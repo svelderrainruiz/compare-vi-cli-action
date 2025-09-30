@@ -1,7 +1,10 @@
 # Compare VI (composite) GitHub Action
 
+<!-- ci: bootstrap status checks -->
+
 [![Validate](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/validate.yml/badge.svg)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/validate.yml)
 [![Smoke test](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/smoke.yml/badge.svg)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/smoke.yml)
+[![Test (mock)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/test-mock.yml/badge.svg)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/test-mock.yml)
 
 Diff two LabVIEW `.vi` files using NI LVCompare CLI. Validated with LabVIEW 2025 Q3 on self-hosted Windows runners.
 
@@ -57,11 +60,28 @@ jobs:
           Write-Host 'Differences detected.'
 ```
 
-Full flag pass-through
+UNC/long path guidance
 
-- All LVCompare CLI flags are passed via `lvCompareArgs` without opinionated defaults.
-- Quoted arguments with spaces are supported: e.g., `--out "C:\\path with spaces\\report.html"`.
-- If your organization relies on a common set of flags, define them in your workflow rather than baking them into the action.
+- The action resolves `base`/`head` to absolute paths before invoking LVCompare.
+- If you encounter long-path or UNC issues, consider:
+  - Using shorter workspace-relative paths via `working-directory`.
+  - Mapping a drive on self-hosted runners for long UNC prefixes.
+  - Ensuring your LabVIEW/Windows environment supports long paths.
+
+Common lvCompareArgs recipes (patterns)
+
+- Pass a path with spaces:
+  - `lvCompareArgs: "--flag \"C:\\Path With Spaces\\out.txt\""`
+- Multiple flags:
+  - `lvCompareArgs: "--flag1 value1 --flag2 value2"`
+- Environment-driven values:
+  - `lvCompareArgs: "--flag \"${{ runner.temp }}\\out.txt\""`
+
+Troubleshooting unknown exit codes
+
+- The action treats 0 as no diff and 1 as diff. Any other exit code fails fast.
+- Outputs are still set for diagnostics: `exitCode`, `cliPath`, `command`, and `diff=false`.
+- Check $GITHUB_STEP_SUMMARY for a concise run report.
 
 Smoke test workflow
 
@@ -69,10 +89,13 @@ Smoke test workflow
 - Trigger it with “Run workflow” and supply `base`, `head`, and optional `lvComparePath`/`lvCompareArgs`.
 - It runs the local action (`uses: ./`) on a self-hosted Windows runner and prints outputs.
 
+Marketplace
+
+- Marketplace listing coming soon. After publication, update the link here for easy discovery.
+
 Notes
 
 - This action maps `LVCompare.exe` exit codes to a boolean `diff` (0 = no diff, 1 = diff). Any other exit code fails the step.
-- If you rely on specific report-generation flags, pass them via `lvCompareArgs` and document them in your workflow for your environment.
 - Typical locations to try for 2025 Q3 include:
   - `C:\Program Files\NI\LabVIEW 2025\LVCompare.exe`
   - `C:\Program Files\National Instruments\LabVIEW 2025\LVCompare.exe`
