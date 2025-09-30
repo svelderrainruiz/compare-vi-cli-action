@@ -10,11 +10,17 @@ Briefly describe the changes.
 
 ## Testing
 
-- [ ] Ran smoke workflow on self-hosted Windows
-- [ ] Verified exit codes and outputs (`diff`, `exitCode`, `cliPath`, `command`)
+- [ ] Ran Test (mock) on windows-latest and it passed
+- [ ] Ran Smoke on self-hosted Windows and recorded exit codes
+- [ ] Verified outputs (`diff`, `exitCode`, `cliPath`, `command`) and step summary
+
+## Documentation
+
+- [ ] README updated (usage, args, troubleshooting)
+- [ ] CHANGELOG updated (user-facing changes)
+- [ ] Copilot instructions updated if behavior changed
 
 ## Checklist
 
-- [ ] README and examples updated
-- [ ] CHANGELOG updated (if user-facing changes)
-- [ ] CI green (validate)
+- [ ] CI green (Validate, Test (mock))
+- [ ] Tag plan prepared (if releasing)
