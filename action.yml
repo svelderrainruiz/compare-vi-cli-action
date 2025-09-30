@@ -1,0 +1,110 @@
+name: "Compare VI (composite)"
+description: "Diff two LabVIEW .vi files using NI LVCompare CLI (validated with LabVIEW 2025 Q3)."
+author: "compare-vi-cli-action maintainers"
+branding:
+  icon: "git-merge"
+  color: "blue"
+
+inputs:
+  base:
+    description: "Path to the base .vi file"
+    required: true
+  head:
+    description: "Path to the head .vi file"
+    required: true
+  lvComparePath:
+    description: "Full path to LVCompare.exe, if not on PATH"
+    required: false
+  lvCompareArgs:
+    description: "Additional CLI flags for LVCompare.exe (space-delimited)"
+    required: false
+    default: ""
+  fail-on-diff:
+    description: "Fail the job if differences are found"
+    required: false
+    default: "true"
+  working-directory:
+    description: "Directory to run LVCompare from (sets process CWD for relative paths)"
+    required: false
+    default: ""
+
+outputs:
+  diff:
+    description: "true if differences were found"
+    value: ${{ steps.run_compare.outputs.diff }}
+  exitCode:
+    description: "Raw exit code from LVCompare"
+    value: ${{ steps.run_compare.outputs.exitCode }}
+  cliPath:
+    description: "Resolved path to LVCompare.exe"
+    value: ${{ steps.run_compare.outputs.cliPath }}
+  command:
+    description: "Exact command line executed (for auditing)"
+    value: ${{ steps.run_compare.outputs.command }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: run_compare
+      name: Run LVCompare
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        function Resolve-Cli {
+          param([string]$Explicit)
+          if ($Explicit -and (Test-Path -LiteralPath $Explicit)) { return (Resolve-Path -LiteralPath $Explicit).Path }
+          if ($env:LVCOMPARE_PATH -and (Test-Path -LiteralPath $env:LVCOMPARE_PATH)) { return (Resolve-Path -LiteralPath $env:LVCOMPARE_PATH).Path }
+          $cmd = Get-Command 'LVCompare.exe' -ErrorAction SilentlyContinue
+          if ($cmd) { return $cmd.Source }
+          $candidates = @(
+            'C:\Program Files\NI\LabVIEW 2025\LVCompare.exe',
+            'C:\Program Files\National Instruments\LabVIEW 2025\LVCompare.exe'
+          )
+          foreach ($p in $candidates) { if (Test-Path -LiteralPath $p) { return $p } }
+          throw 'LVCompare.exe not found. Provide lvComparePath, set LVCOMPARE_PATH, or ensure it is on PATH. Verifying LabVIEW 2025 Q3 install is recommended.'
+        }
+
+        $wd = '${{ inputs.working-directory }}'
+        if ($wd) {
+          if (-not (Test-Path -LiteralPath $wd)) { throw "working-directory not found: $wd" }
+          Push-Location -LiteralPath $wd
+        }
+        try {
+          $base = '${{ inputs.base }}'
+          $head = '${{ inputs.head }}'
+          if (-not (Test-Path -LiteralPath $base)) { throw "Base VI not found: $base" }
+          if (-not (Test-Path -LiteralPath $head)) { throw "Head VI not found: $head" }
+
+          $cli = Resolve-Cli '${{ inputs.lvComparePath }}'
+          $extra = '${{ inputs.lvCompareArgs }}'
+          $args = @()
+          if ($extra) {
+            $pattern = '"[^"]+"|\S+'
+            $tokens = [regex]::Matches($extra, $pattern) | ForEach-Object { $_.Value }
+            foreach ($t in $tokens) { $args += $t.Trim('"') }
+          }
+
+          # Build a quoted command string for traceability
+          function Quote($s) { if ($s -match '\s|"') { return '"' + ($s -replace '"','\"') + '"' } else { return $s } }
+          $cmdline = (@(Quote($cli); Quote($base); Quote($head)) + ($args | ForEach-Object { Quote($_) })) -join ' '
+
+          & $cli $base $head @args
+          $code = $LASTEXITCODE
+
+          # Map exit code to boolean diff
+          $diff = $false
+          if ($code -eq 1) { $diff = $true }
+          elseif ($code -eq 0) { $diff = $false }
+          else { throw "Compare CLI failed with exit code $code" }
+
+          "diff=$diff"       >> $env:GITHUB_OUTPUT
+          "exitCode=$code"   >> $env:GITHUB_OUTPUT
+          "cliPath=$cli"     >> $env:GITHUB_OUTPUT
+          "command=$cmdline" >> $env:GITHUB_OUTPUT
+
+          if ($diff -and ('${{ inputs.fail-on-diff }}' -ieq 'true')) {
+            Write-Error 'Differences detected and fail-on-diff=true'
+          }
+        } finally {
+          if ($wd) { Pop-Location }
+        }

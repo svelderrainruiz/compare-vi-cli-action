@@ -1,0 +1,53 @@
+name: Smoke test Compare VI action
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Absolute or workspace-relative path to base .vi"
+        required: true
+        type: string
+      head:
+        description: "Absolute or workspace-relative path to head .vi"
+        required: true
+        type: string
+      lvComparePath:
+        description: "Full path to LVCompare.exe (if not on PATH)"
+        required: false
+        type: string
+        default: ""
+      lvCompareArgs:
+        description: "Extra flags for LVCompare.exe (space-delimited; quotes supported)"
+        required: false
+        type: string
+        default: ""
+      fail-on-diff:
+        description: "Fail the job if differences are found"
+        required: false
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+
+jobs:
+  compare:
+    runs-on: [self-hosted, Windows]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run local action
+        id: compare
+        uses: ./
+        with:
+          base: ${{ inputs.base }}
+          head: ${{ inputs.head }}
+          lvComparePath: ${{ inputs.lvComparePath }}
+          lvCompareArgs: ${{ inputs.lvCompareArgs }}
+          fail-on-diff: ${{ inputs["fail-on-diff"] }}
+
+      - name: Echo outputs
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "diff      = ${{ steps.compare.outputs.diff }}"
+          Write-Host "exitCode  = ${{ steps.compare.outputs.exitCode }}"
+          Write-Host "cliPath   = ${{ steps.compare.outputs.cliPath }}"
