@@ -1,0 +1,45 @@
+name: Release on tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          awk -v tag="$TAG" '
+            $0 ~ "^##[[:space:]]*\\[?" tag "\\]?$" {print; in=1; next}
+            in && $0 ~ "^##[[:space:]]*\\[" {exit}
+            in && $0 ~ "^##[[:space:]]*v?[0-9]" {exit}
+            in {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md || true
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "No changelog section found for $TAG. Falling back to auto-generated notes." | tee RELEASE_NOTES.md
+            echo "fallback=true" >> $GITHUB_OUTPUT
+          else
+            echo "fallback=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release (CHANGELOG)
+        if: steps.notes.outputs.fallback == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+
+      - name: Create GitHub Release (auto notes)
+        if: steps.notes.outputs.fallback == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
