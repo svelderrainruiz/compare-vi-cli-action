@@ -29,6 +29,11 @@ on:
         type: choice
         options: ["true", "false"]
         default: "true"
+      working_directory:
+        description: "Working directory (process CWD) for resolving relative paths"
+        required: false
+        type: string
+        default: ""
       pr_number:
         description: "Optional PR number to post results as a comment"
         required: false
@@ -55,11 +60,13 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($head)) { $head = $env:LV_HEAD_VI }
           $cli  = '${{ github.event.inputs.lvComparePath }}'
           if ([string]::IsNullOrWhiteSpace($cli))  { $cli  = $env:LVCOMPARE_PATH }
+          $wd   = '${{ github.event.inputs.working_directory }}'
           "base=$base"                 >> $env:GITHUB_OUTPUT
           "head=$head"                 >> $env:GITHUB_OUTPUT
           "lvComparePath=$cli"         >> $env:GITHUB_OUTPUT
           "lvCompareArgs=${{ github.event.inputs.lvCompareArgs }}" >> $env:GITHUB_OUTPUT
           "fail_on_diff=${{ github.event.inputs.fail_on_diff }}"   >> $env:GITHUB_OUTPUT
+          "working_directory=$wd"      >> $env:GITHUB_OUTPUT
 
       - name: Run local action
         id: compare
@@ -70,6 +77,7 @@ jobs:
           lvComparePath: ${{ steps.res.outputs.lvComparePath }}
           lvCompareArgs: ${{ steps.res.outputs.lvCompareArgs }}
           fail-on-diff: ${{ steps.res.outputs.fail_on_diff }}
+          working-directory: ${{ steps.res.outputs.working_directory }}
 
       - name: Echo outputs
         if: always()

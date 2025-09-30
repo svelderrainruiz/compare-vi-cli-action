@@ -38,8 +38,13 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
 
   It 'resolves relative paths from working-directory' {
     $res = Invoke-CompareVI -Base 'a.vi' -Head 'b.vi' -WorkingDirectory $vis -Executor { 0 }
-    $res.Base | Should -Be (Resolve-Path (Join-Path $vis 'a.vi')).Path
-    $res.Head | Should -Be (Resolve-Path (Join-Path $vis 'b.vi')).Path
+    # Compare canonical absolute paths to avoid 8.3 short path vs long path differences
+    [System.IO.Path]::GetFullPath($res.Base) | Should -Be ([System.IO.Path]::GetFullPath($a))
+    [System.IO.Path]::GetFullPath($res.Head) | Should -Be ([System.IO.Path]::GetFullPath($b))
+  }
+
+  It 'throws when working-directory does not exist' {
+    { Invoke-CompareVI -Base $a -Head $b -WorkingDirectory (Join-Path $td 'missing-dir') -Executor { 0 } } | Should -Throw
   }
 
   It 'parses quoted lvCompareArgs and includes them in the reconstructed command' {
@@ -47,6 +52,15 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
     $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs '--flag "C:\\Temp\\Spaced Path\\x"' -Executor $exec
     # Validate command contains the flag and the quoted path (robust match)
     $res.Command | Should -Match '--flag\s+"C:.*Spaced Path.*x"'
+  }
+
+  It 'supports multiple lvCompareArgs including appended values with spaces' {
+    $exec = { param($cli,$base,$head,$arr) return 0 }
+    $argLine = '--a 1 --b "two words" --c'
+    $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs $argLine -Executor $exec
+    $res.Command | Should -Match '--a\s+1'
+    $res.Command | Should -Match '--b\s+"two words"'
+    $res.Command | Should -Match '--c(\s|$)'
   }
 
   It 'writes outputs and summary for exit code 0 (diff=false)' {
@@ -57,6 +71,14 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
     (Get-Content $out -Raw) | Should -Match 'exitCode=0'
     (Get-Content $out -Raw) | Should -Match 'diff=false'
     (Get-Content $sum -Raw) | Should -Match 'Diff: false'
+  }
+
+  It 'does not throw when fail-on-diff is false and exit code is 1 (diff=true)' {
+    $out = Join-Path $td 'out.txt'
+    $res = Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -FailOnDiff:$false -Executor { 1 }
+    $res.Diff | Should -BeTrue
+    (Get-Content $out -Raw) | Should -Match 'exitCode=1'
+    (Get-Content $out -Raw) | Should -Match 'diff=true'
   }
 
   It 'writes outputs then throws for unknown exit code (diff=false)' {
@@ -78,5 +100,18 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   It 'uses mocked Resolve-Cli value in result' {
     $res = Invoke-CompareVI -Base $a -Head $b -Executor { 0 }
     $res.CliPath | Should -Be 'C:\fake\LVCompare.exe'
+  }
+
+  It 'quotes base/head when working-directory path contains spaces' {
+    $exec = { param($cli,$base,$head,$arr) return 0 }
+    $spacedDir = Join-Path $td 'space dir'
+    New-Item -ItemType Directory -Path $spacedDir -Force | Out-Null
+    Copy-Item -LiteralPath $a -Destination (Join-Path $spacedDir 'a.vi') -Force
+    Copy-Item -LiteralPath $b -Destination (Join-Path $spacedDir 'b.vi') -Force
+    $res = Invoke-CompareVI -Base 'a.vi' -Head 'b.vi' -WorkingDirectory $spacedDir -Executor $exec
+    $baseAbs = [System.IO.Path]::GetFullPath((Join-Path $spacedDir 'a.vi'))
+    $headAbs = [System.IO.Path]::GetFullPath((Join-Path $spacedDir 'b.vi'))
+    $res.Command | Should -Match ('"' + [regex]::Escape($baseAbs) + '"')
+    $res.Command | Should -Match ('"' + [regex]::Escape($headAbs) + '"')
   }
 }

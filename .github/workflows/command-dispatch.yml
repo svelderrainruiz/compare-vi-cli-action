@@ -34,6 +34,55 @@ jobs:
           if echo "$body" | grep -qE '^/run +mock'; then echo "target=mock" >> $GITHUB_OUTPUT; fi
           if echo "$body" | grep -qE '^/run +smoke'; then echo "target=smoke" >> $GITHUB_OUTPUT; fi
 
+      - name: Resolve target ref (PR head when same-repo, else main)
+        id: ref
+        shell: bash
+        run: |
+          pr=$PR_NUMBER
+          resp=$(curl -s -H "Authorization: Bearer $XCLI_PAT" -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/$REPO/pulls/$pr")
+          echo "$resp" > pr.json
+          head_ref=$(python3 -c "import json; j=json.load(open('pr.json')); print(j.get('head',{}).get('ref',''))")
+          head_repo=$(python3 -c "import json; j=json.load(open('pr.json')); print(j.get('head',{}).get('repo',{}).get('full_name',''))")
+          if [ -n "$head_ref" ] && [ "$head_repo" = "$REPO" ]; then
+            echo "target_ref=$head_ref" >> $GITHUB_OUTPUT
+            echo "fork=false" >> $GITHUB_OUTPUT
+          else
+            echo "target_ref=main" >> $GITHUB_OUTPUT
+            echo "fork=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Parse smoke options from comment
+        id: parse
+        if: steps.cmd.outputs.target == 'smoke'
+        shell: bash
+        env:
+          RAW_BODY: ${{ github.event.comment.body }}
+        run: |
+          base=""; head=""; lvpath=""; lvargs=""; fail=""; prnum=""; workdir=""
+          tail=$(printf "%s" "$RAW_BODY" | sed -n 's#^/run[[:space:]]\+smoke[[:space:]]\?##Ip')
+          read -r -a arr <<< "$tail"
+          for tok in "${arr[@]}"; do
+            case "$tok" in
+              base=*) base="${tok#base=}" ;;
+              head=*) head="${tok#head=}" ;;
+              lvComparePath=*|cli=*|lvpath=*) lvpath="${tok#*=}" ;;
+              lvCompareArgs+=*|args+=*) v="${tok#*=}"; lvargs="$lvargs ${v}" ;;
+              lvCompareArgs=*|args=*) lvargs="${tok#*=}" ;;
+              fail_on_diff=*|fail=*|fail-on-diff=*) fail="${tok#*=}" ;;
+              pr=*|pr_number=*) prnum="${tok#*=}" ;;
+              working_directory=*|working-directory=*|wd=*|cwd=*) workdir="${tok#*=}" ;;
+            esac
+          done
+          lvargs="${lvargs# }"
+          echo "base=$base" >> $GITHUB_OUTPUT
+          echo "head=$head" >> $GITHUB_OUTPUT
+          echo "lvComparePath=$lvpath" >> $GITHUB_OUTPUT
+          echo "lvCompareArgs=$lvargs" >> $GITHUB_OUTPUT
+          echo "fail_on_diff=$fail" >> $GITHUB_OUTPUT
+          echo "pr_number=$prnum" >> $GITHUB_OUTPUT
+          echo "working_directory=$workdir" >> $GITHUB_OUTPUT
+
       - name: Dispatch unit tests
         if: steps.cmd.outputs.target == 'unit'
         shell: bash
@@ -42,7 +91,7 @@ jobs:
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
            https://api.github.com/repos/$REPO/actions/workflows/test-pester.yml/dispatches \
-           -d '{"ref":"main","inputs":{"include_integration":"false"}}' | cat
+           -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'","inputs":{"include_integration":"false"}}' | cat
 
       - name: Dispatch mock tests
         if: steps.cmd.outputs.target == 'mock'
@@ -52,14 +101,26 @@ jobs:
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
            https://api.github.com/repos/$REPO/actions/workflows/test-mock.yml/dispatches \
-           -d '{"ref":"main"}' | cat
+           -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'"}' | cat
 
       - name: Dispatch smoke tests
         if: steps.cmd.outputs.target == 'smoke'
         shell: bash
+        env:
+          TARGET_REF: ${{ steps.ref.outputs.target_ref }}
+          IN_BASE: ${{ steps.parse.outputs.base }}
+          IN_HEAD: ${{ steps.parse.outputs.head }}
+          IN_LVPATH: ${{ steps.parse.outputs.lvComparePath }}
+          IN_ARGS: ${{ steps.parse.outputs.lvCompareArgs }}
+          IN_FAIL: ${{ steps.parse.outputs.fail_on_diff }}
+          IN_PR: ${{ steps.parse.outputs.pr_number }}
+          IN_WD: ${{ steps.parse.outputs.working_directory }}
+          FALLBACK_PR: ${{ github.event.issue.number }}
         run: |
+          python3 -c "import json,os; payload={'ref':os.environ['TARGET_REF'],'inputs':{'base':os.environ.get('IN_BASE','') or '','head':os.environ.get('IN_HEAD','') or '','lvComparePath':os.environ.get('IN_LVPATH','') or '','lvCompareArgs':os.environ.get('IN_ARGS','') or '','fail_on_diff':os.environ.get('IN_FAIL','') or '','working_directory':os.environ.get('IN_WD','') or '','pr_number':(os.environ.get('IN_PR') or os.environ.get('FALLBACK_PR') or '')}}; open('payload.json','w',encoding='utf-8').write(json.dumps(payload))"
+          cat payload.json
           curl -s -X POST \
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
            https://api.github.com/repos/$REPO/actions/workflows/smoke.yml/dispatches \
-           -d '{"ref":"main","inputs":{"pr_number":"'"$PR_NUMBER"'"}}' | cat
+           -d @payload.json | cat

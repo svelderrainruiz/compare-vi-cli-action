@@ -35,13 +35,14 @@ jobs:
           Write-Host "command   = ${{ steps.compare.outputs.command }}"
 
       - name: Comment results on PR (using XCLI_PAT)
-        if: ${{ env.XCLI_PAT != '' }}
+        if: always()
         shell: pwsh
         env:
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           XCLI_PAT: ${{ secrets.XCLI_PAT }}
         run: |
+          if (-not $env:XCLI_PAT) { Write-Host 'XCLI_PAT not available; skipping comment.'; exit 0 }
           $lines = @(
             '### Smoke test results (label-triggered)',
             '',
