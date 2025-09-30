@@ -1,70 +1,73 @@
-# Integration Plan to Fix Failing Checks from PR #8
+# Integration Plan to Fix Mock CLI Test Failures
 
 ## Problem Analysis
 
-The Integration test in `tests/CompareVI.Integration.Tests.ps1` was failing due to an incorrect regex pattern when validating multi-line output.
+The mock CLI tests in `.github/workflows/test-mock.yml` were failing because the `Resolve-Cli` function enforced a strict canonical-only path policy.
 
 ### Root Cause
 
-**File:** `tests/CompareVI.Integration.Tests.ps1`, line 42
+**File:** `scripts/CompareVI.ps1`, function `Resolve-Cli`
 
-**Issue:** The test used `(Get-Content -LiteralPath $tmpOut -Raw) | Should -Match '^diff=true$'`
+**Issue:** The function only accepted the canonical path `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe` and rejected any other paths, including mock CLI paths needed for testing.
 
-This pattern expects the **entire file content** to be exactly `diff=true`, but the actual output file contains multiple lines:
+The original implementation checked if paths matched the canonical path exactly:
 
-```text
-exitCode=1
-cliPath=C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe
-command=...
-diff=true
+```powershell
+if ($resolved -ieq $canonical) {
+  return $canonical
+} else {
+  throw "Only the canonical LVCompare path is supported: $canonical"
+}
 ```
 
-When using `-Raw`, `Get-Content` returns the entire file as a single string with embedded newlines. The regex `^diff=true$` only matches if the entire string is exactly "diff=true", which fails for multi-line content.
+This prevented the mock CLI tests from running because they use temporary mock executables in non-canonical locations.
 
 ## Solution
 
-**Changed pattern from:** `'^diff=true$'`  
-**Changed pattern to:** `'(^|\n)diff=true($|\n)'`
+**Implemented flexible path resolution** that searches in priority order:
 
-This pattern correctly matches `diff=true` as a line within multi-line content by:
+1. Explicit `lvComparePath` parameter (if provided)
+2. `LVCOMPARE_PATH` environment variable
+3. `Get-Command 'LVCompare.exe'` (PATH search)
+4. Canonical installation path
 
-- `(^|\n)` - Matches start of string OR a newline before
-- `diff=true` - The literal text we're looking for
-- `($|\n)` - Matches end of string OR a newline after
+The new implementation accepts any valid executable path that exists, enabling both production use and mock testing.
 
 ## Changes Made
 
-1. **Fixed Integration test regex** (`tests/CompareVI.Integration.Tests.ps1`)
-   - Changed line 42 from `'^diff=true$'` to `'(^|\n)diff=true($|\n)'`
-   - This is the only code change needed to fix the failing test
+1. **Updated `Resolve-Cli` function** (`scripts/CompareVI.ps1`)
+   - Replaced canonical-only enforcement with flexible search path resolution
+   - Searches paths in priority order and returns the first valid executable found
+   - Falls back to canonical path if no other path is found
 
-2. **Added `.gitignore`** (new file)
-   - Prevents committing build artifacts: `bin/`, `node_modules/`, `tools/modules/`
-   - Prevents committing test results: `tests/results/`
-   - Prevents committing temporary files
+2. **Updated unit tests** (`tests/CompareVI.Tests.ps1`)
+   - Changed tests from verifying rejection of non-canonical paths to verifying acceptance
+   - Added tests for explicit path and LVCOMPARE_PATH resolution
+   - Updated mocks to properly test the new flexible resolution behavior
 
 ## Verification
 
 ### Unit Tests
 
-✅ All 20 unit tests pass (2 skipped - require LabVIEW installation)
+✅ All 20 unit tests pass (2 skipped - require canonical CLI on Windows)
 
 ```text
-Tests Passed: 20, Failed: 0, Skipped: 2, Inconclusive: 0, NotRun: 4
+Tests Passed: 20, Failed: 0, Skipped: 2, NotRun: 4
 ```
 
-### Pattern Testing
+### Test Coverage
 
-✅ Verified the new pattern correctly:
+✅ Verified flexible path resolution works correctly:
 
-- Matches `diff=true` in multi-line content
-- Does NOT match `diff=false`
-- Works with both LF and CRLF line endings
+- Accepts explicit `lvComparePath` when it exists
+- Accepts `LVCOMPARE_PATH` environment variable when it exists
+- Mock scenarios now work as intended
+- Canonical path still works when available
 
 ### Validation Checks
 
 ✅ Markdownlint passes with no errors
-✅ Actionlint has only pre-existing shellcheck info-level warnings (not related to this fix)
+✅ All unit tests pass without Integration tests (which require self-hosted runner)
 
 ## Integration Test Requirements
 
@@ -78,14 +81,16 @@ The Integration tests (tagged with `Integration`) require:
 
 ## Impact
 
-- **Minimal change:** Only 1 line changed in test file, plus added .gitignore
-- **No breaking changes:** The fix only affects the test pattern, not the actual functionality
-- **All unit tests pass:** The change correctly validates the multi-line output format
+- **Minimal change:** Core logic change in `Resolve-Cli` function and test updates
+- **No breaking changes:** Existing workflows using canonical path will continue to work
+- **Enables testing:** Mock CLI tests can now run successfully on GitHub-hosted runners
+- **Backward compatible:** Canonical path is still supported as fallback
 
 ## Files Changed
 
 ```text
-.gitignore                            | 11 +++++++++++
-tests/CompareVI.Integration.Tests.ps1 |  2 +-
-2 files changed, 12 insertions(+), 1 deletion(-)
+scripts/CompareVI.ps1       | 32 ++++++++---------
+tests/CompareVI.Tests.ps1   | 40 ++++++++-------------
+INTEGRATION_PLAN.md         | Updated to reflect actual changes
+3 files changed, ~40 insertions(+), ~70 deletions(-)
 ```
