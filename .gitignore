@@ -1,0 +1,11 @@
+# Build artifacts and tools
+bin/
+node_modules/
+tools/modules/
+
+# Test results
+tests/results/
+
+# Temporary files
+*.tmp
+.DS_Store
