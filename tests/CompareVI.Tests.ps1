@@ -7,7 +7,7 @@ BeforeAll {
   . (Join-Path $root 'scripts' 'CompareVI.ps1')
 }
 
-Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
+Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
   BeforeEach {
     $TestDrive = Join-Path $env:TEMP ("comparevi-tests-" + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $TestDrive -Force | Out-Null
@@ -30,7 +30,8 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
       'exit /b 1'
     )
 
-    $script:a = $a; $script:b = $b; $script:mock = $mockExe; $script:vis = $vis
+    $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+    $script:a = $a; $script:b = $b; $script:mock = $mockExe; $script:vis = $vis; $script:canonical = $canonical
   }
 
   AfterEach {
@@ -67,17 +68,30 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
     (Get-Content $out) | Should -Contain 'diff=false'
   }
 
-  It 'discovers CLI via LVCOMPARE_PATH env var' {
-    $env:LVCOMPARE_PATH = $mock
-    $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false
-    Remove-Item Env:LVCOMPARE_PATH -ErrorAction SilentlyContinue
-    $res.CliPath | Should -Be (Resolve-Path $mock).Path
+  It 'rejects explicit lvComparePath when non-canonical' {
+    { Invoke-CompareVI -Base $a -Head $b -LvComparePath $mock -FailOnDiff:$false } | Should -Throw -ExpectedMessage "*Only the canonical LVCompare path is supported*"
   }
 
-  It 'discovers CLI via PATH when not explicitly provided' {
-    $env:PATH = (Split-Path -Parent $mock) + ';' + $env:PATH
-    $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false
-    $res.CliPath | Should -Match 'LVCompare'
+  It 'rejects LVCOMPARE_PATH when non-canonical' {
+    $old = $env:LVCOMPARE_PATH
+    try {
+      $env:LVCOMPARE_PATH = $mock
+      { Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false } | Should -Throw -ExpectedMessage "*Only the canonical LVCompare path is supported*"
+    } finally { $env:LVCOMPARE_PATH = $old }
+  }
+
+  It 'accepts explicit lvComparePath when canonical and exists' -Skip:(-not (Test-Path -LiteralPath 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe')) {
+    $res = Invoke-CompareVI -Base $a -Head $b -LvComparePath $canonical -FailOnDiff:$false
+    $res.CliPath | Should -Be (Resolve-Path $canonical).Path
+  }
+
+  It 'accepts LVCOMPARE_PATH when canonical and exists' -Skip:(-not (Test-Path -LiteralPath 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe')) {
+    $old = $env:LVCOMPARE_PATH
+    try {
+      $env:LVCOMPARE_PATH = $canonical
+      $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false
+      $res.CliPath | Should -Be (Resolve-Path $canonical).Path
+    } finally { $env:LVCOMPARE_PATH = $old }
   }
 
   It 'parses quoted args and reconstructs the command' {
@@ -96,3 +110,4 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
     { Invoke-CompareVI -Base $a -Head 'missing.vi' -LvComparePath $mock } | Should -Throw
   }
 }
+

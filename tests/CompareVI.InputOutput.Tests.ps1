@@ -20,9 +20,11 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
     New-Item -ItemType File -Path $b -Force | Out-Null
 
     # Always mock Resolve-Cli to avoid any dependency on real installations
-    Mock -CommandName Resolve-Cli -MockWith { 'C:\fake\LVCompare.exe' } -Verifiable
+    # Return the canonical path
+    $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+    Mock -CommandName Resolve-Cli -MockWith { $canonical } -Verifiable
 
-    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:td = $TestDrive
+    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:td = $TestDrive; $script:canonical = $canonical
   }
 
   AfterEach {
@@ -99,7 +101,7 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
 
   It 'uses mocked Resolve-Cli value in result' {
     $res = Invoke-CompareVI -Base $a -Head $b -Executor { 0 }
-    $res.CliPath | Should -Be 'C:\fake\LVCompare.exe'
+    $res.CliPath | Should -Be $canonical
   }
 
   It 'quotes base/head when working-directory path contains spaces' {

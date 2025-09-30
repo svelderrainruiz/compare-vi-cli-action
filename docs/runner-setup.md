@@ -13,17 +13,16 @@ Steps
 
 2) Install LabVIEW 2025 Q3
    - Verify `LVCompare.exe` exists after installation
-   - Typical paths:
-     - `C:\Program Files\NI\LabVIEW 2025\LVCompare.exe`
-     - `C:\Program Files\National Instruments\LabVIEW 2025\LVCompare.exe`
+   - **Required canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
+   - This is the ONLY supported location; no other paths will work
 
 3) Make the compare CLI discoverable
-   - Preferred: set a machine-level environment variable
-     - `LVCOMPARE_PATH=C:\Program Files\NI\LabVIEW 2025\LVCompare.exe`
+   - The action will automatically find the CLI at the canonical path
+   - Optionally set environment variable for explicit configuration:
+     - `LVCOMPARE_PATH=C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
      - Restart the runner service after changes
-   - Alternatives:
-     - Add the containing folder to `PATH`
-     - Provide `lvComparePath` input in the workflow
+   - Or provide `lvComparePath` input in workflows
+   - **Important**: All paths must resolve to the canonical location
 
 4) Validate access
    - Run the repository’s “Smoke test Compare VI action” workflow (manual) and provide two `.vi` file paths
@@ -33,3 +32,4 @@ Notes
 
 - Ensure the runner service account has GUI-less access sufficient for CLI tools provided by LabVIEW
 - Keep LabVIEW patched at the 2025 Q3 level used by your organization
+- **Path policy**: Only the canonical path is supported to ensure consistency across runners
