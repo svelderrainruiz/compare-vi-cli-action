@@ -50,97 +50,23 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
-        function Resolve-Cli {
-          param([string]$Explicit)
-          if ($Explicit -and (Test-Path -LiteralPath $Explicit)) { return (Resolve-Path -LiteralPath $Explicit).Path }
-          if ($env:LVCOMPARE_PATH -and (Test-Path -LiteralPath $env:LVCOMPARE_PATH)) { return (Resolve-Path -LiteralPath $env:LVCOMPARE_PATH).Path }
-          $cmd = Get-Command 'LVCompare.exe' -ErrorAction SilentlyContinue
-          if ($cmd) { return $cmd.Source }
-          $candidates = @(
-            'C:\Program Files\NI\LabVIEW 2025\LVCompare.exe',
-            'C:\Program Files\National Instruments\LabVIEW 2025\LVCompare.exe'
-          )
-          foreach ($p in $candidates) { if (Test-Path -LiteralPath $p) { return $p } }
-          throw 'LVCompare.exe not found. Provide lvComparePath, set LVCOMPARE_PATH, or ensure it is on PATH. Verifying LabVIEW 2025 Q3 install is recommended.'
-        }
+        . "$PSScriptRoot\scripts\CompareVI.ps1"
 
         $wd = '${{ inputs.working-directory }}'
-        if ($wd) {
-          if (-not (Test-Path -LiteralPath $wd)) { throw "working-directory not found: $wd" }
-          Push-Location -LiteralPath $wd
-        }
-        try {
-          $base = '${{ inputs.base }}'
-          $head = '${{ inputs.head }}'
-          if ([string]::IsNullOrWhiteSpace($base)) { throw "Input 'base' is required and cannot be empty" }
-          if ([string]::IsNullOrWhiteSpace($head)) { throw "Input 'head' is required and cannot be empty" }
-          if (-not (Test-Path -LiteralPath $base)) { throw "Base VI not found: $base" }
-          if (-not (Test-Path -LiteralPath $head)) { throw "Head VI not found: $head" }
+        $outPath = $env:GITHUB_OUTPUT
+        $sumPath = $env:GITHUB_STEP_SUMMARY
 
-          $baseAbs = (Resolve-Path -LiteralPath $base).Path
-          $headAbs = (Resolve-Path -LiteralPath $head).Path
+        $result = Invoke-CompareVI -Base '${{ inputs.base }}' -Head '${{ inputs.head }}' `
+          -LvComparePath '${{ inputs.lvComparePath }}' `
+          -LvCompareArgs '${{ inputs.lvCompareArgs }}' `
+          -WorkingDirectory $wd `
+          -FailOnDiff ([System.Convert]::ToBoolean('${{ inputs.fail-on-diff }}')) `
+          -GitHubOutputPath $outPath `
+          -GitHubStepSummaryPath $sumPath
 
-          $cli = Resolve-Cli '${{ inputs.lvComparePath }}'
-          $extra = '${{ inputs.lvCompareArgs }}'
-          $args = @()
-          if ($extra) {
-            $pattern = '"[^"]+"|\S+'
-            $tokens = [regex]::Matches($extra, $pattern) | ForEach-Object { $_.Value }
-            foreach ($t in $tokens) { $args += $t.Trim('"') }
-          }
-
-          # Build a quoted command string for traceability
-          function Quote($s) { if ($s -match '\s|"') { return '"' + ($s -replace '"','\"') + '"' } else { return $s } }
-          $cmdline = (@(Quote($cli); Quote($baseAbs); Quote($headAbs)) + ($args | ForEach-Object { Quote($_) })) -join ' '
-
-          & $cli $baseAbs $headAbs @args
-          $code = $LASTEXITCODE
-
-          # Always emit core outputs for traceability
-          "exitCode=$code"   >> $env:GITHUB_OUTPUT
-          "cliPath=$cli"     >> $env:GITHUB_OUTPUT
-          "command=$cmdline" >> $env:GITHUB_OUTPUT
-
-          $cwd = (Get-Location).Path
-
-          # Map exit code to boolean diff (0=no diff, 1=diff); else fail fast
-          $diff = $false
-          if ($code -eq 1) { $diff = $true }
-          elseif ($code -eq 0) { $diff = $false }
-          else {
-            "diff=false" >> $env:GITHUB_OUTPUT
-            $summaryLines = @(
-              '### Compare VI',
-              "- Working directory: $cwd",
-              "- Base: $baseAbs",
-              "- Head: $headAbs",
-              "- CLI: $cli",
-              "- Command: $cmdline",
-              "- Exit code: $code",
-              "- Diff: false"
-            )
-            ($summaryLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            throw "Compare CLI failed with exit code $code"
-          }
-
-          "diff=$diff"       >> $env:GITHUB_OUTPUT
-
-          $diffStr = if ($diff) { 'true' } else { 'false' }
-          $summaryLines = @(
-            '### Compare VI',
-            "- Working directory: $cwd",
-            "- Base: $baseAbs",
-            "- Head: $headAbs",
-            "- CLI: $cli",
-            "- Command: $cmdline",
-            "- Exit code: $code",
-            "- Diff: $diffStr"
-          )
-          ($summaryLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-          if ($diff -and ('${{ inputs.fail-on-diff }}' -ieq 'true')) {
-            Write-Error 'Differences detected and fail-on-diff=true'
-          }
-        } finally {
-          if ($wd) { Pop-Location }
-        }
+        # Expose outputs explicitly in case Invoke-CompareVI was called with custom paths
+        "exitCode=$($result.ExitCode)"   >> $env:GITHUB_OUTPUT
+        "cliPath=$($result.CliPath)"     >> $env:GITHUB_OUTPUT
+        "command=$($result.Command)"     >> $env:GITHUB_OUTPUT
+        $diffLower = if ($result.Diff) { 'true' } else { 'false' }
+        "diff=$diffLower"                 >> $env:GITHUB_OUTPUT

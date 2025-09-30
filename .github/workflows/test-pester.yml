@@ -1,0 +1,38 @@
+name: Pester tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      include_integration:
+        description: "Include Integration-tagged tests (may invoke mock CLI)"
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false','true']
+
+jobs:
+  pester:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run unit tests (Pester v5, repo-local)
+        shell: pwsh
+        run: |
+          $include = '${{ inputs.include_integration }}' -ieq 'true'
+          ./tools/Run-Pester.ps1 @{
+            IncludeIntegration = $include
+          }
+
+      - name: Upload Pester artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results
+          path: |
+            tests/results/pester-results.xml
+            tests/results/pester-summary.txt

@@ -2,9 +2,10 @@
 
 <!-- ci: bootstrap status checks -->
 
-[![Validate](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/validate.yml/badge.svg)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/validate.yml)
-[![Smoke test](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/smoke.yml/badge.svg)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/smoke.yml)
-[![Test (mock)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/test-mock.yml/badge.svg)](https://github.com/svelderrainruiz/compare-vi-cli-action/actions/workflows/test-mock.yml)
+[![Validate](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/validate.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/validate.yml)
+[![Smoke test](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/smoke.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/smoke.yml)
+[![Test (mock)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml)
+[![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Action-blue?logo=github)](https://github.com/marketplace/actions/compare-vi-cli-action)
 
 Diff two LabVIEW `.vi` files using NI LVCompare CLI. Validated with LabVIEW 2025 Q3 on self-hosted Windows runners.
 
@@ -31,6 +32,12 @@ Outputs
 - `cliPath`: Resolved path to the executable
 - `command`: The exact command line executed (quoted) for auditing
 
+Exit codes and step summary
+
+- Exit code mapping: 0 = no diff, 1 = diff detected, any other code = failure.
+- Outputs (`diff`, `exitCode`, `cliPath`, `command`) are always emitted even when the step fails, to support branching and diagnostics.
+- A structured run report is appended to `$GITHUB_STEP_SUMMARY` with working directory, resolved paths, CLI path, command, exit code, and diff result.
+
 Usage (self-hosted Windows)
 
 ```yaml
@@ -38,10 +45,10 @@ jobs:
   compare:
     runs-on: [self-hosted, Windows]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Compare VIs
         id: compare
-        uses: svelderrainruiz/compare-vi-cli-action@v0.1.0
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.1.0
         with:
           working-directory: subfolder/with/vis
           base: relative/path/to/base.vi   # resolved from working-directory if set
@@ -91,17 +98,27 @@ Smoke test workflow
 
 Marketplace
 
-- Marketplace listing coming soon. After publication, update the link here for easy discovery.
+- Listing: [GitHub Marketplace listing](https://github.com/marketplace/actions/compare-vi-cli-action)
+- After publication, keep the badge/link updated to the final marketplace URL and ensure the README usage references the latest tag.
 
 Notes
 
 - This action maps `LVCompare.exe` exit codes to a boolean `diff` (0 = no diff, 1 = diff). Any other exit code fails the step.
 - Typical locations to try for 2025 Q3 include:
-  - `C:\Program Files\NI\LabVIEW 2025\LVCompare.exe`
-  - `C:\Program Files\National Instruments\LabVIEW 2025\LVCompare.exe`
+  - `C:\\Program Files\\NI\\LabVIEW 2025\\LVCompare.exe`
+  - `C:\\Program Files\\National Instruments\\LabVIEW 2025\\LVCompare.exe`
 
 Troubleshooting
 
 - Ensure the runner user has the necessary LabVIEW licensing.
 - Verify `LVCompare.exe` is reachable (PATH, `LVCOMPARE_PATH`, or `lvComparePath`).
 - Check composite action outputs (`diff`, `exitCode`, `cliPath`, `command`) and the CLI exit code for diagnostics.
+
+Tests
+
+- Unit tests (no external CLI):
+  - Run: `pwsh -File ./tools/Run-Pester.ps1`
+  - Produces artifacts under `tests/results/` (NUnit XML and summary)
+- Integration tests (may use mock CLI):
+  - Run: `pwsh -File ./tools/Run-Pester.ps1 -IncludeIntegration`
+- CI workflow: `.github/workflows/test-pester.yml` runs unit tests by default and uploads artifacts. Use the "Run workflow" input to include integration tests.

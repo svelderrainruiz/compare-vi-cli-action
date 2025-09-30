@@ -11,7 +11,7 @@ jobs:
   mock-cli:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Prepare mock LVCompare
         shell: pwsh
@@ -155,3 +155,55 @@ jobs:
           if ('${{ steps.c6.outcome }}' -ne 'failure') { throw "Expected step failure" }
           if ('${{ steps.c6.outputs.exitCode }}' -ne '2') { throw "Expected exitCode=2" }
           if ('${{ steps.c6.outputs.diff }}' -ne 'false') { throw "Expected diff=false" }
+
+      - name: Comment results on PR (using XCLI_PAT)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        env:
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          XCLI_PAT: ${{ secrets.XCLI_PAT }}
+        run: |
+          $lines = @(
+            '### Test (mock) results',
+            '',
+            "- Case 1: diff=${{ steps.c1.outputs.diff }}, exitCode=${{ steps.c1.outputs.exitCode }}",
+            "- Case 2: outcome=${{ steps.c2.outcome }}, diff=${{ steps.c2.outputs.diff }}, exitCode=${{ steps.c2.outputs.exitCode }}",
+            "- Case 3: diff=${{ steps.c3.outputs.diff }}, exitCode=${{ steps.c3.outputs.exitCode }}",
+            "- Case 4: diff=${{ steps.c4.outputs.diff }}, exitCode=${{ steps.c4.outputs.exitCode }}",
+            "- Case 5: diff=${{ steps.c5.outputs.diff }}, exitCode=${{ steps.c5.outputs.exitCode }}",
+            "- Case 6: outcome=${{ steps.c6.outcome }}, diff=${{ steps.c6.outputs.diff }}, exitCode=${{ steps.c6.outputs.exitCode }}"
+          ) -join "`n"
+          $payload = @{ body = $lines } | ConvertTo-Json -Compress
+          $headers = @{ Authorization = "Bearer $env:XCLI_PAT"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'xcli-bot' }
+          $uri = "https://api.github.com/repos/$env:GH_REPO/issues/$env:PR_NUMBER/comments"
+          Invoke-RestMethod -Method POST -Uri $uri -Headers $headers -ContentType 'application/json' -Body $payload
+
+      - name: Generate HTML reports from outputs
+        if: always()
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:RUNNER_TEMP 'mock-reports'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $renderer = Join-Path $env:GITHUB_WORKSPACE 'scripts' 'Render-CompareReport.ps1'
+          # Report for Case 1 (diff=true)
+          & $renderer `
+            -Command '${{ steps.c1.outputs.command }}' `
+            -ExitCode [int]'${{ steps.c1.outputs.exitCode }}' `
+            -Diff '${{ steps.c1.outputs.diff }}' `
+            -CliPath '${{ steps.c1.outputs.cliPath }}' `
+            -OutputPath (Join-Path $outDir 'case-1.html')
+          # Report for Case 3 (no diff)
+          & $renderer `
+            -Command '${{ steps.c3.outputs.command }}' `
+            -ExitCode [int]'${{ steps.c3.outputs.exitCode }}' `
+            -Diff '${{ steps.c3.outputs.diff }}' `
+            -CliPath '${{ steps.c3.outputs.cliPath }}' `
+            -OutputPath (Join-Path $outDir 'case-3.html')
+
+      - name: Upload mock HTML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mock-html-reports
+          path: ${{ runner.temp }}/mock-reports/*.html

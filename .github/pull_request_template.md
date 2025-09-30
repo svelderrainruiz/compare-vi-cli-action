@@ -10,6 +10,7 @@ Briefly describe the changes.
 
 ## Testing
 
+- [ ] Unit tests passed (Pester tests workflow)
 - [ ] Ran Test (mock) on windows-latest and it passed
 - [ ] Ran Smoke on self-hosted Windows and recorded exit codes
 - [ ] Verified outputs (`diff`, `exitCode`, `cliPath`, `command`) and step summary
@@ -22,5 +23,11 @@ Briefly describe the changes.
 
 ## Checklist
 
-- [ ] CI green (Validate, Test (mock))
+- [ ] CI green (Validate, Pester tests, Test (mock))
 - [ ] Tag plan prepared (if releasing)
+
+## Smoke test (optional guidance)
+
+- If you have access to the self-hosted runner with LabVIEW, run `.github/workflows/smoke.yml`.
+- Provide inputs, or ensure repo variables exist:
+  - `LV_BASE_VI` (no-diff), `LV_HEAD_VI` (diff), `LVCOMPARE_PATH`

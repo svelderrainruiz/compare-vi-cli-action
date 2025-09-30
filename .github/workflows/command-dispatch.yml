@@ -1,0 +1,65 @@
+name: Command dispatcher
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  dispatch:
+    if: github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+      AUTHOR_ASSOC: ${{ github.event.comment.author_association }}
+      PR_NUMBER: ${{ github.event.issue.number }}
+      XCLI_PAT: ${{ secrets.XCLI_PAT }}
+    steps:
+      - name: Validate permissions
+        shell: bash
+        run: |
+          case "$AUTHOR_ASSOC" in
+            OWNER|MEMBER|COLLABORATOR) echo "Authorized commenter: $AUTHOR_ASSOC" ;;
+            *) echo "Not authorized ($AUTHOR_ASSOC). Skipping."; exit 0 ;;
+          esac
+          if [ -z "$XCLI_PAT" ]; then echo "XCLI_PAT not set; cannot dispatch."; exit 0; fi
+
+      - name: Normalize command
+        id: cmd
+        shell: bash
+        run: |
+          body="$(echo "$COMMENT_BODY" | tr '[:upper:]' '[:lower:]')"
+          echo "comment=$body" >> $GITHUB_OUTPUT
+          if echo "$body" | grep -qE '^/run +unit'; then echo "target=unit" >> $GITHUB_OUTPUT; fi
+          if echo "$body" | grep -qE '^/run +mock'; then echo "target=mock" >> $GITHUB_OUTPUT; fi
+          if echo "$body" | grep -qE '^/run +smoke'; then echo "target=smoke" >> $GITHUB_OUTPUT; fi
+
+      - name: Dispatch unit tests
+        if: steps.cmd.outputs.target == 'unit'
+        shell: bash
+        run: |
+          curl -s -X POST \
+           -H "Authorization: Bearer $XCLI_PAT" \
+           -H "Accept: application/vnd.github+json" \
+           https://api.github.com/repos/$REPO/actions/workflows/test-pester.yml/dispatches \
+           -d '{"ref":"main","inputs":{"include_integration":"false"}}' | cat
+
+      - name: Dispatch mock tests
+        if: steps.cmd.outputs.target == 'mock'
+        shell: bash
+        run: |
+          curl -s -X POST \
+           -H "Authorization: Bearer $XCLI_PAT" \
+           -H "Accept: application/vnd.github+json" \
+           https://api.github.com/repos/$REPO/actions/workflows/test-mock.yml/dispatches \
+           -d '{"ref":"main"}' | cat
+
+      - name: Dispatch smoke tests
+        if: steps.cmd.outputs.target == 'smoke'
+        shell: bash
+        run: |
+          curl -s -X POST \
+           -H "Authorization: Bearer $XCLI_PAT" \
+           -H "Accept: application/vnd.github+json" \
+           https://api.github.com/repos/$REPO/actions/workflows/smoke.yml/dispatches \
+           -d '{"ref":"main","inputs":{"pr_number":"'"$PR_NUMBER"'"}}' | cat
