@@ -1,0 +1,157 @@
+name: Test (mock LVCompare)
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  mock-cli:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare mock LVCompare
+        shell: pwsh
+        run: |
+          $mockDir = Join-Path $env:RUNNER_TEMP 'mock'
+          New-Item -ItemType Directory -Path $mockDir -Force | Out-Null
+          $cmdPath = Join-Path $mockDir 'LVCompare.cmd'
+          $lines = @(
+            '@echo off',
+            'REM Mock LVCompare: exit 0 if base==head; else 1. Allow override via FORCE_EXIT.',
+            'if not "%FORCE_EXIT%"=="" exit /b %FORCE_EXIT%',
+            'if "%~f1"=="%~f2" exit /b 0',
+            'exit /b 1'
+          )
+          $lines | Set-Content -LiteralPath $cmdPath -Encoding ASCII
+          Write-Host ("Mock at: {0}" -f $cmdPath)
+          echo ("MOCK_PATH={0}" -f $mockDir) | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Create sample files
+        shell: pwsh
+        run: |
+          $wd = Join-Path $env:RUNNER_TEMP 'vis'
+          New-Item -ItemType Directory -Path $wd -Force | Out-Null
+          New-Item -ItemType File -Path (Join-Path $wd 'a.vi') -Force | Out-Null
+          New-Item -ItemType File -Path (Join-Path $wd 'b.vi') -Force | Out-Null
+          echo ("WD={0}" -f $wd) | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Export mock vars
+        id: vars
+        shell: pwsh
+        run: |
+          if (-not $env:WD) { throw 'WD not set' }
+          if (-not $env:MOCK_PATH) { throw 'MOCK_PATH not set' }
+          "WD=$($env:WD)"         >> $env:GITHUB_OUTPUT
+          "MOCK_PATH=$($env:MOCK_PATH)" >> $env:GITHUB_OUTPUT
+
+      - name: Case 1 - diff true, fail-on-diff=false
+        id: c1
+        uses: ./
+        with:
+          working-directory: ${{ steps.vars.outputs.WD }}
+          base: a.vi
+          head: b.vi
+          lvComparePath: ${{ steps.vars.outputs.MOCK_PATH }}\\LVCompare.cmd
+          lvCompareArgs: "--dummy \"C:\\Temp\\Spaced Path\\x\""
+          fail-on-diff: "false"
+
+      - name: Assert Case 1 outputs
+        shell: pwsh
+        run: |
+          if ('${{ steps.c1.outputs.diff }}' -ne 'true') { throw "Expected diff=true" }
+          if ('${{ steps.c1.outputs.exitCode }}' -ne '1') { throw "Expected exitCode=1" }
+
+      - name: Case 2 - diff true, fail-on-diff=true (should fail step)
+        id: c2
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: ${{ steps.vars.outputs.WD }}
+          base: a.vi
+          head: b.vi
+          lvComparePath: ${{ steps.vars.outputs.MOCK_PATH }}\\LVCompare.cmd
+          fail-on-diff: "true"
+
+      - name: Assert Case 2 failed and outputs present
+        shell: pwsh
+        run: |
+          if ('${{ steps.c2.outcome }}' -ne 'failure') { throw "Expected step failure" }
+          if ('${{ steps.c2.outputs.diff }}' -ne 'true') { throw "Expected diff=true" }
+          if ('${{ steps.c2.outputs.exitCode }}' -ne '1') { throw "Expected exitCode=1" }
+
+      - name: Case 3 - no diff, equal files
+        id: c3
+        uses: ./
+        with:
+          working-directory: ${{ steps.vars.outputs.WD }}
+          base: a.vi
+          head: a.vi
+          lvComparePath: ${{ steps.vars.outputs.MOCK_PATH }}\\LVCompare.cmd
+          fail-on-diff: "true"
+
+      - name: Assert Case 3 outputs
+        shell: pwsh
+        run: |
+          if ('${{ steps.c3.outputs.diff }}' -ne 'false') { throw "Expected diff=false" }
+          if ('${{ steps.c3.outputs.exitCode }}' -ne '0') { throw "Expected exitCode=0" }
+
+      - name: Case 4 - LVCOMPARE_PATH discovery
+        id: c4
+        uses: ./
+        env:
+          LVCOMPARE_PATH: ${{ steps.vars.outputs.MOCK_PATH }}\LVCompare.cmd
+        with:
+          working-directory: ${{ steps.vars.outputs.WD }}
+          base: a.vi
+          head: b.vi
+          fail-on-diff: "false"
+
+      - name: Assert Case 4 outputs
+        shell: pwsh
+        run: |
+          if ('${{ steps.c4.outputs.diff }}' -ne 'true') { throw "Expected diff=true" }
+          if ('${{ steps.c4.outputs.exitCode }}' -ne '1') { throw "Expected exitCode=1" }
+
+      - name: Expose mock on PATH
+        shell: pwsh
+        run: |
+          echo ("PATH={0};{1}" -f '${{ steps.vars.outputs.MOCK_PATH }}', $env:PATH) | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Case 5 - PATH discovery
+        id: c5
+        uses: ./
+        with:
+          working-directory: ${{ steps.vars.outputs.WD }}
+          base: a.vi
+          head: b.vi
+          fail-on-diff: "false"
+
+      - name: Assert Case 5 outputs
+        shell: pwsh
+        run: |
+          if ('${{ steps.c5.outputs.diff }}' -ne 'true') { throw "Expected diff=true" }
+          if ('${{ steps.c5.outputs.exitCode }}' -ne '1') { throw "Expected exitCode=1" }
+
+      - name: Case 6 - unknown exit code should fail but keep outputs
+        id: c6
+        continue-on-error: true
+        uses: ./
+        env:
+          FORCE_EXIT: '2'
+        with:
+          working-directory: ${{ steps.vars.outputs.WD }}
+          base: a.vi
+          head: b.vi
+          lvComparePath: ${{ steps.vars.outputs.MOCK_PATH }}\LVCompare.cmd
+          fail-on-diff: "false"
+
+      - name: Assert Case 6 failure with outputs
+        shell: pwsh
+        run: |
+          if ('${{ steps.c6.outcome }}' -ne 'failure') { throw "Expected step failure" }
+          if ('${{ steps.c6.outputs.exitCode }}' -ne '2') { throw "Expected exitCode=2" }
+          if ('${{ steps.c6.outputs.diff }}' -ne 'false') { throw "Expected diff=false" }
