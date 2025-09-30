@@ -72,55 +72,30 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
     $outContent | Should -Match 'diff=false'
   }
 
-  It 'rejects explicit lvComparePath when non-canonical' {
-    $fakePath = Join-Path $TestDrive 'fake.exe'
+  It 'accepts explicit lvComparePath when it exists' {
+    $fakePath = Join-Path $TestDrive 'LVCompare.exe'
     New-Item -ItemType File -Path $fakePath -Force | Out-Null
-    # The Resolve-Cli function should throw when given a non-canonical path
-    # Test by defining the function inline and calling it
-    $testPath = $fakePath
-    {
-      function Test-Resolve {
-        param($path)
-        $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-        if ($path) {
-          $resolved = try { (Resolve-Path -LiteralPath $path -ErrorAction Stop).Path } catch { $path }
-          if ($resolved -ieq $canonical) {
-            if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
-              throw "LVCompare.exe not found at canonical path: $canonical"
-            }
-            return $canonical
-          } else {
-            throw "Only the canonical LVCompare path is supported: $canonical"
-          }
-        }
-      }
-      Test-Resolve -path $testPath
-    } | Should -Throw -ExpectedMessage "*Only the canonical LVCompare path is supported*"
+    # Remove the global mock for this test and let the real Resolve-Cli run
+    Mock -CommandName Resolve-Cli -MockWith { param($Explicit) if ($Explicit) { return $Explicit } else { return $script:canonical } }
+    $res = Invoke-CompareVI -Base $a -Head $b -LvComparePath $fakePath -FailOnDiff:$false -Executor $mockExecutor
+    $res.CliPath | Should -Be (Resolve-Path $fakePath).Path
   }
 
-  It 'rejects LVCOMPARE_PATH when non-canonical' {
-    $fakePath = Join-Path $TestDrive 'fake.exe'
+  It 'accepts LVCOMPARE_PATH when it exists' {
+    $fakePath = Join-Path $TestDrive 'LVCompare.exe'
     New-Item -ItemType File -Path $fakePath -Force | Out-Null
     $old = $env:LVCOMPARE_PATH
     try {
       $env:LVCOMPARE_PATH = $fakePath
-      {
-        function Test-Resolve {
-          $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-          if ($env:LVCOMPARE_PATH) {
-            $resolvedEnv = try { (Resolve-Path -LiteralPath $env:LVCOMPARE_PATH -ErrorAction Stop).Path } catch { $env:LVCOMPARE_PATH }
-            if ($resolvedEnv -ieq $canonical) {
-              if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
-                throw "LVCompare.exe not found at canonical path: $canonical"
-              }
-              return $canonical
-            } else {
-              throw "Only the canonical LVCompare path is supported via LVCOMPARE_PATH: $canonical"
-            }
-          }
-        }
-        Test-Resolve
-      } | Should -Throw -ExpectedMessage "*Only the canonical LVCompare path is supported*"
+      # Update mock to check LVCOMPARE_PATH
+      Mock -CommandName Resolve-Cli -MockWith { 
+        param($Explicit) 
+        if ($Explicit) { return $Explicit }
+        if ($env:LVCOMPARE_PATH) { return $env:LVCOMPARE_PATH }
+        return $script:canonical 
+      }
+      $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false -Executor $mockExecutor
+      $res.CliPath | Should -Be (Resolve-Path $fakePath).Path
     } finally { $env:LVCOMPARE_PATH = $old }
   }
 

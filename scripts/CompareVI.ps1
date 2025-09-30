@@ -7,38 +7,33 @@ function Resolve-Cli {
   )
   $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
 
-  # If explicit path provided, enforce canonical path only
-  if ($Explicit) {
-    $resolved = try { (Resolve-Path -LiteralPath $Explicit -ErrorAction Stop).Path } catch { $Explicit }
-    if ($resolved -ieq $canonical) {
-      if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
-        throw "LVCompare.exe not found at canonical path: $canonical"
-      }
-      return $canonical
-    } else {
-      throw "Only the canonical LVCompare path is supported: $canonical"
+  # Build search paths in priority order
+  $SearchPaths = @(
+    $env:LVCOMPARE_PATH,
+    (Get-Command 'LVCompare.exe' -ErrorAction SilentlyContinue | Select-Object -First 1 | ForEach-Object { $_.Source }),
+    $canonical
+  )
+  
+  # If explicit path provided, prepend it to search list
+  if ($Explicit) { 
+    $SearchPaths = @($Explicit) + $SearchPaths 
+  }
+
+  # Search for the CLI in priority order
+  foreach ($candidate in $SearchPaths) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    $p = $candidate
+    try { 
+      $p = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).Path 
+    } catch { 
+      # If resolve fails, use the candidate as-is
+    }
+    if (Test-Path -LiteralPath $p -PathType Leaf) { 
+      return $p 
     }
   }
 
-  # If environment variable provided, enforce canonical
-  if ($env:LVCOMPARE_PATH) {
-    $resolvedEnv = try { (Resolve-Path -LiteralPath $env:LVCOMPARE_PATH -ErrorAction Stop).Path } catch { $env:LVCOMPARE_PATH }
-    if ($resolvedEnv -ieq $canonical) {
-      if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
-        throw "LVCompare.exe not found at canonical path: $canonical"
-      }
-      return $canonical
-    } else {
-      throw "Only the canonical LVCompare path is supported via LVCOMPARE_PATH: $canonical"
-    }
-  }
-
-  # Default to canonical
-  if (Test-Path -LiteralPath $canonical -PathType Leaf) {
-    return $canonical
-  }
-
-  throw "LVCompare.exe not found. Install at: $canonical"
+  throw "LVCompare.exe not found. Provide 'lvComparePath', set LVCOMPARE_PATH, add to PATH, or install at: $canonical"
 }
 
 function Quote($s) {
