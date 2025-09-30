@@ -14,7 +14,8 @@ See also: [`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at `.github/
 Requirements
 
 - Self-hosted Windows runner with LabVIEW 2025 Q3 installed and licensed
-- `LVCompare.exe` either on `PATH`, provided via `lvComparePath`, or set as `LVCOMPARE_PATH` environment variable
+- `LVCompare.exe` installed at the **canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
+- Only the canonical path is supported; paths via `PATH`, `LVCOMPARE_PATH`, or `lvComparePath` must resolve to this exact location
 
 Inputs
 
@@ -104,14 +105,14 @@ Marketplace
 Notes
 
 - This action maps `LVCompare.exe` exit codes to a boolean `diff` (0 = no diff, 1 = diff). Any other exit code fails the step.
-- Typical locations to try for 2025 Q3 include:
-  - `C:\\Program Files\\NI\\LabVIEW 2025\\LVCompare.exe`
-  - `C:\\Program Files\\National Instruments\\LabVIEW 2025\\LVCompare.exe`
+- **Canonical path policy**: Only `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe` is supported
+- Any `lvComparePath` or `LVCOMPARE_PATH` value must resolve to this exact canonical path or the action will fail
 
 Troubleshooting
 
 - Ensure the runner user has the necessary LabVIEW licensing.
-- Verify `LVCompare.exe` is reachable (PATH, `LVCOMPARE_PATH`, or `lvComparePath`).
+- Verify `LVCompare.exe` is installed at: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
+- If you set `LVCOMPARE_PATH` or `lvComparePath`, ensure they point to the canonical path
 - Check composite action outputs (`diff`, `exitCode`, `cliPath`, `command`) and the CLI exit code for diagnostics.
 
 Tests
@@ -119,6 +120,10 @@ Tests
 - Unit tests (no external CLI):
   - Run: `pwsh -File ./tools/Run-Pester.ps1`
   - Produces artifacts under `tests/results/` (NUnit XML and summary)
-- Integration tests (may use mock CLI):
+- Integration tests (requires canonical LVCompare path on self-hosted runner):
   - Run: `pwsh -File ./tools/Run-Pester.ps1 -IncludeIntegration`
-- CI workflow: `.github/workflows/test-pester.yml` runs unit tests by default and uploads artifacts. Use the "Run workflow" input to include integration tests.
+  - Requires environment variables: `LV_BASE_VI` and `LV_HEAD_VI` pointing to test `.vi` files
+- CI workflows:
+  - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
+  - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI
+  - Use PR comments to trigger: `/run unit`, `/run mock`, `/run smoke`, `/run pester-selfhosted`

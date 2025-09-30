@@ -9,9 +9,7 @@ BeforeAll {
 
 Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   BeforeEach {
-    $TestDrive = Join-Path $env:TEMP ("comparevi-io-tests-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $TestDrive -Force | Out-Null
-
+    # Use Pester's native TestDrive
     $vis = Join-Path $TestDrive 'vis'
     New-Item -ItemType Directory -Path $vis -Force | Out-Null
     $a = Join-Path $vis 'a.vi'
@@ -20,13 +18,11 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
     New-Item -ItemType File -Path $b -Force | Out-Null
 
     # Always mock Resolve-Cli to avoid any dependency on real installations
-    Mock -CommandName Resolve-Cli -MockWith { 'C:\fake\LVCompare.exe' } -Verifiable
+    # Return the canonical path
+    $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+    Mock -CommandName Resolve-Cli -MockWith { $canonical } -Verifiable
 
-    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:td = $TestDrive
-  }
-
-  AfterEach {
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $td
+    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:canonical = $canonical
   }
 
   It 'validates required inputs and file existence' {
@@ -44,7 +40,7 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   }
 
   It 'throws when working-directory does not exist' {
-    { Invoke-CompareVI -Base $a -Head $b -WorkingDirectory (Join-Path $td 'missing-dir') -Executor { 0 } } | Should -Throw
+    { Invoke-CompareVI -Base $a -Head $b -WorkingDirectory (Join-Path $TestDrive 'missing-dir') -Executor { 0 } } | Should -Throw
   }
 
   It 'parses quoted lvCompareArgs and includes them in the reconstructed command' {
@@ -64,8 +60,8 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   }
 
   It 'writes outputs and summary for exit code 0 (diff=false)' {
-    $out = Join-Path $td 'out.txt'
-    $sum = Join-Path $td 'sum.md'
+    $out = Join-Path $TestDrive 'out.txt'
+    $sum = Join-Path $TestDrive 'sum.md'
     $res = Invoke-CompareVI -Base $a -Head $a -GitHubOutputPath $out -GitHubStepSummaryPath $sum -Executor { 0 }
     $res.Diff | Should -BeFalse
     (Get-Content $out -Raw) | Should -Match 'exitCode=0'
@@ -74,7 +70,7 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   }
 
   It 'does not throw when fail-on-diff is false and exit code is 1 (diff=true)' {
-    $out = Join-Path $td 'out.txt'
+    $out = Join-Path $TestDrive 'out.txt'
     $res = Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -FailOnDiff:$false -Executor { 1 }
     $res.Diff | Should -BeTrue
     (Get-Content $out -Raw) | Should -Match 'exitCode=1'
@@ -82,8 +78,8 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   }
 
   It 'writes outputs then throws for unknown exit code (diff=false)' {
-    $out = Join-Path $td 'out.txt'
-    $sum = Join-Path $td 'sum.md'
+    $out = Join-Path $TestDrive 'out.txt'
+    $sum = Join-Path $TestDrive 'sum.md'
     { Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -GitHubStepSummaryPath $sum -Executor { 2 } } | Should -Throw
     (Get-Content $out -Raw) | Should -Match 'exitCode=2'
     (Get-Content $out -Raw) | Should -Match 'diff=false'
@@ -91,7 +87,7 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
   }
 
   It 'throws when fail-on-diff is true with exit code 1, but writes outputs' {
-    $out = Join-Path $td 'out.txt'
+    $out = Join-Path $TestDrive 'out.txt'
     { Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -FailOnDiff:$true -Executor { 1 } } | Should -Throw
     (Get-Content $out -Raw) | Should -Match 'exitCode=1'
     (Get-Content $out -Raw) | Should -Match 'diff=true'
@@ -99,12 +95,12 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
 
   It 'uses mocked Resolve-Cli value in result' {
     $res = Invoke-CompareVI -Base $a -Head $b -Executor { 0 }
-    $res.CliPath | Should -Be 'C:\fake\LVCompare.exe'
+    $res.CliPath | Should -Be $canonical
   }
 
   It 'quotes base/head when working-directory path contains spaces' {
     $exec = { param($cli,$base,$head,$arr) return 0 }
-    $spacedDir = Join-Path $td 'space dir'
+    $spacedDir = Join-Path $TestDrive 'space dir'
     New-Item -ItemType Directory -Path $spacedDir -Force | Out-Null
     Copy-Item -LiteralPath $a -Destination (Join-Path $spacedDir 'a.vi') -Force
     Copy-Item -LiteralPath $b -Destination (Join-Path $spacedDir 'b.vi') -Force

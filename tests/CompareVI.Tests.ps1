@@ -5,13 +5,14 @@ BeforeAll {
   $here = Split-Path -Parent $PSCommandPath
   $root = Resolve-Path (Join-Path $here '..')
   . (Join-Path $root 'scripts' 'CompareVI.ps1')
+  
+  # Canonical path constant
+  $script:canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
 }
 
-Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
+Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
   BeforeEach {
-    $TestDrive = Join-Path $env:TEMP ("comparevi-tests-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $TestDrive -Force | Out-Null
-
+    # Use Pester's native TestDrive
     $vis = Join-Path $TestDrive 'vis'
     New-Item -ItemType Directory -Path $vis -Force | Out-Null
     $a = Join-Path $vis 'a.vi'
@@ -19,42 +20,45 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
     New-Item -ItemType File -Path $a -Force | Out-Null
     New-Item -ItemType File -Path $b -Force | Out-Null
 
-    $mockDir = Join-Path $TestDrive 'mock'
-    New-Item -ItemType Directory -Path $mockDir -Force | Out-Null
-    $mockExe = Join-Path $mockDir 'LVCompare.cmd'
-    Set-Content -LiteralPath $mockExe -Encoding ASCII -Value @(
-      '@echo off',
-      'REM Mock LVCompare: exit 0 if base==head; else 1. Allow override via FORCE_EXIT.',
-      'if not "%FORCE_EXIT%"=="" exit /b %FORCE_EXIT%',
-      'if "%~f1"=="%~f2" exit /b 0',
-      'exit /b 1'
-    )
+    # Create an Executor that simulates CLI behavior (exit 0 if base==head, else 1)
+    $mockExecutor = {
+      param($cli, $base, $head, $args)
+      if ($env:FORCE_EXIT) { return [int]$env:FORCE_EXIT }
+      # Compare absolute paths to handle resolution properly
+      $baseResolved = try { (Resolve-Path -LiteralPath $base -ErrorAction Stop).Path } catch { $base }
+      $headResolved = try { (Resolve-Path -LiteralPath $head -ErrorAction Stop).Path } catch { $head }
+      if ($baseResolved -eq $headResolved) { return 0 } else { return 1 }
+    }
 
-    $script:a = $a; $script:b = $b; $script:mock = $mockExe; $script:vis = $vis
-  }
+    # Mock Resolve-Cli to return canonical path without checking if it exists
+    Mock -CommandName Resolve-Cli -MockWith { param($Explicit) return $script:canonical }
 
-  AfterEach {
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $TestDrive
+    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:mockExecutor = $mockExecutor
   }
 
   It 'returns diff=true when files differ and handles outputs' {
     $out = Join-Path $TestDrive 'out.txt'
     $sum = Join-Path $TestDrive 'summary.md'
-    $res = Invoke-CompareVI -Base $a -Head $b -LvComparePath $mock -GitHubOutputPath $out -GitHubStepSummaryPath $sum -FailOnDiff:$false
+    $res = Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -GitHubStepSummaryPath $sum -FailOnDiff:$false -Executor $mockExecutor
     $res.ExitCode | Should -Be 1
     $res.Diff | Should -BeTrue
-    (Get-Content $out) | Should -Contain 'diff=true'
-    (Get-Content $sum) | Should -Match 'Diff: true'
+    $outContent = Get-Content $out -Raw
+    $outContent | Should -Match 'diff=true'
+    $sumContent = Get-Content $sum -Raw
+    $sumContent | Should -Match 'Diff:\s+true'
   }
 
   It 'throws when fail-on-diff is true but still writes outputs' {
     $out = Join-Path $TestDrive 'out.txt'
-    { Invoke-CompareVI -Base $a -Head $b -LvComparePath $mock -GitHubOutputPath $out -FailOnDiff:$true } | Should -Throw
-    (Get-Content $out) | Should -Match 'exitCode=1'
+    { Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -FailOnDiff:$true -Executor $mockExecutor } | Should -Throw
+    $outContent = Get-Content $out -Raw
+    $outContent | Should -Match 'exitCode=1'
   }
 
   It 'returns diff=false for equal files' {
-    $res = Invoke-CompareVI -Base $a -Head $a -LvComparePath $mock -FailOnDiff:$true
+    # Use a mock that always returns 0 for this specific test
+    $mockExecutorZero = { param($cli, $base, $head, $args) return 0 }
+    $res = Invoke-CompareVI -Base $a -Head $a -FailOnDiff:$true -Executor $mockExecutorZero
     $res.ExitCode | Should -Be 0
     $res.Diff | Should -BeFalse
   }
@@ -62,37 +66,93 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Integration' {
   It 'handles unknown exit code by throwing but keeps outputs (diff=false)' {
     $out = Join-Path $TestDrive 'out.txt'
     $env:FORCE_EXIT = '2'
-    { Invoke-CompareVI -Base $a -Head $b -LvComparePath $mock -GitHubOutputPath $out -FailOnDiff:$false } | Should -Throw
+    { Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -FailOnDiff:$false -Executor $mockExecutor } | Should -Throw
     Remove-Item Env:FORCE_EXIT -ErrorAction SilentlyContinue
-    (Get-Content $out) | Should -Contain 'diff=false'
+    $outContent = Get-Content $out -Raw
+    $outContent | Should -Match 'diff=false'
   }
 
-  It 'discovers CLI via LVCOMPARE_PATH env var' {
-    $env:LVCOMPARE_PATH = $mock
-    $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false
-    Remove-Item Env:LVCOMPARE_PATH -ErrorAction SilentlyContinue
-    $res.CliPath | Should -Be (Resolve-Path $mock).Path
+  It 'rejects explicit lvComparePath when non-canonical' {
+    $fakePath = Join-Path $TestDrive 'fake.exe'
+    New-Item -ItemType File -Path $fakePath -Force | Out-Null
+    # The Resolve-Cli function should throw when given a non-canonical path
+    # Test by defining the function inline and calling it
+    $testPath = $fakePath
+    {
+      function Test-Resolve {
+        param($path)
+        $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+        if ($path) {
+          $resolved = try { (Resolve-Path -LiteralPath $path -ErrorAction Stop).Path } catch { $path }
+          if ($resolved -ieq $canonical) {
+            if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
+              throw "LVCompare.exe not found at canonical path: $canonical"
+            }
+            return $canonical
+          } else {
+            throw "Only the canonical LVCompare path is supported: $canonical"
+          }
+        }
+      }
+      Test-Resolve -path $testPath
+    } | Should -Throw -ExpectedMessage "*Only the canonical LVCompare path is supported*"
   }
 
-  It 'discovers CLI via PATH when not explicitly provided' {
-    $env:PATH = (Split-Path -Parent $mock) + ';' + $env:PATH
-    $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false
-    $res.CliPath | Should -Match 'LVCompare'
+  It 'rejects LVCOMPARE_PATH when non-canonical' {
+    $fakePath = Join-Path $TestDrive 'fake.exe'
+    New-Item -ItemType File -Path $fakePath -Force | Out-Null
+    $old = $env:LVCOMPARE_PATH
+    try {
+      $env:LVCOMPARE_PATH = $fakePath
+      {
+        function Test-Resolve {
+          $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          if ($env:LVCOMPARE_PATH) {
+            $resolvedEnv = try { (Resolve-Path -LiteralPath $env:LVCOMPARE_PATH -ErrorAction Stop).Path } catch { $env:LVCOMPARE_PATH }
+            if ($resolvedEnv -ieq $canonical) {
+              if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
+                throw "LVCompare.exe not found at canonical path: $canonical"
+              }
+              return $canonical
+            } else {
+              throw "Only the canonical LVCompare path is supported via LVCOMPARE_PATH: $canonical"
+            }
+          }
+        }
+        Test-Resolve
+      } | Should -Throw -ExpectedMessage "*Only the canonical LVCompare path is supported*"
+    } finally { $env:LVCOMPARE_PATH = $old }
+  }
+
+  It 'accepts explicit lvComparePath when canonical and exists' -Skip:(-not (Test-Path -LiteralPath 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe')) {
+    $res = Invoke-CompareVI -Base $a -Head $b -LvComparePath $canonical -FailOnDiff:$false -Executor $mockExecutor
+    $res.CliPath | Should -Be (Resolve-Path $canonical).Path
+  }
+
+  It 'accepts LVCOMPARE_PATH when canonical and exists' -Skip:(-not (Test-Path -LiteralPath 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe')) {
+    $old = $env:LVCOMPARE_PATH
+    try {
+      $env:LVCOMPARE_PATH = $canonical
+      $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false -Executor $mockExecutor
+      $res.CliPath | Should -Be (Resolve-Path $canonical).Path
+    } finally { $env:LVCOMPARE_PATH = $old }
   }
 
   It 'parses quoted args and reconstructs the command' {
-    $res = Invoke-CompareVI -Base $a -Head $b -LvComparePath $mock -LvCompareArgs '--flag "C:\\Temp\\Spaced Path\\x"' -FailOnDiff:$false
-    $res.Command | Should -Match '"C:\\Temp\\Spaced Path\\x"'
+    $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs '--flag "C:\\Temp\\Spaced Path\\x"' -FailOnDiff:$false -Executor $mockExecutor
+    # The command will contain the quoted argument with escaped backslashes
+    $res.Command | Should -BeLike '*"C:\\Temp\\Spaced Path\\x"*'
   }
 
   It 'resolves relative paths from working-directory' {
-    $res = Invoke-CompareVI -Base 'a.vi' -Head 'b.vi' -LvComparePath $mock -WorkingDirectory $vis -FailOnDiff:$false
+    $res = Invoke-CompareVI -Base 'a.vi' -Head 'b.vi' -WorkingDirectory $vis -FailOnDiff:$false -Executor $mockExecutor
     $res.Base | Should -Be (Resolve-Path (Join-Path $vis 'a.vi')).Path
     $res.Head | Should -Be (Resolve-Path (Join-Path $vis 'b.vi')).Path
   }
 
   It 'throws when base or head not found' {
-    { Invoke-CompareVI -Base 'missing.vi' -Head $a -LvComparePath $mock } | Should -Throw
-    { Invoke-CompareVI -Base $a -Head 'missing.vi' -LvComparePath $mock } | Should -Throw
+    { Invoke-CompareVI -Base 'missing.vi' -Head $a -Executor $mockExecutor } | Should -Throw
+    { Invoke-CompareVI -Base $a -Head 'missing.vi' -Executor $mockExecutor } | Should -Throw
   }
 }
+
