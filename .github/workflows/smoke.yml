@@ -21,7 +21,7 @@ on:
         required: false
         type: string
         default: ""
-      fail-on-diff:
+      fail_on_diff:
         description: "Fail the job if differences are found"
         required: false
         type: choice
@@ -38,11 +38,11 @@ jobs:
         id: compare
         uses: ./
         with:
-          base: ${{ inputs.base }}
-          head: ${{ inputs.head }}
-          lvComparePath: ${{ inputs.lvComparePath }}
-          lvCompareArgs: ${{ inputs.lvCompareArgs }}
-          fail-on-diff: ${{ inputs["fail-on-diff"] }}
+          base: ${{ github.event.inputs.base }}
+          head: ${{ github.event.inputs.head }}
+          lvComparePath: ${{ github.event.inputs.lvComparePath }}
+          lvCompareArgs: ${{ github.event.inputs.lvCompareArgs }}
+          fail-on-diff: ${{ github.event.inputs.fail_on_diff }}
 
       - name: Echo outputs
         if: always()
