@@ -11,7 +11,8 @@ The Integration test in `tests/CompareVI.Integration.Tests.ps1` was failing due 
 **Issue:** The test used `(Get-Content -LiteralPath $tmpOut -Raw) | Should -Match '^diff=true$'`
 
 This pattern expects the **entire file content** to be exactly `diff=true`, but the actual output file contains multiple lines:
-```
+
+```text
 exitCode=1
 cliPath=C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe
 command=...
@@ -26,6 +27,7 @@ When using `-Raw`, `Get-Content` returns the entire file as a single string with
 **Changed pattern to:** `'(^|\n)diff=true($|\n)'`
 
 This pattern correctly matches `diff=true` as a line within multi-line content by:
+
 - `(^|\n)` - Matches start of string OR a newline before
 - `diff=true` - The literal text we're looking for
 - `($|\n)` - Matches end of string OR a newline after
@@ -44,24 +46,30 @@ This pattern correctly matches `diff=true` as a line within multi-line content b
 ## Verification
 
 ### Unit Tests
+
 ✅ All 20 unit tests pass (2 skipped - require LabVIEW installation)
-```
+
+```text
 Tests Passed: 20, Failed: 0, Skipped: 2, Inconclusive: 0, NotRun: 4
 ```
 
 ### Pattern Testing
+
 ✅ Verified the new pattern correctly:
+
 - Matches `diff=true` in multi-line content
 - Does NOT match `diff=false`
 - Works with both LF and CRLF line endings
 
 ### Validation Checks
+
 ✅ Markdownlint passes with no errors
 ✅ Actionlint has only pre-existing shellcheck info-level warnings (not related to this fix)
 
 ## Integration Test Requirements
 
 The Integration tests (tagged with `Integration`) require:
+
 - Self-hosted Windows runner
 - LabVIEW Compare CLI installed at: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
 - Environment variables set:
@@ -76,7 +84,7 @@ The Integration tests (tagged with `Integration`) require:
 
 ## Files Changed
 
-```
+```text
 .gitignore                            | 11 +++++++++++
 tests/CompareVI.Integration.Tests.ps1 |  2 +-
 2 files changed, 12 insertions(+), 1 deletion(-)
