@@ -18,6 +18,11 @@ This document summarizes the implementation status of self-hosted Windows runner
   - Emits outputs before failures for workflow branching
   - Structured step summaries via `$GITHUB_STEP_SUMMARY`
 
+- **PR-Triggered Self-Hosted Testing**:
+  - Integration tests run on self-hosted Windows runners when PR labeled with `test-integration`
+  - Smoke tests run on self-hosted Windows runners when PR labeled with `smoke`
+  - Provides test coverage validation before merge
+
 ### Testing Infrastructure
 
 #### Unit Tests (`tests/CompareVI.Tests.ps1`, `tests/CompareVI.InputOutput.Tests.ps1`)
@@ -56,6 +61,15 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Uses repository variables `LV_BASE_VI` and `LV_HEAD_VI`
 - Includes Integration tests by default
 - Uploads test results as artifacts
+- Manual dispatch only (workflow_dispatch)
+
+#### `pester-integration-on-label.yml` - PR Integration Tests
+
+- Runs on `[self-hosted, Windows, X64]` when PR is labeled with `test-integration`
+- Automatically triggered on PR events (labeled, reopened, synchronize)
+- Runs full Pester integration suite including real CLI tests
+- Posts results as PR comment
+- Uploads test results as artifacts
 
 #### `test-mock.yml` - Mock CLI Validation
 
@@ -81,6 +95,13 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Runs on self-hosted Windows runner
 - Accepts VI file paths as inputs
 - Generates HTML comparison reports
+
+#### `smoke-on-label.yml` - PR Smoke Tests
+
+- Runs on `[self-hosted, Windows, X64]` when PR is labeled with `smoke`
+- Automatically triggered on PR events (labeled, reopened, synchronize)
+- Uses repository variables for VI file paths
+- Posts results as PR comment
 
 #### `validate.yml` - Linting and Validation
 
@@ -120,6 +141,8 @@ This document summarizes the implementation status of self-hosted Windows runner
 1. Manually dispatch `pester-selfhosted.yml` workflow
 2. Verify all Integration tests pass
 3. Use PR comment `/run pester-selfhosted` to test from PRs
+4. Add label `test-integration` to PRs to run integration tests automatically
+5. Add label `smoke` to PRs to run smoke tests automatically
 
 ## CI/CD Pipeline
 
@@ -128,6 +151,8 @@ This document summarizes the implementation status of self-hosted Windows runner
 1. Validate (markdownlint, actionlint)
 2. Unit tests (windows-latest)
 3. Mock CLI tests (windows-latest)
+4. **Optional:** Integration tests (self-hosted, when labeled with `test-integration`)
+5. **Optional:** Smoke tests (self-hosted, when labeled with `smoke`)
 
 ### On PR Comment
 
