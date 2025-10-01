@@ -18,6 +18,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Only-failed re-run mode `-OnlyFailed` (re-executes only failing test file containers when no new targeted changes detected).
 - Post-run notification hook `-NotifyScript` with WATCH_* environment variables and named parameter invocation.
 - Flaky mitigation via `-RerunFailedAttempts` with retry classification override (`improved` on recovery) and flaky metadata in delta JSON (`flaky.enabled`, `attempts`, `recoveredAfter`, `initialFailedFiles`).
+- Closure regression test (`CompareLoop.NewExecClosure.Tests.ps1`) ensuring executor delay capture stability.
+- `-VerboseDiagnostics` / `BINDING_MINREPRO_VERBOSE` flag in `Binding-MinRepro.ps1` to optionally restore extended diagnostics.
 
 ### Tooling
 
@@ -59,6 +61,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Fixed
 
 - Dispatcher: robust handling of zero-test scenario (prevents null path/placeholder failures observed previously).
+- Custom percentiles test failures caused by missing closure capture of `$delayMs` (replaced inline variable reference with `.GetNewClosure()` pattern).
+- Binding-MinRepro warning matching instability by consolidating missing / non-existent path output into a single deterministic line and gating verbose noise behind a flag.
 - Restored backward-compatible `IncludeIntegration` string normalization for legacy pattern-based tests.
 - Single-test file array handling (`$testFiles.Count` reliability) and artifact manifest scoping.
 - Corrected test assertion operators (`-BeLessOrEqual`) preventing ParameterBindingException during streaming tests.
