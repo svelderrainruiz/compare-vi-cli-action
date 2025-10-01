@@ -8,6 +8,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
  
 ### Added (Features)
 
+- Artifact manifest (`pester-artifacts.json`) with schema versions for all JSON outputs
+- Schema version identifiers: `summaryVersion`, `failuresVersion`, `manifestVersion` (all 1.0.0)
+- `-EmitFailuresJsonAlways` switch to emit empty failures JSON on success (for unconditional parsing in CI)
 - Enhanced dispatcher failure diagnostics: enumerates failed tests with names, durations, and messages; summarizes skipped tests.
 - Machine-readable JSON summary artifact (`pester-summary.json`) emitted alongside existing text and XML results.
 - Synthetic diagnostic test file (`Invoke-PesterTests.Diagnostics.Tests.ps1`) to allow opt-in observation of failure diagnostics (activate by setting `ENABLE_DIAGNOSTIC_FAIL` env var).
@@ -15,15 +18,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Emission of `pester-failures.json` on test failure with structured failed test data.
 - Nightly diagnostics workflow (`pester-diagnostics-nightly.yml`) exercising enhanced failure path without failing build.
 - Job summary metric block in self-hosted Pester workflow using JSON summary.
+- Integration tests for manifest structure, -EmitFailuresJsonAlways, and failure JSON schema validation
 
 ### Fixed
 
 - Restored backward-compatible IncludeIntegration string comparison branch so legacy pattern-based test continues to pass.
+- Fixed array handling for single test file (ensured `$testFiles.Count` works with array wrap)
+- Fixed Write-ArtifactManifest scoping issue (simplified to direct artifact checking)
 
 ### Notes
 
-- JSON summary schema: `{ total, passed, failed, errors, skipped, duration_s, timestamp, pesterVersion, includeIntegration }`.
+- JSON summary schema: `{ total, passed, failed, errors, skipped, duration_s, timestamp, pesterVersion, includeIntegration, schemaVersion }`.
 - Failure diagnostics only appear when there are actual failures; normal passing runs remain concise.
+- Schema version policy: patch for additive fields, minor for additive monitored fields, major for breaking changes
 
 
 ## [v0.2.0] - 2025-10-01

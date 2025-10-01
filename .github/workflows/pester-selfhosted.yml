@@ -62,3 +62,4 @@ jobs:
             tests/results/**/*.html
             tests/results/pester-summary.json
             tests/results/pester-failures.json
+            tests/results/pester-artifacts.json
