@@ -100,6 +100,27 @@ For comprehensive documentation on LVCompare CLI flags and Git integration, see 
 - Environment-driven values:
   - `lvCompareArgs: "--flag \"${{ runner.temp }}\\out.txt\""`
 
+HTML Comparison Reports
+
+For CI/CD pipelines and code reviews, you can generate HTML comparison reports using **LabVIEWCLI** (requires LabVIEW 2025 Q3 or later):
+
+```powershell
+# Generate single-file HTML report
+LabVIEWCLI -OperationName CreateComparisonReport `
+  -vi1 "path\to\base.vi" -vi2 "path\to\head.vi" `
+  -reportType HTMLSingleFile -reportPath "CompareReport.html" `
+  -nobdcosm -nofppos -noattr
+```
+
+**Benefits:**
+
+- Self-contained HTML file suitable for artifact upload
+- Visual diff output for code reviews
+- Works with recommended noise filter flags
+- Can be integrated into workflows for automated comparison reporting
+
+See the knowledgebase guide for more details on HTML report generation.
+
 Troubleshooting unknown exit codes
 
 - The action treats 0 as no diff and 1 as diff. Any other exit code fails fast.

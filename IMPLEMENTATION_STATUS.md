@@ -41,6 +41,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Require self-hosted Windows runner with:
   - LabVIEW Compare CLI at canonical path
   - `LV_BASE_VI` and `LV_HEAD_VI` environment variables
+  - (Optional) LabVIEWCLI for HTML report generation tests
 - Validate real CLI invocation and exit codes
 - **Improved error messages**: Provide setup instructions when environment is misconfigured
 - **Knowledgebase integration**: Tests for recommended CLI flags
@@ -49,6 +50,12 @@ This document summarizes the implementation status of self-hosted Windows runner
   - `-noattr` - Ignore VI attribute changes
   - `-lvpath` - LabVIEW version selection
   - Complex flag combinations
+- **LabVIEWCLI HTML Report Tests**: Comprehensive testing of HTML comparison report generation
+  - Tests `CreateComparisonReport` operation from knowledgebase
+  - Validates noise filter flags with HTML output
+  - Tests identical VIs (no differences scenario)
+  - Validates handling of paths with spaces
+  - All LabVIEWCLI tests automatically skipped if LabVIEWCLI.exe not available
 
 #### Mock CLI Tests (`.github/workflows/test-mock.yml`) - DEPRECATED
 
