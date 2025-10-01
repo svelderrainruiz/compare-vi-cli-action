@@ -78,12 +78,48 @@ UNC/long path guidance
 
 Common lvCompareArgs recipes (patterns)
 
+For comprehensive documentation on LVCompare CLI flags and Git integration, see [`docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md`](./docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md).
+
+**Recommended noise filters** (reduce cosmetic diff churn):
+
+- `lvCompareArgs: "-nobdcosm -nofppos -noattr"`
+  - `-nobdcosm` - Ignore block diagram cosmetic changes (position/size/appearance)
+  - `-nofppos` - Ignore front panel object position/size changes
+  - `-noattr` - Ignore VI attribute changes
+
+**LabVIEW version selection:**
+
+- `lvCompareArgs: '-lvpath "C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe"'`
+
+**Other common patterns:**
+
 - Pass a path with spaces:
   - `lvCompareArgs: "--flag \"C:\\Path With Spaces\\out.txt\""`
 - Multiple flags:
   - `lvCompareArgs: "--flag1 value1 --flag2 value2"`
 - Environment-driven values:
   - `lvCompareArgs: "--flag \"${{ runner.temp }}\\out.txt\""`
+
+HTML Comparison Reports
+
+For CI/CD pipelines and code reviews, you can generate HTML comparison reports using **LabVIEWCLI** (requires LabVIEW 2025 Q3 or later):
+
+```powershell
+# Generate single-file HTML report
+LabVIEWCLI -OperationName CreateComparisonReport `
+  -vi1 "path\to\base.vi" -vi2 "path\to\head.vi" `
+  -reportType HTMLSingleFile -reportPath "CompareReport.html" `
+  -nobdcosm -nofppos -noattr
+```
+
+**Benefits:**
+
+- Self-contained HTML file suitable for artifact upload
+- Visual diff output for code reviews
+- Works with recommended noise filter flags
+- Can be integrated into workflows for automated comparison reporting
+
+See the knowledgebase guide for more details on HTML report generation.
 
 Troubleshooting unknown exit codes
 

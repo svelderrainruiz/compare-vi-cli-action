@@ -29,10 +29,11 @@ This document summarizes the implementation status of self-hosted Windows runner
 
 #### Unit Tests (`tests/CompareVI.Tests.ps1`, `tests/CompareVI.InputOutput.Tests.ps1`)
 
-- ✅ 20 tests passing, 2 skipped (require canonical CLI on Windows)
+- ✅ 23 tests total, 20 passing, 3 skipped (require canonical CLI on Windows)
 - Mock-based testing without requiring real CLI
 - Test all resolution paths and error conditions
 - Run on `windows-latest` GitHub-hosted runners
+- **New**: Canonical path fallback test (skipped when CLI not installed)
 
 #### Integration Tests (`tests/CompareVI.Integration.Tests.ps1`)
 
@@ -40,8 +41,21 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Require self-hosted Windows runner with:
   - LabVIEW Compare CLI at canonical path
   - `LV_BASE_VI` and `LV_HEAD_VI` environment variables
+  - (Optional) LabVIEWCLI for HTML report generation tests
 - Validate real CLI invocation and exit codes
 - **Improved error messages**: Provide setup instructions when environment is misconfigured
+- **Knowledgebase integration**: Tests for recommended CLI flags
+  - `-nobdcosm` - Ignore block diagram cosmetic changes
+  - `-nofppos` - Ignore front panel position changes
+  - `-noattr` - Ignore VI attribute changes
+  - `-lvpath` - LabVIEW version selection
+  - Complex flag combinations
+- **LabVIEWCLI HTML Report Tests**: Comprehensive testing of HTML comparison report generation
+  - Tests `CreateComparisonReport` operation from knowledgebase
+  - Validates noise filter flags with HTML output
+  - Tests identical VIs (no differences scenario)
+  - Validates handling of paths with spaces
+  - All LabVIEWCLI tests automatically skipped if LabVIEWCLI.exe not available
 
 #### Mock CLI Tests (`.github/workflows/test-mock.yml`) - DEPRECATED
 
@@ -65,7 +79,8 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Includes Integration tests by default
 - Uploads test results as artifacts
 - Manual dispatch only (workflow_dispatch)
-- **Environment validation**: Checks for CLI and VI files before running tests
+- **Uses open-source action**: `LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions`
+- Delegates environment validation and Pester installation to the shared action
 
 #### `pester-integration-on-label.yml` - PR Integration Tests
 

@@ -106,6 +106,9 @@ Describe 'Resolve-Cli canonical path enforcement' -Tag 'Unit' {
       return 0
     }
 
+    # Reference the canonical path from BeforeAll
+    $canonical = $script:canonical
+
     $script:a = $a; $script:b = $b; $script:vis = $vis; $script:mockExecutor = $mockExecutor
   }
 
@@ -137,6 +140,20 @@ Describe 'Resolve-Cli canonical path enforcement' -Tag 'Unit' {
       $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false -Executor $mockExecutor
       $res.CliPath | Should -Be (Resolve-Path $canonical).Path
     } finally { $env:LVCOMPARE_PATH = $old }
+  }
+
+  It 'falls back to canonical install path when present' -Skip:(-not (Test-Path -LiteralPath 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe')) {
+    $old = $env:LVCOMPARE_PATH
+    $oldPath = $env:PATH
+    try {
+      $env:LVCOMPARE_PATH = $null
+      # PATH may still contain LVCompare, but canonical should win if PATH doesn't resolve
+      $res = Invoke-CompareVI -Base $a -Head $b -FailOnDiff:$false -Executor $mockExecutor
+      $res.CliPath | Should -Be (Resolve-Path $canonical).Path
+    } finally {
+      $env:LVCOMPARE_PATH = $old
+      $env:PATH = $oldPath
+    }
   }
 }
 
