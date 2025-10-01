@@ -208,6 +208,13 @@ Tests
   - Use PR comments to trigger: `/run unit`, `/run mock`, `/run smoke`, `/run pester-selfhosted`
 - **For end-to-end testing**, see [End-to-End Testing Guide](./docs/E2E_TESTING_GUIDE.md)
 
+RunSummary renderer test restoration
+
+- The original renderer tool tests were temporarily quarantined due to a discovery-time PowerShell parameter binding anomaly injecting a null `-Path`.
+- Tests have been restored (`RunSummary.Tool.Restored.Tests.ps1`) using a safe pattern: all `$TestDrive` and dynamic file creation occurs inside `BeforeAll` or individual `It` blocks (never at script top-level during Pester discovery).
+- A minimal reproduction script (`tools/Binding-MinRepro.ps1`) plus diagnostic test (`Binding.MinRepro.Tests.ps1`) are included for future investigations.
+- If adding new renderer-related tests, avoid performing filesystem or `$TestDrive` operations outside of runtime blocks to prevent reintroducing the anomaly.
+
 Integration compare control loop (developer scaffold)
 
 For rapid, iterative development against two real VIs (e.g. editing a feature branch VI and observing diff stability / timing) a lightweight polling loop script is provided:
