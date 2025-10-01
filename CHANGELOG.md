@@ -6,31 +6,48 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
  
-### Added (Features)
+_No changes yet._
 
-- Artifact manifest (`pester-artifacts.json`) with schema versions for all JSON outputs
-- Schema version identifiers: `summaryVersion`, `failuresVersion`, `manifestVersion` (all 1.0.0)
-- `-EmitFailuresJsonAlways` switch to emit empty failures JSON on success (for unconditional parsing in CI)
-- Enhanced dispatcher failure diagnostics: enumerates failed tests with names, durations, and messages; summarizes skipped tests.
-- Machine-readable JSON summary artifact (`pester-summary.json`) emitted alongside existing text and XML results.
-- Synthetic diagnostic test file (`Invoke-PesterTests.Diagnostics.Tests.ps1`) to allow opt-in observation of failure diagnostics (activate by setting `ENABLE_DIAGNOSTIC_FAIL` env var).
-- `-JsonSummaryPath` parameter to dispatcher allowing custom JSON summary filename.
-- Emission of `pester-failures.json` on test failure with structured failed test data.
+## [v0.3.0] - 2025-10-01
+
+### Added
+
+- Streaming latency percentile strategy `StreamingReservoir` (bounded ring buffer) for low-memory approximate p50/p90/p99.
+- Hybrid quantile strategy (`Hybrid`) that seeds with exact samples then transitions to streaming after `-HybridExactThreshold`.
+- Periodic reconciliation option (`-ReconcileEvery`) to rebuild reservoir from all collected durations (uniform stride subsample) reducing long-run drift.
+- Configurable reservoir capacity via `-StreamCapacity` (min 10) and exposure of `StreamingWindowCount` in result object for visibility.
+- Reconciliation & streaming accuracy tests: `CompareLoop.StreamingQuantiles.Tests.ps1`, `CompareLoop.StreamingReconcile.Tests.ps1`.
+- README documentation: comprehensive Streaming Quantile Strategies section (usage, tuning, accuracy guidance, future considerations).
+- Dispatcher zero-test safeguard: early exit generates placeholder `pester-results.xml`, `pester-summary.txt`, JSON summary, and artifact manifest when no tests are found.
+- Artifact manifest (`pester-artifacts.json`) with schema version identifiers (`summaryVersion`, `failuresVersion`, `manifestVersion`).
+- `-EmitFailuresJsonAlways` switch to force emission of empty failures JSON for consistent CI parsing.
+- Machine-readable JSON summary artifact (`pester-summary.json`) plus `-JsonSummaryPath` customization parameter.
+- Structured failures artifact `pester-failures.json` on failing test runs.
+- Synthetic diagnostic test file (`Invoke-PesterTests.Diagnostics.Tests.ps1`) gated by `ENABLE_DIAGNOSTIC_FAIL` env var.
 - Nightly diagnostics workflow (`pester-diagnostics-nightly.yml`) exercising enhanced failure path without failing build.
-- Job summary metric block in self-hosted Pester workflow using JSON summary.
-- Integration tests for manifest structure, -EmitFailuresJsonAlways, and failure JSON schema validation
+- Job summary metrics block (self-hosted workflow) using JSON summary; integration tests covering manifest and schema validation.
+
+### Changed
+
+- Renamed streaming strategy from `StreamingP2` to `StreamingReservoir`; legacy name retained as deprecated alias with warning.
+- Percentile emission logic now branches on Exact / Streaming / Hybrid modes without retaining full sample array for streaming cases.
 
 ### Fixed
 
-- Restored backward-compatible IncludeIntegration string comparison branch so legacy pattern-based test continues to pass.
-- Fixed array handling for single test file (ensured `$testFiles.Count` works with array wrap)
-- Fixed Write-ArtifactManifest scoping issue (simplified to direct artifact checking)
+- Dispatcher: robust handling of zero-test scenario (prevents null path/placeholder failures observed previously).
+- Restored backward-compatible `IncludeIntegration` string normalization for legacy pattern-based tests.
+- Single-test file array handling (`$testFiles.Count` reliability) and artifact manifest scoping.
+- Corrected test assertion operators (`-BeLessOrEqual`) preventing ParameterBindingException during streaming tests.
+
+### Removed
+
+- Legacy experimental P² estimator implementation (fully supplanted by reservoir approach; alias maintained for user continuity).
 
 ### Notes
 
 - JSON summary schema: `{ total, passed, failed, errors, skipped, duration_s, timestamp, pesterVersion, includeIntegration, schemaVersion }`.
-- Failure diagnostics only appear when there are actual failures; normal passing runs remain concise.
-- Schema version policy: patch for additive fields, minor for additive monitored fields, major for breaking changes
+- Reservoir percentiles use linear interpolation—raise `-StreamCapacity` or enable `-ReconcileEvery` for more stable high-percentile (p99) estimates under bursty distributions.
+- Schema version policy: patch for strictly additive fields; minor for additive but monitored fields; major for breaking structural changes.
 
 
 ## [v0.2.0] - 2025-10-01
