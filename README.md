@@ -357,6 +357,8 @@ Supplement the heuristic inference with an explicit JSON array file:
 ]
 ```
 
+See `watch-mapping.sample.json` in the repository root for a longer example including mapping the watcher script itself to dispatcher tests.
+
 Rules:
 
 - Patterns are simple globs converted to regex (`*` → `.*`, `?` → `.`) and matched against repository-relative normalized paths (`/` separators).
@@ -374,6 +376,21 @@ Flaky retry mitigation (`-RerunFailedAttempts`):
 - After the initial run, failing test file containers (*.Tests.ps1) are re-run up to N attempts.
 - If failures clear on attempt K, `flaky.recoveredAfter` = K and classification is forced to `improved`.
 - Counts in the delta JSON correspond to the final attempt executed (subset of full suite when retries target a subset).
+
+Demo flaky test:
+
+- `tests/Flaky.Demo.Tests.ps1` simulates a flaky failure only on the first execution attempt when `ENABLE_FLAKY_DEMO=1`.
+- Combine with `-RerunFailedAttempts 2` to exercise `flaky.recoveredAfter` behavior producing a classification of `improved`.
+
+Example (single-run recovery showcase):
+
+```powershell
+$env:ENABLE_FLAKY_DEMO = '1'
+pwsh -File ./tools/Watch-Pester.ps1 -SingleRun -RerunFailedAttempts 2 -DeltaJsonPath tests/results/delta.json -ShowFailed
+Get-Content tests/results/delta.json | ConvertFrom-Json | Select-Object status,classification,flaky
+```
+
+Expected: first attempt fails the flaky demo test, second attempt passes, `flaky.recoveredAfter=1` and `classification=improved`.
 
 Notify hook (`-NotifyScript`):
 
