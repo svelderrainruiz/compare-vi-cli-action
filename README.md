@@ -128,3 +128,4 @@ Tests
   - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
   - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI
   - Use PR comments to trigger: `/run unit`, `/run mock`, `/run smoke`, `/run pester-selfhosted`
+- **For end-to-end testing**, see [End-to-End Testing Guide](./docs/E2E_TESTING_GUIDE.md)
