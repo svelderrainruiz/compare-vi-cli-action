@@ -204,5 +204,102 @@ Tests
 - CI workflows:
   - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
   - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI
+  - `.github/workflows/pester-diagnostics-nightly.yml` - nightly synthetic failure to validate enhanced diagnostics (non-blocking)
   - Use PR comments to trigger: `/run unit`, `/run mock`, `/run smoke`, `/run pester-selfhosted`
 - **For end-to-end testing**, see [End-to-End Testing Guide](./docs/E2E_TESTING_GUIDE.md)
+
+Dispatcher JSON outputs & customization
+
+The local dispatcher (`Invoke-PesterTests.ps1`) emits:
+
+- `pester-summary.json` (or custom name via `-JsonSummaryPath`) with aggregate metrics
+- `pester-failures.json` only when there are failing tests (array of failed test objects)
+
+`pester-summary.json` schema:
+
+```jsonc
+{
+  "total": 0,
+  "passed": 0,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "duration_s": 0.00,
+  "timestamp": "2025-01-01T00:00:00.0000000Z",
+  "pesterVersion": "5.x.x",
+  "includeIntegration": false
+}
+```
+
+Change the JSON filename (while keeping location) via:
+
+```powershell
+./Invoke-PesterTests.ps1 -JsonSummaryPath custom-summary.json
+```
+
+Failure diagnostics
+
+When failures occur the dispatcher prints:
+
+1. A table-style list of failing tests (name + duration)
+2. Error messages per failed test
+3. Writes `pester-failures.json` for downstream tooling
+
+Nightly diagnostics
+
+The workflow `pester-diagnostics-nightly.yml` sets `ENABLE_DIAGNOSTIC_FAIL=1`, triggering a synthetic failing test (skipped otherwise). This validates the failure reporting path without marking the workflow failed (uses `continue-on-error`). Artifacts include both JSON files for inspection.
+
+Dispatcher artifact manifest
+
+The dispatcher emits a `pester-artifacts.json` manifest listing all generated artifacts with their types and schema versions:
+
+| Artifact | Type | Schema Version | Always Present |
+|----------|------|----------------|----------------|
+| `pester-results.xml` | `nunitXml` | N/A | Yes |
+| `pester-summary.txt` | `textSummary` | N/A | Yes |
+| `pester-summary.json` | `jsonSummary` | `1.0.0` | Yes |
+| `pester-failures.json` | `jsonFailures` | `1.0.0` | Only on failures (or with `-EmitFailuresJsonAlways`) |
+
+Example manifest:
+
+```jsonc
+{
+  "manifestVersion": "1.0.0",
+  "generatedAt": "2025-01-01T00:00:00.0000000Z",
+  "artifacts": [
+    { "file": "pester-results.xml", "type": "nunitXml" },
+    { "file": "pester-summary.txt", "type": "textSummary" },
+    { "file": "pester-summary.json", "type": "jsonSummary", "schemaVersion": "1.0.0" },
+    { "file": "pester-failures.json", "type": "jsonFailures", "schemaVersion": "1.0.0" }
+  ]
+}
+```
+
+**-EmitFailuresJsonAlways flag**
+
+By default, `pester-failures.json` is only created when tests fail. To always emit it (as an empty array `[]` on success), use:
+
+```powershell
+./Invoke-PesterTests.ps1 -EmitFailuresJsonAlways
+```
+
+**Rationale:** Downstream tools can unconditionally parse `pester-failures.json` without checking for its existence, simplifying CI/CD pipelines that consume failure data.
+
+Schema version policy
+
+All JSON artifacts include schema versions for forward compatibility:
+
+- **`summaryVersion`**: Schema for `pester-summary.json`
+- **`failuresVersion`**: Schema for `pester-failures.json`
+- **`manifestVersion`**: Schema for `pester-artifacts.json`
+
+Current versions: **1.0.0** for all schemas.
+
+**Versioning rules:**
+
+- **Patch bump** (e.g., 1.0.0 → 1.0.1): Additive fields only; existing parsers unaffected
+- **Minor bump** (e.g., 1.0.0 → 1.1.0): Additive monitored fields that tools should start tracking
+- **Major bump** (e.g., 1.0.0 → 2.0.0): Breaking changes (field removal, rename, type change)
+
+Consumers should check `schemaVersion` and handle unknown major versions gracefully.
+
