@@ -9,3 +9,4 @@ tests/results/
 # Temporary files
 *.tmp
 .DS_Store
+actionlint
