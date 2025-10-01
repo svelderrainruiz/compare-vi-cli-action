@@ -19,6 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The open-source action delegates to Invoke-PesterTests.ps1 at the repository root
+      # This dispatcher assumes Pester v5+ is pre-installed on the self-hosted runner
       - name: Run Pester on self-hosted via open-source action
         uses: LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions
         with:
