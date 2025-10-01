@@ -159,7 +159,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 - ✅ `INTEGRATION_PLAN.md` - Implementation details and test coverage
 - ✅ `IMPLEMENTATION_STATUS.md` - Current implementation status and verification checklist
 - ✅ `PESTER_SELFHOSTED_FIXES.md` - Pester self-hosted runner fixes summary
-- ✅ `.github/copilot-instructions.md` - AI assistant context
+- ✅ `.copilot-instructions.md` - AI assistant context
 
 ## Self-Hosted Runner Requirements
 

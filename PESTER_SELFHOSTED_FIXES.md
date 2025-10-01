@@ -4,7 +4,7 @@
 
 ### 1. Fixed Markdown Linting Errors
 
-**File:** `.github/copilot-instructions.md`
+**File:** `.copilot-instructions.md`
 
 **Problem:** The file had duplicate content, missing blank lines, and bare URLs causing 13 markdown lint errors.
 
@@ -123,7 +123,7 @@ To fully enable Integration testing:
 
 ## Files Modified
 
-- `.github/copilot-instructions.md` - Fixed markdown linting errors
+- `.copilot-instructions.md` - Fixed markdown linting errors
 - `.github/workflows/test-pester.yml` - Fixed parameter passing to Run-Pester.ps1
 
 ## Test Results
