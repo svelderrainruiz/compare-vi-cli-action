@@ -5,7 +5,8 @@ param(
   [Parameter(Mandatory=$true)] [string]$CliPath,
   [string]$Base,
   [string]$Head,
-  [string]$OutputPath
+  [string]$OutputPath,
+  [double]$DurationSeconds
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,7 +81,8 @@ $css
       <div class="key">Generated</div><div class="value">$now</div>
       <div class="key">Exit code</div><div class="value">$ExitCode ($exitText)</div>
       <div class="key">Diff</div><div class="value">$Diff</div>
-      <div class="key">CLI Path</div><div class="value">$CliPath</div>
+  <div class="key">CLI Path</div><div class="value">$CliPath</div>
+  <div class="key">Duration (s)</div><div class="value">$([string]::Format('{0:F3}', $DurationSeconds))</div>
       <div class="key">Base</div><div class="value">$Base</div>
       <div class="key">Head</div><div class="value">$Head</div>
     </div>

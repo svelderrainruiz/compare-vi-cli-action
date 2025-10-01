@@ -42,10 +42,17 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
     $res = Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -GitHubStepSummaryPath $sum -FailOnDiff:$false -Executor $mockExecutor
     $res.ExitCode | Should -Be 1
     $res.Diff | Should -BeTrue
+    $res.CompareDurationSeconds | Should -BeGreaterOrEqual 0
+    $res.CompareDurationNanoseconds | Should -BeGreaterOrEqual 0
     $outContent = Get-Content $out -Raw
     $outContent | Should -Match 'diff=true'
+    $outContent | Should -Match 'compareDurationSeconds='
+    $outContent | Should -Match 'compareDurationNanoseconds='
     $sumContent = Get-Content $sum -Raw
     $sumContent | Should -Match 'Diff:\s+true'
+    # Escape parentheses in regex
+    $sumContent | Should -Match 'Duration \(s\):'
+    $sumContent | Should -Match 'Duration \(ns\):'
   }
 
   It 'throws when fail-on-diff is true but still writes outputs' {
@@ -61,6 +68,8 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
     $res = Invoke-CompareVI -Base $a -Head $a -FailOnDiff:$true -Executor $mockExecutorZero
     $res.ExitCode | Should -Be 0
     $res.Diff | Should -BeFalse
+    $res.CompareDurationSeconds | Should -BeGreaterOrEqual 0
+    $res.CompareDurationNanoseconds | Should -BeGreaterOrEqual 0
   }
 
   It 'handles unknown exit code by throwing but keeps outputs (diff=false)' {

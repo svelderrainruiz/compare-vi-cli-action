@@ -32,6 +32,8 @@ Outputs
 - `exitCode`: Raw exit code from the CLI
 - `cliPath`: Resolved path to the executable
 - `command`: The exact command line executed (quoted) for auditing
+- `compareDurationSeconds`: Elapsed execution time (float, seconds) for the LVCompare invocation (renamed from `durationSeconds`)
+- `compareDurationNanoseconds`: High-resolution elapsed time in nanoseconds (useful for profiling very fast comparisons)
 
 Exit codes and step summary
 
@@ -49,7 +51,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Compare VIs
         id: compare
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.1.0
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
         with:
           working-directory: subfolder/with/vis
           base: relative/path/to/base.vi   # resolved from working-directory if set
@@ -121,6 +123,44 @@ LabVIEWCLI -OperationName CreateComparisonReport `
 
 See the knowledgebase guide for more details on HTML report generation.
 
+Timing metrics
+
+- Each invocation now records wall-clock execution time and surfaces it via:
+  - Action output `compareDurationSeconds` (was `durationSeconds` in earlier versions)
+  - Action output `compareDurationNanoseconds` (high-resolution; derived from Stopwatch ticks)
+  - Step summary line `Duration (s): <value>`
+  - Step summary line `Duration (ns): <value>`
+  - PR comment and artifact workflow job summary include a combined line: `<seconds>s (<milliseconds> ms)` for quick readability
+  - HTML report field (if you render a report via `Render-CompareReport.ps1` passing `-CompareDurationSeconds` or legacy alias `-DurationSeconds`)
+
+Artifact publishing workflow
+
+A dedicated workflow (`.github/workflows/compare-artifacts.yml`) runs the local action, generates:
+
+- `compare-summary.json` (JSON metadata: base, head, exit code, diff, timing)
+- `compare-report.html` (HTML summary rendered via `Render-CompareReport.ps1`)
+
+and uploads them as artifacts. It also appends a timing block to the job summary:
+
+```text
+### Compare VI Timing
+- Seconds: <seconds>
+- Nanoseconds: <nanoseconds>
+- Combined: <seconds>s (<ms> ms)
+```
+
+Use this workflow to retain comparison evidence on every push or pull request without failing the build on differences (it sets `fail-on-diff: false`).
+
+Integration readiness
+
+Use the helper script to assess prerequisites before enabling integration tests:
+ 
+```powershell
+./scripts/Test-IntegrationEnvironment.ps1 -JsonPath tests/results/integration-env.json
+```
+ 
+Exit code 0 means ready; 1 indicates missing prerequisites (non-fatal for CI gating).
+
 Troubleshooting unknown exit codes
 
 - The action treats 0 as no diff and 1 as diff. Any other exit code fails fast.
@@ -160,6 +200,7 @@ Tests
 - Integration tests (requires canonical LVCompare path on self-hosted runner):
   - Run: `pwsh -File ./tools/Run-Pester.ps1 -IncludeIntegration`
   - Requires environment variables: `LV_BASE_VI` and `LV_HEAD_VI` pointing to test `.vi` files
+  - See detailed prerequisites & skip behavior: [Integration Tests Guide](./docs/INTEGRATION_TESTS.md)
 - CI workflows:
   - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
   - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI

@@ -320,6 +320,8 @@ Describe 'Sample' {
 }
 
 Describe 'Invoke-PesterTests.ps1 Integration' -Tag 'Integration' {
+  # Initialize to safe default so discovery (building skip expressions) doesn't error
+  $pesterAvailable = $false
   
   BeforeAll {
     # Only run if Pester is available
