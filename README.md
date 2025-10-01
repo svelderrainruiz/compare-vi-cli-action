@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Compare VIs
         id: compare
-  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
         with:
           working-directory: subfolder/with/vis
           base: relative/path/to/base.vi   # resolved from working-directory if set
