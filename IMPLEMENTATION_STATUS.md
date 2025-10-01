@@ -41,6 +41,7 @@ This document summarizes the implementation status of self-hosted Windows runner
   - LabVIEW Compare CLI at canonical path
   - `LV_BASE_VI` and `LV_HEAD_VI` environment variables
 - Validate real CLI invocation and exit codes
+- **Improved error messages**: Provide setup instructions when environment is misconfigured
 
 #### Mock CLI Tests (`.github/workflows/test-mock.yml`) - DEPRECATED
 
@@ -64,6 +65,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Includes Integration tests by default
 - Uploads test results as artifacts
 - Manual dispatch only (workflow_dispatch)
+- **Environment validation**: Checks for CLI and VI files before running tests
 
 #### `pester-integration-on-label.yml` - PR Integration Tests
 
@@ -72,6 +74,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Runs full Pester integration suite including real CLI tests
 - Posts results as PR comment
 - Uploads test results as artifacts
+- **Environment validation**: Checks for CLI and VI files before running tests
 
 #### `test-mock.yml` - Mock CLI Validation
 
@@ -104,6 +107,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Automatically triggered on PR events (labeled, reopened, synchronize)
 - Uses repository variables for VI file paths
 - Posts results as PR comment
+- **Environment validation**: Checks for CLI before running tests
 
 #### `validate.yml` - Linting and Validation
 
@@ -113,10 +117,13 @@ This document summarizes the implementation status of self-hosted Windows runner
 
 ### Documentation
 
-- ✅ `README.md` - User-facing documentation
+- ✅ `README.md` - User-facing documentation with quick start guide
 - ✅ `docs/runner-setup.md` - Self-hosted runner setup guide
+- ✅ `docs/SELFHOSTED_CI_SETUP.md` - Comprehensive CI/CD setup and troubleshooting guide
 - ✅ `CONTRIBUTING.md` - Contribution guidelines
 - ✅ `INTEGRATION_PLAN.md` - Implementation details and test coverage
+- ✅ `IMPLEMENTATION_STATUS.md` - Current implementation status and verification checklist
+- ✅ `PESTER_SELFHOSTED_FIXES.md` - Pester self-hosted runner fixes summary
 - ✅ `.github/copilot-instructions.md` - AI assistant context
 
 ## Self-Hosted Runner Requirements
