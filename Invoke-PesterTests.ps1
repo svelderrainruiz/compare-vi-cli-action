@@ -96,6 +96,69 @@ function Write-ArtifactManifest {
   }
 }
 
+function Write-FailureDiagnostics {
+  param(
+    [Parameter(Mandatory)] $PesterResult,
+    [Parameter(Mandatory)] [string]$ResultsDirectory,
+    [Parameter(Mandatory)] [int]$SkippedCount,
+    [Parameter(Mandatory)] [string]$FailuresSchemaVersion
+  )
+  try {
+    if ($null -eq $PesterResult -or -not $PesterResult.Tests) {
+      return
+    }
+    
+    $failedTests = $PesterResult.Tests | Where-Object { $_.Result -eq 'Failed' }
+    if ($failedTests) {
+      Write-Host "Failed Tests (detailed):" -ForegroundColor Red
+      foreach ($t in $failedTests) {
+        $name = if ($t.Name) { $t.Name } elseif ($t.Path) { $t.Path } else { '<unknown>' }
+        $duration = if ($t.Duration) { ('{0:N2}ms' -f ($t.Duration.TotalMilliseconds)) } else { '' }
+        Write-Host ("  - {0} {1}" -f $name, $duration).Trim() -ForegroundColor Red
+        if ($t.ErrorRecord) {
+          $msg = ($t.ErrorRecord.Exception.Message | Out-String).Trim()
+          if ($msg) { Write-Host "      Message: $msg" -ForegroundColor DarkRed }
+        }
+      }
+      
+      # Emit machine-readable failures JSON
+      try {
+        $failArray = @()
+        foreach ($t in $failedTests) {
+          $failArray += [PSCustomObject]@{
+            name          = $t.Name
+            path          = $t.Path
+            duration_ms   = if ($t.Duration) { [math]::Round($t.Duration.TotalMilliseconds,2) } else { $null }
+            message       = if ($t.ErrorRecord) { ($t.ErrorRecord.Exception.Message | Out-String).Trim() } else { $null }
+            schemaVersion = $FailuresSchemaVersion
+          }
+        }
+        $failJsonPath = Join-Path $ResultsDirectory 'pester-failures.json'
+        $failArray | ConvertTo-Json -Depth 4 | Out-File -FilePath $failJsonPath -Encoding utf8 -ErrorAction Stop
+        Write-Host "Failures JSON written to: $failJsonPath" -ForegroundColor Gray
+      } catch {
+        Write-Warning "Failed to write failures JSON: $_"
+      }
+    }
+    
+    # Summarize skipped tests if any
+    if ($SkippedCount -gt 0) {
+      $skippedTests = $PesterResult.Tests | Where-Object { $_.Result -eq 'Skipped' }
+      if ($skippedTests) {
+        Write-Host "Skipped Tests (first 10 shown):" -ForegroundColor Yellow
+        $i = 0
+        foreach ($s in $skippedTests) {
+          if ($i -ge 10) { Write-Host "  ... ($($skippedTests.Count - 10)) more skipped" -ForegroundColor Yellow; break }
+          Write-Host "  - $($s.Name)" -ForegroundColor Yellow
+          $i++
+        }
+      }
+    }
+  } catch {
+    Write-Host "(Warning) Failed to emit detailed failure diagnostics: $_" -ForegroundColor DarkYellow
+  }
+}
+
 # Display dispatcher information
 Write-Host "=== Pester Test Dispatcher ===" -ForegroundColor Cyan
 Write-Host "Script Version: 1.0.0"
@@ -338,57 +401,8 @@ Write-Host ""
 
 # Exit with appropriate code
 if ($failed -gt 0 -or $errors -gt 0) {
-  # Provide richer failure diagnostics leveraging the in-memory Pester result object when available
-  try {
-    if ($null -ne $result -and $result.Tests) {
-      $failedTests = $result.Tests | Where-Object { $_.Result -eq 'Failed' }
-      if ($failedTests) {
-        Write-Host "Failed Tests (detailed):" -ForegroundColor Red
-        foreach ($t in $failedTests) {
-          $name = if ($t.Name) { $t.Name } elseif ($t.Path) { $t.Path } else { '<unknown>' }
-          $duration = if ($t.Duration) { ('{0:N2}ms' -f ($t.Duration.TotalMilliseconds)) } else { '' }
-          Write-Host ("  - {0} {1}" -f $name, $duration).Trim() -ForegroundColor Red
-          if ($t.ErrorRecord) {
-            $msg = ($t.ErrorRecord.Exception.Message | Out-String).Trim()
-            if ($msg) { Write-Host "      Message: $msg" -ForegroundColor DarkRed }
-          }
-        }
-        # Emit machine-readable failures JSON
-        try {
-          $failArray = @()
-          foreach ($t in $failedTests) {
-            $failArray += [PSCustomObject]@{
-              name          = $t.Name
-              path          = $t.Path
-              duration_ms   = if ($t.Duration) { [math]::Round($t.Duration.TotalMilliseconds,2) } else { $null }
-              message       = if ($t.ErrorRecord) { ($t.ErrorRecord.Exception.Message | Out-String).Trim() } else { $null }
-              schemaVersion = $SchemaFailuresVersion
-            }
-          }
-          $failJsonPath = Join-Path $resultsDir 'pester-failures.json'
-          $failArray | ConvertTo-Json -Depth 4 | Out-File -FilePath $failJsonPath -Encoding utf8 -ErrorAction Stop
-          Write-Host "Failures JSON written to: $failJsonPath" -ForegroundColor Gray
-        } catch {
-          Write-Warning "Failed to write failures JSON: $_"
-        }
-      }
-      # Summarize skipped tests if any (use XML count as fallback)
-      if ($skipped -gt 0) {
-        $skippedTests = $result.Tests | Where-Object { $_.Result -eq 'Skipped' }
-        if ($skippedTests) {
-          Write-Host "Skipped Tests (first 10 shown):" -ForegroundColor Yellow
-          $i = 0
-          foreach ($s in $skippedTests) {
-            if ($i -ge 10) { Write-Host "  ... ($($skippedTests.Count - 10)) more skipped" -ForegroundColor Yellow; break }
-            Write-Host "  - $($s.Name)" -ForegroundColor Yellow
-            $i++
-          }
-        }
-      }
-    }
-  } catch {
-    Write-Host "(Warning) Failed to emit detailed failure diagnostics: $_" -ForegroundColor DarkYellow
-  }
+  # Emit failure diagnostics using helper function
+  Write-FailureDiagnostics -PesterResult $result -ResultsDirectory $resultsDir -SkippedCount $skipped -FailuresSchemaVersion $SchemaFailuresVersion
   Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
   Write-Host "❌ Tests failed: $failed failure(s), $errors error(s)" -ForegroundColor Red
   Write-Error "Test execution completed with failures"

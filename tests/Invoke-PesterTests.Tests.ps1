@@ -248,6 +248,12 @@ Describe 'Sample' {
       $scriptContent | Should -Match 'Failures JSON written to:'
       $scriptContent | Should -Match '\$failArray \| ConvertTo-Json'
     }
+    
+    It 'has Write-FailureDiagnostics helper function' {
+      $scriptContent = Get-Content $dispatcherPath -Raw
+      $scriptContent | Should -Match 'function Write-FailureDiagnostics'
+      $scriptContent | Should -Match 'Write-FailureDiagnostics -PesterResult'
+    }
   }
 
   Context 'Error handling' {
