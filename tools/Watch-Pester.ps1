@@ -20,6 +20,7 @@ param(
   , [int]$MaxFailedList = 10
   , [switch]$OnlyFailed
   , [string]$NotifyScript
+  , [int]$RerunFailedAttempts = 0
 )
 
 Set-StrictMode -Version Latest
@@ -141,23 +142,92 @@ function Invoke-PesterSelective {
     Write-Log 'No result object (likely discovery failure).' 'ERROR'
     return
   }
-  $failedCount = ($result | Add-Member -PassThru -NotePropertyName dummy 0 | Select-Object -ExpandProperty FailedCount -ErrorAction SilentlyContinue)
-  # Force numeric cast if possible to avoid later parameter binding confusion
-  if ($failedCount -isnot [int]) { $failedCount = [int]($failedCount -as [int]) }
-  $failedBlocks = ($result | Select-Object -ExpandProperty FailedBlocksCount -ErrorAction SilentlyContinue)
-  $testCount = ($result | Select-Object -ExpandProperty TestCount -ErrorAction SilentlyContinue)
-  if (-not $testCount) { $testCount = ($result | Select-Object -ExpandProperty TotalCount -ErrorAction SilentlyContinue) }
-  if (-not $testCount -and ($result.Tests)) { $testCount = (@($result.Tests)).Length }
-  if (-not $testCount) {
-    # Last resort: sum passed+failed+skipped if available
-    try {
-      $passed = ($result | Select-Object -ExpandProperty PassedCount -ErrorAction SilentlyContinue)
-      $sk = ($result | Select-Object -ExpandProperty SkippedCount -ErrorAction SilentlyContinue)
-      $fl = $failedCount
-      if ($passed -or $fl -or $sk) { $testCount = (($passed|ForEach-Object {[int]$_}) + ($fl|ForEach-Object {[int]$_}) + ($sk|ForEach-Object {[int]$_})) }
-    } catch {}
+  function Get-ResultCounts {
+    param($pesterResult)
+    $fc = ($pesterResult | Add-Member -PassThru -NotePropertyName dummy 0 | Select-Object -ExpandProperty FailedCount -ErrorAction SilentlyContinue)
+    if ($fc -isnot [int]) { $fc = [int]($fc -as [int]) }
+    $fb = ($pesterResult | Select-Object -ExpandProperty FailedBlocksCount -ErrorAction SilentlyContinue)
+    $tc = ($pesterResult | Select-Object -ExpandProperty TestCount -ErrorAction SilentlyContinue)
+    if (-not $tc) { $tc = ($pesterResult | Select-Object -ExpandProperty TotalCount -ErrorAction SilentlyContinue) }
+    if (-not $tc -and ($pesterResult.Tests)) { $tc = (@($pesterResult.Tests)).Length }
+    if (-not $tc) {
+      try {
+        $passed = ($pesterResult | Select-Object -ExpandProperty PassedCount -ErrorAction SilentlyContinue)
+        $sk2 = ($pesterResult | Select-Object -ExpandProperty SkippedCount -ErrorAction SilentlyContinue)
+        $fl2 = $fc
+        if ($passed -or $fl2 -or $sk2) { $tc = (($passed|ForEach-Object {[int]$_}) + ($fl2|ForEach-Object {[int]$_}) + ($sk2|ForEach-Object {[int]$_})) }
+      } catch {}
+    }
+    $skc = ($pesterResult | Select-Object -ExpandProperty SkippedCount -ErrorAction SilentlyContinue)
+    return [pscustomobject]@{ Failed=$fc; FailedBlocks=$fb; Tests=$tc; Skipped=$skc }
   }
-  $skipped = ($result | Select-Object -ExpandProperty SkippedCount -ErrorAction SilentlyContinue)
+
+  $counts = Get-ResultCounts -pesterResult $result
+  $failedCount = $counts.Failed
+  $failedBlocks = $counts.FailedBlocks
+  $testCount = $counts.Tests
+  $skipped = $counts.Skipped
+  $flakyRecoveredAfter = $null
+  $flakyInitialFailedFiles = @()
+  if ($failedCount -gt 0 -and $RerunFailedAttempts -gt 0 -and $result.Tests) {
+    try {
+      # Collect failing test file containers (not individual test case paths) for retries.
+      $flakyInitialFailedFiles = @(
+        $result.Tests | Where-Object { $_.Result -eq 'Failed' } | ForEach-Object {
+          # Prefer ScriptBlock.File if present (Pester internal), else Path trimmed to file boundary
+          $file = $null
+          try { if ($_.ScriptBlock -and $_.ScriptBlock.File) { $file = $_.ScriptBlock.File } } catch {}
+          if (-not $file) {
+            $p = $_.Path
+            if ($p -match '^(.*?\.Tests\.ps1)') { $file = $Matches[1] }
+          }
+          if ($file) { Resolve-Path -LiteralPath $file -ErrorAction SilentlyContinue }
+        } | Where-Object { $_ -ne $null } | ForEach-Object { $_.Path }
+      ) | Sort-Object -Unique
+      Write-Log "Flaky retry enabled. Initial failing files: $(@($flakyInitialFailedFiles).Count). Attempts=$RerunFailedAttempts" 'INFO'
+      for ($attempt=1; $attempt -le $RerunFailedAttempts; $attempt++) {
+        if (-not $flakyInitialFailedFiles -or $flakyInitialFailedFiles.Count -eq 0) { break }
+        Write-Log "Flaky retry attempt #$attempt targeting $(@($flakyInitialFailedFiles).Count) file(s)" 'INFO'
+        $retryConfig = New-PesterConfiguration
+        $retryConfig.Run.PassThru = $true
+        $retryConfig.Run.Path = $flakyInitialFailedFiles
+        $retryConfig.Output.Verbosity = if ($Quiet) { 'Normal' } else { 'Detailed' }
+        if ($Tag) { $retryConfig.Filter.Tag = @($Tag) }
+        if ($ExcludeTag) { $retryConfig.Filter.ExcludeTag = @($ExcludeTag) }
+        $retryResult = $null
+        try { $retryResult = Invoke-Pester -Configuration $retryConfig -ErrorAction Stop } catch { Write-Log "Flaky retry attempt #$attempt threw: $($_.Exception.Message)" 'WARN' }
+        if ($retryResult) {
+          $counts = Get-ResultCounts -pesterResult $retryResult
+          $failedCount = $counts.Failed
+          $failedBlocks = $counts.FailedBlocks
+          $testCount = $counts.Tests  # tests executed this attempt (not cumulative)
+          $skipped = $counts.Skipped
+          if ($failedCount -eq 0 -and ($failedBlocks -as [int]) -eq 0) {
+            Write-Log "Flaky retry succeeded on attempt #$attempt; failures cleared." 'INFO'
+            $result = $retryResult
+            $flakyRecoveredAfter = $attempt
+            break
+          } else {
+            Write-Log "Flaky retry attempt #$attempt still failing ($failedCount tests)." 'INFO'
+            try {
+              $flakyInitialFailedFiles = @(
+                $retryResult.Tests | Where-Object { $_.Result -eq 'Failed' } | ForEach-Object {
+                  $file = $null
+                  try { if ($_.ScriptBlock -and $_.ScriptBlock.File) { $file = $_.ScriptBlock.File } } catch {}
+                  if (-not $file) {
+                    $p = $_.Path
+                    if ($p -match '^(.*?\.Tests\.ps1)') { $file = $Matches[1] }
+                  }
+                  if ($file) { Resolve-Path -LiteralPath $file -ErrorAction SilentlyContinue }
+                } | Where-Object { $_ -ne $null } | ForEach-Object { $_.Path }
+              ) | Sort-Object -Unique
+            } catch {}
+            $result = $retryResult
+          }
+        }
+      }
+    } catch { Write-Log "Flaky retry orchestration failed: $($_.Exception.Message)" 'WARN' }
+  }
   $status = if (($failedCount -as [int]) -gt 0 -or ($failedBlocks -as [int]) -gt 0) { 'FAIL' } else { 'PASS' }
 
   $prev = $script:LastRunStats
@@ -169,12 +239,14 @@ function Invoke-PesterSelective {
     $deltaText = " (Δ Tests=$dTests Failed=$dFailed Skipped=$dSkipped)"
   }
   $classification = if ($prev) { if ($dFailed -lt 0) { 'improved' } elseif ($dFailed -gt 0) { 'worsened' } else { 'unchanged' } } else { 'baseline' }
+  if ($flakyRecoveredAfter) { $classification = 'improved' }
   $script:RunSequence++
 
   # Colorized status line
   $elapsedSec = [Math]::Round($sw.Elapsed.TotalSeconds,2)
   $statusColor = switch ($status) { 'PASS' { 'Green' } 'FAIL' { 'Red' } default { 'Yellow' } }
   $line = "Run #$(${script:RunSequence}) $status in ${elapsedSec}s (Tests=$testCount Failed=$failedCount)$deltaText"
+  if ($flakyRecoveredAfter) { $line += " [recovered after ${flakyRecoveredAfter} retry]" }
   if (-not $Quiet) { Write-Host $line -ForegroundColor $statusColor } else { Write-Log $line 'INFO' }
   if ($BeepOnFail -and $status -eq 'FAIL') {
     try { [console]::beep(440,220) } catch { Write-Log 'Beep failed (non-interactive console?)' 'WARN' }
@@ -188,6 +260,7 @@ function Invoke-PesterSelective {
         previous = if ($prev) { [ordered]@{ tests=$prev.Tests; failed=$prev.Failed; skipped=$prev.Skipped } } else { $null }
         delta = if ($prev) { [ordered]@{ tests=$dTests; failed=$dFailed; skipped=$dSkipped } } else { $null }
         classification = $classification
+        flaky = if ($RerunFailedAttempts -gt 0) { [ordered]@{ enabled=$true; attempts=$RerunFailedAttempts; recoveredAfter=$flakyRecoveredAfter; initialFailedFiles=(@($flakyInitialFailedFiles).Count); } } else { $null }
         runSequence = $script:RunSequence
       }
       $json = $payload | ConvertTo-Json -Depth 5
