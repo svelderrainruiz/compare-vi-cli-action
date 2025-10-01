@@ -122,12 +122,7 @@ $conf = New-PesterConfiguration
 $conf.Run.Path = $testsDir
 
 # Handle include-integration parameter (string or boolean)
-$includeIntegrationBool = $false
-if ($IncludeIntegration -is [string]) {
-  $includeIntegrationBool = $IncludeIntegration -ieq 'true'
-} elseif ($IncludeIntegration -is [bool]) {
-  $includeIntegrationBool = $IncludeIntegration
-}
+$includeIntegrationBool = [System.Convert]::ToBoolean($IncludeIntegration)
 
 if (-not $includeIntegrationBool) {
   Write-Host "  Excluding Integration-tagged tests" -ForegroundColor Cyan
