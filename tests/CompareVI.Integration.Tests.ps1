@@ -11,9 +11,15 @@ BeforeAll {
   $Canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
   $BaseVi = $env:LV_BASE_VI
   $HeadVi = $env:LV_HEAD_VI
+  
+  # Create results directory once for all integration tests
+  $ResultsDir = Join-Path $here 'results'
+  New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
+  
   $script:Canonical = $Canonical
   $script:BaseVi = $BaseVi
   $script:HeadVi = $HeadVi
+  $script:ResultsDir = $ResultsDir
 }
 
 Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
@@ -57,5 +63,32 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
     { Invoke-CompareVI -Base $BaseVi -Head $HeadVi -LvComparePath $Canonical -GitHubOutputPath $tmpOut -FailOnDiff:$true } | Should -Throw
     (Get-Content -LiteralPath $tmpOut -Raw) | Should -Match '(^|\n)diff=true($|\n)'
     Remove-Item -LiteralPath $tmpOut -Force -ErrorAction SilentlyContinue
+  }
+
+  It 'generates HTML report from real comparison results' {
+    # Run comparison (with diff expected)
+    $res = Invoke-CompareVI -Base $BaseVi -Head $HeadVi -LvComparePath $Canonical -FailOnDiff:$false
+    $res.ExitCode | Should -Be 1
+    $res.Diff | Should -BeTrue
+
+    # Generate HTML report
+    $htmlPath = Join-Path $ResultsDir 'integration-compare-report.html'
+    
+    $renderer = Join-Path (Split-Path -Parent $here) 'scripts' 'Render-CompareReport.ps1'
+    & $renderer `
+      -Command $res.Command `
+      -ExitCode $res.ExitCode `
+      -Diff ($res.Diff.ToString().ToLower()) `
+      -CliPath $res.CliPath `
+      -OutputPath $htmlPath
+
+    # Verify HTML was created
+    Test-Path -LiteralPath $htmlPath | Should -BeTrue
+    
+    # Verify HTML contains expected content
+    $html = Get-Content -LiteralPath $htmlPath -Raw
+    $html | Should -Match 'Compare VI Report'
+    $html | Should -Match 'Differences detected'
+    $html | Should -Match 'Exit code.*1'
   }
 }
