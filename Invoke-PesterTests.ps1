@@ -34,15 +34,57 @@ param(
 
   [Parameter(Mandatory = $false)]
   [ValidateNotNullOrEmpty()]
-  [string]$ResultsPath = 'tests/results'
-,
+  [string]$ResultsPath = 'tests/results',
+
   [Parameter(Mandatory = $false)]
   [ValidateNotNullOrEmpty()]
-  [string]$JsonSummaryPath = 'pester-summary.json'
+  [string]$JsonSummaryPath = 'pester-summary.json',
+
+  [Parameter(Mandatory = $false)]
+  [switch]$EmitFailuresJsonAlways
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
+$SchemaSummaryVersion  = '1.0.0'
+$SchemaFailuresVersion = '1.0.0'
+$SchemaManifestVersion = '1.0.0'
+
+function Write-ArtifactManifest {
+  param(
+    [Parameter(Mandatory)] [string]$Directory,
+    [Parameter(Mandatory)] [string]$SummaryJsonPath,
+    [Parameter(Mandatory)] [string]$ManifestVersion
+  )
+  try {
+    $artifacts = @()
+    $add = {
+      param($file,$type,$schemaVersion)
+      $full = Join-Path $Directory $file
+      if (Test-Path -LiteralPath $full) {
+        $obj = [PSCustomObject]@{ file = $file; type = $type }
+        if ($schemaVersion) { $obj | Add-Member -NotePropertyName schemaVersion -NotePropertyValue $schemaVersion }
+        $artifacts += $obj
+      }
+    }
+    & $add 'pester-results.xml' 'nunitXml'
+    & $add 'pester-summary.txt' 'textSummary'
+    & $add (Split-Path -Leaf $SummaryJsonPath) 'jsonSummary' $SchemaSummaryVersion
+    & $add 'pester-failures.json' 'jsonFailures' $SchemaFailuresVersion
+    $manifest = [PSCustomObject]@{
+      manifestVersion = $ManifestVersion
+      generatedAt     = (Get-Date).ToString('o')
+      artifacts       = $artifacts
+    }
+    $manifestPath = Join-Path $Directory 'pester-artifacts.json'
+    $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath $manifestPath -Encoding utf8 -ErrorAction Stop
+    Write-Host "Artifact manifest written to: $manifestPath" -ForegroundColor Gray
+  } catch {
+    Write-Warning "Failed to write artifact manifest: $_"
+  }
+}
 
 # Display dispatcher information
 Write-Host "=== Pester Test Dispatcher ===" -ForegroundColor Cyan
@@ -54,6 +96,7 @@ Write-Host "  Tests Path: $TestsPath"
 Write-Host "  Include Integration: $IncludeIntegration"
 Write-Host "  Results Path: $ResultsPath"
 Write-Host "  JSON Summary File: $JsonSummaryPath"
+Write-Host "  Emit Failures JSON Always: $EmitFailuresJsonAlways"
 Write-Host ""
 
 # Resolve paths relative to script root
@@ -263,17 +306,18 @@ try {
 $jsonSummaryPath = Join-Path $resultsDir $JsonSummaryPath
 try {
   $jsonObj = [PSCustomObject]@{
-    total      = $total
-    passed     = $passed
-    failed     = $failed
-    errors     = $errors
-    skipped    = $skipped
-    duration_s = [double]::Parse($testDuration.TotalSeconds.ToString('F2'))
-    timestamp  = (Get-Date).ToString('o')
-    pesterVersion = $loadedPester.Version.ToString()
+    total              = $total
+    passed             = $passed
+    failed             = $failed
+    errors             = $errors
+    skipped            = $skipped
+    duration_s         = [double]::Parse($testDuration.TotalSeconds.ToString('F2'))
+    timestamp          = (Get-Date).ToString('o')
+    pesterVersion      = $loadedPester.Version.ToString()
     includeIntegration = [bool]$includeIntegrationBool
+    schemaVersion      = $SchemaSummaryVersion
   }
-  $jsonObj | ConvertTo-Json -Depth 3 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
+  $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray
 } catch {
   Write-Warning "Failed to write JSON summary file: $_"
@@ -304,14 +348,15 @@ if ($failed -gt 0 -or $errors -gt 0) {
           $failArray = @()
           foreach ($t in $failedTests) {
             $failArray += [PSCustomObject]@{
-              name = $t.Name
-              path = $t.Path
-              duration_ms = if ($t.Duration) { [math]::Round($t.Duration.TotalMilliseconds,2) } else { $null }
-              message = if ($t.ErrorRecord) { ($t.ErrorRecord.Exception.Message | Out-String).Trim() } else { $null }
+              name          = $t.Name
+              path          = $t.Path
+              duration_ms   = if ($t.Duration) { [math]::Round($t.Duration.TotalMilliseconds,2) } else { $null }
+              message       = if ($t.ErrorRecord) { ($t.ErrorRecord.Exception.Message | Out-String).Trim() } else { $null }
+              schemaVersion = $SchemaFailuresVersion
             }
           }
           $failJsonPath = Join-Path $resultsDir 'pester-failures.json'
-            $failArray | ConvertTo-Json -Depth 3 | Out-File -FilePath $failJsonPath -Encoding utf8 -ErrorAction Stop
+          $failArray | ConvertTo-Json -Depth 4 | Out-File -FilePath $failJsonPath -Encoding utf8 -ErrorAction Stop
           Write-Host "Failures JSON written to: $failJsonPath" -ForegroundColor Gray
         } catch {
           Write-Warning "Failed to write failures JSON: $_"
@@ -334,10 +379,23 @@ if ($failed -gt 0 -or $errors -gt 0) {
   } catch {
     Write-Host "(Warning) Failed to emit detailed failure diagnostics: $_" -ForegroundColor DarkYellow
   }
+  Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
   Write-Host "❌ Tests failed: $failed failure(s), $errors error(s)" -ForegroundColor Red
   Write-Error "Test execution completed with failures"
   exit 1
 }
 
 Write-Host "✅ All tests passed!" -ForegroundColor Green
+if ($EmitFailuresJsonAlways) {
+  try {
+    $failJsonPath = Join-Path $resultsDir 'pester-failures.json'
+    if (-not (Test-Path -LiteralPath $failJsonPath)) {
+      '[]' | Out-File -FilePath $failJsonPath -Encoding utf8 -ErrorAction Stop
+      Write-Host "Empty failures JSON emitted (no failures)" -ForegroundColor Gray
+    }
+  } catch {
+    Write-Warning "Failed to emit empty failures JSON: $_"
+  }
+}
+Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
 exit 0
