@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install Pester v5
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck -Scope CurrentUser
+
       - name: Run Pester on self-hosted
         shell: pwsh
         run: |
