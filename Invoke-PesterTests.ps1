@@ -60,19 +60,29 @@ function Write-ArtifactManifest {
   )
   try {
     $artifacts = @()
-    $add = {
-      param($file,$type,$schemaVersion)
-      $full = Join-Path $Directory $file
-      if (Test-Path -LiteralPath $full) {
-        $obj = [PSCustomObject]@{ file = $file; type = $type }
-        if ($schemaVersion) { $obj | Add-Member -NotePropertyName schemaVersion -NotePropertyValue $schemaVersion }
-        $artifacts += $obj
-      }
+    
+    # Add artifacts if they exist
+    $xmlPath = Join-Path $Directory 'pester-results.xml'
+    if (Test-Path -LiteralPath $xmlPath) {
+      $artifacts += [PSCustomObject]@{ file = 'pester-results.xml'; type = 'nunitXml' }
     }
-    & $add 'pester-results.xml' 'nunitXml'
-    & $add 'pester-summary.txt' 'textSummary'
-    & $add (Split-Path -Leaf $SummaryJsonPath) 'jsonSummary' $SchemaSummaryVersion
-    & $add 'pester-failures.json' 'jsonFailures' $SchemaFailuresVersion
+    
+    $txtPath = Join-Path $Directory 'pester-summary.txt'
+    if (Test-Path -LiteralPath $txtPath) {
+      $artifacts += [PSCustomObject]@{ file = 'pester-summary.txt'; type = 'textSummary' }
+    }
+    
+    $jsonSummaryFile = Split-Path -Leaf $SummaryJsonPath
+    $jsonPath = Join-Path $Directory $jsonSummaryFile
+    if (Test-Path -LiteralPath $jsonPath) {
+      $artifacts += [PSCustomObject]@{ file = $jsonSummaryFile; type = 'jsonSummary'; schemaVersion = $SchemaSummaryVersion }
+    }
+    
+    $failuresPath = Join-Path $Directory 'pester-failures.json'
+    if (Test-Path -LiteralPath $failuresPath) {
+      $artifacts += [PSCustomObject]@{ file = 'pester-failures.json'; type = 'jsonFailures'; schemaVersion = $SchemaFailuresVersion }
+    }
+    
     $manifest = [PSCustomObject]@{
       manifestVersion = $ManifestVersion
       generatedAt     = (Get-Date).ToString('o')
@@ -123,7 +133,7 @@ if (-not (Test-Path -LiteralPath $testsDir -PathType Container)) {
 }
 
 # Count test files
-$testFiles = Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File
+$testFiles = @(Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File)
 Write-Host "Found $($testFiles.Count) test file(s) in tests directory" -ForegroundColor Green
 
 # Create results directory if it doesn't exist
