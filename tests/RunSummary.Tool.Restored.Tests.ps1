@@ -6,7 +6,8 @@ $ErrorActionPreference = 'Stop'
 
 Describe 'RunSummary Renderer (Restored)' -Tag 'Unit','RunSummary' {
     BeforeAll {
-        $script:ModulePath = Join-Path (Resolve-Path -LiteralPath '.') 'module/RunSummary/RunSummary.psm1'
+    $repoRoot = (Get-Item (Join-Path $PSScriptRoot '..')).FullName
+    $script:ModulePath = Join-Path $repoRoot 'module/RunSummary/RunSummary.psm1'
         Import-Module $script:ModulePath -Force
         $script:TempSummary = Join-Path $TestDrive 'run-summary.json'
         $summaryObj = [pscustomobject]@{

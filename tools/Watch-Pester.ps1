@@ -260,7 +260,7 @@ function Invoke-PesterSelective {
         previous = if ($prev) { [ordered]@{ tests=$prev.Tests; failed=$prev.Failed; skipped=$prev.Skipped } } else { $null }
         delta = if ($prev) { [ordered]@{ tests=$dTests; failed=$dFailed; skipped=$dSkipped } } else { $null }
         classification = $classification
-        flaky = if ($RerunFailedAttempts -gt 0) { [ordered]@{ enabled=$true; attempts=$RerunFailedAttempts; recoveredAfter=$flakyRecoveredAfter; initialFailedFiles=(@($flakyInitialFailedFiles).Count); } } else { $null }
+  flaky = if ($RerunFailedAttempts -gt 0) { [ordered]@{ enabled=$true; attempts=$RerunFailedAttempts; recoveredAfter=$flakyRecoveredAfter; initialFailedFiles=(@($flakyInitialFailedFiles).Count); initialFailedFileNames=($flakyInitialFailedFiles | ForEach-Object { Split-Path $_ -Leaf }); } } else { $null }
         runSequence = $script:RunSequence
       }
       $json = $payload | ConvertTo-Json -Depth 5

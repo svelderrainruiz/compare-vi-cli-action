@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 Describe 'Binding-MinRepro script parameter binding' -Tag 'Unit','Diagnostic' {
 
     It 'should exist at expected path' {
-        $resolvedRoot = Resolve-Path -LiteralPath '.'
+    $resolvedRoot = (Get-Item (Join-Path $PSScriptRoot '..')).FullName
         Write-Host "[diag-test] Resolved root (inside It): $resolvedRoot" -ForegroundColor Cyan
         $scriptPath = Join-Path -Path $resolvedRoot -ChildPath 'tools/Binding-MinRepro.ps1'
         Write-Host "[diag-test] Computed scriptPath (inside It): $scriptPath" -ForegroundColor Cyan
@@ -24,10 +24,10 @@ Describe 'Binding-MinRepro script parameter binding' -Tag 'Unit','Diagnostic' {
             Set-Content -LiteralPath $script:TmpFile -Value 'x'
         }
         It 'binds the positional Path argument and echoes it' {
-            $resolvedRoot = Resolve-Path -LiteralPath '.'
+            $resolvedRoot = (Get-Item (Join-Path $PSScriptRoot '..')).FullName
             $scriptPath = Join-Path -Path $resolvedRoot -ChildPath 'tools/Binding-MinRepro.ps1'
             Write-Host "[diag-test] invocation scriptPath: $scriptPath" -ForegroundColor Cyan
-            $out = & pwsh -NoProfile -File $scriptPath $script:TmpFile 2>&1
+            $out = & pwsh -NoProfile -File $scriptPath $script:TmpFile *>&1
             $out | Should -Contain "[repro] Raw Input -Path: '$script:TmpFile'" -Because 'Script should echo bound Path'
             $out | Should -Not -Match "Path was NOT bound"
         }
@@ -35,10 +35,10 @@ Describe 'Binding-MinRepro script parameter binding' -Tag 'Unit','Diagnostic' {
 
     Context 'Invocation without argument' {
         It 'warns when Path was not bound' {
-            $resolvedRoot = Resolve-Path -LiteralPath '.'
+            $resolvedRoot = (Get-Item (Join-Path $PSScriptRoot '..')).FullName
             $scriptPath = Join-Path -Path $resolvedRoot -ChildPath 'tools/Binding-MinRepro.ps1'
             Write-Host "[diag-test] invocation scriptPath (no arg): $scriptPath" -ForegroundColor Cyan
-            $out = & pwsh -NoProfile -File $scriptPath 2>&1
+            $out = & pwsh -NoProfile -File $scriptPath *>&1
             $out | Should -Match 'Path was NOT bound'
         }
     }
@@ -49,10 +49,10 @@ Describe 'Binding-MinRepro script parameter binding' -Tag 'Unit','Diagnostic' {
             # Do not create the file
         }
         It 'reports non-existent path warning' {
-            $resolvedRoot = Resolve-Path -LiteralPath '.'
+            $resolvedRoot = (Get-Item (Join-Path $PSScriptRoot '..')).FullName
             $scriptPath = Join-Path -Path $resolvedRoot -ChildPath 'tools/Binding-MinRepro.ps1'
             Write-Host "[diag-test] invocation scriptPath (non-existent arg): $scriptPath" -ForegroundColor Cyan
-            $out = & pwsh -NoProfile -File $scriptPath $script:NonExist 2>&1
+            $out = & pwsh -NoProfile -File $scriptPath $script:NonExist *>&1
             $out | Should -Match 'Provided Path does not exist'
         }
     }

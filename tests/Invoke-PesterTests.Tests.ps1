@@ -358,6 +358,11 @@ Describe 'Sample' {
   }
 }
 
+## Pre-initialize integration availability flag to avoid StrictMode retrieval errors
+## In some discovery flows the -Skip parameter evaluation can occur before the in-Describe
+## assignment executes; defining it here ensures a defined (false) value under all circumstances.
+$script:pesterAvailable = $false
+
 Describe 'Invoke-PesterTests.ps1 Integration' -Tag 'Integration' {
   # Check Pester availability during discovery (required for -Skip evaluation)
   $script:pesterAvailable = $null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' })
@@ -431,7 +436,7 @@ Describe 'Passing Test' {
     
     # Execute dispatcher
     $resultsPath = Join-Path $workspace 'results'
-    $output = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' -EmitFailuresJsonAlways 2>&1
+  $null = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' -EmitFailuresJsonAlways 2>&1
     
     # Verify manifest exists
     $manifestPath = Join-Path $resultsPath 'pester-artifacts.json'

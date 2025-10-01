@@ -5,10 +5,12 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Describe 'Flaky Demo' -Tag 'Unit' {
+Describe 'Flaky Demo' -Tag 'Unit','FlakyDemo' {
   BeforeAll {
+    # Resolve repo root (test file lives in tests/). Avoid current working directory side-effects.
+    $repoRoot = Split-Path -Parent $PSScriptRoot
     # Initialize or increment an attempt counter in a temp file under tests/results
-    $global:FlakyStatePath = Join-Path (Resolve-Path .).Path 'tests/results/flaky-demo-state.txt'
+    $global:FlakyStatePath = Join-Path $repoRoot 'tests/results/flaky-demo-state.txt'
     if (-not (Test-Path $global:FlakyStatePath)) { '0' | Set-Content -LiteralPath $global:FlakyStatePath -Encoding UTF8 }
     $attempt = [int](Get-Content -LiteralPath $global:FlakyStatePath -Raw)
     $attempt++

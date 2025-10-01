@@ -274,6 +274,7 @@ Field notes:
 - `recoveredAfter` is null if retries did not clear all failures.
 - `initialFailedFiles` counts distinct failing *.Tests.ps1 files in the initial (pre-retry) attempt.
 - `classification` is forced to `improved` if failures were cleared by a retry even if prior run comparison would be neutral.
+- `initialFailedFileNames` (when present) lists the leaf filenames of the initially failing test files for quick glance diffing.
 
 History logging (`-DeltaHistoryPath`):
 
@@ -418,6 +419,22 @@ param(
 )
 "Notify: Run#$RunSequence Status=$Status Failed=$Failed/$Tests Skipped=$Skipped Class=$Classification (env=$env:WATCH_STATUS)"
 ```
+
+Flaky recovery helper script:
+
+Use `tools/Demo-FlakyRecovery.ps1` to produce a deterministic flaky recovery demonstration without running the whole suite:
+
+```powershell
+pwsh -File tools/Demo-FlakyRecovery.ps1 -RerunFailedAttempts 2
+# Output includes classification, recoveredAfter=1, and initial failing file names
+```
+
+This script:
+
+- Resets the flaky demo test state file
+- Sets `ENABLE_FLAKY_DEMO=1`
+- Runs watcher with `-Tag FlakyDemo` to isolate the demo test file
+- Emits a delta JSON containing `flaky.recoveredAfter=1` and `classification=improved` on success
 
 Integration compare control loop (developer scaffold)
 
