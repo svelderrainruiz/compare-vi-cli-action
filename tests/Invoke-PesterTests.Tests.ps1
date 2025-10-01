@@ -248,6 +248,12 @@ Describe 'Sample' {
       $scriptContent | Should -Match 'Failures JSON written to:'
       $scriptContent | Should -Match '\$failArray \| ConvertTo-Json'
     }
+    
+    It 'has Write-FailureDiagnostics helper function' {
+      $scriptContent = Get-Content $dispatcherPath -Raw
+      $scriptContent | Should -Match 'function Write-FailureDiagnostics'
+      $scriptContent | Should -Match 'Write-FailureDiagnostics -PesterResult'
+    }
   }
 
   Context 'Error handling' {
@@ -342,20 +348,16 @@ Describe 'Sample' {
 }
 
 Describe 'Invoke-PesterTests.ps1 Integration' -Tag 'Integration' {
-  # Initialize to safe default so discovery (building skip expressions) doesn't error
-  $pesterAvailable = $false
+  # Check Pester availability during discovery (required for -Skip evaluation)
+  $script:pesterAvailable = $null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' })
   
   BeforeAll {
-    # Only run if Pester is available
-    $pesterAvailable = $null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' })
-    
-    if (-not $pesterAvailable) {
+    if (-not $script:pesterAvailable) {
       Write-Host "Pester v5+ not available, skipping integration tests"
-      Set-ItResult -Skipped -Because "Pester v5+ not installed"
     }
   }
   
-  It 'executes successfully with valid parameters' -Skip:(-not $pesterAvailable) {
+  It 'executes successfully with valid parameters' -Skip:(-not $script:pesterAvailable) {
     # Create test workspace
     $workspace = Join-Path $TestDrive 'integration-test'
     New-Item -ItemType Directory -Path $workspace -Force | Out-Null
@@ -386,5 +388,167 @@ Describe 'Simple Test' {
     Test-Path (Join-Path $resultsPath 'pester-results.xml') | Should -BeTrue
     Test-Path (Join-Path $resultsPath 'pester-summary.txt') | Should -BeTrue
     Test-Path (Join-Path $resultsPath 'pester-summary.json') | Should -BeTrue
+  }
+
+  It 'generates manifest with required structure' -Skip:(-not $script:pesterAvailable) {
+    # Create test workspace
+    $workspace = Join-Path $TestDrive 'manifest-test'
+    New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+    
+    $testsDir = Join-Path $workspace 'tests'
+    New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
+    
+    # Create a simple passing test
+    $testFile = Join-Path $testsDir 'Pass.Tests.ps1'
+    @'
+Describe 'Passing Test' {
+  It 'passes' {
+    $true | Should -Be $true
+  }
+}
+'@ | Set-Content -Path $testFile
+    
+    # Copy dispatcher to workspace
+    $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
+    Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
+    
+    # Execute dispatcher
+    $resultsPath = Join-Path $workspace 'results'
+    $output = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' 2>&1
+    
+    # Verify manifest exists
+    $manifestPath = Join-Path $resultsPath 'pester-artifacts.json'
+    Test-Path $manifestPath | Should -BeTrue
+    
+    # Parse manifest
+    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    
+    # Verify required fields
+    $manifest.manifestVersion | Should -Not -BeNullOrEmpty
+    $manifest.generatedAt | Should -Not -BeNullOrEmpty
+    $manifest.artifacts | Should -Not -BeNullOrEmpty
+    
+    # Verify minimum artifact entries
+    $manifest.artifacts.Count | Should -BeGreaterOrEqual 3
+    $artifactFiles = $manifest.artifacts | Select-Object -ExpandProperty file
+    $artifactFiles | Should -Contain 'pester-results.xml'
+    $artifactFiles | Should -Contain 'pester-summary.txt'
+    $artifactFiles | Should -Contain 'pester-summary.json'
+    
+    # Verify JSON artifacts have schemaVersion
+    $jsonSummary = $manifest.artifacts | Where-Object { $_.file -eq 'pester-summary.json' }
+    $jsonSummary.schemaVersion | Should -Not -BeNullOrEmpty
+  }
+
+  It 'emits empty failures JSON with -EmitFailuresJsonAlways on success' -Skip:(-not $script:pesterAvailable) {
+    # Create test workspace
+    $workspace = Join-Path $TestDrive 'emit-always-test'
+    New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+    
+    $testsDir = Join-Path $workspace 'tests'
+    New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
+    
+    # Create a passing test
+    $testFile = Join-Path $testsDir 'Success.Tests.ps1'
+    @'
+Describe 'Success Test' -Tag 'Unit' {
+  It 'passes' {
+    $true | Should -Be $true
+  }
+}
+'@ | Set-Content -Path $testFile
+    
+    # Copy dispatcher to workspace
+    $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
+    Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
+    
+    # Execute dispatcher with -EmitFailuresJsonAlways
+    $resultsPath = Join-Path $workspace 'results'
+    Push-Location $workspace
+    try {
+      pwsh -File './Invoke-PesterTests.ps1' -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' -EmitFailuresJsonAlways 2>&1 | Out-Null
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+    
+    # Verify exit code
+    $exitCode | Should -Be 0
+    
+    # Verify empty failures JSON exists
+    $failuresPath = Join-Path $resultsPath 'pester-failures.json'
+    Test-Path $failuresPath | Should -BeTrue
+    
+    # Parse failures JSON (should be empty array)
+    $failures = Get-Content $failuresPath -Raw | ConvertFrom-Json
+    $failures | Should -BeOfType [System.Array]
+    $failures.Count | Should -Be 0
+    
+    # Verify manifest includes jsonFailures entry with schemaVersion
+    $manifestPath = Join-Path $resultsPath 'pester-artifacts.json'
+    Test-Path $manifestPath | Should -BeTrue
+    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    $jsonFailures = $manifest.artifacts | Where-Object { $_.file -eq 'pester-failures.json' }
+    $jsonFailures | Should -Not -BeNullOrEmpty
+    $jsonFailures.schemaVersion | Should -Not -BeNullOrEmpty
+  }
+
+  It 'emits failures JSON with schemaVersion on test failure' -Skip:(-not $script:pesterAvailable) {
+    # Create test workspace
+    $workspace = Join-Path $TestDrive 'failure-test'
+    New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+    
+    $testsDir = Join-Path $workspace 'tests'
+    New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
+    
+    # Create a synthetic failing test
+    $testFile = Join-Path $testsDir 'Fail.Tests.ps1'
+    @'
+Describe 'Failing Test' -Tag 'Unit' {
+  It 'should fail' {
+    $false | Should -Be $true
+  }
+}
+'@ | Set-Content -Path $testFile
+    
+    # Copy dispatcher to workspace
+    $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
+    Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
+    
+    # Execute dispatcher (expect failure)
+    $resultsPath = Join-Path $workspace 'results'
+    Push-Location $workspace
+    try {
+      pwsh -File './Invoke-PesterTests.ps1' -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' 2>&1 | Out-Null
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+    
+    # Verify exit code is 1
+    $exitCode | Should -Be 1
+    
+    # Verify failures JSON exists
+    $failuresPath = Join-Path $resultsPath 'pester-failures.json'
+    Test-Path $failuresPath | Should -BeTrue
+    
+    # Parse failures JSON
+    $failures = Get-Content $failuresPath -Raw | ConvertFrom-Json
+    $failures | Should -BeOfType [System.Array]
+    $failures.Count | Should -BeGreaterThan 0
+    
+    # Verify each failure object has schemaVersion
+    foreach ($failure in $failures) {
+      $failure.schemaVersion | Should -Not -BeNullOrEmpty
+      $failure.name | Should -Not -BeNullOrEmpty
+    }
+    
+    # Verify manifest includes jsonFailures entry with schemaVersion
+    $manifestPath = Join-Path $resultsPath 'pester-artifacts.json'
+    Test-Path $manifestPath | Should -BeTrue
+    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+    $jsonFailures = $manifest.artifacts | Where-Object { $_.file -eq 'pester-failures.json' }
+    $jsonFailures | Should -Not -BeNullOrEmpty
+    $jsonFailures.schemaVersion | Should -Not -BeNullOrEmpty
   }
 }
