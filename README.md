@@ -208,6 +208,287 @@ Tests
   - Use PR comments to trigger: `/run unit`, `/run mock`, `/run smoke`, `/run pester-selfhosted`
 - **For end-to-end testing**, see [End-to-End Testing Guide](./docs/E2E_TESTING_GUIDE.md)
 
+Integration compare control loop (developer scaffold)
+
+For rapid, iterative development against two real VIs (e.g. editing a feature branch VI and observing diff stability / timing) a lightweight polling loop script is provided:
+
+```powershell
+pwsh -File ./scripts/Integration-ControlLoop.ps1 `
+  -Base 'C:\repos\main\ControlLoop.vi' `
+  -Head 'C:\repos\feature\ControlLoop.vi' `
+  -LvCompareArgs "-nobdcosm -nofppos -noattr" `
+  -SkipIfUnchanged `
+  -IntervalSeconds 3
+```
+
+Key features:
+
+- Enforces canonical LVCompare path only
+- Polls at a configurable interval (default 5s)
+- Optional skip when neither VI timestamp changed (`-SkipIfUnchanged`)
+- Shows a compact per-iteration table (diff flag, exit code, duration)
+- Records timing metrics and counts (diffs, errors)
+- Optional JSON lines log via `-JsonLog path\loop-log.jsonl`
+- Optional `-FailOnDiff` to terminate on first diff (useful in guard scenarios)
+
+Example JSON log line (one per iteration when `-JsonLog` supplied):
+
+```jsonc
+{
+  "iteration": 4,
+  "timestampUtc": "2025-10-01T12:34:56.789Z",
+  "skipped": false,
+  "diff": true,
+  "exitCode": 1,
+  "status": "OK",
+  "durationSeconds": 0.217,
+  "baseChanged": false,
+  "headChanged": true
+}
+```
+
+Planned extensions (contributions welcome): file system watcher trigger, HTML report generation on diff, latency histogram, automatic re-baselining.
+
+Module reuse
+
+The loop logic is also packaged as a lightweight module for programmatic automation: `module/CompareLoop/CompareLoop.psd1`.
+
+Example:
+
+```powershell
+Import-Module ./module/CompareLoop/CompareLoop.psd1 -Force
+$exec = { param($CliPath,$Base,$Head,$Args) 0 } # always no diff
+Invoke-IntegrationCompareLoop -Base 'C:\repos\main\ControlLoop.vi' -Head 'C:\repos\feature\ControlLoop.vi' -MaxIterations 1 -CompareExecutor $exec -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet
+```
+
+## Composite Action Loop Mode (Experimental)
+
+The composite action now supports an optional **loop mode** (`loop-enabled: true`) that delegates to the `CompareLoop` module to collect multiple LVCompare iterations and export aggregate latency metrics, percentiles, and (optionally) a histogram.
+
+When loop mode is enabled, the action:
+
+1. Executes up to `loop-max-iterations` iterations (or fewer if canceled / job ends).
+2. Uses a simulated executor by default (`loop-simulate: true`) so percentile telemetry can run on GitHub-hosted runners without LabVIEW installed. Set `loop-simulate: false` to run real comparisons (requires canonical CLI path).
+3. Emits additional outputs for downstream workflows (average latency, p50/p90/p99, counts, reservoir window size, etc.).
+4. Writes a `compare-loop-summary.json` (aggregate) and optional histogram JSON file into the runner temp directory.
+
+### Loop Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `loop-enabled` | `false` | Enable loop mode branch. |
+| `loop-max-iterations` | `25` | Cap on iterations (0 = run until diff only if `fail-on-diff` is false; otherwise treat as finite). |
+| `loop-interval-seconds` | `0` | Delay between iterations (fractional seconds supported). |
+| `quantile-strategy` | `StreamingReservoir` | `Exact` \| `StreamingReservoir` \| `Hybrid`. |
+| `stream-capacity` | `500` | Reservoir capacity (min 10). |
+| `reconcile-every` | `0` | Reservoir rebuild cadence (0 = disabled). |
+| `hybrid-exact-threshold` | `200` | Exact seed iterations before streaming when `Hybrid` is chosen. |
+| `histogram-bins` | `0` | Number of histogram bins (0 = disabled). |
+| `loop-simulate` | `true` | Use internal mock executor instead of real LVCompare. |
+| `loop-simulate-exit-code` | `1` | Exit code from simulated executor (1=differences, 0=no diff). |
+
+### Loop Outputs
+
+| Output | Meaning |
+|--------|---------|
+| `iterations` | Total iterations executed. |
+| `diffCount` | Number of diff iterations (exit code 1). |
+| `errorCount` | Unexpected error iterations. |
+| `averageSeconds` | Mean duration across non-skipped iterations. |
+| `totalSeconds` | Total elapsed wall clock (s). |
+| `p50` / `p90` / `p99` | Latency percentiles (seconds). Blank if insufficient samples. |
+| `quantileStrategy` | Effective quantile strategy used (alias normalized). |
+| `streamingWindowCount` | Active reservoir sample count (streaming modes). |
+| `loopResultPath` | Path to loop summary JSON (`loop-summary-v1` schema). |
+| `histogramPath` | Path to histogram JSON (if bins > 0, else blank). |
+
+Legacy single-run outputs (`diff`, `exitCode`, `compareDurationSeconds`, etc.) are still populated for compatibility (duration fields represent average loop latency when in loop mode).
+
+### Example: Simulated Loop With Streaming Reservoir
+
+```yaml
+jobs:
+  perf-probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Simulated latency loop
+        id: loop
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.3.0
+        with:
+          base: Base.vi
+          head: Head.vi
+          loop-enabled: true
+          loop-max-iterations: 40
+          loop-interval-seconds: 0
+          quantile-strategy: StreamingReservoir
+          stream-capacity: 400
+          reconcile-every: 0
+          histogram-bins: 5
+          loop-simulate: true
+          loop-simulate-exit-code: 1
+      - name: Print percentiles
+        run: |
+          echo "p50=${{ steps.loop.outputs.p50 }} p90=${{ steps.loop.outputs.p90 }} p99=${{ steps.loop.outputs.p99 }}"
+```
+
+### Example: Hybrid Strategy With Reconciliation (Real CLI)
+
+```yaml
+jobs:
+  soak:
+    runs-on: [self-hosted, Windows]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Hybrid percentile soak
+        id: loop
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.3.0
+        with:
+          base: path/to/base.vi
+          head: path/to/head.vi
+          fail-on-diff: "false"            # keep iterating even if diffs occur
+          loop-enabled: true
+          loop-max-iterations: 2000
+          loop-interval-seconds: 0
+          quantile-strategy: Hybrid
+          hybrid-exact-threshold: 300
+          stream-capacity: 600
+          reconcile-every: 1800
+          histogram-bins: 6
+          loop-simulate: false             # real comparisons
+```
+
+Loop JSON summary schema (`loop-summary-v1`):
+
+```jsonc
+{
+  "iterations": 40,
+  "diffCount": 18,
+  "errorCount": 0,
+  "averageSeconds": 0.012,
+  "totalSeconds": 0.51,
+  "quantileStrategy": "StreamingReservoir",
+  "streamingWindowCount": 400,
+  "percentiles": { "p50": 0.010, "p90": 0.018, "p99": 0.025 },
+  "histogram": [ { "Index":0, "Start":0, "End":1, "Count":15 } ],
+  "schema": "loop-summary-v1",
+  "generatedUtc": "2025-10-01T12:34:56.789Z"
+}
+```
+
+Guidance:
+
+- Use `StreamingReservoir` for long / memory-sensitive runs; adjust `stream-capacity` if p99 unstable.
+- Use `Hybrid` when early exact percentiles are important before switching to bounded memory.
+- Add `reconcile-every` for multi-thousand iteration soaks to minimize drift in non-stationary distributions.
+- Keep `loop-simulate: true` in public CI if LabVIEW licenses aren't available; switch to `false` only on trusted self-hosted runners.
+
+Limitations:
+
+- Histogram is coarse (equal-width); future enhancements may provide adaptive or log-scale bucketing.
+- Percentiles are limited to p50/p90/p99 (custom list planned as a future enhancement).
+- Loop mode intentionally does not expose raw per-iteration records via outputs—consume the JSON file if needed.
+
+
+## Streaming quantile strategies (timing distribution)
+
+The compare loop module can estimate latency percentiles (p50/p90/p99) with bounded memory.
+
+Supported `-QuantileStrategy` values:
+
+| Strategy | Behavior | Memory | Notes |
+|----------|----------|--------|-------|
+| `Exact` | Collects all non-zero iteration durations then sorts at the end | O(N) | Most accurate; can grow large for long runs |
+| `StreamingReservoir` | Maintains a fixed-size ring buffer (reservoir) of recent samples | O(K) | Formerly named `StreamingP2`; provides rolling approximation |
+| `Hybrid` | Starts as `Exact` for seeding, then switches to `StreamingReservoir` after threshold | O(K)+O(T) initially | Good balance of early accuracy + steady-state bounded memory |
+
+Additional parameters:
+
+- `-StreamCapacity <int>`: Reservoir size (default 500, minimum 10). Larger improves tail stability but increases memory and sort cost per percentile snapshot.
+- `-HybridExactThreshold <int>`: Number of iterations to collect exact samples before switching in `Hybrid`.
+- `-ReconcileEvery <int>`: If > 0 and streaming active, periodically rebuilds the reservoir from all collected durations using a uniform stride subsample. Helps reduce drift in long, highly non-stationary runs. Set to a multiple of `StreamCapacity` (e.g. capacity 500, reconcile every 2000 iterations) for a balance of freshness vs. overhead.
+
+Result object fields (selected):
+
+- `Percentiles.p50|p90|p99`
+- `QuantileStrategy` (reports `StreamingReservoir` even if legacy alias `StreamingP2` was used)
+- `StreamingWindowCount` (current reservoir size; 0 when not streaming yet)
+
+Legacy alias:
+
+- `StreamingP2` is accepted but now maps to `StreamingReservoir` and emits a deprecation warning unless `-Quiet` is specified.
+
+Accuracy guidance:
+
+- For relatively stable latency distributions, `StreamCapacity=300-500` keeps p50/p90 within a few milliseconds (or a few percent relative error) versus exact in typical quick-iteration scenarios.
+- Increase capacity or enable reconciliation if p99 drifts (especially with bimodal or bursty latency patterns).
+- Hybrid mode is helpful when early, small-sample percentiles must be exact for initial diagnostics, but you still want bounded memory for a long soak run.
+
+Example hybrid run with reconciliation:
+
+```powershell
+Import-Module ./module/CompareLoop/CompareLoop.psm1 -Force
+$exec = { param($cli,$b,$h,$args) Start-Sleep -Milliseconds (5 + (Get-Random -Max 10)); 0 }
+$r = Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 2000 -IntervalSeconds 0 `
+  -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -Quiet `
+  -QuantileStrategy Hybrid -HybridExactThreshold 400 -StreamCapacity 500 -ReconcileEvery 2000
+$r.Percentiles
+```
+
+If reconciliation is enabled it triggers at the configured cadence only after streaming becomes active (Hybrid post-threshold or StreamingReservoir immediately).
+
+Tuning checklist:
+
+1. Need absolute accuracy and short run? Use `Exact`.
+2. Long run, bounded memory? Use `StreamingReservoir` with suitable `StreamCapacity`.
+3. Want accurate early baseline then bounded? Use `Hybrid` + set `HybridExactThreshold`.
+4. Observing drift over hours? Introduce `-ReconcileEvery` at a multiple of capacity.
+5. Tail (p99) noisy? Increase capacity or reconciliation frequency modestly.
+
+Future considerations (open to contributions): true P² marker implementation, p99.9 support, configurable percentile list, and stratified or weighted reservoir sampling.
+
+
+Switches `-SkipValidation` and `-PassThroughPaths` exist solely for unit-style testing; omit them in real usage.
+
+## Advanced loop parameters (module & delegated script)
+
+The enhanced module (`CompareLoop`) exposes additional tuning/automation parameters beyond the basic scaffold:
+
+| Area | Parameters | Purpose |
+|------|------------|---------|
+| Event-driven triggering | `-UseEventDriven`, `-DebounceMilliseconds` | React to filesystem changes instead of fixed polling. Debounce consolidates bursts. |
+| Adaptive backoff | `-AdaptiveInterval`, `-MinIntervalSeconds`, `-MaxIntervalSeconds`, `-BackoffFactor` | Increase interval during quiet periods; reset on activity. |
+| Diff summaries | ``-DiffSummaryFormat (Text\|Markdown\|Html)``, `-DiffSummaryPath` | Generate a one-shot human-readable summary after at least one diff. |
+| Percentile metrics | (auto) `Percentiles.p50/p90/p99` | Exposed in result object when at least one non-skipped iteration ran. |
+| Histogram | (auto) `Histogram[]` | Coarse distribution of iteration durations (5 bins). |
+| Re-baseline helper | `-RebaselineAfterCleanCount`, `-ApplyRebaseline` | Detect sustained clean streaks and optionally treat head timestamp as new base reference. |
+| Dependency injection | `-CompareExecutor`, `-BypassCliValidation`, `-SkipValidation`, `-PassThroughPaths` | Unit / synthetic testing without real LVCompare. |
+| Diff control | `-FailOnDiff` | Early terminate loop when first diff occurs. |
+
+Example combining several advanced features:
+
+```powershell
+Invoke-IntegrationCompareLoop `
+  -Base 'C:\repos\main\ControlLoop.vi' `
+  -Head 'C:\repos\feature\ControlLoop.vi' `
+  -UseEventDriven -DebounceMilliseconds 400 `
+  -AdaptiveInterval -MinIntervalSeconds 1 -MaxIntervalSeconds 20 -BackoffFactor 1.8 `
+  -RebaselineAfterCleanCount 5 `
+  -DiffSummaryFormat Markdown -DiffSummaryPath .\diff-summary.md `
+  -LvCompareArgs '-nobdcosm -nofppos -noattr' `
+  -FailOnDiff
+```
+
+Result object excerpt:
+
+```powershell
+$r = Invoke-IntegrationCompareLoop -Base ... -Head ... -MaxIterations 3 -UseEventDriven -AdaptiveInterval -SkipIfUnchanged
+$r | Select-Object Iterations,DiffCount,ErrorCount,Mode,AverageSeconds,Percentiles,RebaselineApplied | Format-List
+```
+
+For full schema details see `docs/COMPARE_LOOP_MODULE.md`.
+
+
 Dispatcher JSON outputs & customization
 
 The local dispatcher (`Invoke-PesterTests.ps1`) emits:
@@ -275,7 +556,7 @@ Example manifest:
 }
 ```
 
-**-EmitFailuresJsonAlways flag**
+### -EmitFailuresJsonAlways flag
 
 By default, `pester-failures.json` is only created when tests fail. To always emit it (as an empty array `[]` on success), use:
 

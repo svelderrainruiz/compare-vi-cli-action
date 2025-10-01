@@ -56,4 +56,27 @@ Describe 'Composite action output shape (emulated)' -Tag 'Unit' {
     (Get-Content $sumPath -Raw) | Should -Match 'Duration \(s\):'
     (Get-Content $sumPath -Raw) | Should -Match 'Duration \(ns\):'
   }
+
+  It 'loop mode emits percentile and loop outputs (simulated executor)' {
+    # Arrange
+    $vis = Join-Path $TestDrive 'vis'
+    New-Item -ItemType Directory -Path $vis -Force | Out-Null
+    $a = Join-Path $vis 'a.vi'
+    $b = Join-Path $vis 'b.vi'
+    New-Item -ItemType File -Path $a -Force | Out-Null
+    New-Item -ItemType File -Path $b -Force | Out-Null
+
+    # Import loop module
+    $modulePath = Join-Path (Split-Path -Parent $PSCommandPath) '..' 'module' 'CompareLoop' 'CompareLoop.psd1'
+    Import-Module $modulePath -Force
+
+    # Simulate a short loop
+    $loopRes = Invoke-IntegrationCompareLoop -Base $a -Head $b -MaxIterations 5 -IntervalSeconds 0 -CompareExecutor { param($cli,$ba,$he,$args) Start-Sleep -Milliseconds 2; return 1 } -Quiet -SkipValidation -PassThroughPaths -BypassCliValidation -QuantileStrategy StreamingReservoir -StreamCapacity 40
+    $loopRes | Should -Not -BeNullOrEmpty
+    $loopRes.Iterations | Should -Be 5
+    $loopRes.DiffCount | Should -BeGreaterThan 0
+    $loopRes.Percentiles | Should -Not -BeNullOrEmpty
+    $loopRes.Percentiles.p50 | Should -BeGreaterOrEqual 0
+    $loopRes.StreamingWindowCount | Should -BeGreaterThan 0
+  }
 }
