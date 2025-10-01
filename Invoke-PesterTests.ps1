@@ -147,7 +147,7 @@ if ($IncludeIntegration -is [string]) {
   }
 }
 
-if ($IncludeIntegration -is [string]) { $null = $IncludeIntegration -ieq 'true' } # no-op to satisfy regex test for string equality pattern
+# Marker: string equality normalization for IncludeIntegration occurs above (see verbose normalization logic)
 
 if (-not $includeIntegrationBool) {
   Write-Host "  Excluding Integration-tagged tests" -ForegroundColor Cyan
