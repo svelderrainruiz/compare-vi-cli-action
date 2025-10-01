@@ -84,10 +84,44 @@ jobs:
         run: |
           if (-not $env:XCLI_PAT) { Write-Host 'XCLI_PAT not available; skipping comment.'; exit 0 }
           $summaryPath = './tests/results/pester-summary.txt'
+          $jsonSummaryPath = Join-Path $env:RUNNER_TEMP 'compare-summary.json'
+          $durationSeconds = $null
+          $durationNanoseconds = $null
+          # Prefer JSON summary (more reliable) if present
+          if (Test-Path $jsonSummaryPath) {
+            try {
+              $json = Get-Content $jsonSummaryPath -Raw | ConvertFrom-Json -ErrorAction Stop
+              if ($json.compareDurationSeconds) { $durationSeconds = [string]$json.compareDurationSeconds }
+              if ($json.compareDurationNanoseconds) { $durationNanoseconds = [string]$json.compareDurationNanoseconds }
+            } catch {
+              Write-Host "Failed to parse JSON summary: $_"
+            }
+          }
           if (Test-Path $summaryPath) {
             $summary = Get-Content $summaryPath -Raw
+            # Fallback extraction from text only if JSON values missing
+            if (-not $durationSeconds -or -not $durationNanoseconds) {
+              foreach ($line in ($summary -split "`n")) {
+                if (-not $durationSeconds -and $line -match 'Duration \(s\):\s*([0-9]+\.[0-9]+|[0-9]+)') { $durationSeconds = $Matches[1] }
+                if (-not $durationNanoseconds -and $line -match 'Duration \(ns\):\s*([0-9]+)') { $durationNanoseconds = $Matches[1] }
+              }
+            }
           } else {
             $summary = 'Results not available'
+          }
+          $timingBlock = ''
+          if ($durationSeconds -or $durationNanoseconds) {
+            $timingLines = @('','Timing:')
+            if ($durationSeconds) { $timingLines += ('- Seconds: ' + $durationSeconds) }
+            if ($durationNanoseconds) { $timingLines += ('- Nanoseconds: ' + $durationNanoseconds) }
+            # Derived milliseconds for quick readability
+            if ($durationSeconds) {
+              try {
+                $ms = [math]::Round([double]$durationSeconds * 1000, 2)
+                $timingLines += ('- Combined: ' + $durationSeconds + 's (' + $ms + ' ms)')
+              } catch { }
+            }
+            $timingBlock = ($timingLines -join "`n")
           }
           $lines = @(
             '### Pester integration test results (label-triggered)',
@@ -95,7 +129,9 @@ jobs:
             '```',
             $summary,
             '```'
-          ) -join "`n"
+          )
+          if ($timingBlock) { $lines += $timingBlock }
+          $lines = $lines -join "`n"
           $payload = @{ body = $lines } | ConvertTo-Json -Compress
           $headers = @{ Authorization = "Bearer $env:XCLI_PAT"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'xcli-bot' }
           $uri = "https://api.github.com/repos/$env:GH_REPO/issues/$env:PR_NUMBER/comments"

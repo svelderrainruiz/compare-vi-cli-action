@@ -86,6 +86,8 @@ function Invoke-CompareVI {
 
     $cmdline = (@(Quote $cli; Quote $baseAbs; Quote $headAbs) + ($args | ForEach-Object { Quote $_ })) -join ' '
 
+    # Measure execution time
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
     # Execute via injected executor for tests, or call CLI directly
     $code = $null
     if ($Executor) {
@@ -96,6 +98,10 @@ function Invoke-CompareVI {
       & $cli $baseAbs $headAbs @args
       $code = $LASTEXITCODE
     }
+  $sw.Stop()
+  $compareDurationSeconds = [math]::Round($sw.Elapsed.TotalSeconds, 3)
+  # High resolution nanosecond precision (Stopwatch ticks * (1e9 / Frequency))
+  $compareDurationNanoseconds = [long]([double]$sw.ElapsedTicks * (1e9 / [double][System.Diagnostics.Stopwatch]::Frequency))
 
     $cwd = (Get-Location).Path
 
@@ -126,11 +132,13 @@ function Invoke-CompareVI {
     }
 
     if ($GitHubOutputPath) {
-      "exitCode=$code"   | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
-      "cliPath=$cli"     | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
-      "command=$cmdline" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+      "exitCode=$code"        | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+      "cliPath=$cli"          | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+      "command=$cmdline"      | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
       $diffLower = if ($diff) { 'true' } else { 'false' }
-      "diff=$diffLower"  | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+      "diff=$diffLower"       | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+  "compareDurationSeconds=$compareDurationSeconds" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+  "compareDurationNanoseconds=$compareDurationNanoseconds" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
     }
 
     if ($GitHubStepSummaryPath) {
@@ -143,7 +151,9 @@ function Invoke-CompareVI {
         "- CLI: $cli",
         "- Command: $cmdline",
         "- Exit code: $code",
-        "- Diff: $diffStr"
+        "- Diff: $diffStr",
+  "- Duration (s): $compareDurationSeconds"
+  "- Duration (ns): $compareDurationNanoseconds"
       )
       ($summaryLines -join "`n") | Out-File -FilePath $GitHubStepSummaryPath -Append -Encoding utf8
     }
@@ -153,13 +163,15 @@ function Invoke-CompareVI {
     }
 
     [pscustomobject]@{
-      Base       = $baseAbs
-      Head       = $headAbs
-      Cwd        = $cwd
-      CliPath    = $cli
-      Command    = $cmdline
-      ExitCode   = $code
-      Diff       = $diff
+      Base                   = $baseAbs
+      Head                   = $headAbs
+      Cwd                    = $cwd
+      CliPath                = $cli
+      Command                = $cmdline
+      ExitCode               = $code
+      Diff                   = $diff
+      CompareDurationSeconds     = $compareDurationSeconds
+      CompareDurationNanoseconds = $compareDurationNanoseconds
     }
   }
   finally {

@@ -41,6 +41,15 @@ outputs:
   command:
     description: "Exact command line executed (for auditing)"
     value: ${{ steps.run_compare.outputs.command }}
+  compareDurationSeconds:
+    description: "Execution duration in seconds (floating point with millisecond precision)"
+    value: ${{ steps.run_compare.outputs.compareDurationSeconds }}
+  compareDurationNanoseconds:
+    description: "Execution duration in nanoseconds (high-resolution)"
+    value: ${{ steps.run_compare.outputs.compareDurationNanoseconds }}
+  compareSummaryPath:
+    description: "Path to generated JSON summary (comparison metadata)"
+    value: ${{ steps.run_compare.outputs.compareSummaryPath }}
 
 runs:
   using: "composite"
@@ -70,3 +79,18 @@ runs:
         "command=$($result.Command)"     >> $env:GITHUB_OUTPUT
         $diffLower = if ($result.Diff) { 'true' } else { 'false' }
         "diff=$diffLower"                 >> $env:GITHUB_OUTPUT
+        "compareDurationSeconds=$($result.CompareDurationSeconds)" >> $env:GITHUB_OUTPUT
+        "compareDurationNanoseconds=$($result.CompareDurationNanoseconds)" >> $env:GITHUB_OUTPUT
+        $summaryJsonPath = Join-Path $env:RUNNER_TEMP 'compare-summary.json'
+        [pscustomobject]@{
+          base = $result.Base
+          head = $result.Head
+          cliPath = $result.CliPath
+          command = $result.Command
+          exitCode = $result.ExitCode
+          diff = $result.Diff
+          compareDurationSeconds = $result.CompareDurationSeconds
+          compareDurationNanoseconds = $result.CompareDurationNanoseconds
+          generatedUtc = [DateTime]::UtcNow.ToString('o')
+        } | ConvertTo-Json -Depth 4 | Out-File -FilePath $summaryJsonPath -Encoding utf8
+        "compareSummaryPath=$summaryJsonPath" >> $env:GITHUB_OUTPUT
