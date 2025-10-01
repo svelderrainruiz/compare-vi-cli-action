@@ -19,25 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Validate environment
-        shell: pwsh
-        run: |
-          ./tools/Validate-Environment.ps1
-
-      - name: Install Pester v5
-        shell: pwsh
-        run: |
-          Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck -Scope CurrentUser
-
-      - name: Run Pester on self-hosted
-        shell: pwsh
-        run: |
-          $include = '${{ inputs.include_integration }}' -ieq 'true'
-          if ($include) {
-            ./tools/Run-Pester.ps1 -IncludeIntegration
-          } else {
-            ./tools/Run-Pester.ps1
-          }
+      - name: Run Pester on self-hosted via open-source action
+        uses: LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions
+        with:
+          tests-path: tests
+          include-integration: ${{ inputs.include_integration }}
+          results-path: tests/results
 
       - name: Upload Pester artifacts
         if: always()

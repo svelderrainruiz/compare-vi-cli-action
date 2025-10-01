@@ -91,4 +91,46 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
     $html | Should -Match 'Differences detected'
     $html | Should -Match 'Exit code.*1'
   }
+
+  It 'accepts recommended knowledgebase CLI flags: -nobdcosm -nofppos -noattr' {
+    # Test with recommended noise filters from knowledgebase
+    $args = '-nobdcosm -nofppos -noattr'
+    $res = Invoke-CompareVI -Base $BaseVi -Head $HeadVi -LvComparePath $Canonical -LvCompareArgs $args -FailOnDiff:$false
+    
+    # Should execute successfully with these flags
+    $res.ExitCode | Should -BeIn @(0, 1)
+    
+    # Verify flags are in the command
+    $res.Command | Should -Match '-nobdcosm'
+    $res.Command | Should -Match '-nofppos'
+    $res.Command | Should -Match '-noattr'
+  }
+
+  It 'handles -lvpath flag from knowledgebase for LabVIEW version selection' {
+    # Note: This test verifies the flag is passed correctly, but doesn't require LabVIEW.exe to exist
+    # The actual LabVIEW path may not exist on the test runner
+    $lvPath = 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe'
+    $args = "-lvpath `"$lvPath`""
+    
+    $res = Invoke-CompareVI -Base $BaseVi -Head $BaseVi -LvComparePath $Canonical -LvCompareArgs $args -FailOnDiff:$false
+    
+    # Should execute (may fail if LabVIEW.exe doesn't exist, but that's OK for this test)
+    # We're just verifying the argument is passed correctly
+    $res.Command | Should -Match '-lvpath'
+    $res.Command | Should -Match [regex]::Escape($lvPath)
+  }
+
+  It 'handles complex flag combinations from knowledgebase' {
+    # Combine multiple recommended flags
+    $lvPath = 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe'
+    $args = "-lvpath `"$lvPath`" -nobdcosm -nofppos -noattr"
+    
+    $res = Invoke-CompareVI -Base $BaseVi -Head $BaseVi -LvComparePath $Canonical -LvCompareArgs $args -FailOnDiff:$false
+    
+    # Verify all flags are in the command
+    $res.Command | Should -Match '-lvpath'
+    $res.Command | Should -Match '-nobdcosm'
+    $res.Command | Should -Match '-nofppos'
+    $res.Command | Should -Match '-noattr'
+  }
 }
