@@ -14,8 +14,11 @@ param(
   [switch]$BeepOnFail,
   [switch]$InferTestsFromSource
   , [string]$DeltaJsonPath
+  , [string]$DeltaHistoryPath
+  , [string]$MappingConfig
   , [switch]$ShowFailed
   , [int]$MaxFailedList = 10
+  , [switch]$OnlyFailed
 )
 
 Set-StrictMode -Version Latest
@@ -30,6 +33,7 @@ function Write-Log {
 
 ${script:LastRunStats} = $null
 ${script:RunSequence} = 0
+${script:LastFailingTestFiles} = @()
 
 function Invoke-PesterSelective {
   param([string[]]$ChangedFiles)
@@ -55,6 +59,38 @@ function Invoke-PesterSelective {
   foreach ($f in $ChangedFiles) {
     if ($f -match '\\tests\\.+\.Tests\.ps1$') { $testFiles += $f }
   }
+  $mappingEntries = @()
+  if ($MappingConfig) {
+    try {
+      if (Test-Path -LiteralPath $MappingConfig) {
+        $raw = Get-Content -LiteralPath $MappingConfig -Raw
+        $parsed = $null
+        try { $parsed = $raw | ConvertFrom-Json -ErrorAction Stop } catch {}
+        if ($parsed) { $mappingEntries = @($parsed) }
+        else { Write-Log "MappingConfig JSON parse failed; expecting array of objects" 'WARN' }
+      } else { Write-Log "MappingConfig path not found: $MappingConfig" 'WARN' }
+    } catch { Write-Log "Failed loading MappingConfig: $($_.Exception.Message)" 'WARN' }
+  }
+  # Each mapping entry: { "sourcePattern": "module/RunSummary/*.psm1", "tests": ["tests/RunSummary.Tool.Restored.Tests.ps1"] }
+  if ($mappingEntries.Count -gt 0 -and (Get-ItemCount $ChangedFiles) -gt 0) {
+    foreach ($entry in $mappingEntries) {
+      $srcPattern = $entry.sourcePattern
+      $testsList = @($entry.tests)
+      if (-not $srcPattern -or $testsList.Count -eq 0) { continue }
+      # Convert glob-like pattern to regex for match
+      $escaped = [regex]::Escape($srcPattern) -replace '\\\*','.*' -replace '\\\?','.'
+      $regex = '^' + ($escaped -replace '\\/', '\\') + '$'
+      foreach ($cf in $ChangedFiles) {
+        $rel = ($cf -replace [regex]::Escape((Resolve-Path .).Path), '').TrimStart('\\','/') -replace '\\','/'
+        if ($rel -match $regex) {
+          foreach ($t in $testsList) {
+            $tp = if (Test-Path -LiteralPath $t) { (Resolve-Path -LiteralPath $t).Path } else { $null }
+            if ($tp) { $testFiles += $tp }
+          }
+        }
+      }
+    }
+  }
   if ($InferTestsFromSource -and (Get-ItemCount $ChangedFiles) -gt 0) {
     foreach ($src in $ChangedFiles) {
       if ($src -match '\\module\\.+\\([^\\]+)\.psm1$') {
@@ -74,11 +110,21 @@ function Invoke-PesterSelective {
     $config.Run.Path = $testFiles
     Write-Log "Targeted test run: $testFileCount file(s)" 'INFO'
   } else {
-    if ($ChangedOnly) {
-      Write-Log 'ChangedOnly set and no targeted test files inferred; skipping run.' 'INFO'
-      return
+    # If OnlyFailed requested and we have a previous failing set, prefer re-running only those
+    if ($OnlyFailed -and $script:LastFailingTestFiles -and (Get-ItemCount $script:LastFailingTestFiles) -gt 0) {
+      $config.Run.Path = $script:LastFailingTestFiles
+      Write-Log "OnlyFailed: Re-running $((Get-ItemCount $script:LastFailingTestFiles)) previously failing test file(s)" 'INFO'
+    } else {
+      if ($ChangedOnly) {
+        Write-Log 'ChangedOnly set and no targeted test files inferred; skipping run.' 'INFO'
+        return
+      }
+      if ($OnlyFailed) {
+        Write-Log 'OnlyFailed requested but no prior failing test list available; running full suite.' 'INFO'
+      } else {
+        Write-Log 'No targeted tests inferred; running full test suite scope' 'INFO'
+      }
     }
-    Write-Log 'No targeted tests inferred; running full test suite scope' 'INFO'
   }
 
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -147,11 +193,28 @@ function Invoke-PesterSelective {
       if ($outDir -and -not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
       $json | Set-Content -NoNewline -LiteralPath $DeltaJsonPath -Encoding UTF8
       Write-Log "Wrote delta JSON: $DeltaJsonPath" 'INFO'
+      if ($DeltaHistoryPath) {
+        try {
+          $histDir = Split-Path -Parent $DeltaHistoryPath
+          if ($histDir -and -not (Test-Path -LiteralPath $histDir)) { New-Item -ItemType Directory -Path $histDir -Force | Out-Null }
+          $json | Add-Content -LiteralPath $DeltaHistoryPath -Encoding UTF8
+        } catch { Write-Log "Failed appending delta history: $($_.Exception.Message)" 'WARN' }
+      }
     } catch {
       Write-Log "Failed writing delta JSON: $($_.Exception.Message)" 'WARN'
     }
   }
   $script:LastRunStats = [pscustomobject]@{ Tests=$testCount; Failed=$failedCount; Skipped=$skipped }
+  # Capture failing test file list for OnlyFailed mode (store unique file paths)
+  try {
+    if (($failedCount -as [int]) -gt 0 -and $result.Tests) {
+      $failedPaths = $result.Tests | Where-Object { $_.Result -eq 'Failed' } | ForEach-Object { $_.Path } | Sort-Object -Unique
+      if ($failedPaths) { $script:LastFailingTestFiles = $failedPaths }
+    } elseif ($status -eq 'PASS') {
+      # Clear on full pass to avoid stale reruns
+      $script:LastFailingTestFiles = @()
+    }
+  } catch { Write-Log "Failed capturing failing test paths: $($_.Exception.Message)" 'WARN' }
   if (-not $NoSummary) {
     Write-Host "--- Summary ---" -ForegroundColor Cyan
     Write-Host ("Tests: {0}  Failed: {1}  Skipped: {2}  Duration: {3:N2}s" -f $testCount,$failedCount,$skipped,$sw.Elapsed.TotalSeconds)
