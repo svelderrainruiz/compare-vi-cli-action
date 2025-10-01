@@ -7,7 +7,7 @@ on:
 
 jobs:
   pester-integration:
-    if: contains(toJson(github.event.pull_request.labels), 'test-integration')
+    if: contains(github.event.pull_request.labels.*.name, 'test-integration')
     runs-on: [self-hosted, Windows, X64]
     env:
       LV_BASE_VI: ${{ vars.LV_BASE_VI }}
