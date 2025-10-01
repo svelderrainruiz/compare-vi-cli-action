@@ -58,4 +58,33 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
     (Get-Content -LiteralPath $tmpOut -Raw) | Should -Match '(^|\n)diff=true($|\n)'
     Remove-Item -LiteralPath $tmpOut -Force -ErrorAction SilentlyContinue
   }
+
+  It 'generates HTML report from real comparison results' {
+    # Run comparison (with diff expected)
+    $res = Invoke-CompareVI -Base $BaseVi -Head $HeadVi -LvComparePath $Canonical -FailOnDiff:$false
+    $res.ExitCode | Should -Be 1
+    $res.Diff | Should -BeTrue
+
+    # Generate HTML report
+    $resultsDir = Join-Path $here 'results'
+    New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+    $htmlPath = Join-Path $resultsDir 'integration-compare-report.html'
+    
+    $renderer = Join-Path (Split-Path -Parent $here) 'scripts' 'Render-CompareReport.ps1'
+    & $renderer `
+      -Command $res.Command `
+      -ExitCode $res.ExitCode `
+      -Diff ($res.Diff.ToString().ToLower()) `
+      -CliPath $res.CliPath `
+      -OutputPath $htmlPath
+
+    # Verify HTML was created
+    Test-Path -LiteralPath $htmlPath | Should -BeTrue
+    
+    # Verify HTML contains expected content
+    $html = Get-Content -LiteralPath $htmlPath -Raw
+    $html | Should -Match 'Compare VI Report'
+    $html | Should -Match 'Differences detected'
+    $html | Should -Match 'Exit code.*1'
+  }
 }

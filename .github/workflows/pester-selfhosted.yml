@@ -47,3 +47,4 @@ jobs:
           path: |
             tests/results/**/*.xml
             tests/results/**/*.txt
+            tests/results/**/*.html
