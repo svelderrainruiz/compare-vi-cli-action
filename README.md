@@ -54,8 +54,8 @@ jobs:
           working-directory: subfolder/with/vis
           base: relative/path/to/base.vi   # resolved from working-directory if set
           head: relative/path/to/head.vi   # resolved from working-directory if set
-          # Preferred: LVCOMPARE_PATH on runner, or provide full path
-          lvComparePath: C:\\Program Files\\NI\\LabVIEW 2025\\LVCompare.exe
+          # Canonical path is enforced - set via LVCOMPARE_PATH env or omit if CLI is at canonical location
+          # lvComparePath: C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe
           # Optional extra flags (space-delimited, quotes supported)
           lvCompareArgs: "--some-flag --value \"C:\\Temp\\My Folder\\file.txt\""
           # Built-in policy: fail on diff by default
