@@ -78,20 +78,8 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
     # Override the mock to call the real function
     Mock -CommandName Resolve-Cli -MockWith { 
       param($Explicit)
-      # Call the real Resolve-Cli logic inline
-      $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-      if ($Explicit) {
-        $resolved = try { (Resolve-Path -LiteralPath $Explicit -ErrorAction Stop).Path } catch { $Explicit }
-        if ($resolved -ieq $canonical) {
-          if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
-            throw "LVCompare.exe not found at canonical path: $canonical"
-          }
-          return $canonical
-        } else {
-          throw "Only the canonical LVCompare path is supported: $canonical"
-        }
-      }
-      return $canonical
+      # Call the real Resolve-Cli function directly
+      & Resolve-Cli $Explicit
     }
     { Invoke-CompareVI -Base $a -Head $b -LvComparePath $fakePath -FailOnDiff:$false -Executor $mockExecutor } | Should -Throw -ExpectedMessage '*canonical*'
   }
