@@ -114,6 +114,7 @@ Troubleshooting
 - Verify `LVCompare.exe` is installed at: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
 - If you set `LVCOMPARE_PATH` or `lvComparePath`, ensure they point to the canonical path
 - Check composite action outputs (`diff`, `exitCode`, `cliPath`, `command`) and the CLI exit code for diagnostics.
+- **For comprehensive CI/CD setup and troubleshooting**, see [Self-Hosted Runner CI/CD Setup Guide](./docs/SELFHOSTED_CI_SETUP.md)
 
 Tests
 
