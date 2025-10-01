@@ -11,9 +11,15 @@ BeforeAll {
   $Canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
   $BaseVi = $env:LV_BASE_VI
   $HeadVi = $env:LV_HEAD_VI
+  
+  # Create results directory once for all integration tests
+  $ResultsDir = Join-Path $here 'results'
+  New-Item -ItemType Directory -Path $ResultsDir -Force | Out-Null
+  
   $script:Canonical = $Canonical
   $script:BaseVi = $BaseVi
   $script:HeadVi = $HeadVi
+  $script:ResultsDir = $ResultsDir
 }
 
 Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
@@ -66,9 +72,7 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
     $res.Diff | Should -BeTrue
 
     # Generate HTML report
-    $resultsDir = Join-Path $here 'results'
-    New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
-    $htmlPath = Join-Path $resultsDir 'integration-compare-report.html'
+    $htmlPath = Join-Path $ResultsDir 'integration-compare-report.html'
     
     $renderer = Join-Path (Split-Path -Parent $here) 'scripts' 'Render-CompareReport.ps1'
     & $renderer `
