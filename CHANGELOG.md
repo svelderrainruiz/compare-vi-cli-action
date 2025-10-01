@@ -34,6 +34,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Restored run summary renderer tests (`RunSummary.Tool.Restored.Tests.ps1`) using safe initialization (all `$TestDrive` usage inside `BeforeAll`/`It`) eliminating prior discovery-time null `-Path` anomaly.
 - Removed quarantine placeholder (`RunSummary.Tool.Quarantined.Tests.ps1`); anomaly documented in issue template with reproduction script (`Binding-MinRepro.Tests.ps1`).
 
+### Removed
+
+- Flaky demo artifacts: `tests/Flaky.Demo.Tests.ps1` and helper script `tools/Demo-FlakyRecovery.ps1` fully removed (previously deprecated). Retry classification telemetry retained in watcher without demo harness.
+
 ## [v0.3.0] - 2025-10-01
 
 ### Added

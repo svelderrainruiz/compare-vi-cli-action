@@ -405,7 +405,6 @@ param(
 "Notify: Run#$RunSequence Status=$Status Failed=$Failed/$Tests Skipped=$Skipped Class=$Classification (env=$env:WATCH_STATUS)"
 ```
 
-<!-- Flaky demo helper script section removed (deprecated) -->
 
 Integration compare control loop (developer scaffold)
 
