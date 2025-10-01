@@ -21,8 +21,8 @@ Describe 'Invoke-IntegrationCompareLoop percentile edge handling' -Tag 'Unit' {
   It 'collapses duplicate percentile values' {
     $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 3 -IntervalSeconds 0 -CompareExecutor { 0 } -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,50,90,90,99'
     $names = $r.Percentiles | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
-    ($names | Where-Object { $_ -eq 'p50' }).Count | Should -Be 1
-    ($names | Where-Object { $_ -eq 'p90' }).Count | Should -Be 1
+    @($names | Where-Object { $_ -eq 'p50' }).Count | Should -Be 1
+    @($names | Where-Object { $_ -eq 'p90' }).Count | Should -Be 1
   }
 
   It 'enforces maximum list length' {
