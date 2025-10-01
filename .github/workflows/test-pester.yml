@@ -28,10 +28,11 @@ jobs:
       - name: Run unit tests (Pester v5, repo-local)
         shell: pwsh
         run: |
-          $include = '${{ inputs.include_integration }}' -ieq 'true'
-          $params = @{}
-          if ($include) { $params.IncludeIntegration = $true }
-          ./tools/Run-Pester.ps1 @params
+          if ('${{ inputs.include_integration }}' -ieq 'true') {
+            ./tools/Run-Pester.ps1 -IncludeIntegration
+          } else {
+            ./tools/Run-Pester.ps1
+          }
 
       - name: Upload Pester artifacts
         if: always()
