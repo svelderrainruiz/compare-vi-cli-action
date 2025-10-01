@@ -29,28 +29,28 @@ jobs:
         shell: bash
         run: |
           body="$(echo "$COMMENT_BODY" | tr '[:upper:]' '[:lower:]')"
-          echo "comment=$body" >> $GITHUB_OUTPUT
-          if echo "$body" | grep -qE '^/run +unit'; then echo "target=unit" >> $GITHUB_OUTPUT; fi
-          if echo "$body" | grep -qE '^/run +mock'; then echo "target=mock" >> $GITHUB_OUTPUT; fi
-          if echo "$body" | grep -qE '^/run +smoke'; then echo "target=smoke" >> $GITHUB_OUTPUT; fi
-          if echo "$body" | grep -qE '^/run +pester-selfhosted'; then echo "target=pester-selfhosted" >> $GITHUB_OUTPUT; fi
+          echo "comment=$body" >> "$GITHUB_OUTPUT"
+          if echo "$body" | grep -qE '^/run +unit'; then echo "target=unit" >> "$GITHUB_OUTPUT"; fi
+          if echo "$body" | grep -qE '^/run +mock'; then echo "target=mock" >> "$GITHUB_OUTPUT"; fi
+          if echo "$body" | grep -qE '^/run +smoke'; then echo "target=smoke" >> "$GITHUB_OUTPUT"; fi
+          if echo "$body" | grep -qE '^/run +pester-selfhosted'; then echo "target=pester-selfhosted" >> "$GITHUB_OUTPUT"; fi
 
       - name: Resolve target ref (PR head when same-repo, else main)
         id: ref
         shell: bash
         run: |
-          pr=$PR_NUMBER
+          pr="$PR_NUMBER"
           resp=$(curl -s -H "Authorization: Bearer $XCLI_PAT" -H "Accept: application/vnd.github+json" \
                   "https://api.github.com/repos/$REPO/pulls/$pr")
           echo "$resp" > pr.json
           head_ref=$(python3 -c "import json; j=json.load(open('pr.json')); print(j.get('head',{}).get('ref',''))")
           head_repo=$(python3 -c "import json; j=json.load(open('pr.json')); print(j.get('head',{}).get('repo',{}).get('full_name',''))")
           if [ -n "$head_ref" ] && [ "$head_repo" = "$REPO" ]; then
-            echo "target_ref=$head_ref" >> $GITHUB_OUTPUT
-            echo "fork=false" >> $GITHUB_OUTPUT
+            echo "target_ref=$head_ref" >> "$GITHUB_OUTPUT"
+            echo "fork=false" >> "$GITHUB_OUTPUT"
           else
-            echo "target_ref=main" >> $GITHUB_OUTPUT
-            echo "fork=true" >> $GITHUB_OUTPUT
+            echo "target_ref=main" >> "$GITHUB_OUTPUT"
+            echo "fork=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Parse smoke options from comment
@@ -76,13 +76,15 @@ jobs:
             esac
           done
           lvargs="${lvargs# }"
-          echo "base=$base" >> $GITHUB_OUTPUT
-          echo "head=$head" >> $GITHUB_OUTPUT
-          echo "lvComparePath=$lvpath" >> $GITHUB_OUTPUT
-          echo "lvCompareArgs=$lvargs" >> $GITHUB_OUTPUT
-          echo "fail_on_diff=$fail" >> $GITHUB_OUTPUT
-          echo "pr_number=$prnum" >> $GITHUB_OUTPUT
-          echo "working_directory=$workdir" >> $GITHUB_OUTPUT
+          {
+            echo "base=$base"
+            echo "head=$head"
+            echo "lvComparePath=$lvpath"
+            echo "lvCompareArgs=$lvargs"
+            echo "fail_on_diff=$fail"
+            echo "pr_number=$prnum"
+            echo "working_directory=$workdir"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Dispatch unit tests
         if: steps.cmd.outputs.target == 'unit'
@@ -91,7 +93,7 @@ jobs:
           curl -s -X POST \
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
-           https://api.github.com/repos/$REPO/actions/workflows/test-pester.yml/dispatches \
+           "https://api.github.com/repos/$REPO/actions/workflows/test-pester.yml/dispatches" \
            -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'","inputs":{"include_integration":"false"}}' | cat
 
       - name: Dispatch mock tests
@@ -101,7 +103,7 @@ jobs:
           curl -s -X POST \
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
-           https://api.github.com/repos/$REPO/actions/workflows/test-mock.yml/dispatches \
+           "https://api.github.com/repos/$REPO/actions/workflows/test-mock.yml/dispatches" \
            -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'"}' | cat
 
       - name: Dispatch smoke tests
@@ -123,7 +125,7 @@ jobs:
           curl -s -X POST \
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
-           https://api.github.com/repos/$REPO/actions/workflows/smoke.yml/dispatches \
+           "https://api.github.com/repos/$REPO/actions/workflows/smoke.yml/dispatches" \
            -d @payload.json | cat
 
       - name: Dispatch pester-selfhosted tests
@@ -133,5 +135,5 @@ jobs:
           curl -s -X POST \
            -H "Authorization: Bearer $XCLI_PAT" \
            -H "Accept: application/vnd.github+json" \
-           https://api.github.com/repos/$REPO/actions/workflows/pester-selfhosted.yml/dispatches \
+           "https://api.github.com/repos/$REPO/actions/workflows/pester-selfhosted.yml/dispatches" \
            -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'","inputs":{"include_integration":"true"}}' | cat
