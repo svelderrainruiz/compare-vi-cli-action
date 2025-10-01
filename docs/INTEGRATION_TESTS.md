@@ -70,13 +70,7 @@ When using the action or calling `Invoke-CompareVI` directly, an execution durat
 - Return object property `CompareDurationSeconds` (renamed from `DurationSeconds`)
 - Step summary line `Duration (s): <value>`
 - Output file key `compareDurationSeconds=<value>` when `GitHubOutputPath` is used
-- HTML report field when `Render-CompareReport.ps1` is passed `-CompareDurationSeconds` (legacy alias `-DurationSeconds` supported)
-
-
-### Environment Readiness Script
-
-Use the provided script to quickly validate prerequisites before running integration tests:
-
+- HTML report field when `Render-CompareReport.ps1` is passed `-DurationSeconds`
 ```powershell
 ./scripts/Test-IntegrationEnvironment.ps1 -JsonPath tests/results/integration-env.json
 ```
