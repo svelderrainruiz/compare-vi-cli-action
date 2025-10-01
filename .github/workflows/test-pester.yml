@@ -29,11 +29,9 @@ jobs:
         shell: pwsh
         run: |
           $include = '${{ inputs.include_integration }}' -ieq 'true'
-          if ($include) {
-            ./tools/Run-Pester.ps1 -IncludeIntegration
-          } else {
-            ./tools/Run-Pester.ps1
-          }
+          $params = @{}
+          if ($include) { $params.IncludeIntegration = $true }
+          ./tools/Run-Pester.ps1 @params
 
       - name: Upload Pester artifacts
         if: always()
