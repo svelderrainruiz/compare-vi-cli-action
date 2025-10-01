@@ -21,12 +21,14 @@ This document summarizes the implementation status of self-hosted Windows runner
 ### Testing Infrastructure
 
 #### Unit Tests (`tests/CompareVI.Tests.ps1`, `tests/CompareVI.InputOutput.Tests.ps1`)
+
 - ✅ 20 tests passing, 2 skipped (require canonical CLI on Windows)
 - Mock-based testing without requiring real CLI
 - Test all resolution paths and error conditions
 - Run on `windows-latest` GitHub-hosted runners
 
 #### Integration Tests (`tests/CompareVI.Integration.Tests.ps1`)
+
 - Tagged with `Integration` for conditional execution
 - Require self-hosted Windows runner with:
   - LabVIEW Compare CLI at canonical path
@@ -34,6 +36,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Validate real CLI invocation and exit codes
 
 #### Mock CLI Tests (`.github/workflows/test-mock.yml`)
+
 - Run on `windows-latest` GitHub-hosted runners
 - Use mock CLI script to simulate behavior
 - Test multiple scenarios including error conditions
@@ -42,23 +45,27 @@ This document summarizes the implementation status of self-hosted Windows runner
 ### Workflows
 
 #### `test-pester.yml` - Unit Tests
+
 - Runs on `windows-latest`
 - Excludes Integration tests by default
 - Can include Integration via workflow_dispatch input
 
 #### `pester-selfhosted.yml` - Self-Hosted Integration Tests
+
 - Runs on `[self-hosted, Windows, X64]`
 - Uses repository variables `LV_BASE_VI` and `LV_HEAD_VI`
 - Includes Integration tests by default
 - Uploads test results as artifacts
 
 #### `test-mock.yml` - Mock CLI Validation
+
 - Runs on `windows-latest`
 - Tests action behavior without real CLI
 - Validates all code paths
 - Generates and uploads HTML reports
 
 #### `command-dispatch.yml` - PR Comment Commands
+
 - Responds to PR comments starting with `/run`
 - Supports commands:
   - `/run unit` - Unit tests only
@@ -69,12 +76,14 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Dispatches workflows on PR head branch (same-repo) or main (fork)
 
 #### `smoke.yml` - Manual Smoke Tests
+
 - Manual dispatch workflow
 - Runs on self-hosted Windows runner
 - Accepts VI file paths as inputs
 - Generates HTML comparison reports
 
 #### `validate.yml` - Linting and Validation
+
 - Runs markdownlint on all Markdown files
 - Runs actionlint on all workflow files
 - Executes on every PR and push to main
@@ -115,22 +124,26 @@ This document summarizes the implementation status of self-hosted Windows runner
 ## CI/CD Pipeline
 
 ### On Pull Request
+
 1. Validate (markdownlint, actionlint)
 2. Unit tests (windows-latest)
 3. Mock CLI tests (windows-latest)
 
 ### On PR Comment
+
 - `/run unit` - Quick unit test feedback
 - `/run mock` - Mock CLI validation
 - `/run pester-selfhosted` - Full integration testing
 - `/run smoke pr=NUMBER` - Manual smoke test
 
 ### On Push to Main
+
 1. Validate
 2. Unit tests
 3. Mock CLI tests
 
 ### On Tag Push (vX.Y.Z)
+
 1. Create GitHub Release
 2. Extract changelog section
 3. Publish to GitHub Marketplace
