@@ -19,6 +19,7 @@ param(
   , [switch]$ShowFailed
   , [int]$MaxFailedList = 10
   , [switch]$OnlyFailed
+  , [string]$NotifyScript
 )
 
 Set-StrictMode -Version Latest
@@ -141,6 +142,8 @@ function Invoke-PesterSelective {
     return
   }
   $failedCount = ($result | Add-Member -PassThru -NotePropertyName dummy 0 | Select-Object -ExpandProperty FailedCount -ErrorAction SilentlyContinue)
+  # Force numeric cast if possible to avoid later parameter binding confusion
+  if ($failedCount -isnot [int]) { $failedCount = [int]($failedCount -as [int]) }
   $failedBlocks = ($result | Select-Object -ExpandProperty FailedBlocksCount -ErrorAction SilentlyContinue)
   $testCount = ($result | Select-Object -ExpandProperty TestCount -ErrorAction SilentlyContinue)
   if (-not $testCount) { $testCount = ($result | Select-Object -ExpandProperty TotalCount -ErrorAction SilentlyContinue) }
@@ -165,6 +168,7 @@ function Invoke-PesterSelective {
     $dSkipped = ($skipped - $prev.Skipped)
     $deltaText = " (Δ Tests=$dTests Failed=$dFailed Skipped=$dSkipped)"
   }
+  $classification = if ($prev) { if ($dFailed -lt 0) { 'improved' } elseif ($dFailed -gt 0) { 'worsened' } else { 'unchanged' } } else { 'baseline' }
   $script:RunSequence++
 
   # Colorized status line
@@ -183,9 +187,7 @@ function Invoke-PesterSelective {
         stats = [ordered]@{ tests = $testCount; failed = $failedCount; skipped = $skipped }
         previous = if ($prev) { [ordered]@{ tests=$prev.Tests; failed=$prev.Failed; skipped=$prev.Skipped } } else { $null }
         delta = if ($prev) { [ordered]@{ tests=$dTests; failed=$dFailed; skipped=$dSkipped } } else { $null }
-        classification = if ($prev) {
-          if ($dFailed -lt 0) { 'improved' } elseif ($dFailed -gt 0) { 'worsened' } else { 'unchanged' }
-        } else { 'baseline' }
+        classification = $classification
         runSequence = $script:RunSequence
       }
       $json = $payload | ConvertTo-Json -Depth 5
@@ -229,6 +231,26 @@ function Invoke-PesterSelective {
           }
         }
       } catch { Write-Log "Failed enumerating failed tests: $($_.Exception.Message)" 'WARN' }
+    }
+  }
+
+  # Notify hook invocation (post-run)
+  if ($NotifyScript) {
+    try {
+      if (Test-Path -LiteralPath $NotifyScript) {
+        $env:WATCH_STATUS = $status
+        $env:WATCH_FAILED = ("{0}" -f $failedCount)
+        $env:WATCH_TESTS = ("{0}" -f $testCount)
+        $env:WATCH_SKIPPED = ("{0}" -f $skipped)
+        $env:WATCH_SEQUENCE = ("{0}" -f $script:RunSequence)
+        $env:WATCH_CLASSIFICATION = $classification
+        Write-Log ("Invoking NotifyScript (explicit): {0} -Status {1} -Failed {2} -Tests {3} -Skipped {4} -RunSequence {5} -Classification {6}" -f $NotifyScript,$status,$failedCount,$testCount,$skipped,$script:RunSequence,$classification) 'INFO'
+        & $NotifyScript -Status $status -Failed ([int]$failedCount) -Tests ([int]$testCount) -Skipped ([int]$skipped) -RunSequence ([int]$script:RunSequence) -Classification $classification | ForEach-Object { Write-Host "[notify] $_" }
+      } else {
+        Write-Log "NotifyScript path not found: $NotifyScript" 'WARN'
+      }
+    } catch {
+      Write-Log "NotifyScript execution failed: $($_.Exception.Message)" 'WARN'
     }
   }
 }
