@@ -91,8 +91,8 @@ jobs:
           if (Test-Path $jsonSummaryPath) {
             try {
               $json = Get-Content $jsonSummaryPath -Raw | ConvertFrom-Json -ErrorAction Stop
-              if ($json.compareDurationSeconds) { $durationSeconds = [string]$json.compareDurationSeconds }
-              if ($json.compareDurationNanoseconds) { $durationNanoseconds = [string]$json.compareDurationNanoseconds }
+              if ($null -ne $json.compareDurationSeconds) { $durationSeconds = [string]$json.compareDurationSeconds }
+              if ($null -ne $json.compareDurationNanoseconds) { $durationNanoseconds = [string]$json.compareDurationNanoseconds }
             } catch {
               Write-Host "Failed to parse JSON summary: $_"
             }
