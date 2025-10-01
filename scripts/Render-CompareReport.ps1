@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 function Get-BaseHeadFromCommand([string]$cmd) {
   # Tokenize respecting quotes: match quoted strings (preserving quotes) or non-space sequences
   # This pattern matches: "quoted strings" OR non-whitespace sequences
-  $pattern = '"[^"]*"|\S+'
+  $pattern = '"[^"]+"|\S+'
   $tokens = [regex]::Matches($cmd, $pattern) | ForEach-Object { 
     $val = $_.Value
     # Remove surrounding quotes if present
