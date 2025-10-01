@@ -3,7 +3,7 @@
 .SYNOPSIS
     Pester test dispatcher for compare-vi-cli-action
 .DESCRIPTION
-    This dispatcher is called by the open-source run-pester-tests action.
+    This dispatcher is called directly by the pester-selfhosted.yml workflow.
     It handles running Pester tests with the appropriate configuration.
     Assumes Pester is already installed on the self-hosted runner.
 .PARAMETER TestsPath

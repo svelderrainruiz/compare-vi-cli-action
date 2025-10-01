@@ -150,10 +150,10 @@ Used by GitHub-hosted workflows and manual local testing:
 
 #### Root Dispatcher (`Invoke-PesterTests.ps1`)
 
-Used by the open-source shared action on self-hosted runners:
+Used directly by self-hosted runner workflows:
 
-- **Used by:** `pester-selfhosted.yml` via `LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions`
-- **Purpose:** Entry point for the open-source shared action
+- **Used by:** `pester-selfhosted.yml` (called directly via PowerShell)
+- **Purpose:** Entry point for self-hosted test execution
 - **Assumption:** Pester v5+ is pre-installed on the self-hosted runner
 - **Parameters:**
   - `TestsPath` - Path to tests directory (default: `tests`)
@@ -162,7 +162,7 @@ Used by the open-source shared action on self-hosted runners:
 
 **When to use which:**
 
-- Self-hosted runners with real CLI → Use open-source action (calls `Invoke-PesterTests.ps1`)
+- Self-hosted runners with real CLI → Call `Invoke-PesterTests.ps1` directly
 - GitHub-hosted runners or local → Use `tools/Run-Pester.ps1` directly
 
 ### Unit Tests (No CLI Required)

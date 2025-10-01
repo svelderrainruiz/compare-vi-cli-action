@@ -1,20 +1,20 @@
-# Pester Test Dispatcher Refinement
+# Pester Test Dispatcher Architecture
 
 ## Overview
 
-This document summarizes the refinements made to the Pester test execution architecture to properly integrate with the open-source `run-pester-tests` action.
+This document describes the Pester test execution architecture, featuring a dual-dispatcher pattern for running tests on both GitHub-hosted and self-hosted runners.
 
 ## Changes Made
 
 ### 1. Root-Level Test Dispatcher (`Invoke-PesterTests.ps1`)
 
-**Purpose:** Entry point for the open-source `run-pester-tests` action from `LabVIEW-Community-CI-CD/open-source`.
+**Purpose:** Entry point for self-hosted runner test execution via `pester-selfhosted.yml` workflow.
 
 **Location:** Repository root
 
 **Key Features:**
 
-- Accepts parameters matching the open-source action interface:
+- Accepts parameters for flexible test execution:
   - `TestsPath` (default: `tests`)
   - `IncludeIntegration` (default: `false`)
   - `ResultsPath` (default: `tests/results`)
@@ -25,7 +25,7 @@ This document summarizes the refinements made to the Pester test execution archi
 **Usage:**
 
 ```powershell
-# Called automatically by the open-source action
+# Called directly by pester-selfhosted.yml workflow
 ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration true -ResultsPath tests/results
 ```
 
@@ -65,18 +65,13 @@ This document summarizes the refinements made to the Pester test execution archi
                               │                                 │
                     ┌─────────▼──────────┐        ┌────────────▼──────────┐
                     │  test-pester.yml   │        │ pester-selfhosted.yml │
-                    │  (direct call)     │        │ (open-source action)  │
+                    │  (direct call)     │        │   (direct call)        │
                     └─────────┬──────────┘        └────────────┬──────────┘
                               │                                 │
                     ┌─────────▼──────────┐        ┌────────────▼──────────┐
-                    │ tools/Run-Pester   │        │ open-source action    │
-                    │   .ps1             │        │ run-pester-tests      │
+                    │ tools/Run-Pester   │        │ Invoke-PesterTests.ps1 │
+                    │   .ps1             │        │ (repository root)      │
                     └─────────┬──────────┘        └────────────┬──────────┘
-                              │                                 │
-                              │                   ┌─────────────▼──────────┐
-                              │                   │ Invoke-PesterTests.ps1 │
-                              │                   │ (repository root)      │
-                              │                   └─────────────┬──────────┘
                               │                                 │
                               └─────────────┬───────────────────┘
                                             │
@@ -93,15 +88,15 @@ This document summarizes the refinements made to the Pester test execution archi
 
 ### Self-Hosted Runner Workflow (`pester-selfhosted.yml`)
 
-Uses the open-source action, which delegates to `Invoke-PesterTests.ps1`:
+Calls the dispatcher directly without external action dependencies:
 
 ```yaml
-- name: Run Pester on self-hosted via open-source action
-  uses: LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions
-  with:
-    tests-path: tests
-    include-integration: ${{ inputs.include_integration }}
-    results-path: tests/results
+- name: Run Pester tests via local dispatcher
+  shell: pwsh
+  run: |
+    ./Invoke-PesterTests.ps1 `
+      -TestsPath tests `
+      -IncludeIntegration '${{ inputs.include_integration }}' `
 ```
 
 ### GitHub-Hosted Workflow (`test-pester.yml`)
