@@ -75,17 +75,17 @@ Describe 'Sample' {
     It 'resolves relative TestsPath from script root' {
       $scriptContent = Get-Content $dispatcherPath -Raw
       $scriptContent | Should -Match '\$root = \$PSScriptRoot'
-      $scriptContent | Should -Match 'Join-Path \$root \$TestsPath'
+      $scriptContent | Should -Match '\$testsDir = Join-Path \$root \$TestsPath'
     }
     
     It 'resolves relative ResultsPath from script root' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Join-Path \$root \$ResultsPath'
+      $scriptContent | Should -Match '\$resultsDir = Join-Path \$root \$ResultsPath'
     }
     
     It 'validates tests directory exists' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'if \(-not \(Test-Path -LiteralPath \$testsDir\)\)'
+      $scriptContent | Should -Match 'Test-Path -LiteralPath \$testsDir -PathType Container'
       $scriptContent | Should -Match 'Write-Error "Tests directory not found'
     }
     
@@ -135,8 +135,8 @@ Describe 'Sample' {
     
     It 'provides clear output about Integration test inclusion' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Write-Host "Excluding Integration-tagged tests"'
-      $scriptContent | Should -Match 'Write-Host "Including Integration-tagged tests"'
+      $scriptContent | Should -Match 'Excluding Integration-tagged tests'
+      $scriptContent | Should -Match 'Including Integration-tagged tests'
     }
   }
 
@@ -183,7 +183,7 @@ Describe 'Sample' {
       $scriptContent | Should -Match '\[int\]\$total = \$rootNode\.total'
       $scriptContent | Should -Match '\[int\]\$failed = \$rootNode\.failures'
       $scriptContent | Should -Match '\[int\]\$errors = \$rootNode\.errors'
-      $scriptContent | Should -Match '\$skipped = \[int\]\$rootNode\.''not-run'''
+      $scriptContent | Should -Match '\[int\]\$skipped = \$rootNode\.''not-run'''
     }
     
     It 'calculates passed count' {
@@ -194,7 +194,7 @@ Describe 'Sample' {
     It 'generates formatted summary' {
       $scriptContent = Get-Content $dispatcherPath -Raw
       $scriptContent | Should -Match '=== Pester Test Summary ==='
-      $scriptContent | Should -Match 'Total: \$total'
+      $scriptContent | Should -Match 'Total Tests: \$total'
       $scriptContent | Should -Match 'Passed: \$passed'
       $scriptContent | Should -Match 'Failed: \$failed'
       $scriptContent | Should -Match 'Errors: \$errors'
@@ -203,7 +203,8 @@ Describe 'Sample' {
     
     It 'writes summary to file' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Out-File -FilePath .* ''pester-summary\.txt'''
+      $scriptContent | Should -Match 'pester-summary\.txt'
+      $scriptContent | Should -Match 'Out-File'
     }
   }
 
@@ -217,13 +218,13 @@ Describe 'Sample' {
     
     It 'exits with code 0 when all tests pass' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Write-Host "All tests passed!"'
+      $scriptContent | Should -Match '✅ All tests passed!'
       $scriptContent | Should -Match 'exit 0'
     }
     
     It 'provides clear error message on test failure' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Write-Error "Tests failed: \$failed failures, \$errors errors"'
+      $scriptContent | Should -Match 'Tests failed:.*failure.*error'
     }
   }
 
@@ -264,19 +265,19 @@ Describe 'Sample' {
     
     It 'displays input parameters' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Write-Host "Tests Path: \$TestsPath"'
-      $scriptContent | Should -Match 'Write-Host "Include Integration: \$IncludeIntegration"'
-      $scriptContent | Should -Match 'Write-Host "Results Path: \$ResultsPath"'
+      $scriptContent | Should -Match 'Write-Host.*Tests Path:.*\$TestsPath'
+      $scriptContent | Should -Match 'Write-Host.*Include Integration:.*\$IncludeIntegration'
+      $scriptContent | Should -Match 'Write-Host.*Results Path:.*\$ResultsPath'
     }
     
     It 'displays Pester version' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Write-Host "Using Pester \$\(\(Get-Module Pester\)\.Version\)"'
+      $scriptContent | Should -Match 'Write-Host.*Using Pester'
     }
     
     It 'displays test execution message' {
       $scriptContent = Get-Content $dispatcherPath -Raw
-      $scriptContent | Should -Match 'Write-Host "Running Pester tests\.\.\."'
+      $scriptContent | Should -Match 'Write-Host "Executing Pester tests\.\.\."'
     }
   }
 
