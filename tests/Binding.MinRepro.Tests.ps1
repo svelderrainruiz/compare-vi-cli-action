@@ -18,15 +18,17 @@ Describe 'Binding-MinRepro script parameter binding' -Tag 'Unit','Diagnostic' {
     }
 
     Context 'Invocation with argument' {
-        $tmp = Join-Path $TestDrive 'dummy.txt'
-        Set-Content -LiteralPath $tmp -Value 'x'
-
+        BeforeAll {
+            # $TestDrive is only reliably available at run-time, not discovery.
+            $script:TmpFile = Join-Path $TestDrive 'dummy.txt'
+            Set-Content -LiteralPath $script:TmpFile -Value 'x'
+        }
         It 'binds the positional Path argument and echoes it' {
             $resolvedRoot = Resolve-Path -LiteralPath '.'
             $scriptPath = Join-Path -Path $resolvedRoot -ChildPath 'tools/Binding-MinRepro.ps1'
             Write-Host "[diag-test] invocation scriptPath: $scriptPath" -ForegroundColor Cyan
-            $out = & pwsh -NoProfile -File $scriptPath $tmp 2>&1
-            $out | Should -Contain "[repro] Raw Input -Path: '$tmp'"
+            $out = & pwsh -NoProfile -File $scriptPath $script:TmpFile 2>&1
+            $out | Should -Contain "[repro] Raw Input -Path: '$script:TmpFile'" -Because 'Script should echo bound Path'
             $out | Should -Not -Match "Path was NOT bound"
         }
     }
@@ -42,12 +44,15 @@ Describe 'Binding-MinRepro script parameter binding' -Tag 'Unit','Diagnostic' {
     }
 
     Context 'Invocation with non-existent path' {
+        BeforeAll {
+            $script:NonExist = Join-Path $TestDrive 'does-not-exist.xyz'
+            # Do not create the file
+        }
         It 'reports non-existent path warning' {
-            $nonExist = Join-Path $TestDrive 'does-not-exist.xyz'
             $resolvedRoot = Resolve-Path -LiteralPath '.'
             $scriptPath = Join-Path -Path $resolvedRoot -ChildPath 'tools/Binding-MinRepro.ps1'
             Write-Host "[diag-test] invocation scriptPath (non-existent arg): $scriptPath" -ForegroundColor Cyan
-            $out = & pwsh -NoProfile -File $scriptPath $nonExist 2>&1
+            $out = & pwsh -NoProfile -File $scriptPath $script:NonExist 2>&1
             $out | Should -Match 'Provided Path does not exist'
         }
     }

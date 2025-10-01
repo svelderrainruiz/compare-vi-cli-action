@@ -122,6 +122,18 @@ Please provide:
 - Quarantined test file: `tests/RunSummary.Tool.Quarantined.Tests.ps1`
 - Original (removed) failing test name: `RunSummary.Tool.Tests.ps1`
 - Minimal repro script: `tools/Binding-MinRepro.ps1`
+- Restored renderer tests: `tests/RunSummary.Tool.Restored.Tests.ps1`
+
+## Update (Restored Tests)
+
+Restored renderer tests now pass using the following mitigations:
+
+- All dynamic filesystem setup moved to `BeforeAll` or inside individual `It` blocks
+- Avoided using `$TestDrive` outside runtime blocks to prevent discovery-time evaluation anomalies
+- Replaced brittle `Should -Throw` pattern check with explicit try/catch and substring assertions due to full path variance in error messages
+- Added minimal repro test `Binding.MinRepro.Tests.ps1` (still demonstrates environment discovery injection when using discovery-time variable assignments prior refactor)
+
+Remaining open item: root cause of original injected null `-Path` during discovery still not definitively isolated (likely early evaluation of `$TestDrive` combined with Pester discovery semantics). Further investigation optional unless anomaly reappears.
 
 ---
 Please append diagnostic findings and commands run as comments below.
