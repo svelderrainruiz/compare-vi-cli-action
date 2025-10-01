@@ -72,10 +72,6 @@ When using the action or calling `Invoke-CompareVI` directly, an execution durat
 - Output file key `compareDurationSeconds=<value>` when `GitHubOutputPath` is used
 - HTML report field when `Render-CompareReport.ps1` is passed `-CompareDurationSeconds` (legacy alias `-DurationSeconds` supported)
 
-- Return object property `CompareDurationSeconds` (renamed from `DurationSeconds`)
-- Step summary line `Duration (s): <value>`
-- Output file key `compareDurationSeconds=<value>` when `GitHubOutputPath` is used
-- HTML report field when `Render-CompareReport.ps1` is passed `-CompareDurationSeconds` (legacy alias `-DurationSeconds` supported)
 
 ### Environment Readiness Script
 
