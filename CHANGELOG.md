@@ -12,6 +12,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Final run summary JSON export via `-RunSummaryJsonPath` (schema `compare-loop-run-summary-v1`) including aggregate metrics, dynamic percentiles, histogram, quantile strategy, and rebaseline metadata.
 - Snapshot tailing helper `tools/Tail-Snapshots.ps1` for interactive NDJSON monitoring with selectable percentile columns.
 - Run summary Pester tests (`CompareLoop.RunSummary.Tests.ps1`) validating schema presence and dynamic percentile labeling.
+- Watch-Pester enhancements: selective run targeting, `-ChangedOnly`, heuristic source→test inference (`-InferTestsFromSource`), delta summary & classification (`-DeltaJsonPath`), run sequencing & colorized status, failed test listing (`-ShowFailed`, `-MaxFailedList`), audible failure notification (`-BeepOnFail`).
 
 ### Tooling
 

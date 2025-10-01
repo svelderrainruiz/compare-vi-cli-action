@@ -233,6 +233,12 @@ Key options:
 - `-RunAllOnStart`: Perform an initial full run.
 - `-SingleRun`: Run once (honoring targeting) and exit (useful for scripting).
 - `-Quiet`: Reduce output verbosity (summary only).
+ - `-ChangedOnly`: Skip a run if no directly changed or inferred test files were detected.
+ - `-InferTestsFromSource`: Attempt to map changed module/script files to corresponding `*.Tests.ps1` by basename.
+ - `-BeepOnFail`: Emit an audible console beep when a run has failures.
+ - `-DeltaJsonPath <file>`: Write a JSON artifact containing current stats, previous stats, deltas, and classification (`baseline|improved|worsened|unchanged`).
+ - `-ShowFailed`: After summary, list failing test names (up to `-MaxFailedList`).
+ - `-MaxFailedList <N>`: Cap the number of failing tests printed (default 10).
 
 Selective runs:
 
@@ -241,6 +247,63 @@ If any changed file path matches `\tests\*.Tests.ps1`, only those test files are
 Exit behavior:
 
 The watcher runs until interrupted (Ctrl+C). It installs Pester automatically if not found (CurrentUser scope).
+
+Delta JSON schema example (`-DeltaJsonPath tests/results/delta.json`):
+
+```jsonc
+{
+  "timestamp": "2025-10-01T15:15:27.123Z",
+  "status": "FAIL",
+  "runSequence": 5,
+  "stats": { "tests": 121, "failed": 6, "skipped": 15 },
+  "previous": { "tests": 121, "failed": 7, "skipped": 15 },
+  "delta": { "tests": 0, "failed": -1, "skipped": 0 },
+  "classification": "improved"
+}
+```
+
+Classification logic:
+
+- `baseline`: First run (no previous stats)
+- `improved`: Failed count decreased
+- `worsened`: Failed count increased
+- `unchanged`: Failed count unchanged
+
+Typical usage patterns:
+
+```powershell
+# Full run on start, then only run when tests or inferred sources change
+pwsh -File ./tools/Watch-Pester.ps1 -RunAllOnStart -ChangedOnly -InferTestsFromSource
+
+# Emit delta JSON and audible alert on failures
+pwsh -File ./tools/Watch-Pester.ps1 -DeltaJsonPath tests/results/delta.json -BeepOnFail
+
+# Show top 5 failing tests each run (compact selective runs)
+pwsh -File ./tools/Watch-Pester.ps1 -ShowFailed -MaxFailedList 5 -ChangedOnly
+```
+
+Heuristic source→test inference:
+
+- A changed file under `module/<Name>/<Name>.psm1` or `scripts/<Name>.ps1` maps to `tests/<Name>.Tests.ps1` if present.
+- If no mapping is found and `-ChangedOnly` is set, the run is skipped (fast no-op feedback).
+- You can still force a full run manually (save a test file or omit `-ChangedOnly`).
+
+Failed test listing (`-ShowFailed`):
+
+- Extracts failing test objects from Pester result and prints up to `-MaxFailedList` entries.
+- Uses trimmed relative path or describe block name (depending on the object metadata available).
+
+Colorized status & sequencing:
+
+- Each run prints a line: `Run #<n> PASS|FAIL in <seconds>s (Tests=<t> Failed=<f>) (Δ Tests=... Failed=... Skipped=...)`.
+- Only appears after execution; delta portion omitted on first (baseline) run.
+
+Notes & limitations:
+
+- Inference is intentionally conservative; contribute mapping expansions if you have alternate naming schemes.
+- The delta JSON overwrites the same file each run (append-mode history could be added later).
+- `-BeepOnFail` may be suppressed in non-interactive consoles.
+- If Pester changes internal property names, the script falls back through multiple strategies to compute `tests`.
 
 Integration compare control loop (developer scaffold)
 
