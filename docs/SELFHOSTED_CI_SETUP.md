@@ -28,7 +28,9 @@ This guide explains how to set up continuous integration for the LabVIEW Compare
 
 5. **Pester v5+**
    - PowerShell testing framework
-   - Auto-installed by workflows or install manually: `Install-Module -Name Pester -RequiredVersion 5.4.0 -Force`
+   - Required for self-hosted runners
+   - Install manually: `Install-Module -Name Pester -MinimumVersion 5.0.0 -Force`
+   - Auto-installed by GitHub-hosted runner workflows
 
 ## Repository Configuration
 
@@ -133,6 +135,35 @@ Workflows can also be triggered manually from the Actions tab:
    - Provide VI file paths and options
 
 ## Test Structure
+
+### Test Dispatcher Architecture
+
+The repository uses a layered test execution architecture:
+
+#### Local Dispatcher (`tools/Run-Pester.ps1`)
+
+Used by GitHub-hosted workflows and manual local testing:
+
+- **Used by:** `test-pester.yml`, `pester-integration-on-label.yml`
+- **Purpose:** Handles Pester module discovery/installation and test execution
+- **Features:** Auto-installs Pester if not found, supports exclude tags
+
+#### Root Dispatcher (`Invoke-PesterTests.ps1`)
+
+Used by the open-source shared action on self-hosted runners:
+
+- **Used by:** `pester-selfhosted.yml` via `LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions`
+- **Purpose:** Entry point for the open-source shared action
+- **Assumption:** Pester v5+ is pre-installed on the self-hosted runner
+- **Parameters:**
+  - `TestsPath` - Path to tests directory (default: `tests`)
+  - `IncludeIntegration` - Include Integration-tagged tests (default: `false`)
+  - `ResultsPath` - Path to results directory (default: `tests/results`)
+
+**When to use which:**
+
+- Self-hosted runners with real CLI → Use open-source action (calls `Invoke-PesterTests.ps1`)
+- GitHub-hosted runners or local → Use `tools/Run-Pester.ps1` directly
 
 ### Unit Tests (No CLI Required)
 
