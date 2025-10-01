@@ -6,8 +6,24 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
- 
-_No changes yet._
+
+### Added
+
+- Final run summary JSON export via `-RunSummaryJsonPath` (schema `compare-loop-run-summary-v1`) including aggregate metrics, dynamic percentiles, histogram, quantile strategy, and rebaseline metadata.
+- Snapshot tailing helper `tools/Tail-Snapshots.ps1` for interactive NDJSON monitoring with selectable percentile columns.
+- Run summary Pester tests (`CompareLoop.RunSummary.Tests.ps1`) validating schema presence and dynamic percentile labeling.
+
+### Tooling
+
+- Developer utility script to live-tail metrics snapshots without external tooling.
+
+### Documentation
+
+- Module guide updated with Run Summary section and schema example; README “What’s New” section expanded.
+
+### Tests
+
+- Quarantined former `RunSummary.Tool.Tests.ps1` due to a PowerShell host parameter binding anomaly repeatedly injecting a null `-Path` argument prior to test execution. Placeholder `RunSummary.Tool.Quarantined.Tests.ps1` remains; restore original tests once environment issue is diagnosed and resolved.
 
 ## [v0.3.0] - 2025-10-01
 
