@@ -9,6 +9,7 @@
 **Problem:** The file had duplicate content, missing blank lines, and bare URLs causing 13 markdown lint errors.
 
 **Fix:** Cleaned up the file to have proper structure with:
+
 - Single occurrence of each section
 - Proper heading hierarchy
 - Blank lines around lists and code blocks
@@ -53,7 +54,8 @@ The Integration tests (`tests/CompareVI.Integration.Tests.ps1`) are designed to 
 1. **PowerShell 7+**: The test file has `#Requires -Version 7.0`
 
 2. **Canonical LVCompare.exe Path**: Must be installed at:
-   ```
+
+   ```powershell
    C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe
    ```
 
@@ -84,7 +86,8 @@ The Integration tests verify:
 #### Via PR Comment
 
 Comment on a PR:
-```
+
+```bash
 /run pester-selfhosted
 ```
 
@@ -126,12 +129,14 @@ To fully enable Integration testing:
 ## Test Results
 
 ### Unit Tests (Mock-based, no CLI)
-```
+
+```text
 Tests Passed: 20, Failed: 0, Skipped: 2
 ```
 
 ### Linting
-```
+
+```text
 Markdown: 0 errors
 Actionlint: 0 errors
 ```
