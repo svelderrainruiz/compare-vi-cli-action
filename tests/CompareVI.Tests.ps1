@@ -109,7 +109,7 @@ Describe 'Resolve-Cli canonical path enforcement' -Tag 'Unit' {
     # Reference the canonical path from BeforeAll
     $canonical = $script:canonical
 
-    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:mockExecutor = $mockExecutor; $script:canonical = $canonical
+    $script:a = $a; $script:b = $b; $script:vis = $vis; $script:mockExecutor = $mockExecutor
   }
 
   It 'rejects explicit lvComparePath when non-canonical' {
