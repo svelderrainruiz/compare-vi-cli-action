@@ -46,7 +46,7 @@ Key capabilities:
 | `PassThroughPaths` | switch | off | Do not resolve paths (unit tests / synthetic) |
 | `UseEventDriven` | switch | off | Enable FileSystemWatcher event triggering + debounce |
 | `DebounceMilliseconds` | int | 250 | Debounce consolidation window for events |
-| `DiffSummaryFormat` | enum | `None` | `None|Text|Markdown|Html` summary when diffs > 0 |
+| `DiffSummaryFormat` | enum | `None` | Summary when diffs > 0. Allowed values: `None`, `Text`, `Markdown`, `Html` |
 | `DiffSummaryPath` | string | (none) | Output path for diff summary text/markdown/html |
 | `AdaptiveInterval` | switch | off | Enable exponential backoff on quiet iterations |
 | `MinIntervalSeconds` | double | 1 | Lower bound for adaptive interval (fractional supported) |

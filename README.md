@@ -445,7 +445,7 @@ Tuning checklist:
 4. Observing drift over hours? Introduce `-ReconcileEvery` at a multiple of capacity.
 5. Tail (p99) noisy? Increase capacity or reconciliation frequency modestly.
 
-Future considerations (open to contributions): true P² marker implementation, p99.9 support, configurable percentile list, and stratified or weighted reservoir sampling.
+Future considerations (open to contributions): true P² marker implementation, advanced tail percentiles beyond those requested (e.g., p99.99), weighted / stratified sampling strategies.
 
 
 Switches `-SkipValidation` and `-PassThroughPaths` exist solely for unit-style testing; omit them in real usage.
@@ -487,6 +487,34 @@ $r | Select-Object Iterations,DiffCount,ErrorCount,Mode,AverageSeconds,Percentil
 ```
 
 For full schema details see `docs/COMPARE_LOOP_MODULE.md`.
+
+## What's New (Snapshot v2 & Dynamic Percentiles)
+
+Recent enhancements introduce richer latency telemetry and more flexible percentile analysis:
+
+- metrics-snapshot-v2: Snapshot lines now include `percentiles` (dynamic object), `requestedPercentiles` (echo of your list or defaults), and optional `histogram` when `-IncludeSnapshotHistogram` is used.
+- Custom percentile lists: Supply `-CustomPercentiles '50,75,90,97.5,99.9'` (comma/space separated). Values must be >0 and <100; duplicates removed; max 50 entries.
+- Fractional percentile labels: Dots become underscores (e.g. 97.5 -> `p97_5`, 99.9 -> `p99_9`).
+- Backward compatibility: Legacy `p50/p90/p99` still emitted at top-level in snapshots and result objects for existing consumers.
+- Inline snapshot enrichment: Percentiles & histogram computed per-emission without relying on final aggregation logic.
+
+Quick example (custom list + histogram + snapshots every 5 iterations):
+
+```powershell
+$exec = { param($cli,$b,$h,$args) Start-Sleep -Milliseconds (5 + (Get-Random -Max 20)); 0 }
+Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 25 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -CustomPercentiles '50 75 90 97.5 99.9' -MetricsSnapshotEvery 5 -MetricsSnapshotPath snapshots.ndjson -IncludeSnapshotHistogram -Quiet
+Get-Content snapshots.ndjson | Select-Object -First 2
+```
+
+Parsing dynamic percentiles (robust to optional keys):
+
+```powershell
+$line = Get-Content snapshots.ndjson -First 1 | ConvertFrom-Json
+$pKeys = $line.percentiles | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+"Available percentile keys: $($pKeys -join ', ')"
+```
+
+See `docs/COMPARE_LOOP_MODULE.md` for full snapshot v2 schema.
 
 
 Dispatcher JSON outputs & customization

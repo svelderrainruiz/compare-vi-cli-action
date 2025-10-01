@@ -52,6 +52,33 @@ $SchemaSummaryVersion  = '1.0.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
+function Ensure-FailuresJson {
+  param(
+    [Parameter(Mandatory)][string]$Directory,
+    [Parameter()][switch]$Force,
+    [Parameter()][switch]$Normalize,
+    [Parameter()][switch]$Quiet
+  )
+  try {
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) {
+      New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+    }
+    $path = Join-Path $Directory 'pester-failures.json'
+    if ($Force -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      '[]' | Out-File -FilePath $path -Encoding utf8 -ErrorAction Stop
+      if (-not $Quiet) { Write-Host "Created empty failures JSON at: $path" -ForegroundColor Gray }
+    } elseif ($Normalize) {
+      try {
+        $info = Get-Item -LiteralPath $path -ErrorAction Stop
+        if ($info.Length -eq 0 -or -not (Get-Content -LiteralPath $path -Raw).Trim()) {
+          '[]' | Out-File -FilePath $path -Encoding utf8 -Force
+          if (-not $Quiet) { Write-Host 'Normalized zero-byte failures JSON to []' -ForegroundColor Gray }
+        }
+      } catch { Write-Warning "Failed to normalize failures JSON: $_" }
+    }
+  } catch { Write-Warning "Ensure-FailuresJson encountered an error: $_" }
+}
+
 function Write-ArtifactManifest {
   param(
     [Parameter(Mandatory)] [string]$Directory,
@@ -267,15 +294,7 @@ try {
 
 # Early (idempotent) failures JSON emission when always requested. This guarantees existence
 # regardless of later Pester execution branches or discovery failures. Overwritten later if real failures occur.
-if ($EmitFailuresJsonAlways) {
-  try {
-    $preFailPath = Join-Path $resultsDir 'pester-failures.json'
-    if (-not (Test-Path -LiteralPath $preFailPath -PathType Leaf)) {
-      '[]' | Out-File -FilePath $preFailPath -Encoding utf8 -ErrorAction Stop
-      Write-Host 'Pre-created empty failures JSON (EmitFailuresJsonAlways)' -ForegroundColor Gray
-    }
-  } catch { Write-Warning "Failed pre-create failures JSON (EmitFailuresJsonAlways): $_" }
-}
+if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Force -Quiet }
 
 Write-Host ""
 
@@ -507,17 +526,8 @@ Write-Host ""
 # Exit with appropriate code
 if ($failed -gt 0 -or $errors -gt 0) {
   # Emit failure diagnostics using helper function (guard null result)
-  if ($null -ne $result) {
-    Write-FailureDiagnostics -PesterResult $result -ResultsDirectory $resultsDir -SkippedCount $skipped -FailuresSchemaVersion $SchemaFailuresVersion
-  } else {
-    # Still emit an empty failures JSON for consistency if requested or if failures were detected but result object missing
-    try {
-      if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
-      $emptyFailPath = Join-Path $resultsDir 'pester-failures.json'
-      '[]' | Out-File -FilePath $emptyFailPath -Encoding utf8 -ErrorAction SilentlyContinue
-      Write-Warning 'No in-memory PesterResult available; emitted empty pester-failures.json'
-    } catch { Write-Warning "Failed to create empty failures JSON: $_" }
-  }
+  if ($null -ne $result) { Write-FailureDiagnostics -PesterResult $result -ResultsDirectory $resultsDir -SkippedCount $skipped -FailuresSchemaVersion $SchemaFailuresVersion }
+  elseif ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Force }
   Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
   Write-Host "❌ Tests failed: $failed failure(s), $errors error(s)" -ForegroundColor Red
   Write-Error "Test execution completed with failures"
@@ -525,47 +535,6 @@ if ($failed -gt 0 -or $errors -gt 0) {
 }
 
 Write-Host "✅ All tests passed!" -ForegroundColor Green
-if ($EmitFailuresJsonAlways) {
-  try {
-    if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
-    $failJsonPath = Join-Path $resultsDir 'pester-failures.json'
-    if (-not (Test-Path -LiteralPath $failJsonPath)) {
-      '[]' | Out-File -FilePath $failJsonPath -Encoding utf8 -ErrorAction Stop
-      Write-Host "Empty failures JSON emitted (no failures)" -ForegroundColor Gray
-    }
-    else {
-      # Normalize zero-byte or whitespace-only file to a valid empty JSON array for downstream stability
-      try {
-        $info = Get-Item -LiteralPath $failJsonPath -ErrorAction Stop
-        if ($info.Length -eq 0 -or -not (Get-Content -LiteralPath $failJsonPath -Raw).Trim()) {
-          '[]' | Out-File -FilePath $failJsonPath -Encoding utf8 -Force
-          Write-Host 'Normalized zero-byte failures JSON to []' -ForegroundColor Gray
-        }
-      } catch { Write-Warning "Failed to inspect/normalize failures JSON: $_" }
-    }
-  } catch {
-    Write-Warning "Failed to emit empty failures JSON: $_"
-  }
-}
-# Final safeguard: if user requested always and file still missing for any unforeseen reason, force creation.
-if ($EmitFailuresJsonAlways) {
-  $finalFailPath = Join-Path $resultsDir 'pester-failures.json'
-  if (-not (Test-Path -LiteralPath $finalFailPath)) {
-    try {
-      '[]' | Out-File -FilePath $finalFailPath -Encoding utf8 -ErrorAction Stop
-      Write-Host 'Late safeguard wrote empty failures JSON.' -ForegroundColor Gray
-    } catch { Write-Warning "Late safeguard failed to create failures JSON: $_" }
-  }
-  else {
-    # Repeat normalization in case late creation path produced an empty file
-    try {
-      $info = Get-Item -LiteralPath $finalFailPath -ErrorAction Stop
-      if ($info.Length -eq 0 -or -not (Get-Content -LiteralPath $finalFailPath -Raw).Trim()) {
-        '[]' | Out-File -FilePath $finalFailPath -Encoding utf8 -Force
-        Write-Host 'Late safeguard normalized zero-byte failures JSON to []' -ForegroundColor Gray
-      }
-    } catch { Write-Warning "Late normalization failed for failures JSON: $_" }
-  }
-}
+if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Normalize -Quiet }
 Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
 exit 0
