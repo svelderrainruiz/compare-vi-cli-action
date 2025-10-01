@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Validate environment
+        shell: pwsh
+        run: |
+          ./tools/Validate-Environment.ps1
+
       - name: Install Pester v5
         shell: pwsh
         run: |

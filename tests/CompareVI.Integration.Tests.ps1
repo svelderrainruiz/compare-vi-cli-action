@@ -18,7 +18,23 @@ BeforeAll {
 
 Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
   It 'has required files present' {
+    if (-not (Test-Path -LiteralPath $Canonical -PathType Leaf)) {
+      Write-Host "ERROR: LVCompare.exe not found at canonical path: $Canonical"
+      Write-Host "Install LabVIEW 2025 Q3 or later with LabVIEW Compare CLI"
+      Write-Host "See docs/SELFHOSTED_CI_SETUP.md for setup instructions"
+    }
     Test-Path -LiteralPath $Canonical -PathType Leaf | Should -BeTrue
+
+    if (-not $BaseVi) {
+      Write-Host "ERROR: LV_BASE_VI environment variable not set"
+      Write-Host "Set repository variable LV_BASE_VI to path of a test VI file"
+      Write-Host "See docs/SELFHOSTED_CI_SETUP.md for setup instructions"
+    }
+    if (-not $HeadVi) {
+      Write-Host "ERROR: LV_HEAD_VI environment variable not set"
+      Write-Host "Set repository variable LV_HEAD_VI to path of a test VI file (different from LV_BASE_VI)"
+      Write-Host "See docs/SELFHOSTED_CI_SETUP.md for setup instructions"
+    }
     Test-Path -LiteralPath $BaseVi -PathType Leaf | Should -BeTrue
     Test-Path -LiteralPath $HeadVi -PathType Leaf | Should -BeTrue
   }
