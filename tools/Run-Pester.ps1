@@ -7,7 +7,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $resultsDir = Join-Path $root 'tests' 'results'
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 
-# Import Pester v5 explicitly (should be pre-installed in CI or available locally)
+# Check for Pester v5+ availability and import accordingly (should be pre-installed in CI or available locally)
 $pesterModule = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' } | Select-Object -First 1
 if (-not $pesterModule) {
   Write-Host 'Pester v5+ not found. Attempting to install locally under tools/modules...'
