@@ -204,5 +204,47 @@ Tests
 - CI workflows:
   - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
   - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI
+  - `.github/workflows/pester-diagnostics-nightly.yml` - nightly synthetic failure to validate enhanced diagnostics (non-blocking)
   - Use PR comments to trigger: `/run unit`, `/run mock`, `/run smoke`, `/run pester-selfhosted`
 - **For end-to-end testing**, see [End-to-End Testing Guide](./docs/E2E_TESTING_GUIDE.md)
+
+Dispatcher JSON outputs & customization
+
+The local dispatcher (`Invoke-PesterTests.ps1`) emits:
+
+- `pester-summary.json` (or custom name via `-JsonSummaryPath`) with aggregate metrics
+- `pester-failures.json` only when there are failing tests (array of failed test objects)
+
+`pester-summary.json` schema:
+
+```jsonc
+{
+  "total": 0,
+  "passed": 0,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "duration_s": 0.00,
+  "timestamp": "2025-01-01T00:00:00.0000000Z",
+  "pesterVersion": "5.x.x",
+  "includeIntegration": false
+}
+```
+
+Change the JSON filename (while keeping location) via:
+
+```powershell
+./Invoke-PesterTests.ps1 -JsonSummaryPath custom-summary.json
+```
+
+Failure diagnostics
+
+When failures occur the dispatcher prints:
+
+1. A table-style list of failing tests (name + duration)
+2. Error messages per failed test
+3. Writes `pester-failures.json` for downstream tooling
+
+Nightly diagnostics
+
+The workflow `pester-diagnostics-nightly.yml` sets `ENABLE_DIAGNOSTIC_FAIL=1`, triggering a synthetic failing test (skipped otherwise). This validates the failure reporting path without marking the workflow failed (uses `continue-on-error`). Artifacts include both JSON files for inspection.

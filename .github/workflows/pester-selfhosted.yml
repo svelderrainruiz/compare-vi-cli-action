@@ -29,6 +29,28 @@ jobs:
             -IncludeIntegration '${{ inputs.include_integration }}' `
             -ResultsPath tests/results
 
+      - name: Append test metrics to job summary
+        if: always()
+        shell: pwsh
+        run: |
+          $json = Join-Path 'tests/results' 'pester-summary.json'
+          if (Test-Path $json) {
+            $data = Get-Content $json -Raw | ConvertFrom-Json
+            $lines = @(
+              '### Pester Test Metrics',
+              "- Total: $($data.total)",
+              "- Passed: $($data.passed)",
+              "- Failed: $($data.failed)",
+              "- Errors: $($data.errors)",
+              "- Skipped: $($data.skipped)",
+              "- Duration (s): $($data.duration_s)",
+              "- Include Integration: $($data.includeIntegration)"
+            ) -join [Environment]::NewLine
+            $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            Write-Host '::warning::pester-summary.json not found.'
+          }
+
       - name: Upload Pester artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -38,3 +60,5 @@ jobs:
             tests/results/**/*.xml
             tests/results/**/*.txt
             tests/results/**/*.html
+            tests/results/pester-summary.json
+            tests/results/pester-failures.json

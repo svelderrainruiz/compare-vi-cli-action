@@ -68,6 +68,12 @@ Describe 'Sample' {
       $scriptContent = Get-Content $dispatcherPath -Raw
       $scriptContent | Should -Match '\[string\]\$ResultsPath'
     }
+
+    It 'accepts custom JsonSummaryPath parameter' {
+      $scriptContent = Get-Content $dispatcherPath -Raw
+      $scriptContent | Should -Match '\[string\]\$JsonSummaryPath'
+      $scriptContent | Should -Match 'JSON Summary File'
+    }
   }
 
   Context 'Path resolution' {
@@ -206,6 +212,13 @@ Describe 'Sample' {
       $scriptContent | Should -Match 'pester-summary\.txt'
       $scriptContent | Should -Match 'Out-File'
     }
+
+    It 'writes JSON summary to custom file when specified' {
+      $scriptContent = Get-Content $dispatcherPath -Raw
+      $scriptContent | Should -Match '\$JsonSummaryPath = '\''pester-summary.json'\'''
+      $scriptContent | Should -Match 'JSON summary written to:'
+      $scriptContent | Should -Match 'ConvertTo-Json'
+    }
   }
 
   Context 'Exit code handling' {
@@ -225,6 +238,15 @@ Describe 'Sample' {
     It 'provides clear error message on test failure' {
       $scriptContent = Get-Content $dispatcherPath -Raw
       $scriptContent | Should -Match 'Tests failed:.*failure.*error'
+    }
+  }
+
+  Context 'Failure JSON emission' {
+    It 'emits pester-failures.json when a test fails' {
+      $scriptContent = Get-Content $dispatcherPath -Raw
+      $scriptContent | Should -Match 'pester-failures.json'
+      $scriptContent | Should -Match 'Failures JSON written to:'
+      $scriptContent | Should -Match '\$failArray \| ConvertTo-Json'
     }
   }
 
@@ -363,5 +385,6 @@ Describe 'Simple Test' {
     $LASTEXITCODE | Should -Be 0
     Test-Path (Join-Path $resultsPath 'pester-results.xml') | Should -BeTrue
     Test-Path (Join-Path $resultsPath 'pester-summary.txt') | Should -BeTrue
+    Test-Path (Join-Path $resultsPath 'pester-summary.json') | Should -BeTrue
   }
 }
