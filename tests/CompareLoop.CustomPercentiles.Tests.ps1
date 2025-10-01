@@ -11,7 +11,15 @@ Describe 'Invoke-IntegrationCompareLoop custom percentiles' -Tag 'Unit' {
     # Ensure placeholder files exist in case prior cleanup removed them
     if (-not (Test-Path -LiteralPath $script:base)) { 'a' | Out-File -FilePath $script:base -Encoding utf8 }
     if (-not (Test-Path -LiteralPath $script:head)) { 'b' | Out-File -FilePath $script:head -Encoding utf8 }
-    function New-Exec { param($delayMs) return { param($cli,$b,$h,$argList) if ($delayMs -gt 0) { Start-Sleep -Milliseconds $delayMs }; return 0 } }
+    function New-Exec {
+      param($delayMs)
+      $captured = [int]$delayMs
+      return {
+        param($cli,$b,$h,$argList)
+        if ($captured -gt 0) { Start-Sleep -Milliseconds $captured }
+        0
+      }.GetNewClosure()
+    }
   }
 
   It 'accepts a custom percentile list and exposes dynamic properties' {
