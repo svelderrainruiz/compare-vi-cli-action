@@ -42,12 +42,12 @@ This document summarizes the implementation status of self-hosted Windows runner
   - `LV_BASE_VI` and `LV_HEAD_VI` environment variables
 - Validate real CLI invocation and exit codes
 
-#### Mock CLI Tests (`.github/workflows/test-mock.yml`)
+#### Mock CLI Tests (`.github/workflows/test-mock.yml`) - DEPRECATED
 
-- Run on `windows-latest` GitHub-hosted runners
-- Use mock CLI script to simulate behavior
-- Test multiple scenarios including error conditions
-- Generate HTML reports via `scripts/Render-CompareReport.ps1`
+- **NOTE**: This workflow is deprecated with the canonical-only CLI path policy
+- Unit tests provide sufficient mock-based coverage via function-level mocking
+- Kept for manual dispatch only for backward compatibility
+- Use `test-pester.yml` for mock-based testing instead
 
 ### Workflows
 
@@ -152,14 +152,13 @@ This document summarizes the implementation status of self-hosted Windows runner
 
 1. Validate (markdownlint, actionlint)
 2. Unit tests (windows-latest)
-3. Mock CLI tests (windows-latest)
-4. **Optional:** Integration tests (self-hosted, when labeled with `test-integration`)
-5. **Optional:** Smoke tests (self-hosted, when labeled with `smoke`)
+3. **Optional:** Integration tests (self-hosted, when labeled with `test-integration`)
+4. **Optional:** Smoke tests (self-hosted, when labeled with `smoke`)
 
 ### On PR Comment
 
 - `/run unit` - Quick unit test feedback
-- `/run mock` - Mock CLI validation
+- `/run mock` - Mock CLI validation (deprecated, use unit tests instead)
 - `/run pester-selfhosted` - Full integration testing
 - `/run smoke pr=NUMBER` - Manual smoke test
 
@@ -167,7 +166,6 @@ This document summarizes the implementation status of self-hosted Windows runner
 
 1. Validate
 2. Unit tests
-3. Mock CLI tests
 
 ### On Tag Push (vX.Y.Z)
 

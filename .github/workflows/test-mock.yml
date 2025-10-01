@@ -1,10 +1,10 @@
-name: Test (mock LVCompare)
+name: Test (mock LVCompare) - DEPRECATED
+
+# NOTE: This workflow is deprecated with the canonical-only CLI path policy.
+# Use unit tests (test-pester.yml) for mock-based testing instead.
+# This workflow is kept for manual dispatch only for backward compatibility.
 
 on:
-  pull_request:
-    branches: [ main ]
-  push:
-    branches: [ main ]
   workflow_dispatch: {}
 
 jobs:
