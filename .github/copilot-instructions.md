@@ -37,7 +37,7 @@
 
 ## Composite action implementation notes
 
-- Resolve CLI path priority: `lvComparePath` → `LVCOMPARE_PATH` env → `Get-Command LVCompare.exe` → common 2025 Q3 locations (`C:\Program Files\NI\LabVIEW 2025\LVCompare.exe`, `C:\Program Files\National Instruments\LabVIEW 2025\LVCompare.exe`). If not found, error with guidance.
+- Resolve CLI path priority: `lvComparePath` → `LVCOMPARE_PATH` env → canonical path (`C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`). All paths must resolve to the canonical location; non-canonical paths are rejected with clear error messages.
 - Path resolution: Relative `base`/`head` paths are resolved from `working-directory` if set, then converted to absolute paths before CLI invocation.
 - Arguments parsing: `lvCompareArgs` supports space-delimited tokens with quoted strings (`"path with spaces"`), parsed via regex `"[^"]+"|\S+`.
 - Command reconstruction: Build quoted command string for auditability using custom `Quote()` function that escapes as needed.
