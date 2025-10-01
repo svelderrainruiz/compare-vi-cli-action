@@ -353,7 +353,6 @@ Supplement the heuristic inference with an explicit JSON array file:
   },
   {
     "sourcePattern": "scripts/Render-CompareReport.ps1",
-  <!-- Flaky demo section removed (previous simulation artifacts deprecated) -->
     "tests": ["tests/CompareVI.Tests.ps1"]
   }
 ]
@@ -378,21 +377,6 @@ Flaky retry mitigation (`-RerunFailedAttempts`):
 - After the initial run, failing test file containers (*.Tests.ps1) are re-run up to N attempts.
 - If failures clear on attempt K, `flaky.recoveredAfter` = K and classification is forced to `improved`.
 - Counts in the delta JSON correspond to the final attempt executed (subset of full suite when retries target a subset).
-
-Demo flaky test:
-
-- `tests/Flaky.Demo.Tests.ps1` simulates a flaky failure only on the first execution attempt when `ENABLE_FLAKY_DEMO=1`.
-- Combine with `-RerunFailedAttempts 2` to exercise `flaky.recoveredAfter` behavior producing a classification of `improved`.
-
-Example (single-run recovery showcase):
-
-```powershell
-$env:ENABLE_FLAKY_DEMO = '1'
-pwsh -File ./tools/Watch-Pester.ps1 -SingleRun -RerunFailedAttempts 2 -DeltaJsonPath tests/results/delta.json -ShowFailed
-Get-Content tests/results/delta.json | ConvertFrom-Json | Select-Object status,classification,flaky
-```
-
-Expected: first attempt fails the flaky demo test, second attempt passes, `flaky.recoveredAfter=1` and `classification=improved`.
 
 Notify hook (`-NotifyScript`):
 
@@ -421,21 +405,7 @@ param(
 "Notify: Run#$RunSequence Status=$Status Failed=$Failed/$Tests Skipped=$Skipped Class=$Classification (env=$env:WATCH_STATUS)"
 ```
 
-Flaky recovery helper script:
-
-Use `tools/Demo-FlakyRecovery.ps1` to produce a deterministic flaky recovery demonstration without running the whole suite:
-
-```powershell
-pwsh -File tools/Demo-FlakyRecovery.ps1 -RerunFailedAttempts 2
-# Output includes classification, recoveredAfter=1, and initial failing file names
-```
-
-This script:
-
-- Resets the flaky demo test state file
-- Sets `ENABLE_FLAKY_DEMO=1`
-- Runs watcher with `-Tag FlakyDemo` to isolate the demo test file
-- Emits a delta JSON containing `flaky.recoveredAfter=1` and `classification=improved` on success
+<!-- Flaky demo helper script section removed (deprecated) -->
 
 Integration compare control loop (developer scaffold)
 
