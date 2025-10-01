@@ -78,6 +78,21 @@ UNC/long path guidance
 
 Common lvCompareArgs recipes (patterns)
 
+For comprehensive documentation on LVCompare CLI flags and Git integration, see [`docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md`](./docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md).
+
+**Recommended noise filters** (reduce cosmetic diff churn):
+
+- `lvCompareArgs: "-nobdcosm -nofppos -noattr"`
+  - `-nobdcosm` - Ignore block diagram cosmetic changes (position/size/appearance)
+  - `-nofppos` - Ignore front panel object position/size changes
+  - `-noattr` - Ignore VI attribute changes
+
+**LabVIEW version selection:**
+
+- `lvCompareArgs: '-lvpath "C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe"'`
+
+**Other common patterns:**
+
 - Pass a path with spaces:
   - `lvCompareArgs: "--flag \"C:\\Path With Spaces\\out.txt\""`
 - Multiple flags:
