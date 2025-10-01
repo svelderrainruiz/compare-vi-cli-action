@@ -19,6 +19,46 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Validate environment
+        shell: pwsh
+        run: |
+          $errors = @()
+          
+          # Check for LabVIEW Compare CLI
+          $cliPath = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          if (-not (Test-Path -LiteralPath $cliPath)) {
+            $errors += "LVCompare.exe not found at canonical path: $cliPath"
+            $errors += "Install LabVIEW 2025 Q3 or later with LabVIEW Compare CLI"
+          }
+          
+          # Check for environment variables
+          if (-not $env:LV_BASE_VI) {
+            $errors += "LV_BASE_VI environment variable not set"
+            $errors += "Set repository variable LV_BASE_VI in Settings -> Secrets and variables -> Actions -> Variables"
+          } elseif (-not (Test-Path -LiteralPath $env:LV_BASE_VI)) {
+            $errors += "LV_BASE_VI points to non-existent file: $env:LV_BASE_VI"
+          }
+          
+          if (-not $env:LV_HEAD_VI) {
+            $errors += "LV_HEAD_VI environment variable not set"
+            $errors += "Set repository variable LV_HEAD_VI in Settings -> Secrets and variables -> Actions -> Variables"
+          } elseif (-not (Test-Path -LiteralPath $env:LV_HEAD_VI)) {
+            $errors += "LV_HEAD_VI points to non-existent file: $env:LV_HEAD_VI"
+          }
+          
+          if ($errors.Count -gt 0) {
+            Write-Host "Environment validation failed:"
+            $errors | ForEach-Object { Write-Host "  - $_" }
+            Write-Host ""
+            Write-Host "See docs/SELFHOSTED_CI_SETUP.md for setup instructions"
+            exit 1
+          }
+          
+          Write-Host "Environment validation passed:"
+          Write-Host "  - CLI: $cliPath"
+          Write-Host "  - LV_BASE_VI: $env:LV_BASE_VI"
+          Write-Host "  - LV_HEAD_VI: $env:LV_HEAD_VI"
+
       - name: Install Pester v5
         shell: pwsh
         run: |
