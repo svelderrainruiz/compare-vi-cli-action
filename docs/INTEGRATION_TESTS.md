@@ -54,11 +54,11 @@ To include HTML report tests also verify:
 Test-Path 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEWCLI.exe'
 ```
 
-## Helper Function
+## Prerequisite Check Logic
 
-The integration script defines a helper `Initialize-CompareVIPrereqs` which:
+The integration test script now performs prerequisite checks inline:
 
-- Captures canonical paths & environment variable values.
+- Captures canonical paths and environment variable values.
 - Evaluates existence of required files.
 - Sets `$script:CompareVIPrereqsAvailable` for skip gating.
 
