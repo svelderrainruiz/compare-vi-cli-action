@@ -13,6 +13,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Snapshot tailing helper `tools/Tail-Snapshots.ps1` for interactive NDJSON monitoring with selectable percentile columns.
 - Run summary Pester tests (`CompareLoop.RunSummary.Tests.ps1`) validating schema presence and dynamic percentile labeling.
 - Watch-Pester enhancements: selective run targeting, `-ChangedOnly`, heuristic source→test inference (`-InferTestsFromSource`), delta summary & classification (`-DeltaJsonPath`), run sequencing & colorized status, failed test listing (`-ShowFailed`, `-MaxFailedList`), audible failure notification (`-BeepOnFail`).
+ - Watch-Pester delta history export via `-DeltaHistoryPath` (JSON Lines) for longitudinal run analytics.
+ - Explicit mapping-based inference via `-MappingConfig` (glob-to-regex pattern mapping source files to test files).
+ - Only-failed re-run mode `-OnlyFailed` (re-executes only failing test file containers when no new targeted changes detected).
+ - Post-run notification hook `-NotifyScript` with WATCH_* environment variables and named parameter invocation.
+ - Flaky mitigation via `-RerunFailedAttempts` with retry classification override (`improved` on recovery) and flaky metadata in delta JSON (`flaky.enabled`, `attempts`, `recoveredAfter`, `initialFailedFiles`).
 
 ### Tooling
 

@@ -239,6 +239,11 @@ Key options:
  - `-DeltaJsonPath <file>`: Write a JSON artifact containing current stats, previous stats, deltas, and classification (`baseline|improved|worsened|unchanged`).
  - `-ShowFailed`: After summary, list failing test names (up to `-MaxFailedList`).
  - `-MaxFailedList <N>`: Cap the number of failing tests printed (default 10).
+ - `-DeltaHistoryPath <file>`: Append each delta JSON payload (same schema as `-DeltaJsonPath`) as one line of JSON (JSON Lines / NDJSON). Useful for run history graphs.
+ - `-MappingConfig <file>`: JSON file mapping source glob patterns to one or more test files (augmenting `-InferTestsFromSource`).
+ - `-OnlyFailed`: If the previous run had failing test files and no direct/inferred changes are detected this run, re-run only those failing test files.
+ - `-NotifyScript <file>`: Post-run hook script invoked with named parameters & WATCH_* environment variables (see below).
+ - `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N additional attempts (flaky mitigation). Classification becomes `improved` if failures clear on a retry.
 
 Selective runs:
 
@@ -254,13 +259,33 @@ Delta JSON schema example (`-DeltaJsonPath tests/results/delta.json`):
 {
   "timestamp": "2025-10-01T15:15:27.123Z",
   "status": "FAIL",
-  "runSequence": 5,
   "stats": { "tests": 121, "failed": 6, "skipped": 15 },
   "previous": { "tests": 121, "failed": 7, "skipped": 15 },
   "delta": { "tests": 0, "failed": -1, "skipped": 0 },
-  "classification": "improved"
+  "classification": "improved",
+  "flaky": { "enabled": true, "attempts": 2, "recoveredAfter": 1, "initialFailedFiles": 3 },
+  "runSequence": 5
 }
 ```
+
+Field notes:
+
+- `flaky` object is present only when `-RerunFailedAttempts > 0`.
+- `recoveredAfter` is null if retries did not clear all failures.
+- `initialFailedFiles` counts distinct failing *.Tests.ps1 files in the initial (pre-retry) attempt.
+- `classification` is forced to `improved` if failures were cleared by a retry even if prior run comparison would be neutral.
+
+History logging (`-DeltaHistoryPath`):
+
+Each completed run appends the exact JSON (single line) written to `-DeltaJsonPath`. Example JSON Lines file after three runs:
+
+```jsonl
+{"timestamp":"2025-10-01T15:15:27.123Z","status":"FAIL","stats":{"tests":121,"failed":6,"skipped":15},"previous":null,"delta":null,"classification":"baseline","flaky":null,"runSequence":1}
+{"timestamp":"2025-10-01T15:16:03.987Z","status":"FAIL","stats":{"tests":121,"failed":5,"skipped":15},"previous":{"tests":121,"failed":6,"skipped":15},"delta":{"tests":0,"failed":-1,"skipped":0},"classification":"improved","flaky":null,"runSequence":2}
+{"timestamp":"2025-10-01T15:17:10.111Z","status":"PASS","stats":{"tests":121,"failed":0,"skipped":15},"previous":{"tests":121,"failed":5,"skipped":15},"delta":{"tests":0,"failed":-5,"skipped":0},"classification":"improved","flaky":{"enabled":true,"attempts":2,"recoveredAfter":1,"initialFailedFiles":2},"runSequence":3}
+```
+
+You can ingest this with tools expecting newline-delimited JSON for generating trend charts (failures over time, recovery streaks, etc.).
 
 Classification logic:
 
@@ -280,6 +305,15 @@ pwsh -File ./tools/Watch-Pester.ps1 -DeltaJsonPath tests/results/delta.json -Bee
 
 # Show top 5 failing tests each run (compact selective runs)
 pwsh -File ./tools/Watch-Pester.ps1 -ShowFailed -MaxFailedList 5 -ChangedOnly
+
+# Maintain a JSON run history & attempt flaky recovery (2 retries)
+pwsh -File ./tools/Watch-Pester.ps1 -RunAllOnStart -DeltaJsonPath tests/results/delta.json -DeltaHistoryPath tests/results/delta-history.jsonl -RerunFailedAttempts 2
+
+# Use mapping config + OnlyFailed fallback between edits
+pwsh -File ./tools/Watch-Pester.ps1 -ChangedOnly -MappingConfig watch-mapping.json -OnlyFailed
+
+# Invoke a desktop/toast notifier script when runs complete
+pwsh -File ./tools/Watch-Pester.ps1 -NotifyScript tools/Notify-Demo.ps1 -ShowFailed -MaxFailedList 3
 ```
 
 Heuristic source→test inference:
@@ -302,8 +336,71 @@ Notes & limitations:
 
 - Inference is intentionally conservative; contribute mapping expansions if you have alternate naming schemes.
 - The delta JSON overwrites the same file each run (append-mode history could be added later).
+ - Use `-DeltaHistoryPath` to enable append-mode history (JSON Lines) without overwriting.
 - `-BeepOnFail` may be suppressed in non-interactive consoles.
 - If Pester changes internal property names, the script falls back through multiple strategies to compute `tests`.
+
+Mapping configuration (`-MappingConfig`):
+
+Supplement the heuristic inference with an explicit JSON array file:
+
+```jsonc
+[
+  {
+    "sourcePattern": "module/CompareLoop/*.psm1",
+    "tests": ["tests/CompareLoop.StreamingQuantiles.Tests.ps1", "tests/CompareLoop.StreamingReconcile.Tests.ps1"]
+  },
+  {
+    "sourcePattern": "scripts/Render-CompareReport.ps1",
+    "tests": ["tests/CompareVI.Tests.ps1"]
+  }
+]
+```
+
+Rules:
+
+- Patterns are simple globs converted to regex (`*` → `.*`, `?` → `.`) and matched against repository-relative normalized paths (`/` separators).
+- When a changed file matches `sourcePattern`, all listed `tests` are added to the targeted test file set (if they exist).
+- Mapping augments (does not replace) heuristic `-InferTestsFromSource` logic.
+
+Only failed re-run mode (`-OnlyFailed`):
+
+- After a failing run the script remembers the set of failing test file containers.
+- If a subsequent change batch has no directly changed or inferred test files and `-OnlyFailed` is set, only those failing files are re-run (fast feedback on fixes without re-running entire suite).
+- A fully passing run clears the stored failing set.
+
+Flaky retry mitigation (`-RerunFailedAttempts`):
+
+- After the initial run, failing test file containers (*.Tests.ps1) are re-run up to N attempts.
+- If failures clear on attempt K, `flaky.recoveredAfter` = K and classification is forced to `improved`.
+- Counts in the delta JSON correspond to the final attempt executed (subset of full suite when retries target a subset).
+
+Notify hook (`-NotifyScript`):
+
+- Invoked after each run with named parameters:
+  - `-Status <PASS|FAIL>`
+  - `-Failed <int>`
+  - `-Tests <int>`
+  - `-Skipped <int>`
+  - `-RunSequence <int>`
+  - `-Classification <baseline|improved|worsened|unchanged>`
+- Environment variables also set for convenience: `WATCH_STATUS`, `WATCH_FAILED`, `WATCH_TESTS`, `WATCH_SKIPPED`, `WATCH_SEQUENCE`, `WATCH_CLASSIFICATION`.
+- Output (stdout) lines from the hook are prefixed with `[notify]` in the watcher console.
+- Use cases: desktop notifications, toast popups, Slack / Teams webhook wrappers, log forwarding.
+
+Example notify script (`tools/Notify-Demo.ps1`):
+
+```powershell
+param(
+  [string]$Status,
+  [int]$Failed,
+  [int]$Tests,
+  [int]$Skipped,
+  [int]$RunSequence,
+  [string]$Classification
+)
+"Notify: Run#$RunSequence Status=$Status Failed=$Failed/$Tests Skipped=$Skipped Class=$Classification (env=$env:WATCH_STATUS)"
+```
 
 Integration compare control loop (developer scaffold)
 
