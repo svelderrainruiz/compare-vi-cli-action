@@ -15,14 +15,17 @@ Steps
    - Verify `LVCompare.exe` exists after installation
    - **Required canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
    - This is the ONLY supported location; no other paths will work
+   - **Important**: The action enforces this path and will reject any other installation location
 
-3) Make the compare CLI discoverable
+3) Configure the CLI path (optional)
    - The action will automatically find the CLI at the canonical path
    - Optionally set environment variable for explicit configuration:
      - `LVCOMPARE_PATH=C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
+     - **Note**: Even when set, the path MUST resolve to the canonical location
      - Restart the runner service after changes
-   - Or provide `lvComparePath` input in workflows
-   - **Important**: All paths must resolve to the canonical location
+   - Or provide `lvComparePath` input in workflows:
+     - **Note**: Even when provided, the path MUST match the canonical location
+   - **Path policy**: Only the canonical path is accepted to ensure consistency across runners
 
 4) Validate access
    - Run the repository’s “Smoke test Compare VI action” workflow (manual) and provide two `.vi` file paths

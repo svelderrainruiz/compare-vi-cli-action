@@ -8,9 +8,11 @@ This document summarizes the implementation status of self-hosted Windows runner
 
 ### Core Functionality
 
-- **Flexible CLI Path Resolution**: Implemented in `scripts/CompareVI.ps1`
-  - Priority: `lvComparePath` input → `LVCOMPARE_PATH` env → `Get-Command` (PATH) → canonical install path
-  - Supports both testing scenarios and production deployments
+- **Strict Canonical CLI Path Resolution**: Implemented in `scripts/CompareVI.ps1`
+  - Only accepts: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
+  - Rejects any other path (via `lvComparePath` input or `LVCOMPARE_PATH` env)
+  - No PATH probing or alternative search locations
+  - Ensures consistency across all self-hosted runners
 
 - **Comprehensive Error Handling**:
   - Validates required inputs
