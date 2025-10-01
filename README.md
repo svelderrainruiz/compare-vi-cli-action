@@ -215,6 +215,33 @@ RunSummary renderer test restoration
 - A minimal reproduction script (`tools/Binding-MinRepro.ps1`) plus diagnostic test (`Binding.MinRepro.Tests.ps1`) are included for future investigations.
 - If adding new renderer-related tests, avoid performing filesystem or `$TestDrive` operations outside of runtime blocks to prevent reintroducing the anomaly.
 
+Continuous local dev loop (watch mode)
+
+For rapid iteration you can run a file watcher that re-executes Pester when source or test files change:
+
+```powershell
+pwsh -File ./tools/Watch-Pester.ps1 -RunAllOnStart
+```
+
+Key options:
+
+- `-Path` (default `.`): Root to watch recursively.
+- `-Filter` (default `*.ps1`): File name filter.
+- `-DebounceMilliseconds` (default 400): Quiet period after last change before a run.
+- `-Tag` / `-ExcludeTag`: Limit test scope using Pester tags.
+- `-TestPath` (default `tests`): Base test directory.
+- `-RunAllOnStart`: Perform an initial full run.
+- `-SingleRun`: Run once (honoring targeting) and exit (useful for scripting).
+- `-Quiet`: Reduce output verbosity (summary only).
+
+Selective runs:
+
+If any changed file path matches `\tests\*.Tests.ps1`, only those test files are executed; otherwise the full suite under `-TestPath` runs.
+
+Exit behavior:
+
+The watcher runs until interrupted (Ctrl+C). It installs Pester automatically if not found (CurrentUser scope).
+
 Integration compare control loop (developer scaffold)
 
 For rapid, iterative development against two real VIs (e.g. editing a feature branch VI and observing diff stability / timing) a lightweight polling loop script is provided:
