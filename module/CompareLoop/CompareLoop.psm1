@@ -76,6 +76,7 @@ function Invoke-IntegrationCompareLoop {
   [int]$StreamCapacity = 500,
   [int]$ReconcileEvery = 0
   , [string]$CustomPercentiles
+  , [string]$RunSummaryJsonPath
   )
 
   if (-not $SkipValidation) {
@@ -512,6 +513,38 @@ function Invoke-IntegrationCompareLoop {
   # Attach rebaseline metadata then output once
   Add-Member -InputObject $result -NotePropertyName RebaselineCandidate -NotePropertyValue $rebaselineCandidate -Force
   Add-Member -InputObject $result -NotePropertyName RebaselineApplied -NotePropertyValue $rebaselinePerformed -Force
+
+  # Optional final run summary JSON emission (schema: compare-loop-run-summary-v1)
+  if ($RunSummaryJsonPath) {
+    try {
+      $dir = Split-Path -Parent $RunSummaryJsonPath
+      if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+      $reqPct = @()
+      if ($CustomPercentiles) { $reqPct = @($customList) } else { $reqPct = @(50,90,99) }
+      $summary = [pscustomobject]@{
+        schema = 'compare-loop-run-summary-v1'
+        timestamp = (Get-Date).ToString('o')
+        iterations = $result.Iterations
+        diffCount = $result.DiffCount
+        errorCount = $result.ErrorCount
+        averageSeconds = $result.AverageSeconds
+        totalSeconds = $result.TotalSeconds
+        quantileStrategy = $result.QuantileStrategy
+        requestedPercentiles = $reqPct
+        percentiles = $result.Percentiles
+        histogram = $histogram
+        mode = $result.Mode
+        basePath = $result.BasePath
+        headPath = $result.HeadPath
+        rebaselineApplied = $result.RebaselineApplied
+        rebaselineCandidate = $result.RebaselineCandidate
+      }
+      $json = $summary | ConvertTo-Json -Depth 6
+      [IO.File]::WriteAllText($RunSummaryJsonPath, $json, [Text.Encoding]::UTF8)
+    } catch {
+      if (-not $Quiet) { Write-Warning "Failed to write run summary JSON: $_" }
+    }
+  }
 
   $result
 }

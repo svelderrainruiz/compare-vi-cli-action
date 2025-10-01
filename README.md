@@ -488,15 +488,16 @@ $r | Select-Object Iterations,DiffCount,ErrorCount,Mode,AverageSeconds,Percentil
 
 For full schema details see `docs/COMPARE_LOOP_MODULE.md`.
 
-## What's New (Snapshot v2 & Dynamic Percentiles)
+## What's New (Snapshot v2, Dynamic Percentiles & Run Summary JSON)
 
-Recent enhancements introduce richer latency telemetry and more flexible percentile analysis:
+Recent enhancements introduce richer latency telemetry, flexible percentile analysis, and a final run summary export:
 
 - metrics-snapshot-v2: Snapshot lines now include `percentiles` (dynamic object), `requestedPercentiles` (echo of your list or defaults), and optional `histogram` when `-IncludeSnapshotHistogram` is used.
 - Custom percentile lists: Supply `-CustomPercentiles '50,75,90,97.5,99.9'` (comma/space separated). Values must be >0 and <100; duplicates removed; max 50 entries.
 - Fractional percentile labels: Dots become underscores (e.g. 97.5 -> `p97_5`, 99.9 -> `p99_9`).
 - Backward compatibility: Legacy `p50/p90/p99` still emitted at top-level in snapshots and result objects for existing consumers.
 - Inline snapshot enrichment: Percentiles & histogram computed per-emission without relying on final aggregation logic.
+- Final run summary JSON: Provide `-RunSummaryJsonPath run-summary.json` to emit one consolidated JSON document at loop completion (schema `compare-loop-run-summary-v1`) including aggregate metrics, dynamic percentiles, histogram, and rebaseline metadata.
 
 Quick example (custom list + histogram + snapshots every 5 iterations):
 
@@ -515,6 +516,27 @@ $pKeys = $line.percentiles | Get-Member -MemberType NoteProperty | Select-Object
 ```
 
 See `docs/COMPARE_LOOP_MODULE.md` for full snapshot v2 schema.
+
+Run summary quick example:
+
+```powershell
+$exec = { param($cli,$b,$h,$args) Start-Sleep -Milliseconds (5 + (Get-Random -Max 20)); 0 }
+Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 40 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -CustomPercentiles '50,75,90,97.5,99.9' -HistogramBins 8 -RunSummaryJsonPath run-summary.json -Quiet
+$summary = Get-Content run-summary.json -Raw | ConvertFrom-Json
+"Final p90: $($summary.percentiles.p90) seconds (schema=$($summary.schema))"
+```
+
+Run summary schema excerpt:
+
+```jsonc
+{
+  "schema": "compare-loop-run-summary-v1",
+  "iterations": 40,
+  "diffCount": 0,
+  "averageSeconds": 0.018,
+  "percentiles": { "p50": 0.017, "p75": 0.020, "p90": 0.024, "p97_5": 0.025, "p99_9": 0.028 }
+}
+```
 
 
 Dispatcher JSON outputs & customization

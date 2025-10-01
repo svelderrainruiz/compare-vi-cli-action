@@ -59,6 +59,8 @@ Key capabilities:
 | `MetricsSnapshotPath` | string | (none) | Destination file for NDJSON (one JSON object per line) snapshots |
 | `QuantileStrategy` | enum | `Exact` | Allowed: `Exact`, `StreamingP2`, `Hybrid` (streaming variants pending) |
 | `HybridExactThreshold` | int | 500 | Iteration count threshold where Hybrid would switch to streaming (future) |
+| `CustomPercentiles` | string | (none) | Comma/space list of percentile values (0-100 exclusive) for dynamic metric keys (e.g. `"50,75,90,97.5,99.9"`) |
+| `RunSummaryJsonPath` | string | (none) | If set, writes a final consolidated JSON object (schema `compare-loop-run-summary-v1`) after loop completion |
 
 ## Return Object Schema
 
@@ -309,6 +311,62 @@ Notes:
 - Only iterations with a positive duration contribute to percentile calculations.
 - `quantileStrategy` reflects the active percentile computation mode (Exact/StreamingReservoir/Hybrid).
 - Streaming reservoir + hybrid modes approximate distribution with bounded memory and (for Hybrid) switch after an exact warm-up threshold.
+
+## Final Run Summary JSON
+
+When `-RunSummaryJsonPath <file>` is specified, the loop emits a single JSON document at completion capturing aggregate metrics and final distribution statistics.
+
+### Schema: `compare-loop-run-summary-v1`
+
+```jsonc
+{
+  "schema": "compare-loop-run-summary-v1",
+  "timestamp": "2025-01-15T12:34:56.789Z",
+  "iterations": 150,
+  "diffCount": 4,
+  "errorCount": 0,
+  "averageSeconds": 0.187,
+  "totalSeconds": 28.112,
+  "quantileStrategy": "Exact",
+  "requestedPercentiles": [50,75,90,97.5,99.9],
+  "percentiles": {
+    "p50": 0.180,
+    "p75": 0.195,
+    "p90": 0.230,
+    "p97_5": 0.255,
+    "p99_9": 0.290
+  },
+  "histogram": [
+    { "Index": 0, "Start": 0, "End": 1, "Count": 150 }
+  ],
+  "mode": "Polling",
+  "basePath": "C:/path/Base.vi",
+  "headPath": "C:/path/Head.vi",
+  "rebaselineApplied": false,
+  "rebaselineCandidate": null
+}
+```
+
+Notes:
+
+- `requestedPercentiles` echoes the parsed/validated input list or defaults to `[50,90,99]` when omitted.
+- `percentiles` object mirrors dynamic labeling rules (decimal → underscore) used in snapshots.
+- `histogram` is identical to the return object's histogram, not recomputed separately.
+- Consumers should tolerate additional fields in future minor schema evolutions; rely on `schema` value for version gating.
+
+Example invocation:
+
+```powershell
+Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 200 -IntervalSeconds 0 `
+  -CustomPercentiles '50,75,90,97.5,99.9' -HistogramBins 10 -RunSummaryJsonPath run-summary.json -Quiet
+```
+
+Parsing example (PowerShell):
+
+```powershell
+$summary = Get-Content run-summary.json -Raw | ConvertFrom-Json
+"Final p90: $($summary.percentiles.p90) seconds"
+```
 
 ## Future Enhancements (Open for Contribution)
 
