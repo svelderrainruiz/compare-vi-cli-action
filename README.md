@@ -353,6 +353,7 @@ Supplement the heuristic inference with an explicit JSON array file:
   },
   {
     "sourcePattern": "scripts/Render-CompareReport.ps1",
+  <!-- Flaky demo section removed (previous simulation artifacts deprecated) -->
     "tests": ["tests/CompareVI.Tests.ps1"]
   }
 ]
