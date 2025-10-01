@@ -27,6 +27,23 @@ This document summarizes the implementation status of self-hosted Windows runner
 
 ### Testing Infrastructure
 
+#### Test Dispatchers
+
+**Local Dispatcher (`tools/Run-Pester.ps1`)**:
+
+- Used by GitHub-hosted workflows and manual local testing
+- Handles Pester module discovery and installation
+- Supports `IncludeIntegration` switch parameter
+- Used by `test-pester.yml` and `pester-integration-on-label.yml`
+
+**Root Dispatcher (`Invoke-PesterTests.ps1`)**:
+
+- Entry point for self-hosted runner test execution
+- Called directly by `pester-selfhosted.yml` workflow
+- Assumes Pester v5+ is pre-installed on self-hosted runner
+- Parameters: `TestsPath`, `IncludeIntegration`, `ResultsPath`
+- Generates NUnit XML and summary text files
+
 #### Unit Tests (`tests/CompareVI.Tests.ps1`, `tests/CompareVI.InputOutput.Tests.ps1`)
 
 - ✅ 23 tests total, 20 passing, 3 skipped (require canonical CLI on Windows)
@@ -79,8 +96,11 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Includes Integration tests by default
 - Uploads test results as artifacts
 - Manual dispatch only (workflow_dispatch)
-- **Uses open-source action**: `LabVIEW-Community-CI-CD/open-source/actions/run-pester-tests@actions`
-- Delegates environment validation and Pester installation to the shared action
+- **Calls dispatcher directly**: Invokes `Invoke-PesterTests.ps1` at repository root
+- **Test Dispatcher**: Self-contained test execution
+  - Assumes Pester v5+ is pre-installed on self-hosted runner
+  - Accepts `TestsPath`, `IncludeIntegration`, and `ResultsPath` parameters
+  - No external action dependencies
 
 #### `pester-integration-on-label.yml` - PR Integration Tests
 
