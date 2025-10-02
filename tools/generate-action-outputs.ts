@@ -35,7 +35,9 @@ function main() {
     for (const key of Object.keys(spec.inputs).sort()) {
       const i = spec.inputs[key];
       lines.push(`### ${key}`);
+      lines.push('');
       if (i.description) lines.push(i.description.trim());
+      if (i.required !== undefined) lines.push('');
       if (i.required !== undefined) lines.push(`- Required: ${i.required}`);
       if (i.default !== undefined && i.default !== '') lines.push(`- Default: \`${i.default}\``);
       lines.push('');
@@ -47,6 +49,7 @@ function main() {
     for (const key of Object.keys(spec.outputs).sort()) {
       const o = spec.outputs[key];
       lines.push(`### ${key}`);
+      lines.push('');
       if (o.description) lines.push(o.description.trim());
       lines.push('');
     }

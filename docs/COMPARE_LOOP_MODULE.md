@@ -145,8 +145,8 @@ Histogram construction (linear binning):
   [pscustomobject]@{ Index=0; Start=<double>; End=<double>; Count=0 }
   ```
 
-6. For each duration `v` compute tentative index: `idx = floor((v - min) / width)` with upper clamp `bins-1`.
-7. Increment `Count` for the resolved bin.
+1. For each duration `v` compute tentative index: `idx = floor((v - min) / width)` with upper clamp `bins-1`.
+2. Increment `Count` for the resolved bin.
 
 Properties emitted per bin:
 

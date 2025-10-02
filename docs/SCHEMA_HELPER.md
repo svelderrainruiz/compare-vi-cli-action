@@ -85,7 +85,6 @@ Generates a minimal JSON Schema (Draft 2020-12 style) per spec (`<Spec>.schema.j
 - all known properties under `properties` (Required + Optional)
 - `additionalProperties: false` mirroring Strict expectations
 
-
 By default, predicates are emitted without types. Add `-InferTypes` for a best‑effort scan of each
 predicate scriptblock's text to attach a `type` (or array of types) when recognizable. Inference is
 heuristic (regex on `[bool]`, `[string]`, `[int]`/`[long]`, `[double]`, hashtable/object/array
