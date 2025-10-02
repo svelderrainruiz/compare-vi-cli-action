@@ -144,7 +144,9 @@ and uploads them as artifacts. It also appends a timing block to the job summary
 
 ```text
 ### Compare VI Timing
+
 - Seconds: <seconds>
+
 - Nanoseconds: <nanoseconds>
 - Combined: <seconds>s (<ms> ms)
 ```
