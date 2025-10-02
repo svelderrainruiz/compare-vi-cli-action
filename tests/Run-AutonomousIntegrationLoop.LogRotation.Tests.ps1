@@ -49,12 +49,10 @@ exit 0
     (Get-Item $jsonLog).Length | Should -BeLessThan 600 -Because 'active file should remain modest after rotations'
     foreach ($r in $rolls) { $r.Length | Should -BeLessThan 1500 }
 
-    # Validate NDJSON integrity across all segments (rotated + active)
+    # Validate NDJSON integrity & LoopEvent schema across all segments (rotated + active)
     $allLogs = @($rolls.FullName + $jsonLog)
     foreach ($file in $allLogs) {
-      foreach ($line in Get-Content -LiteralPath $file) {
-        { $null = $line | ConvertFrom-Json } | Should -Not -Throw
-      }
+      Assert-NdjsonShapes -Path $file -Spec 'LoopEvent' | Should -BeTrue
     }
 
     # Confirm rotate meta events equal roll count

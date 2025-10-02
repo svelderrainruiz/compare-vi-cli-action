@@ -44,24 +44,60 @@ $script:JsonShapeSpecs['FinalStatus'] = [pscustomobject]@{
   }
 }
 
+# Actual emitted run summary currently uses:
+#   schema (e.g. 'compare-loop-run-summary-v1'), iterations, percentiles, requestedPercentiles,
+#   optional histogram, diffs, errors, succeeded (some may be omitted in fast runs)
 $script:JsonShapeSpecs['RunSummary'] = [pscustomobject]@{
-  Required = @(
-    'schemaVersion','startedUtc','completedUtc','durationSeconds',
-    'success','diffs','errors','iterations'
-  )
-  Optional = @('percentiles','histogram','message')
+  Required = @('schema','iterations','percentiles','requestedPercentiles')
+  Optional = @('histogram','diffs','errors','succeeded','averageSeconds','totalSeconds')
   Types    = @{
-    schemaVersion    = { param($v) $v -eq 1 }
-    startedUtc       = { param($v) $v -is [string] -and $v.Length -ge 10 }
-    completedUtc     = { param($v) $v -is [string] -and $v.Length -ge 10 }
-    durationSeconds  = { param($v) $v -is [double] -or $v -is [int] }
-    success          = { param($v) $v -is [bool] }
-    diffs            = { param($v) $v -is [int] -and $v -ge 0 }
-    errors           = { param($v) $v -is [int] -and $v -ge 0 }
-    iterations       = { param($v) $v -is [int] -and $v -ge 0 }
-    percentiles      = { param($v) -not $v -or ($v -is [hashtable] -or $v -is [pscustomobject]) }
-    histogram        = { param($v) -not $v -or ($v -is [hashtable] -or $v -is [pscustomobject]) }
-    message          = { param($v) -not $v -or $v -is [string] }
+    schema              = { param($v) $v -is [string] -and $v -like 'compare-loop-run-summary-*' }
+    iterations          = { param($v) ((($v -is [int]) -or ($v -is [long]) -or ($v -is [double])) -and $v -ge 0) -or ($v -is [string] -and $v -match '^[0-9]+$') }
+    percentiles         = { param($v) $v -is [pscustomobject] -or $v -is [hashtable] }
+    requestedPercentiles= { param($v) $v -is [object[]] }
+  histogram           = { param($v) -not $v -or $v -is [pscustomobject] -or $v -is [hashtable] -or $v -is [object[]] -or ($v -is [string]) }
+    diffs               = { param($v) -not $v -or $v -is [int] -or $v -is [long] -or $v -is [double] -or ($v -is [string] -and $v -match '^[0-9]+$') }
+    errors              = { param($v) -not $v -or $v -is [int] -or $v -is [long] -or $v -is [double] -or ($v -is [string] -and $v -match '^[0-9]+$') }
+    succeeded           = { param($v) -not $v -or $v -is [bool] }
+    averageSeconds      = { param($v) -not $v -or $v -is [double] -or $v -is [int] }
+    totalSeconds        = { param($v) -not $v -or $v -is [double] -or $v -is [int] }
+  }
+}
+
+# Snapshot schema (metrics-snapshot-v2 lines)
+$script:JsonShapeSpecs['SnapshotV2'] = [pscustomobject]@{
+  Required = @('schema','iteration','percentiles')
+  Optional = @('requestedPercentiles','histogram','elapsedSeconds','diffs','errors')
+  Types = @{
+    schema              = { param($v) $v -eq 'metrics-snapshot-v2' }
+  iteration           = { param($v) ($v -is [int] -or $v -is [long] -or ($v -is [string] -and $v -match '^[0-9]+$')) -and [int]$v -gt 0 }
+    percentiles         = { param($v) $v -is [pscustomobject] -or $v -is [hashtable] }
+    requestedPercentiles= { param($v) -not $v -or $v -is [object[]] }
+  histogram           = { param($v) -not $v -or $v -is [pscustomobject] -or $v -is [hashtable] -or $v -is [object[]] -or ($v -is [string]) }
+    elapsedSeconds      = { param($v) -not $v -or $v -is [double] -or $v -is [int] }
+    diffs               = { param($v) -not $v -or $v -is [int] }
+    errors              = { param($v) -not $v -or $v -is [int] }
+  }
+}
+
+# Loop event NDJSON (loop-script-events-v1) meta/result/finalStatusEmitted lines
+$script:JsonShapeSpecs['LoopEvent'] = [pscustomobject]@{
+  Required = @('schema','timestamp','type')
+  Optional = @('action','level','iterations','diffs','errors','succeeded','from','to','path')
+  Types = @{
+    schema     = { param($v) $v -eq 'loop-script-events-v1' }
+  # Accept either already-parsed DateTime (some producers may emit [datetime]) or ISO-ish string
+  timestamp  = { param($v) ($v -is [datetime]) -or ($v -is [string] -and $v.Length -ge 10) }
+    type       = { param($v) $v -is [string] }
+    action     = { param($v) -not $v -or $v -is [string] }
+    level      = { param($v) -not $v -or $v -is [string] }
+  iterations = { param($v) -not $v -or $v -is [int] -or $v -is [long] -or $v -is [double] }
+  diffs      = { param($v) -not $v -or $v -is [int] -or $v -is [long] -or $v -is [double] }
+  errors     = { param($v) -not $v -or $v -is [int] -or $v -is [long] -or $v -is [double] }
+    succeeded  = { param($v) -not $v -or $v -is [bool] }
+    from       = { param($v) -not $v -or $v -is [string] }
+    to         = { param($v) -not $v -or $v -is [string] }
+    path       = { param($v) -not $v -or $v -is [string] }
   }
 }
 
@@ -103,6 +139,29 @@ function Assert-JsonShape {
   if ($errors.Count -gt 0) {
     $msg = "Assert-JsonShape FAILED for spec '$Spec' on file '$Path':`n - " + ($errors -join "`n - ")
     throw $msg
+  }
+  return $true
+}
+
+function Assert-NdjsonShapes {
+  [CmdletBinding()] param(
+    [Parameter(Mandatory)][string]$Path,
+    [Parameter(Mandatory)][string]$Spec
+  )
+  if (-not (Test-Path -LiteralPath $Path)) { throw "Assert-NdjsonShapes: file not found: $Path" }
+  $lines = Get-Content -LiteralPath $Path -ErrorAction Stop
+  $idx = 0
+  foreach ($l in $lines) {
+    $idx++
+    if (-not $l.Trim()) { continue }
+  try { $tmp = $l | ConvertFrom-Json -ErrorAction Stop } catch { throw ('Line {0} invalid JSON in {1}: {2}' -f $idx,$Path,$_.Exception.Message) }
+    # Write object to temp file in memory (string) and reuse Assert-JsonShape logic by serializing again
+    $json = $tmp | ConvertTo-Json -Depth 6
+    $temp = [IO.Path]::GetTempFileName()
+    try {
+      Set-Content -LiteralPath $temp -Value $json -Encoding UTF8
+      Assert-JsonShape -Path $temp -Spec $Spec | Out-Null
+    } finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
   }
   return $true
 }
