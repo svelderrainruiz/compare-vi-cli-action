@@ -46,11 +46,21 @@ param(
   ,
 
   [Parameter(Mandatory = $false)]
-  [int]$TimeoutMinutes = 0
+  [double]$TimeoutMinutes = 0,
+  [Parameter(Mandatory = $false)]
+  [double]$TimeoutSeconds = 0
+  ,
+  [Parameter(Mandatory = $false)]
+  [int]$MaxTestFiles = 0
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Derive effective timeout seconds (seconds param takes precedence if >0)
+$effectiveTimeoutSeconds = 0
+if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds }
+elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
 $SchemaSummaryVersion  = '1.1.0'
@@ -246,6 +256,8 @@ Write-Host "  Results Path: $ResultsPath"
 Write-Host "  JSON Summary File: $JsonSummaryPath"
 Write-Host "  Emit Failures JSON Always: $EmitFailuresJsonAlways"
 Write-Host "  Timeout Minutes: $TimeoutMinutes"
+Write-Host "  Timeout Seconds: $TimeoutSeconds"
+Write-Host "  Max Test Files: $MaxTestFiles"
 Write-Host ""
 
 # Debug instrumentation (opt-in via COMPARISON_ACTION_DEBUG=1)
@@ -263,12 +275,21 @@ if (-not $root) {
   exit 1
 }
 
-$testsDir = Join-Path $root $TestsPath
+$testsDirRaw = Join-Path $root $TestsPath
+# Accept single test file path as well as directory
+if (Test-Path -LiteralPath $testsDirRaw -PathType Leaf -and ($testsDirRaw -like '*.ps1')) {
+  $singleTestFile = $testsDirRaw
+  $testsDir = Split-Path -Parent $singleTestFile
+  $limitToSingle = $true
+} else {
+  $testsDir = $testsDirRaw
+  $limitToSingle = $false
+}
 $resultsDir = Join-Path $root $ResultsPath
 
 Write-Host "Resolved Paths:" -ForegroundColor Yellow
 Write-Host "  Script Root: $root"
-Write-Host "  Tests Directory: $testsDir"
+Write-Host "  Tests Directory: $testsDir"; if ($limitToSingle) { Write-Host "  Single Test File: $singleTestFile" }
 Write-Host "  Results Directory: $resultsDir"
 Write-Host ""
 
@@ -279,9 +300,19 @@ if (-not (Test-Path -LiteralPath $testsDir -PathType Container)) {
   exit 1
 }
 
-# Count test files
-$testFiles = @(Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File)
-Write-Host "Found $($testFiles.Count) test file(s) in tests directory" -ForegroundColor Green
+# Count test files (respect single file mode)
+if ($limitToSingle) {
+  $testFiles = @([IO.FileInfo]::new($singleTestFile))
+  Write-Host "Running single test file: $singleTestFile" -ForegroundColor Green
+} else {
+  $testFiles = @(Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File | Sort-Object FullName)
+  Write-Host "Found $($testFiles.Count) test file(s) in tests directory" -ForegroundColor Green
+  if ($MaxTestFiles -gt 0 -and $testFiles.Count -gt $MaxTestFiles) {
+    Write-Host "Selecting first $MaxTestFiles test file(s) for execution (loop count mode)." -ForegroundColor Yellow
+    $selected = $testFiles | Select-Object -First $MaxTestFiles
+    $testFiles = @($selected)
+  }
+}
 
 # Early exit path when zero tests discovered: emit minimal artifacts for stable downstream handling
 if ($testFiles.Count -eq 0) {
@@ -310,6 +341,14 @@ if ($testFiles.Count -eq 0) {
   Write-Host 'No test files found. Placeholder artifacts emitted.' -ForegroundColor Yellow
   exit 0
 }
+
+# Emit selected test file list (for diagnostics / gating)
+try {
+  if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
+  $selOut = Join-Path $resultsDir 'pester-selected-files.txt'
+  ($testFiles | ForEach-Object { $_.FullName }) | Out-File -FilePath $selOut -Encoding utf8
+  Write-Host "Selected test file list written to: $selOut" -ForegroundColor Gray
+} catch { Write-Warning "Failed to write selected files list: $_" }
 
 # Create results directory if it doesn't exist
 try {
@@ -358,7 +397,12 @@ Write-Host "Configuring Pester..." -ForegroundColor Yellow
 $conf = New-PesterConfiguration
 
 # Set test path
-$conf.Run.Path = $testsDir
+if ($limitToSingle) { $conf.Run.Path = $singleTestFile }
+elseif ($MaxTestFiles -gt 0 -and $testFiles.Count -gt 0 -and -not $limitToSingle) {
+  # Build dynamic container for selected files
+  $paths = $testFiles | ForEach-Object { $_.FullName }
+  $conf.Run.Path = $paths
+} else { $conf.Run.Path = $testsDir }
 
 # Handle include-integration parameter (string or boolean)
 # Normalization logic is intentionally verbose to satisfy dispatcher tests
@@ -436,8 +480,8 @@ Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
 ${script:timedOut} = $false
 $testStartTime = Get-Date
-if ($TimeoutMinutes -gt 0) {
-  Write-Host "Executing with timeout guard: $TimeoutMinutes minute(s)" -ForegroundColor Yellow
+if ($effectiveTimeoutSeconds -gt 0) {
+  Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
   $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
   $partialLogPath = Join-Path $resultsDir 'pester-partial.log'
   $lastWriteLen = 0
@@ -458,8 +502,8 @@ if ($TimeoutMinutes -gt 0) {
         }
       }
     } catch { }
-    if ($elapsed.TotalMinutes -ge $TimeoutMinutes) {
-      Write-Warning "Pester execution exceeded timeout of $TimeoutMinutes minute(s); stopping job." 
+    if ($elapsed.TotalSeconds -ge $effectiveTimeoutSeconds) {
+      Write-Warning "Pester execution exceeded timeout of $effectiveTimeoutSeconds second(s); stopping job." 
       try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch {}
       $script:timedOut = $true
       break
