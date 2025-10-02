@@ -1054,3 +1054,53 @@ Current versions: **1.0.0** for all schemas.
 
 Consumers should check `schemaVersion` and handle unknown major versions gracefully.
 
+## For Developers
+
+### Testing
+
+This repository includes a comprehensive Pester test suite. To run tests:
+
+```powershell
+# Unit tests only (fast, no LabVIEW required)
+./Invoke-PesterTests.ps1
+
+# Integration tests (requires LabVIEW and LVCompare at canonical path)
+$env:LV_BASE_VI='Base.vi'
+$env:LV_HEAD_VI='Head.vi'
+./Invoke-PesterTests.ps1 -IncludeIntegration true
+```
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for contribution guidelines and development workflow.
+
+### Building and Generating Documentation
+
+The action documentation is auto-generated from `action.yml`:
+
+```bash
+npm install
+npm run build
+npm run generate:outputs
+```
+
+This regenerates [`docs/action-outputs.md`](./docs/action-outputs.md) with all inputs and outputs.
+
+### Release Process
+
+1. Update [`CHANGELOG.md`](./CHANGELOG.md) with changes for the new version
+2. Create and push a git tag (e.g., `v0.3.0`)
+3. The release workflow automatically creates a GitHub release with changelog content
+
+Tags follow semantic versioning. See [`.github/workflows/release.yml`](./.github/workflows/release.yml) for release automation details.
+
+## License
+
+This project is licensed under the BSD 3-Clause License. See the [`LICENSE`](./LICENSE) file for full license text.
+
+## Support and Contributing
+
+- **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues)
+- **Discussions**: Ask questions or share ideas in [GitHub Discussions](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/discussions)
+- **Contributing**: See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for guidelines
+- **Security**: Report security vulnerabilities via [`SECURITY.md`](./SECURITY.md)
+
+
