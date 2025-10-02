@@ -84,7 +84,7 @@ jobs:
           }
 
       - name: Comment on PR (using XCLI_PAT)
-        if: always() && github.event.pull_request.number
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event.pull_request.number)
         shell: pwsh
         env:
           GH_REPO: ${{ github.repository }}
