@@ -17,20 +17,40 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Resolve VI inputs (fallback to repo vars)
+      - name: Resolve VI inputs (fallback to repo root files)
         id: res
         shell: pwsh
         run: |
           $base = $env:LV_BASE_VI
           $head = $env:LV_HEAD_VI
-          if ([string]::IsNullOrWhiteSpace($base) -or -not (Test-Path -LiteralPath $base)) { Write-Host '::warning::LV_BASE_VI missing or invalid'; }
-          if ([string]::IsNullOrWhiteSpace($head) -or -not (Test-Path -LiteralPath $head)) { Write-Host '::warning::LV_HEAD_VI missing or invalid'; }
+          
+          # Fallback to repo root Base.vi and Head.vi for publish validation
+          if ([string]::IsNullOrWhiteSpace($base) -or -not (Test-Path -LiteralPath $base)) {
+            $base = Join-Path $env:GITHUB_WORKSPACE 'Base.vi'
+            Write-Host "Using fallback Base.vi from repo root: $base"
+          }
+          if ([string]::IsNullOrWhiteSpace($head) -or -not (Test-Path -LiteralPath $head)) {
+            $head = Join-Path $env:GITHUB_WORKSPACE 'Head.vi'
+            Write-Host "Using fallback Head.vi from repo root: $head"
+          }
+          
+          # Validate files exist
+          if (-not (Test-Path -LiteralPath $base)) {
+            Write-Host "::error::Base VI file not found: $base"
+            exit 1
+          }
+          if (-not (Test-Path -LiteralPath $head)) {
+            Write-Host "::error::Head VI file not found: $head"
+            exit 1
+          }
+          
+          Write-Host "Base VI: $base"
+          Write-Host "Head VI: $head"
           "base=$base" >> $env:GITHUB_OUTPUT
           "head=$head" >> $env:GITHUB_OUTPUT
 
-      - name: Run compare (skip if inputs invalid)
+      - name: Run compare
         id: compare
-        if: ${{ steps.res.outputs.base != '' && steps.res.outputs.head != '' }}
         uses: ./
         with:
           base: ${{ steps.res.outputs.base }}
