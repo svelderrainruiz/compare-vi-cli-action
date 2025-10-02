@@ -9,28 +9,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Added
 
-- Final run summary JSON export via `-RunSummaryJsonPath` (schema `compare-loop-run-summary-v1`) including aggregate metrics, dynamic percentiles, histogram, quantile strategy, and rebaseline metadata.
-- Snapshot tailing helper `tools/Tail-Snapshots.ps1` for interactive NDJSON monitoring with selectable percentile columns.
-- Run summary Pester tests (`CompareLoop.RunSummary.Tests.ps1`) validating schema presence and dynamic percentile labeling.
-- Watch-Pester enhancements: selective run targeting, `-ChangedOnly`, heuristic source→test inference (`-InferTestsFromSource`), delta summary & classification (`-DeltaJsonPath`), run sequencing & colorized status, failed test listing (`-ShowFailed`, `-MaxFailedList`), audible failure notification (`-BeepOnFail`).
-- Watch-Pester delta history export via `-DeltaHistoryPath` (JSON Lines) for longitudinal run analytics.
-- Explicit mapping-based inference via `-MappingConfig` (glob-to-regex pattern mapping source files to test files).
-- Only-failed re-run mode `-OnlyFailed` (re-executes only failing test file containers when no new targeted changes detected).
-- Post-run notification hook `-NotifyScript` with WATCH_* environment variables and named parameter invocation.
-- Flaky mitigation via `-RerunFailedAttempts` with retry classification override (`improved` on recovery) and flaky metadata in delta JSON (`flaky.enabled`, `attempts`, `recoveredAfter`, `initialFailedFiles`).
-- Closure regression test (`CompareLoop.NewExecClosure.Tests.ps1`) ensuring executor delay capture stability.
-- `-VerboseDiagnostics` / `BINDING_MINREPRO_VERBOSE` flag in `Binding-MinRepro.ps1` to optionally restore extended diagnostics.
-- Lightweight JSON/NDJSON schema validation helper (`tests/TestHelpers.Schema.ps1`) with predicate-based specs (`FinalStatus`, `RunSummary`, `SnapshotV2`, `LoopEvent`).
-- New documentation: `docs/SCHEMA_HELPER.md` detailing usage, extending specs, predicate philosophy.
-- Test refactors to use shared schema assertions: `CompareLoop.RunSummary.Tests.ps1`, `CompareLoop.SnapshotEnrichment.Tests.ps1`, `Run-AutonomousIntegrationLoop.LogRotation.Tests.ps1`, `Run-AutonomousIntegrationLoop.EventSchema.Tests.ps1`.
-- NDJSON validator function `Assert-NdjsonShapes` for per-line event & snapshot validation.
-- Dispatcher & developer docs cross-links to schema helper (README, AGENTS.md, PESTER_DISPATCHER_REFINEMENT.md).
-- Strict mode (`-Strict`) for `Assert-JsonShape` / `Assert-NdjsonShapes` to fail on unexpected properties.
-- Schema export function `Export-JsonShapeSchemas` generating minimal draft JSON Schema files per spec.
+- Schema export type inference via `Export-JsonShapeSchemas -InferTypes` (best‑effort predicate text heuristics attaching JSON Schema `type` or union types).
+- Machine-readable failure capture for schema assertions using `-FailureJsonPath` on `Assert-JsonShape` / `Assert-NdjsonShapes` (produces `errors` or `lineErrors` arrays with timestamps).
+- Diff helper `Compare-JsonShape` returning structured comparison object (missing, unexpected, predicate failures, scalar value differences) for regression-style assertions.
+- Tests covering: type inference export (`Schema.TypeInference.Tests.ps1`), failure JSON emission (`Schema.FailureJson.Tests.ps1`), diff helper behavior (`Schema.DiffHelper.Tests.ps1`).
 
 ### Tooling
 
-- Developer utility script to live-tail metrics snapshots without external tooling.
+- Expanded `docs/SCHEMA_HELPER.md` with sections for `-InferTypes`, `-FailureJsonPath`, and `Compare-JsonShape` usage including JSON payload examples.
 
 ### Documentation
 
