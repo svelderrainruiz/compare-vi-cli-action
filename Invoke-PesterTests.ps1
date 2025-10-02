@@ -439,10 +439,25 @@ $testStartTime = Get-Date
 if ($TimeoutMinutes -gt 0) {
   Write-Host "Executing with timeout guard: $TimeoutMinutes minute(s)" -ForegroundColor Yellow
   $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
+  $partialLogPath = Join-Path $resultsDir 'pester-partial.log'
+  $lastWriteLen = 0
   while ($true) {
     if ($job.State -eq 'Completed') { break }
     if ($job.State -eq 'Failed') { break }
     $elapsed = (Get-Date) - $testStartTime
+    # Periodically capture partial output (stdout) for diagnostics
+    try {
+      $stream = Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue
+      if ($null -ne $stream) {
+        $text = ($stream | Out-String)
+        if (-not [string]::IsNullOrEmpty($text)) {
+          # Append only new content heuristic (simple length diff)
+          $delta = $text.Substring([Math]::Min($lastWriteLen, $text.Length))
+          if ($delta.Trim()) { Add-Content -Path $partialLogPath -Value $delta -Encoding UTF8 }
+          $lastWriteLen = $text.Length
+        }
+      }
+    } catch { }
     if ($elapsed.TotalMinutes -ge $TimeoutMinutes) {
       Write-Warning "Pester execution exceeded timeout of $TimeoutMinutes minute(s); stopping job." 
       try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch {}
@@ -491,6 +506,9 @@ if ($timedOut) {
       '</test-results>'
     ) -join [Environment]::NewLine
     Set-Content -LiteralPath $absoluteResultPath -Value $placeholder -Encoding UTF8
+    # Ensure partial log exists even if no content captured
+  if (-not $partialLogPath) { $partialLogPath = Join-Path $resultsDir 'pester-partial.log' }
+    if (-not (Test-Path -LiteralPath $partialLogPath)) { '[timeout] No partial output captured before timeout.' | Out-File -FilePath $partialLogPath -Encoding utf8 }
   } catch { Write-Warning "Failed to write timeout placeholder XML: $_" }
 }
 

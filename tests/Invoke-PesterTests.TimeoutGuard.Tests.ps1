@@ -24,5 +24,10 @@ Describe 'Invoke-PesterTests Timeout Guard' -Tag 'Unit' {
     Test-Path $summaryPath | Should -BeTrue
     $obj = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
     $obj.timedOut | Should -BeTrue
+
+    $partialLog = Join-Path $results 'pester-partial.log'
+    Test-Path $partialLog | Should -BeTrue
+    $partialContent = Get-Content -LiteralPath $partialLog -Raw
+    ($partialContent.Length -gt 0) | Should -BeTrue
   }
 }
