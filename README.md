@@ -745,6 +745,47 @@ Troubleshooting
 - Check composite action outputs (`diff`, `exitCode`, `cliPath`, `command`) and the CLI exit code for diagnostics.
 - **For comprehensive CI/CD setup and troubleshooting**, see [Self-Hosted Runner CI/CD Setup Guide](./docs/SELFHOSTED_CI_SETUP.md)
 
+### Dispatcher discovery failures & diagnostic environment toggles
+
+The local Pester dispatcher (`Invoke-PesterTests.ps1`) performs a lightweight scan of console output to detect **discovery-time failures** (e.g. parse / variable resolution errors that prevent tests from loading). Historically a single integration test caused a persistent false positive; instrumentation plus safer test authoring resolved it. This section explains how to diagnose future issues and which environment variables influence behavior.
+
+Key principles:
+
+1. A real discovery failure normally produces console text of the form: `Discovery in <path> failed with:`.
+2. Nested dispatcher invocations (e.g., a test that launches another Pester run) can emit similar lines that are *not* actionable for the outer run. These are suppressed by default.
+3. If discovery failures are detected and there are no normal test failures or errors, the dispatcher elevates the run to an error state (exit code 1) to avoid silent greens with 0 tests executed.
+
+Environment variables (all optional):
+
+| Variable | Default | Effect | When to use |
+|----------|---------|--------|------------|
+| `SUPPRESS_NESTED_DISCOVERY` | (any value except `0`) | Suppress discovery failure pattern matches originating from nested dispatcher contexts (multiple summary headers observed). | Leave enabled for CI stability; set to `0` only when intentionally diagnosing nested dispatcher scenarios. |
+| `DEBUG_DISCOVERY_SCAN` | `0` | When `1`, emits `[debug-discovery]` lines for every regex match and writes a contextual `discovery-debug.log` (400‑char snippets with index & header counts) under `tests/results/`. | Turn on while investigating unexpected `discoveryFailures > 0` in the JSON summary. |
+| `DISABLE_INTEGRATION_FILE_PREFILTER` | `0` | When integration tests are excluded (`-IncludeIntegration false`), the dispatcher pre-filters `*.Integration.Tests.ps1` files entirely. Set this var to `1` to disable the file-level filter (they will still be tag-excluded). | Rare – only for validating integration skip gating or reproducing prior edge cases. |
+| `ENABLE_AGG_INT` | `0` | When `1`, enables the Aggregation Hints integration smoke test (requires canonical LVCompare path + `LV_BASE_VI` + `LV_HEAD_VI`). | Use on self-hosted runners to exercise aggregationHints in an end-to-end dispatcher run. |
+| `COMPARISON_ACTION_DEBUG` | `0` | When `1`, the dispatcher echoes its bound parameters (`[debug]` block). | Debug parameter normalization issues. |
+
+JSON summary linkage:
+
+- Root field `discoveryFailures` reports the (post-suppression) count.
+- Optional discovery diagnostics block (via `-EmitDiscoveryDetail`) can provide captured snippets when failures occur.
+
+Best practices to avoid false positives:
+
+- Ensure any variables used inside `-Skip:` expressions are initialized **before** the `It` block is parsed (i.e., declare them at script top-level or use a `BeforeDiscovery` hook rather than `BeforeAll`). Uninitialized variables can cause discovery-time resolution errors that surface as false positives.
+- Avoid performing filesystem mutations (test file creation/deletion) at script top-level—keep them inside `BeforeAll`/`It` to prevent parse-time side effects.
+
+Quick diagnostic workflow (local):
+
+```powershell
+$env:DEBUG_DISCOVERY_SCAN = '1'
+pwsh -File ./Invoke-PesterTests.ps1 -EmitDiscoveryDetail | Tee-Object -Variable out | Out-Null
+Get-Content tests/results/discovery-debug.log | Select-Object -First 5
+```
+
+If `discoveryFailures` returns to zero after moving variable initialization out of `BeforeAll`, you've resolved a discovery-time reference issue. Re-enable suppression defaults after diagnosis.
+
+
 Tests
 
 - Unit tests (no external CLI):
