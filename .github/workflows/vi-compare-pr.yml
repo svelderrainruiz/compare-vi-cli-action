@@ -7,7 +7,7 @@ on:
 
 jobs:
   vi-compare:
-    if: contains(github.event.pull_request.labels.*.name, 'vi-compare')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'vi-compare')
     runs-on: [self-hosted, Windows, X64]
     steps:
       - name: Checkout
