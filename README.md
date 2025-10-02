@@ -1072,15 +1072,22 @@ Two helper scripts support local development hygiene and richer CI feedback with
      ```
 
 2. `scripts/Write-PesterSummaryToStepSummary.ps1`
+
    - Reads `tests/results/pester-summary.json` (fallback to `pester-summary.txt`) and emits a Markdown table to the GitHub Actions step summary (`$GITHUB_STEP_SUMMARY`).
-   - Optionally includes a Failed Tests table when `pester-failures.json` is present.
+   - Failed tests table (if failures exist) is collapsible by default via `<details>`.
+   - Parameter: `-FailedTestsCollapseStyle` (`Details` | `DetailsOpen` | `None`) default `Details`.
+
+     - `Details`: closed `<details>` block
+     - `DetailsOpen`: open by default on page load
+     - `None`: classic `### Failed Tests` heading (no collapsible wrapper)
+
    - Add to workflows **after** the test execution step:
 
      ```yaml
      - name: Publish Pester summary
        if: always()
        shell: pwsh
-       run: pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 -ResultsDir tests/results
+       run: pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 -ResultsDir tests/results -FailedTestsCollapseStyle DetailsOpen
      ```
 
 Ignoring committed results: `.gitignore` now blocks committing these transient files; retain the directory structure with `tests/results/.gitkeep`.
