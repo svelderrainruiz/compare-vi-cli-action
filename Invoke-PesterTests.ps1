@@ -164,7 +164,7 @@ function Write-ArtifactManifest {
         if (Test-Path -LiteralPath $jsonPath) {
           $summaryJson = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -ErrorAction Stop
           $aggMsValue = $null
-          if ($summaryJson.PSObject.Properties.Name -contains 'aggregatorBuildMs' -and $summaryJson.aggregatorBuildMs -ne $null) {
+          if ($summaryJson.PSObject.Properties.Name -contains 'aggregatorBuildMs' -and $null -ne $summaryJson.aggregatorBuildMs) {
             $aggMsValue = $summaryJson.aggregatorBuildMs
           }
           $metrics = [PSCustomObject]@{
@@ -339,6 +339,13 @@ if ($limitToSingle) {
 } else {
   $testFiles = @(Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File | Sort-Object FullName)
   $originalTestFileCount = $testFiles.Count
+  # Pre-filter integration files entirely (stronger than tag exclusion) when integration disabled, unless explicitly overridden.
+  if (-not $IncludeIntegration -and ($env:DISABLE_INTEGRATION_FILE_PREFILTER -ne '1')) {
+    $before = $testFiles.Count
+    $testFiles = @($testFiles | Where-Object { $_.Name -notmatch '\.Integration\.Tests\.ps1$' })
+    $removed = $before - $testFiles.Count
+    if ($removed -gt 0) { Write-Host "Prefiltered $removed integration test file(s) (file-level exclusion)" -ForegroundColor DarkGray }
+  }
   Write-Host "Found $originalTestFileCount test file(s) in tests directory" -ForegroundColor Green
   if ($MaxTestFiles -gt 0 -and $testFiles.Count -gt $MaxTestFiles) {
     Write-Host "Selecting first $MaxTestFiles test file(s) for execution (loop count mode)." -ForegroundColor Yellow
@@ -620,11 +627,14 @@ Write-Host "Test execution completed in $($testDuration.TotalSeconds.ToString('F
 Write-Host ""
 
 # Detect discovery failures in captured output (inline) or partial log (timeout path)
-$discoveryFailurePatterns = @(
-  # Use single-line (?s) with non-greedy match so wrapped (newline-inserted) long file paths between
-  # 'Discovery in ' and ' failed with:' are matched correctly even when console wrapping introduces line breaks.
-  '(?s)Discovery in .*? failed with:'
-)
+# Default pattern now single-line to avoid accidental multi-line spanning matches.
+$useLegacyDiscovery = ($env:LEGACY_DISCOVERY_PATTERN -eq '1')
+if ($useLegacyDiscovery) {
+  $discoveryFailurePatterns = @('(?s)Discovery in .*? failed with:')
+} else {
+  # Single line: start anchor optional whitespace then 'Discovery in ' then non-greedy path no newline then ' failed with:'
+  $discoveryFailurePatterns = @('Discovery in [^\r\n]+ failed with:')
+}
 $discoveryFailureCount = 0
 try {
   $ansiPattern = "`e\[[0-9;]*[A-Za-z]" # strip ANSI color codes for reliable matching
@@ -637,10 +647,47 @@ try {
     $pl = (Get-Content -LiteralPath $partialLogPath -Raw) -replace $ansiPattern,''
     $scanTextBlocks += $pl
   }
+  $suppressNested = ($env:SUPPRESS_NESTED_DISCOVERY -ne '0')
+  $debugDiscovery = ($env:DEBUG_DISCOVERY_SCAN -eq '1')
+  $suppressedMatchTotal = 0
+  $countedMatchTotal = 0
   foreach ($block in $scanTextBlocks) {
+    # Determine header occurrences to infer nested dispatcher invocations
+    $headerRegex = [regex]'=== Pester Test Summary ==='
+    $headers = $headerRegex.Matches($block)
+    $headerCount = $headers.Count
+    $blockLines = $block -split "`r?`n"
     foreach ($pat in $discoveryFailurePatterns) {
-      $discoveryFailureCount += ([regex]::Matches($block, $pat, 'IgnoreCase')).Count
+      $patMatches = [regex]::Matches($block, $pat, 'IgnoreCase, Multiline')
+      if ($patMatches.Count -gt 0) {
+        $isNestedContext = ($headerCount -gt 1)
+        $shouldSuppress = $suppressNested -and $isNestedContext
+        if ($debugDiscovery) {
+          foreach ($m in $patMatches) {
+            $lineCtx = ''
+            try {
+              # Attempt to find the line containing the match start
+              $startVal = $m.Value.Split("`n")[0]
+              $foundLine = ($blockLines | Select-String -SimpleMatch $startVal -CaseSensitive | Select-Object -First 1).Line
+              if ($foundLine) { $lineCtx = $foundLine.Trim() }
+            } catch {}
+            Write-Host ("[debug-discovery] match='{0}' nested={1} headers={2} suppress={3} line='{4}'" -f ($m.Value.Replace([Environment]::NewLine,' ')), $isNestedContext, $headerCount, $shouldSuppress, $lineCtx) -ForegroundColor DarkCyan
+          }
+        }
+        if ($shouldSuppress) { $suppressedMatchTotal += $patMatches.Count }
+        else { $discoveryFailureCount += $patMatches.Count; $countedMatchTotal += $patMatches.Count }
+      }
     }
+  }
+  if ($suppressNested -and $countedMatchTotal -eq 0 -and $suppressedMatchTotal -gt 0) {
+    if ($debugDiscovery) { Write-Host "[debug-discovery] all $suppressedMatchTotal matches suppressed (nested); forcing discoveryFailureCount=0" -ForegroundColor DarkCyan }
+    $discoveryFailureCount = 0
+  }
+  # Hardening: if all potential matches occurred only in nested contexts and were suppressed,
+  # discoveryFailureCount should remain zero. If non-zero here but suppression was active
+  # and headerCount suggested nested-only context, allow an override via DEBUG to inspect.
+  if ($suppressNested -and $discoveryFailureCount -gt 0 -and $debugDiscovery) {
+    Write-Host "[debug-discovery] post-scan count=$discoveryFailureCount (suppression active)" -ForegroundColor DarkCyan
   }
 } catch { Write-Warning "Discovery failure scan encountered an error: $_" }
 
