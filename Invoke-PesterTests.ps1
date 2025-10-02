@@ -56,6 +56,9 @@ param(
   [switch]$EmitContext,
   [Parameter(Mandatory = $false)]
   [switch]$EmitTimingDetail
+,
+  [Parameter(Mandatory = $false)]
+  [switch]$EmitStability
 )
 
 Set-StrictMode -Version Latest
@@ -67,7 +70,7 @@ if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds 
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.3.0'
+$SchemaSummaryVersion  = '1.4.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -804,6 +807,25 @@ try {
       }
       Add-Member -InputObject $jsonObj -Name timing -MemberType NoteProperty -Value $timingBlock
     } catch { Write-Warning "Failed to emit extended timing block: $_" }
+  }
+
+  # Optional stability block (schema v1.4.0+) – placeholder scaffolding (no retry engine yet)
+  if ($EmitStability) {
+    try {
+      $initialFailed = $failed
+      $finalFailed = $failed
+      $recovered = $false # Will remain false until retry logic added
+      $stabilityBlock = [PSCustomObject]@{
+        supportsRetries   = $false
+        retryAttempts     = 0
+        initialFailed     = $initialFailed
+        finalFailed       = $finalFailed
+        recovered         = $recovered
+        flakySuspects     = @()  # Future: list of test names considered flaky
+        retriedTestFiles  = @()  # Future: test file containers retried
+      }
+      Add-Member -InputObject $jsonObj -Name stability -MemberType NoteProperty -Value $stabilityBlock
+    } catch { Write-Warning "Failed to emit stability block: $_" }
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray

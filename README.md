@@ -399,7 +399,7 @@ Marketplace
 
 Notes
 
-## Pester Test Dispatcher JSON Summary (Schema v1.3.0)
+## Pester Test Dispatcher JSON Summary (Schema v1.4.0)
 
 The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
 
@@ -407,7 +407,7 @@ Schema files:
 
 - Baseline (core fields) [`docs/schemas/pester-summary-v1_1.schema.json`](./docs/schemas/pester-summary-v1_1.schema.json)
 - Current (adds optional context blocks) [`docs/schemas/pester-summary-v1_2.schema.json`](./docs/schemas/pester-summary-v1_2.schema.json)
-- Latest (adds optional timing block) [`docs/schemas/pester-summary-v1_3.schema.json`](./docs/schemas/pester-summary-v1_3.schema.json)
+- Latest (adds optional stability block) [`docs/schemas/pester-summary-v1_4.schema.json`](./docs/schemas/pester-summary-v1_4.schema.json)
 
 Validation tests:
 
@@ -418,7 +418,7 @@ Validation tests:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schemaVersion` | string (const `1.3.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `schemaVersion` | string (const `1.4.0`) | Version identifier (semantic). Additive fields bump minor only. |
 | `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
 | `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
 | `failed` | int >=0 | Assertion failures (Pester logical failures). |
@@ -501,13 +501,35 @@ Invocation example:
 ./Invoke-PesterTests.ps1 -EmitTimingDetail
 ```
 
+### New in 1.4.0: Stability (Flakiness) Scaffold
+
+Version 1.4.0 introduces an opt-in `stability` block (flag: `-EmitStability`) laying groundwork for future retry-based flaky detection. Until a retry engine is implemented all metrics are placeholders derived from the single pass.
+
+Fields:
+
+| Field | Meaning |
+|-------|---------|
+| `supportsRetries` | Indicates whether dispatcher had a retry engine active (currently always false). |
+| `retryAttempts` | Number of additional retry rounds executed (always 0 now). |
+| `initialFailed` | Failed test count after initial execution. |
+| `finalFailed` | Failed test count after (potential) retries (same as initial for now). |
+| `recovered` | True if failures reduced to zero after retries (always false now). |
+| `flakySuspects` | Reserved future list of test names that failed then passed on retry (empty). |
+| `retriedTestFiles` | Reserved future list of test container files retried (empty). |
+
+Invocation example:
+
+```powershell
+./Invoke-PesterTests.ps1 -EmitStability
+```
+
 ### Planned Incremental Enrichment (Roadmap)
 
 | Planned Version | Block | Purpose |
 |-----------------|-------|---------|
 | 1.2.0 | `environment`, `run`, `selection` | Context (OS, PS version, run window, file selection stats) – IMPLEMENTED (opt-in via `-EmitContext`). |
 | 1.3.0 | `timing` (extended) | Rich percentile spread & optional per-test durations (flag‑gated) – IMPLEMENTED (opt-in via `-EmitTimingDetail`). |
-| 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced). |
+| 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced) – IMPLEMENTED (opt-in via `-EmitStability`). |
 | 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size). |
 | 1.6.0 | `outcome` | Unified status classification (`Passed\|Failed\|Errored\|TimedOut\|DiscoveryError`). |
 | 1.7.0 | `aggregationHints` | CI correlation (commit SHA, branch, shard id). |
@@ -527,11 +549,11 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 - When aggregating trends, prefer stable ratios: pass rate = `(passed)/(total)`; failure density = `(failed+errors)/total`.
 
 
-### Example Minimal JSON (Default, No Context, No Timing)
+### Example Minimal JSON (Default, No Context, No Timing, No Stability)
 
 ```jsonc
 {
-  "schemaVersion": "1.3.0",
+  "schemaVersion": "1.4.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -548,11 +570,11 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
   "discoveryFailures": 0
 }
 
-### Example With Context & Timing
+### Example With Context, Timing & Stability
 
 ```jsonc
 {
-  "schemaVersion": "1.3.0",
+  "schemaVersion": "1.4.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -580,6 +602,15 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
     "p90Ms": 120.33,
     "p95Ms": 130.44,
     "p99Ms": 178.91
+  },
+  "stability": {
+    "supportsRetries": false,
+    "retryAttempts": 0,
+    "initialFailed": 0,
+    "finalFailed": 0,
+    "recovered": false,
+    "flakySuspects": [],
+    "retriedTestFiles": []
   },
   "environment": {
     "osDescription": "Microsoft Windows 11 Pro 10.0.22631",
