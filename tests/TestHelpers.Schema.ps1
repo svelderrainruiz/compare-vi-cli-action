@@ -105,7 +105,9 @@ function Assert-JsonShape {
   [CmdletBinding()] param(
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$Spec,
-    [switch]$Strict
+    [switch]$Strict,
+    [string]$FailureJsonPath,
+    [switch]$NoThrow
   )
   if (-not (Test-Path -LiteralPath $Path)) {
     throw "Assert-JsonShape: file not found: $Path"
@@ -115,7 +117,9 @@ function Assert-JsonShape {
   }
   $jsonText = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
   try { $obj = $jsonText | ConvertFrom-Json -ErrorAction Stop } catch {
-    throw "Assert-JsonShape: invalid JSON in $Path : $($_.Exception.Message)"
+    $errMsg = "invalid JSON: $($_.Exception.Message)"
+    if ($FailureJsonPath) { Write-FailureJson -FailureJsonPath $FailureJsonPath -Spec $Spec -SourcePath $Path -Errors @($errMsg) }
+    if (-not $NoThrow) { throw "Assert-JsonShape: $errMsg" } else { return $false }
   }
   $specDef = $script:JsonShapeSpecs[$Spec]
   $errors = New-Object System.Collections.Generic.List[string]
@@ -142,8 +146,9 @@ function Assert-JsonShape {
   }
 
   if ($errors.Count -gt 0) {
-    $msg = "Assert-JsonShape FAILED for spec '$Spec' on file '$Path':`n - " + ($errors -join "`n - ")
-    throw $msg
+    if ($FailureJsonPath) { Write-FailureJson -FailureJsonPath $FailureJsonPath -Spec $Spec -SourcePath $Path -Errors $errors }
+    if (-not $NoThrow) { throw ("Assert-JsonShape FAILED for spec '{0}' on file '{1}':`n - {2}" -f $Spec,$Path,($errors -join "`n - ")) }
+    return $false
   }
   return $true
 }
@@ -152,22 +157,35 @@ function Assert-NdjsonShapes {
   [CmdletBinding()] param(
     [Parameter(Mandatory)][string]$Path,
     [Parameter(Mandatory)][string]$Spec,
-    [switch]$Strict
+    [switch]$Strict,
+    [string]$FailureJsonPath,
+    [switch]$NoThrow
   )
   if (-not (Test-Path -LiteralPath $Path)) { throw "Assert-NdjsonShapes: file not found: $Path" }
+  if (-not $script:JsonShapeSpecs.ContainsKey($Spec)) { throw "Assert-NdjsonShapes: unknown spec '$Spec'" }
+  $specDef = $script:JsonShapeSpecs[$Spec]
   $lines = Get-Content -LiteralPath $Path -ErrorAction Stop
   $idx = 0
+  $lineErrors = New-Object System.Collections.Generic.List[object]
   foreach ($l in $lines) {
     $idx++
     if (-not $l.Trim()) { continue }
-  try { $tmp = $l | ConvertFrom-Json -ErrorAction Stop } catch { throw ('Line {0} invalid JSON in {1}: {2}' -f $idx,$Path,$_.Exception.Message) }
-    # Write object to temp file in memory (string) and reuse Assert-JsonShape logic by serializing again
-    $json = $tmp | ConvertTo-Json -Depth 6
-    $temp = [IO.Path]::GetTempFileName()
-    try {
-      Set-Content -LiteralPath $temp -Value $json -Encoding UTF8
-      Assert-JsonShape -Path $temp -Spec $Spec -Strict:$Strict | Out-Null
-    } finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    try { $tmp = $l | ConvertFrom-Json -ErrorAction Stop } catch { $lineErrors.Add([pscustomobject]@{ line=$idx; errors=@("invalid JSON: $($_.Exception.Message)") }); continue }
+    # Validate inline similar to Assert-JsonShape (avoid temp file)
+    $innerErrors = New-Object System.Collections.Generic.List[string]
+    foreach ($req in $specDef.Required) { if (-not ($tmp.PSObject.Properties.Name -contains $req)) { $innerErrors.Add("missing required property '$req'") } }
+    foreach ($prop in $tmp.PSObject.Properties) {
+      $n=$prop.Name; $v=$prop.Value
+      $isKnown = $specDef.Required -contains $n -or $specDef.Optional -contains $n -or $specDef.Types.ContainsKey($n)
+      if (-not $isKnown -and $Strict) { $innerErrors.Add("unexpected property '$n' (Strict mode)"); continue }
+      if ($isKnown -and $specDef.Types.ContainsKey($n)) { if (-not (& $specDef.Types[$n] $v)) { $innerErrors.Add("property '$n' failed type predicate (value='$v')") } }
+    }
+    if ($innerErrors.Count -gt 0) { $lineErrors.Add([pscustomobject]@{ line=$idx; errors=@($innerErrors) }) }
+  }
+  if ($lineErrors.Count -gt 0) {
+    if ($FailureJsonPath) { Write-FailureJson -FailureJsonPath $FailureJsonPath -Spec $Spec -SourcePath $Path -LineErrors $lineErrors }
+    if (-not $NoThrow) { throw "Assert-NdjsonShapes FAILED for spec '$Spec' on file '$Path' with $($lineErrors.Count) line error(s)." }
+    return $false
   }
   return $true
 }
@@ -288,5 +306,26 @@ function Compare-JsonShape {
   return $result
 }
 
-# Enhanced failure JSON emission wrapper around existing assert functions
+# Helper to centralize writing failure JSON payloads
+function Write-FailureJson {
+  param(
+    [Parameter(Mandatory)][string]$FailureJsonPath,
+    [Parameter(Mandatory)][string]$Spec,
+    [Parameter(Mandatory)][string]$SourcePath,
+    [object[]]$Errors,
+    [object[]]$LineErrors
+  )
+  $dir = Split-Path -Parent $FailureJsonPath
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+  $payload = [ordered]@{
+    spec = $Spec
+    path = (Resolve-Path -LiteralPath $SourcePath).Path
+    timestamp = (Get-Date).ToString('o')
+  }
+  if ($Errors) { $payload.errors = @($Errors) }
+  if ($LineErrors) { $payload.lineErrors = @($LineErrors) }
+  ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $FailureJsonPath -Encoding UTF8
+}
+
+# Alias retained for potential backwards compat if earlier patches referenced it (no-op now)
 Set-Alias -Name _OriginalAssertJsonShape -Value Assert-JsonShape -ErrorAction SilentlyContinue
