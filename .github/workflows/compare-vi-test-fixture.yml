@@ -117,7 +117,7 @@ jobs:
       compareDurationSeconds: ${{ steps.run.outputs.compareDurationSeconds }}
     steps:
       - name: Checkout action repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Resolve effective configuration
         id: cfg
