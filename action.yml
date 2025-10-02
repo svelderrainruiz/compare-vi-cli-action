@@ -234,7 +234,16 @@ runs:
               "- Avg (s): $($loopRes.AverageSeconds)",
               "- Total (s): $($loopRes.TotalSeconds)",
               "- Quantile Strategy: $($loopRes.QuantileStrategy)",
-              $(if ($loopRes.Percentiles) { "- p50/p90/p99 (s): $($loopRes.Percentiles.p50)/$($loopRes.Percentiles.p90)/$($loopRes.Percentiles.p99)" } else { '- Percentiles: (n/a)' }),
+              $(if (
+                $loopRes.Percentiles -and
+                $null -ne $loopRes.Percentiles.p50 -and
+                $null -ne $loopRes.Percentiles.p90 -and
+                $null -ne $loopRes.Percentiles.p99
+              ) {
+                "- p50/p90/p99 (s): $($loopRes.Percentiles.p50)/$($loopRes.Percentiles.p90)/$($loopRes.Percentiles.p99)"
+              } else {
+                '- Percentiles: (n/a)'
+              }),
               "- Streaming Window Count: $($loopRes.StreamingWindowCount)"
             )
             ($lines -join "`n") | Out-File -FilePath $sumPath -Append -Encoding utf8
