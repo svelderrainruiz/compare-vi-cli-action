@@ -144,6 +144,19 @@ This document summarizes the implementation status of self-hosted Windows runner
 - Posts results as PR comment
 - **Environment validation**: Checks for CLI before running tests
 
+#### `vi-compare-pr.yml` - PR VI Compare on Label
+
+- Runs on `[self-hosted, Windows, X64]` when PR is labeled with `vi-compare`
+- Automatically triggered on PR events (labeled, reopened, synchronize)
+- Manual dispatch also supported
+- Generates comprehensive VI comparison reports:
+  - Single-run comparison (Base.vi vs Head.vi)
+  - Loop mode comparison with latency metrics (25 iterations)
+  - HTML reports, JSON summaries, and Markdown snippets
+- Posts results as PR comment (requires XCLI_PAT secret)
+- Uploads artifacts for both single and loop mode
+- **Environment validation**: Checks for CLI before running tests
+
 #### `validate.yml` - Linting and Validation
 
 - Runs markdownlint on all Markdown files
@@ -187,6 +200,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 3. Use PR comment `/run pester-selfhosted` to test from PRs
 4. Add label `test-integration` to PRs to run integration tests automatically
 5. Add label `smoke` to PRs to run smoke tests automatically
+6. Add label `vi-compare` to PRs to generate comprehensive VI comparison reports
 
 ## CI/CD Pipeline
 
@@ -196,6 +210,7 @@ This document summarizes the implementation status of self-hosted Windows runner
 2. Unit tests (windows-latest)
 3. **Optional:** Integration tests (self-hosted, when labeled with `test-integration`)
 4. **Optional:** Smoke tests (self-hosted, when labeled with `smoke`)
+5. **Optional:** VI comparison reports (self-hosted, when labeled with `vi-compare`)
 
 ### On PR Comment
 

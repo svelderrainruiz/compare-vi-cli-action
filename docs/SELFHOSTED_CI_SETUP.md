@@ -101,6 +101,18 @@ The following workflows run automatically on PRs:
 - **Purpose:** Run smoke tests with real VI comparisons
 - **Requires:** Self-hosted runner with LabVIEW CLI and test VIs
 
+#### 5. VI Compare on Label (`vi-compare-pr.yml`)
+
+- **Trigger:** PR labeled with `vi-compare`, PR synchronize, or reopened
+- **Runner:** `[self-hosted, Windows, X64]`
+- **Purpose:** Generate comprehensive VI comparison reports (single run + loop mode)
+- **Requires:** Self-hosted runner with LabVIEW CLI
+- **Outputs:**
+  - HTML comparison reports
+  - JSON summaries
+  - Markdown PR comments with results
+  - Latency metrics and percentiles (loop mode)
+
 ### Manual Testing via PR Comments
 
 Team members with appropriate permissions can trigger workflows via PR comments:
