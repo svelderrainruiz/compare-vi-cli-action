@@ -14,6 +14,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Pester dispatcher schema v1.5.0 (`pester-summary-v1_5.schema.json`): optional `discovery` block (opt-in via `-EmitDiscoveryDetail`) surfacing patterns, sampleLimit, captured failure snippets, and truncation flag.
 - Pester dispatcher schema v1.6.0 (`pester-summary-v1_6.schema.json`): optional `outcome` block (opt-in via `-EmitOutcome`) unifying run status classification (overallStatus, severityRank, flags, counts, exitCodeModel, classificationStrategy).
 - Pester dispatcher schema v1.7.0 (`pester-summary-v1_7.schema.json`): optional `aggregationHints` block (opt-in via `-EmitAggregationHints`) providing heuristic guidance (`dominantTags`, `fileBucketCounts`, `durationBuckets`, `suggestions`, `strategy`).
+- Pester dispatcher schema v1.7.1 (`pester-summary-v1_7_1.schema.json`): optional root metric `aggregatorBuildMs` emitted ONLY when `-EmitAggregationHints` is specified; captures the build time (milliseconds) for generating the `aggregationHints` heuristic block (Stopwatch measured). Absent otherwise to preserve baseline payload size.
 
 ### Documentation
 

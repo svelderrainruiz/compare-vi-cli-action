@@ -399,7 +399,7 @@ Marketplace
 
 Notes
 
-## Pester Test Dispatcher JSON Summary (Schema v1.7.0)
+## Pester Test Dispatcher JSON Summary (Schema v1.7.1)
 
 The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
 
@@ -418,7 +418,7 @@ Validation tests:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schemaVersion` | string (const `1.7.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `schemaVersion` | string (const `1.7.1`) | Version identifier (semantic). Additive fields bump minor only. |
 | `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
 | `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
 | `failed` | int >=0 | Assertion failures (Pester logical failures). |
@@ -585,6 +585,22 @@ Invocation example:
 ./Invoke-PesterTests.ps1 -EmitOutcome
 ```
 
+### New in 1.7.1: Aggregation Build Timing Metric
+
+When aggregation hints are requested (`-EmitAggregationHints`), the dispatcher now emits a root-level numeric field `aggregatorBuildMs` (milliseconds) measuring how long it took to construct the `aggregationHints` block. This field is omitted entirely when aggregation hints are not emitted (no null placeholder) to keep the default payload lean.
+
+Rationale:
+
+- Provide early signal if heuristic generation becomes a performance bottleneck (guarded by dedicated performance tests).
+- Enable external telemetry dashboards to correlate increased dispatcher wall time with aggregation generation costs.
+- Maintain backward compatibility: absence still means feature not enabled, not zero cost.
+
+Guarantees / Notes:
+
+- Value is an integer millisecond duration from a high-resolution Stopwatch; extremely fast builds may report 0.
+- Only present when `aggregationHints` object is present.
+- Schema bump from 1.7.0 → 1.7.1 is additive; existing consumers that ignore unknown fields remain compatible.
+
 ### Planned Incremental Enrichment (Roadmap)
 
 | Planned Version | Block | Purpose |
@@ -595,7 +611,7 @@ Invocation example:
 | 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size) – IMPLEMENTED (opt-in via `-EmitDiscoveryDetail`). |
 | 1.6.0 | `outcome` | Unified status classification (implemented; opt-in via `-EmitOutcome`). |
 | 1.7.0 | `aggregationHints` | Heuristic grouping guidance (implemented; opt-in via `-EmitAggregationHints`). |
-| 1.7.0 | `aggregationHints` | CI correlation (commit SHA, branch, shard id). |
+| 1.7.1 | `aggregatorBuildMs` | Aggregation build timing metric (only when hints emitted). |
 | 1.8.0 | `extensions` | Vendor / custom injection surface (namespaced flexible data). |
 | 1.9.0 | `meta` | Slim mode signalling, emittedFields manifest. |
 | 2.0.0 | Breaking consolidation | Potential migration of `discoveryFailures` → `discovery.failures`, counts object grouping, explicit `schema` slug addition. |
@@ -616,7 +632,7 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 
 ```jsonc
 {
-  "schemaVersion": "1.7.0",
+  "schemaVersion": "1.7.1",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -633,11 +649,11 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
   "discoveryFailures": 0
 }
 
-### Example With Context, Timing, Stability & Discovery
+### Example With Context, Timing, Stability, Discovery & Aggregation Hints
 
 ```jsonc
 {
-  "schemaVersion": "1.7.0",
+  "schemaVersion": "1.7.1",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -652,6 +668,7 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
   "maxTest_ms": 180.02,
   "timedOut": false,
   "discoveryFailures": 0,
+  "aggregatorBuildMs": 12,
   "timing": {
     "count": 42,
     "totalMs": 3150.5,
@@ -696,6 +713,13 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
     "originalTestFileCount": 27,
     "selectedTestFileCount": 27,
     "maxTestFilesApplied": false
+  },
+  "aggregationHints": {
+    "dominantTags": ["Slow", "Integration"],
+    "fileBucketCounts": { "small": 25, "medium": 4, "large": 1 },
+    "durationBuckets": { "subSecond": 90, "oneToFive": 12, "overFive": 3 },
+    "suggestions": ["split-large-files", "isolate-slow-tests"],
+    "strategy": "heuristic/v1"
   }
 }
 ```

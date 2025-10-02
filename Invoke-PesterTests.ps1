@@ -65,7 +65,7 @@ param(
 ,
   [Parameter(Mandatory = $false)]
   [switch]$EmitOutcome,
-  # Optional: emit aggregationHints block (schema v1.7.0+)
+  # Optional: emit aggregationHints block (schema v1.7.1+ with timing metric)
   [switch]$EmitAggregationHints
 )
 
@@ -78,7 +78,7 @@ if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds 
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.7.0'
+$SchemaSummaryVersion  = '1.7.1'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -156,21 +156,26 @@ function Write-ArtifactManifest {
     }
     
     # Optional: include lightweight metrics if summary JSON exists
-    $metrics = $null
+  $metrics = $null
     try {
       $jsonSummaryFile = Split-Path -Leaf $SummaryJsonPath
       if ($jsonSummaryFile) {
         $jsonPath = Join-Path $Directory $jsonSummaryFile
         if (Test-Path -LiteralPath $jsonPath) {
           $summaryJson = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -ErrorAction Stop
+          $aggMsValue = $null
+          if ($summaryJson.PSObject.Properties.Name -contains 'aggregatorBuildMs' -and $summaryJson.aggregatorBuildMs -ne $null) {
+            $aggMsValue = $summaryJson.aggregatorBuildMs
+          }
           $metrics = [PSCustomObject]@{
-            totalTests = $summaryJson.total
-            failed     = $summaryJson.failed
-            skipped    = $summaryJson.skipped
-            duration_s = $summaryJson.duration_s
-            meanTest_ms = $summaryJson.meanTest_ms
-            p95Test_ms  = $summaryJson.p95Test_ms
-            maxTest_ms  = $summaryJson.maxTest_ms
+            totalTests       = $summaryJson.total
+            failed           = $summaryJson.failed
+            skipped          = $summaryJson.skipped
+            duration_s       = $summaryJson.duration_s
+            meanTest_ms      = $summaryJson.meanTest_ms
+            p95Test_ms       = $summaryJson.p95Test_ms
+            maxTest_ms       = $summaryJson.maxTest_ms
+            aggregatorBuildMs = $aggMsValue
           }
         }
       }
@@ -898,7 +903,7 @@ try {
       Add-Member -InputObject $jsonObj -Name outcome -MemberType NoteProperty -Value $outcomeBlock
     } catch { Write-Warning "Failed to emit outcome classification block: $_" }
   }
-  # Optional aggregation hints (schema v1.7.0+) - placeholder structure until schema bump
+  # Optional aggregation hints (schema v1.7.1+)
   if ($EmitAggregationHints) {
     try {
       $aggScript = Join-Path $PSScriptRoot 'scripts' 'AggregationHints.Internal.ps1'
@@ -912,8 +917,17 @@ try {
       if (Get-Command Get-AggregationHintsBlock -ErrorAction SilentlyContinue) {
         $testsForAgg = @()
         if ($result -and $result.Tests) { $testsForAgg = $result.Tests }
+        $aggSw = [System.Diagnostics.Stopwatch]::StartNew()
         $aggBlock = Get-AggregationHintsBlock -Tests $testsForAgg
+        $aggSw.Stop()
+        $aggregatorBuildMs = [math]::Round($aggSw.Elapsed.TotalMilliseconds,2)
         Add-Member -InputObject $jsonObj -Name aggregationHints -MemberType NoteProperty -Value $aggBlock
+        # Emit timing metric (v1.7.1+)
+        if ($null -eq $jsonObj.PSObject.Properties['aggregatorBuildMs']) {
+          Add-Member -InputObject $jsonObj -Name aggregatorBuildMs -MemberType NoteProperty -Value $aggregatorBuildMs
+        } else {
+          $jsonObj.aggregatorBuildMs = $aggregatorBuildMs
+        }
         $aggSuccess = $true
       } else {
         $aggSuccess = $false
@@ -930,6 +944,9 @@ try {
           strategy         = 'heuristic/v1'
         }
         Add-Member -InputObject $jsonObj -Name aggregationHints -MemberType NoteProperty -Value $fallback -Force
+        if ($null -eq $jsonObj.PSObject.Properties['aggregatorBuildMs']) {
+          Add-Member -InputObject $jsonObj -Name aggregatorBuildMs -MemberType NoteProperty -Value $null
+        }
       } catch { Write-Warning "Failed to attach fallback aggregation hints: $_" }
     }
   }
