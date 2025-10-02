@@ -42,6 +42,11 @@ param(
 
   [Parameter(Mandatory = $false)]
   [switch]$EmitFailuresJsonAlways
+
+  ,
+
+  [Parameter(Mandatory = $false)]
+  [int]$TimeoutMinutes = 0
 )
 
 Set-StrictMode -Version Latest
@@ -240,6 +245,7 @@ Write-Host "  Include Integration: $IncludeIntegration"
 Write-Host "  Results Path: $ResultsPath"
 Write-Host "  JSON Summary File: $JsonSummaryPath"
 Write-Host "  Emit Failures JSON Always: $EmitFailuresJsonAlways"
+Write-Host "  Timeout Minutes: $TimeoutMinutes"
 Write-Host ""
 
 # Debug instrumentation (opt-in via COMPARISON_ACTION_DEBUG=1)
@@ -428,25 +434,64 @@ Write-Host "----------------------------------------" -ForegroundColor DarkGray
 #   Pop-Location
 # }
 
+${script:timedOut} = $false
 $testStartTime = Get-Date
-try {
-  $result = Invoke-Pester -Configuration $conf
+if ($TimeoutMinutes -gt 0) {
+  Write-Host "Executing with timeout guard: $TimeoutMinutes minute(s)" -ForegroundColor Yellow
+  $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
+  while ($true) {
+    if ($job.State -eq 'Completed') { break }
+    if ($job.State -eq 'Failed') { break }
+    $elapsed = (Get-Date) - $testStartTime
+    if ($elapsed.TotalMinutes -ge $TimeoutMinutes) {
+      Write-Warning "Pester execution exceeded timeout of $TimeoutMinutes minute(s); stopping job." 
+      try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch {}
+      $script:timedOut = $true
+      break
+    }
+    Start-Sleep -Seconds 5
+  }
+  if (-not $timedOut) {
+    try { $result = Receive-Job -Job $job -ErrorAction Stop } catch { Write-Error "Failed to retrieve Pester job result: $_" }
+  }
+  Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
   $testEndTime = Get-Date
   $testDuration = $testEndTime - $testStartTime
-} catch {
-  Write-Error "Pester execution failed: $_"
+} else {
+  try {
+    $result = Invoke-Pester -Configuration $conf
+    $testEndTime = Get-Date
+    $testDuration = $testEndTime - $testStartTime
+  } catch {
+    Write-Error "Pester execution failed: $_"
+    try {
+      if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
+      $placeholder = @(
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<test-results name="placeholder" total="0" errors="1" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0">',
+        '  <environment nunit-version="3.0" />',
+        '  <culture-info />',
+        '</test-results>'
+      ) -join [Environment]::NewLine
+      Set-Content -LiteralPath $absoluteResultPath -Value $placeholder -Encoding UTF8
+    } catch { Write-Warning "Failed to write placeholder XML: $_" }
+    exit 1
+  }
+}
+
+if ($timedOut) {
+  Write-Warning "Marking run as timed out; emitting timeout placeholder artifacts." 
   try {
     if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
     $placeholder = @(
       '<?xml version="1.0" encoding="utf-8"?>',
-      '<test-results name="placeholder" total="0" errors="1" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0">',
+      '<test-results name="timeout" total="0" errors="1" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0">',
       '  <environment nunit-version="3.0" />',
       '  <culture-info />',
       '</test-results>'
     ) -join [Environment]::NewLine
     Set-Content -LiteralPath $absoluteResultPath -Value $placeholder -Encoding UTF8
-  } catch { Write-Warning "Failed to write placeholder XML: $_" }
-  exit 1
+  } catch { Write-Warning "Failed to write timeout placeholder XML: $_" }
 }
 
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
@@ -491,6 +536,10 @@ try {
   [int]$errors = $rootNode.errors
   [int]$skipped = $rootNode.'not-run'
   $passed = $total - $failed - $errors
+
+  if ($timedOut) {
+    Write-Host "⚠️ Timeout reached before tests completed." -ForegroundColor Yellow
+  }
   
 } catch {
   Write-Error "Failed to parse test results: $_"
@@ -520,7 +569,7 @@ $summary = @(
   "Failed: $failed",
   "Errors: $errors",
   "Skipped: $skipped",
-  "Duration: $($testDuration.TotalSeconds.ToString('F2'))s" + $(if ($meanMs) { " (mean=${meanMs}ms p95=${p95Ms}ms max=${maxMs}ms)" } else { '' })
+  "Duration: $($testDuration.TotalSeconds.ToString('F2'))s" + $(if ($meanMs) { " (mean=${meanMs}ms p95=${p95Ms}ms max=${maxMs}ms)" } else { '' }) + $(if ($timedOut) { ' (TIMED OUT)' } else { '' })
 ) -join [Environment]::NewLine
 
 Write-Host ""
@@ -553,6 +602,7 @@ try {
     p95Test_ms         = $p95Ms
     maxTest_ms         = $maxMs
     schemaVersion      = $SchemaSummaryVersion
+    timedOut           = $timedOut
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray
