@@ -56,6 +56,13 @@
   Provide a scriptblock for dependency injection (testing / simulation). If omitted a real CLI invocation occurs.
   To force simulation via env set LOOP_SIMULATE=1.
 
+.PARAMETER DryRun
+  When set, validates environment/parameters, prints the resolved invocation plan, then exits without running the loop.
+
+.PARAMETER LogVerbosity
+  Controls internal script logging (not the loop's own data output). Values: Quiet | Normal | Verbose.
+  Can be set via env LOOP_LOG_VERBOSITY. Quiet suppresses non-error informational lines; Verbose emits extra diagnostics.
+
 .OUTPUTS
   Writes key result fields and optionally diff summary to stdout. Exit code 0 when Succeeded, 1 otherwise.
 
@@ -91,6 +98,8 @@ param(
   [switch]$AdaptiveInterval,
   [int]$HistogramBins = ($env:LOOP_HISTOGRAM_BINS -as [int]),
   [scriptblock]$CustomExecutor
+  , [switch]$DryRun
+  , [ValidateSet('Quiet','Normal','Verbose')][string]$LogVerbosity = (if ($env:LOOP_LOG_VERBOSITY) { $env:LOOP_LOG_VERBOSITY } else { 'Normal' })
 )
 
 # Defaults / fallbacks
@@ -110,10 +119,7 @@ if (-not $PSBoundParameters.ContainsKey('AdaptiveInterval')) {
 $simulate = $false
 if ($env:LOOP_SIMULATE -match '^(1|true)$') { $simulate = $true }
 
-if (-not $Base -or -not $Head) {
-  Write-Error 'Base/Head not provided (set LV_BASE_VI & LV_HEAD_VI or pass -Base/-Head).'
-  exit 1
-}
+if (-not $Base -or -not $Head) { Write-Error 'Base/Head not provided (set LV_BASE_VI & LV_HEAD_VI or pass -Base/-Head).'; exit 1 }
 
 # Infer summary path if format chosen and no path provided
 if (-not $DiffSummaryPath -and $DiffSummaryFormat -ne 'None') {
@@ -157,7 +163,27 @@ if ($RunSummaryJsonPath) { $invokeParams.RunSummaryJsonPath = $RunSummaryJsonPat
 if ($AdaptiveInterval) { $invokeParams.AdaptiveInterval = $true }
 if ($exec) { $invokeParams.CompareExecutor = $exec; $invokeParams.SkipValidation = $true; $invokeParams.PassThroughPaths = $true; $invokeParams.BypassCliValidation = $true }
 
-Write-Verbose ("Invoking compare loop with params: " + ($invokeParams.Keys | ForEach-Object { "$_=$($invokeParams[$_])" } -join ', '))
+function Write-Detail {
+  param([string]$Message,[string]$Level='Info')
+  switch ($LogVerbosity) {
+    'Quiet'   { if ($Level -eq 'Error') { Write-Host $Message } }
+    'Normal'  { if ($Level -ne 'Debug') { Write-Host $Message } }
+    'Verbose' { Write-Host $Message }
+  }
+}
+
+Write-Detail ("Resolved LogVerbosity=$LogVerbosity DryRun=$($DryRun.IsPresent) Simulate=$simulate") 'Debug'
+Write-Detail ("Invocation parameters (pre-run):" )
+Write-Detail (($invokeParams.Keys | Sort-Object | ForEach-Object { "  $_ = $($invokeParams[$_])" }) -join [Environment]::NewLine) 'Debug'
+
+if ($DryRun) {
+  Write-Detail 'Dry run requested; skipping Invoke-IntegrationCompareLoop execution.'
+  # Show inferred file outputs
+  if ($DiffSummaryPath) { Write-Detail "Would write diff summary to: $DiffSummaryPath" }
+  if ($MetricsSnapshotEvery -gt 0) { Write-Detail "Would emit snapshots to: $MetricsSnapshotPath every $MetricsSnapshotEvery iteration(s)" }
+  if ($RunSummaryJsonPath) { Write-Detail "Would write run summary JSON to: $RunSummaryJsonPath" }
+  exit 0
+}
 
 $result = Invoke-IntegrationCompareLoop @invokeParams
 
@@ -171,7 +197,7 @@ if ($result.Percentiles) { $summaryLines += "Latency p50/p90/p99: $($result.Perc
 if ($result.DiffSummary) { $summaryLines += 'Diff summary fragment emitted.' }
 if ($RunSummaryJsonPath -and (Test-Path $RunSummaryJsonPath)) { $summaryLines += "Run summary JSON: $RunSummaryJsonPath" }
 if ($MetricsSnapshotEvery -gt 0 -and (Test-Path $MetricsSnapshotPath)) { $summaryLines += "Snapshots NDJSON: $MetricsSnapshotPath" }
-$summaryLines | ForEach-Object { Write-Host $_ }
+$summaryLines | ForEach-Object { Write-Detail $_ }
 
 # Append diff summary fragment to GitHub step summary if running in Actions
 if ($env:GITHUB_STEP_SUMMARY -and $result.DiffSummary) {

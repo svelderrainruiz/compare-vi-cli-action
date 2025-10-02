@@ -204,6 +204,12 @@ Key env variables (optional unless noted):
 | `LOOP_SIMULATE` | 1/true use internal mock executor | false |
 | `LOOP_SIMULATE_EXIT_CODE` | Exit code for simulated executor | 1 |
 | `LOOP_SIMULATE_DELAY_MS` | Sleep per iteration (ms) during simulation | 5 |
+| `LOOP_LOG_VERBOSITY` | `Quiet`\|`Normal`\|`Verbose` (script log detail) | Normal |
+
+Additional switches:
+
+- `-DryRun`: Print resolved configuration (including inferred artifact paths) and exit without executing the loop.
+- `-LogVerbosity Quiet|Normal|Verbose`: Override env value for logging detail (DryRun still returns 0 on success).
 
 Quick simulated run (no real LVCompare required):
 
@@ -371,7 +377,7 @@ Key options:
 - `-DeltaHistoryPath <file>`: Append each delta JSON payload (same schema as `-DeltaJsonPath`) as one line of JSON (JSON Lines / NDJSON). Useful for run history graphs.
 - `-MappingConfig <file>`: JSON file mapping source glob patterns to one or more test files (augmenting `-InferTestsFromSource`).
 - `-OnlyFailed`: If the previous run had failing test files and no direct/inferred changes are detected this run, re-run only those failing test files.
- - `-NotifyScript <file>`: Post-run hook script invoked with named parameters & WATCH_* environment variables (see below).
+- `-NotifyScript <file>`: Post-run hook script invoked with named parameters & WATCH_* environment variables (see below).
 - `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N additional attempts (flaky mitigation). Classification becomes `improved` if failures clear on a retry.
 
 Selective runs:
