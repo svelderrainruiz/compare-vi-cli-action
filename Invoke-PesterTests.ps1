@@ -627,14 +627,11 @@ Write-Host "Test execution completed in $($testDuration.TotalSeconds.ToString('F
 Write-Host ""
 
 # Detect discovery failures in captured output (inline) or partial log (timeout path)
-# Default pattern now single-line to avoid accidental multi-line spanning matches.
-$useLegacyDiscovery = ($env:LEGACY_DISCOVERY_PATTERN -eq '1')
-if ($useLegacyDiscovery) {
-  $discoveryFailurePatterns = @('(?s)Discovery in .*? failed with:')
-} else {
-  # Single line: start anchor optional whitespace then 'Discovery in ' then non-greedy path no newline then ' failed with:'
-  $discoveryFailurePatterns = @('Discovery in [^\r\n]+ failed with:')
-}
+$discoveryFailurePatterns = @(
+  # Use single-line (?s) with non-greedy match so wrapped (newline-inserted) long file paths between
+  # 'Discovery in ' and ' failed with:' are matched correctly even when console wrapping introduces line breaks.
+  '(?s)Discovery in .*? failed with:'
+)
 $discoveryFailureCount = 0
 try {
   $ansiPattern = "`e\[[0-9;]*[A-Za-z]" # strip ANSI color codes for reliable matching
@@ -656,22 +653,21 @@ try {
     $headerRegex = [regex]'=== Pester Test Summary ==='
     $headers = $headerRegex.Matches($block)
     $headerCount = $headers.Count
-    $blockLines = $block -split "`r?`n"
     foreach ($pat in $discoveryFailurePatterns) {
-      $patMatches = [regex]::Matches($block, $pat, 'IgnoreCase, Multiline')
+      $patMatches = [regex]::Matches($block, $pat, 'IgnoreCase')
       if ($patMatches.Count -gt 0) {
         $isNestedContext = ($headerCount -gt 1)
         $shouldSuppress = $suppressNested -and $isNestedContext
         if ($debugDiscovery) {
           foreach ($m in $patMatches) {
-            $lineCtx = ''
+            Write-Host ("[debug-discovery] match='{0}' nested={1} headers={2} suppress={3}" -f ($m.Value.Replace([Environment]::NewLine,' ')), $isNestedContext, $headerCount, $shouldSuppress) -ForegroundColor DarkCyan
             try {
-              # Attempt to find the line containing the match start
-              $startVal = $m.Value.Split("`n")[0]
-              $foundLine = ($blockLines | Select-String -SimpleMatch $startVal -CaseSensitive | Select-Object -First 1).Line
-              if ($foundLine) { $lineCtx = $foundLine.Trim() }
-            } catch {}
-            Write-Host ("[debug-discovery] match='{0}' nested={1} headers={2} suppress={3} line='{4}'" -f ($m.Value.Replace([Environment]::NewLine,' ')), $isNestedContext, $headerCount, $shouldSuppress, $lineCtx) -ForegroundColor DarkCyan
+              $dbgPath = Join-Path $resultsDir 'discovery-debug.log'
+              $start = [Math]::Max(0,$m.Index-200)
+              $len = [Math]::Min(400, ($block.Length - $start))
+              $snippet = $block.Substring($start,$len).Replace("`r"," ").Replace("`n"," ")
+              Add-Content -Path $dbgPath -Value ("MATCH nested={0} suppress={1} headers={2} index={3} snippet=>>> {4} <<<" -f $isNestedContext,$shouldSuppress,$headerCount,$m.Index,$snippet)
+            } catch { }
           }
         }
         if ($shouldSuppress) { $suppressedMatchTotal += $patMatches.Count }

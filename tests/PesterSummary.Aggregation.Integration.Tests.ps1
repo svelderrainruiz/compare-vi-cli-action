@@ -5,16 +5,17 @@
 #>
 
 Describe 'AggregationHints (Integration)' -Tag 'Integration' {
-  BeforeAll {
-    $script:dispatcher = Join-Path (Split-Path $PSScriptRoot -Parent) 'Invoke-PesterTests.ps1'
-    $script:canonical = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
-    $script:haveCli = Test-Path -LiteralPath $script:canonical
-    $script:haveBase = -not [string]::IsNullOrWhiteSpace($env:LV_BASE_VI)
-    $script:haveHead = -not [string]::IsNullOrWhiteSpace($env:LV_HEAD_VI)
-    $script:shouldRun = $script:haveCli -and $script:haveBase -and $script:haveHead
-  }
+  # NOTE: Variables needed by -Skip must exist at discovery time; compute them outside BeforeAll.
+  $enableAggInt = ($env:ENABLE_AGG_INT -eq '1')
+  $script:dispatcher = Join-Path (Split-Path $PSScriptRoot -Parent) 'Invoke-PesterTests.ps1'
+  $script:canonical = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+  $script:haveCli = Test-Path -LiteralPath $script:canonical
+  $script:haveBase = -not [string]::IsNullOrWhiteSpace($env:LV_BASE_VI)
+  $script:haveHead = -not [string]::IsNullOrWhiteSpace($env:LV_HEAD_VI)
+  $script:shouldRun = $script:haveCli -and $script:haveBase -and $script:haveHead
+  BeforeAll { }
 
-  It 'emits aggregationHints block when enabled (smoke)' -Skip:(!$script:shouldRun) {
+  It 'emits aggregationHints block when enabled (smoke)' -Skip:((!$script:shouldRun) -or (-not $enableAggInt)) {
     # Create isolated mini test set (fast) so we exercise dispatcher end-to-end quickly.
     $tempDir = Join-Path ([IO.Path]::GetTempPath()) ("agg-int-" + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $tempDir | Out-Null

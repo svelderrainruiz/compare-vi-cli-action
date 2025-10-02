@@ -50,7 +50,7 @@ Describe 'Pester Summary Schema' {
   $req = 'schemaVersion','total','passed','failed','errors','skipped','duration_s','timestamp','pesterVersion','includeIntegration','discoveryFailures'
       foreach ($k in $req) { ($json.PSObject.Properties.Name -contains $k) | Should -BeTrue -Because "Missing field $k" }
 
-  $json.schemaVersion | Should -Be '1.7.0'
+  $json.schemaVersion | Should -Be '1.7.1'
       $json.total | Should -BeGreaterThan 0
       $json.passed | Should -BeGreaterThan 0
       $json.failed | Should -Be 0
@@ -70,6 +70,7 @@ Describe 'Pester Summary Schema' {
   ($json.PSObject.Properties.Name -contains 'outcome') | Should -BeFalse
   # aggregationHints should be absent without -EmitAggregationHints switch
   ($json.PSObject.Properties.Name -contains 'aggregationHints') | Should -BeFalse
+  ($json.PSObject.Properties.Name -contains 'aggregatorBuildMs') | Should -BeFalse
     } finally {
       Pop-Location
       Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
@@ -105,7 +106,8 @@ Describe 'Pester Summary Schema (Aggregation Emit)' {
       $summaryPath = Join-Path $resDir 'pester-summary.json'
       Test-Path $summaryPath | Should -BeTrue
       $json = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
-      ($json.PSObject.Properties.Name -contains 'aggregationHints') | Should -BeTrue
+  ($json.PSObject.Properties.Name -contains 'aggregationHints') | Should -BeTrue
+  ($json.PSObject.Properties.Name -contains 'aggregatorBuildMs') | Should -BeTrue
       $agg = $json.aggregationHints
       $agg.strategy | Should -Be 'heuristic/v1'
   # Buckets may vary with minimal synthetic test set; just assert structure exists
