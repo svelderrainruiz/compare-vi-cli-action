@@ -20,6 +20,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Flaky mitigation via `-RerunFailedAttempts` with retry classification override (`improved` on recovery) and flaky metadata in delta JSON (`flaky.enabled`, `attempts`, `recoveredAfter`, `initialFailedFiles`).
 - Closure regression test (`CompareLoop.NewExecClosure.Tests.ps1`) ensuring executor delay capture stability.
 - `-VerboseDiagnostics` / `BINDING_MINREPRO_VERBOSE` flag in `Binding-MinRepro.ps1` to optionally restore extended diagnostics.
+- Lightweight JSON/NDJSON schema validation helper (`tests/TestHelpers.Schema.ps1`) with predicate-based specs (`FinalStatus`, `RunSummary`, `SnapshotV2`, `LoopEvent`).
+- New documentation: `docs/SCHEMA_HELPER.md` detailing usage, extending specs, predicate philosophy.
+- Test refactors to use shared schema assertions: `CompareLoop.RunSummary.Tests.ps1`, `CompareLoop.SnapshotEnrichment.Tests.ps1`, `Run-AutonomousIntegrationLoop.LogRotation.Tests.ps1`, `Run-AutonomousIntegrationLoop.EventSchema.Tests.ps1`.
+- NDJSON validator function `Assert-NdjsonShapes` for per-line event & snapshot validation.
+- Dispatcher & developer docs cross-links to schema helper (README, AGENTS.md, PESTER_DISPATCHER_REFINEMENT.md).
 
 ### Tooling
 
