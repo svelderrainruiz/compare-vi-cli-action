@@ -476,7 +476,6 @@ Write-Host "  Output Verbosity: Detailed" -ForegroundColor Cyan
 Write-Host "  Result Format: NUnitXml" -ForegroundColor Cyan
 Write-Host ""
 
-# Execute Pester without changing location since OutputPath is absolute
 Write-Host "Executing Pester tests..." -ForegroundColor Yellow
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
@@ -491,6 +490,9 @@ Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
 ${script:timedOut} = $false
 $testStartTime = Get-Date
+$capturedOutputLines = @()  # Will hold textual console lines for discovery failure scanning (non-timeout path)
+$partialLogPath = $null     # Set when timeout job path uses partial logging
+$result = $null              # Initialize result object holder to satisfy StrictMode before first conditional access
 if ($effectiveTimeoutSeconds -gt 0) {
   Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
   $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
@@ -529,9 +531,29 @@ if ($effectiveTimeoutSeconds -gt 0) {
   $testDuration = $testEndTime - $testStartTime
 } else {
   try {
-    $result = Invoke-Pester -Configuration $conf
+    # Capture output; Pester may emit both rich objects and strings. We keep ordering for detection.
+    # Capture all streams (Information/Verbose/Warning/Error) to ensure discovery failure host messages are collected
+    $rawOutput = & {
+      $InformationPreference = 'Continue'
+      Invoke-Pester -Configuration $conf *>&1
+    }
     $testEndTime = Get-Date
     $testDuration = $testEndTime - $testStartTime
+    foreach ($entry in $rawOutput) {
+      if ($entry -is [string]) {
+        $capturedOutputLines += $entry
+      } elseif ($null -ne $entry -and ($entry.PSObject.Properties.Name -contains 'Tests') -and -not $result) {
+        $result = $entry
+      } elseif ($entry -isnot [string]) {
+        # Non-string, non-primary result objects (e.g., progress records) -> stringify
+        $capturedOutputLines += ($entry | Out-String)
+      }
+    }
+    # If PassThru did not surface a result object earlier, attempt to assign from last object
+    if (-not $result) {
+      $maybe = $rawOutput | Where-Object { $_ -isnot [string] -and ($_.PSObject.Properties.Name -contains 'Tests') }
+      if ($maybe) { $result = $maybe[-1] }
+    }
   } catch {
     Write-Error "Pester execution failed: $_"
     try {
@@ -572,6 +594,31 @@ Write-Host ""
 Write-Host "Test execution completed in $($testDuration.TotalSeconds.ToString('F2')) seconds" -ForegroundColor Green
 Write-Host ""
 
+# Detect discovery failures in captured output (inline) or partial log (timeout path)
+$discoveryFailurePatterns = @(
+  # Use single-line (?s) with non-greedy match so wrapped (newline-inserted) long file paths between
+  # 'Discovery in ' and ' failed with:' are matched correctly even when console wrapping introduces line breaks.
+  '(?s)Discovery in .*? failed with:'
+)
+$discoveryFailureCount = 0
+try {
+  $ansiPattern = "`e\[[0-9;]*[A-Za-z]" # strip ANSI color codes for reliable matching
+  $scanTextBlocks = @()
+  if ($capturedOutputLines.Count -gt 0) {
+    $clean = ($capturedOutputLines -join [Environment]::NewLine) -replace $ansiPattern,''
+    $scanTextBlocks += $clean
+  }
+  if ($partialLogPath -and (Test-Path -LiteralPath $partialLogPath)) {
+    $pl = (Get-Content -LiteralPath $partialLogPath -Raw) -replace $ansiPattern,''
+    $scanTextBlocks += $pl
+  }
+  foreach ($block in $scanTextBlocks) {
+    foreach ($pat in $discoveryFailurePatterns) {
+      $discoveryFailureCount += ([regex]::Matches($block, $pat, 'IgnoreCase')).Count
+    }
+  }
+} catch { Write-Warning "Discovery failure scan encountered an error: $_" }
+
 # Verify results file exists
 $xmlPath = Join-Path $resultsDir 'pester-results.xml'
 if (-not (Test-Path -LiteralPath $xmlPath -PathType Leaf)) {
@@ -609,6 +656,12 @@ try {
   [int]$errors = $rootNode.errors
   [int]$skipped = $rootNode.'not-run'
   $passed = $total - $failed - $errors
+
+  # Discovery failure adjustment: if discovery failures detected and no existing failures/errors recorded, promote to errors
+  if ($discoveryFailureCount -gt 0 -and $failed -eq 0 -and $errors -eq 0) {
+    Write-Host "Discovery failures detected ($discoveryFailureCount) with zero test failures; elevating to error state." -ForegroundColor Red
+    $errors = $discoveryFailureCount
+  }
 
   if ($timedOut) {
     Write-Host "⚠️ Timeout reached before tests completed." -ForegroundColor Yellow
@@ -676,6 +729,7 @@ try {
     maxTest_ms         = $maxMs
     schemaVersion      = $SchemaSummaryVersion
     timedOut           = $timedOut
+    discoveryFailures  = $discoveryFailureCount
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray
@@ -705,12 +759,28 @@ if ($failed -gt 0 -or $errors -gt 0) {
   if ($null -ne $result) { Write-FailureDiagnostics -PesterResult $result -ResultsDirectory $resultsDir -SkippedCount $skipped -FailuresSchemaVersion $SchemaFailuresVersion }
   elseif ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Force }
   Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
-  Write-Host "❌ Tests failed: $failed failure(s), $errors error(s)" -ForegroundColor Red
+  $failureLine = "❌ Tests failed: $failed failure(s), $errors error(s)"
+  if ($discoveryFailureCount -gt 0) { $failureLine += " (includes $discoveryFailureCount discovery failure(s))" }
+  Write-Host $failureLine -ForegroundColor Red
   Write-Error "Test execution completed with failures"
   exit 1
 }
 
 Write-Host "✅ All tests passed!" -ForegroundColor Green
+# Final safety: if discovery failures were detected but no failures/errors were registered, treat as failure.
+if ($discoveryFailureCount -gt 0) {
+  Write-Host "Discovery failures detected ($discoveryFailureCount) but test counts showed success; forcing failure exit." -ForegroundColor Red
+  try {
+    if ($jsonSummaryPath -and (Test-Path -LiteralPath $jsonSummaryPath)) {
+      $adjust = Get-Content -LiteralPath $jsonSummaryPath -Raw | ConvertFrom-Json
+      $adjust.errors = ($adjust.errors + $discoveryFailureCount)
+      $adjust.discoveryFailures = $discoveryFailureCount
+      $adjust | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8
+    }
+  } catch { Write-Warning "Failed to adjust JSON summary for discovery failures: $_" }
+  Write-Error "Test execution completed with discovery failures"
+  exit 1
+}
 if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Normalize -Quiet }
 Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
 exit 0
