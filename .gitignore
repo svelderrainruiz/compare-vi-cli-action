@@ -8,6 +8,7 @@ coverage/
 tests/results/
 tests/results
 tests/results/**
+!tests/results/.gitkeep
 # Root-level transient test artifacts (should not be committed)
 testResults.xml
 tests/results/pester-results.xml
