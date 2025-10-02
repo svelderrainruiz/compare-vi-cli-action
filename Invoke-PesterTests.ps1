@@ -62,6 +62,9 @@ param(
 ,
   [Parameter(Mandatory = $false)]
   [switch]$EmitDiscoveryDetail
+,
+  [Parameter(Mandatory = $false)]
+  [switch]$EmitOutcome
 )
 
 Set-StrictMode -Version Latest
@@ -73,7 +76,7 @@ if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds 
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.5.0'
+$SchemaSummaryVersion  = '1.6.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -868,6 +871,30 @@ try {
       }
       Add-Member -InputObject $jsonObj -Name discovery -MemberType NoteProperty -Value $discoveryBlock
     } catch { Write-Warning "Failed to emit discovery diagnostics block: $_" }
+  }
+  # Optional outcome classification block (schema v1.6.0+)
+  if ($EmitOutcome) {
+    try {
+      # Derive coarse status
+      $overallStatus = 'Success'
+      $severityRank = 0
+      $flags = @()
+      if ($timedOut) { $overallStatus = 'Timeout'; $severityRank = 4; $flags += 'TimedOut' }
+      elseif ($discoveryFailureCount -gt 0 -and ($failed -eq 0 -and $errors -eq 0)) { $overallStatus = 'DiscoveryFailure'; $severityRank = 3; $flags += 'DiscoveryIssues' }
+      elseif ($failed -gt 0 -or $errors -gt 0) { $overallStatus = 'Failed'; $severityRank = 2; if ($failed -gt 0) { $flags += 'TestFailures' }; if ($errors -gt 0) { $flags += 'Errors' } }
+      elseif ($skipped -gt 0) { $overallStatus = 'Partial'; $severityRank = 1; $flags += 'SkippedTests' }
+      if ($discoveryFailureCount -gt 0) { $flags += 'DiscoveryScanMatches' }
+      $countsBlock = [pscustomobject]@{ total=$total; passed=$passed; failed=$failed; errors=$errors; skipped=$skipped; discoveryFailures=$discoveryFailureCount }
+      $outcomeBlock = [pscustomobject]@{
+        overallStatus = $overallStatus
+        severityRank  = $severityRank
+        flags         = $flags
+        counts        = $countsBlock
+        classificationStrategy = 'heuristic/v1'
+        exitCodeModel = if ($overallStatus -eq 'Success') { 0 } else { 1 }
+      }
+      Add-Member -InputObject $jsonObj -Name outcome -MemberType NoteProperty -Value $outcomeBlock
+    } catch { Write-Warning "Failed to emit outcome classification block: $_" }
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray

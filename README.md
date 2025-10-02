@@ -399,7 +399,7 @@ Marketplace
 
 Notes
 
-## Pester Test Dispatcher JSON Summary (Schema v1.5.0)
+## Pester Test Dispatcher JSON Summary (Schema v1.6.0)
 
 The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
 
@@ -418,7 +418,7 @@ Validation tests:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schemaVersion` | string (const `1.5.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `schemaVersion` | string (const `1.6.0`) | Version identifier (semantic). Additive fields bump minor only. |
 | `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
 | `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
 | `failed` | int >=0 | Assertion failures (Pester logical failures). |
@@ -541,6 +541,25 @@ Invocation example:
 ./Invoke-PesterTests.ps1 -EmitDiscoveryDetail
 ```
 
+### New in 1.6.0: Outcome Classification Block
+
+Opt-in (`-EmitOutcome`) `outcome` object providing a unified status classification derived from existing counters and timeout/discovery signals.
+
+| Field | Meaning |
+|-------|---------|
+| `overallStatus` | One of `Success`, `Failed`, `Partial`, `DiscoveryFailure`, `Timeout`. |
+| `severityRank` | Numeric ordering (0=Success,1=Partial,2=Failed,3=DiscoveryFailure,4=Timeout). |
+| `flags` | Array of symbolic condition flags (`TestFailures`, `Errors`, `SkippedTests`, `DiscoveryIssues`, `DiscoveryScanMatches`, `TimedOut`). |
+| `counts` | Snapshot of root counters (total, passed, failed, errors, skipped, discoveryFailures). |
+| `classificationStrategy` | Strategy identifier (currently `heuristic/v1`). |
+| `exitCodeModel` | Modeled dispatcher exit code mapping (0 success / 1 failure states). |
+
+Invocation example:
+
+```powershell
+./Invoke-PesterTests.ps1 -EmitOutcome
+```
+
 ### Planned Incremental Enrichment (Roadmap)
 
 | Planned Version | Block | Purpose |
@@ -549,7 +568,7 @@ Invocation example:
 | 1.3.0 | `timing` (extended) | Rich percentile spread & optional per-test durations (flag‑gated) – IMPLEMENTED (opt-in via `-EmitTimingDetail`). |
 | 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced) – IMPLEMENTED (opt-in via `-EmitStability`). |
 | 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size) – IMPLEMENTED (opt-in via `-EmitDiscoveryDetail`). |
-| 1.6.0 | `outcome` | Unified status classification (`Passed\|Failed\|Errored\|TimedOut\|DiscoveryError`). |
+| 1.6.0 | `outcome` | Unified status classification (implemented; opt-in via `-EmitOutcome`). |
 | 1.7.0 | `aggregationHints` | CI correlation (commit SHA, branch, shard id). |
 | 1.8.0 | `extensions` | Vendor / custom injection surface (namespaced flexible data). |
 | 1.9.0 | `meta` | Slim mode signalling, emittedFields manifest. |
@@ -571,7 +590,7 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 
 ```jsonc
 {
-  "schemaVersion": "1.5.0",
+  "schemaVersion": "1.6.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -592,7 +611,7 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 
 ```jsonc
 {
-  "schemaVersion": "1.5.0",
+  "schemaVersion": "1.6.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
