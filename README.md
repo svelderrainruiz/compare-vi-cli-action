@@ -205,11 +205,17 @@ Key env variables (optional unless noted):
 | `LOOP_SIMULATE_EXIT_CODE` | Exit code for simulated executor | 1 |
 | `LOOP_SIMULATE_DELAY_MS` | Sleep per iteration (ms) during simulation | 5 |
 | `LOOP_LOG_VERBOSITY` | `Quiet`\|`Normal`\|`Verbose` (script log detail) | Normal |
+| `LOOP_JSON_LOG` | Path for NDJSON structured events | (disabled) |
+| `LOOP_NO_STEP_SUMMARY` | 1/true to suppress step summary append | off |
+| `LOOP_NO_CONSOLE_SUMMARY` | 1/true suppress console summary block | off |
 
 Additional switches:
 
 - `-DryRun`: Print resolved configuration (including inferred artifact paths) and exit without executing the loop.
 - `-LogVerbosity Quiet|Normal|Verbose`: Override env value for logging detail (DryRun still returns 0 on success).
+- `-NoStepSummary`: Prevent appending diff summary to `$GITHUB_STEP_SUMMARY` even if present.
+- `-NoConsoleSummary`: Suppress printing the human-readable summary block (useful when only JSON logs are desired).
+- `-JsonLogPath <file>`: Write structured NDJSON events (`plan`, `dryRun`, `result`, `stepSummaryAppended`).
 
 Quick simulated run (no real LVCompare required):
 
@@ -220,6 +226,7 @@ $env:LOOP_SIMULATE = '1'
 $env:LOOP_DIFF_SUMMARY_FORMAT = 'Html'
 $env:LOOP_MAX_ITERATIONS = '15'
 $env:LOOP_SNAPSHOT_EVERY = '5'
+$env:LOOP_JSON_LOG = 'loop-events.ndjson'
 $env:LOOP_EMIT_RUN_SUMMARY = '1'
 pwsh -File scripts/Run-AutonomousIntegrationLoop.ps1
 ```
@@ -235,6 +242,13 @@ Latency p50/p90/p99: 0.005/0.006/0.007 s
 Diff summary fragment emitted.
 Run summary JSON: loop-run-summary.json
 Snapshots NDJSON: loop-snapshots.ndjson
+```
+
+Structured events sample (`loop-events.ndjson` first lines):
+
+```jsonc
+{"timestamp":"2025-10-01T12:00:00.100Z","type":"plan","simulate":true,"dryRun":false,"maxIterations":15,"interval":0,"diffSummaryFormat":"Html"}
+{"timestamp":"2025-10-01T12:00:00.250Z","type":"result","iterations":15,"diffs":15,"errors":0,"succeeded":true}
 ```
 
 GitHub Actions step example (simulated):

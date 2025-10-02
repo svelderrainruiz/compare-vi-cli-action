@@ -63,6 +63,15 @@
   Controls internal script logging (not the loop's own data output). Values: Quiet | Normal | Verbose.
   Can be set via env LOOP_LOG_VERBOSITY. Quiet suppresses non-error informational lines; Verbose emits extra diagnostics.
 
+.PARAMETER JsonLogPath
+  When provided (or via env LOOP_JSON_LOG) each high-level event is appended as one line of JSON (NDJSON) with a timestamp and type.
+
+.PARAMETER NoStepSummary
+  Suppress appending diff summary fragment to $GITHUB_STEP_SUMMARY (or set env LOOP_NO_STEP_SUMMARY=1).
+
+.PARAMETER NoConsoleSummary
+  Suppress the human-readable console summary block (or set env LOOP_NO_CONSOLE_SUMMARY=1). JSON logging unaffected.
+
 .OUTPUTS
   Writes key result fields and optionally diff summary to stdout. Exit code 0 when Succeeded, 1 otherwise.
 
@@ -99,7 +108,10 @@ param(
   [int]$HistogramBins = ($env:LOOP_HISTOGRAM_BINS -as [int]),
   [scriptblock]$CustomExecutor
   , [switch]$DryRun
-  , [ValidateSet('Quiet','Normal','Verbose')][string]$LogVerbosity = (if ($env:LOOP_LOG_VERBOSITY) { $env:LOOP_LOG_VERBOSITY } else { 'Normal' })
+  , [ValidateSet('Quiet','Normal','Verbose','Debug')][string]$LogVerbosity = (if ($env:LOOP_LOG_VERBOSITY) { $env:LOOP_LOG_VERBOSITY } else { 'Normal' })
+  , [string]$JsonLogPath = $env:LOOP_JSON_LOG
+  , [switch]$NoStepSummary
+  , [switch]$NoConsoleSummary
 )
 
 # Defaults / fallbacks
@@ -115,6 +127,10 @@ if (-not $PSBoundParameters.ContainsKey('FailOnDiff')) {
 if (-not $PSBoundParameters.ContainsKey('AdaptiveInterval')) {
   if ($env:LOOP_ADAPTIVE -and $env:LOOP_ADAPTIVE -match '^(1|true)$') { $AdaptiveInterval = $true }
 }
+
+# Honor suppression env flags if switches not explicitly passed
+if (-not $PSBoundParameters.ContainsKey('NoStepSummary') -and $env:LOOP_NO_STEP_SUMMARY -match '^(1|true)$') { $NoStepSummary = $true }
+if (-not $PSBoundParameters.ContainsKey('NoConsoleSummary') -and $env:LOOP_NO_CONSOLE_SUMMARY -match '^(1|true)$') { $NoConsoleSummary = $true }
 
 $simulate = $false
 if ($env:LOOP_SIMULATE -match '^(1|true)$') { $simulate = $true }
@@ -167,14 +183,28 @@ function Write-Detail {
   param([string]$Message,[string]$Level='Info')
   switch ($LogVerbosity) {
     'Quiet'   { if ($Level -eq 'Error') { Write-Host $Message } }
-    'Normal'  { if ($Level -ne 'Debug') { Write-Host $Message } }
-    'Verbose' { Write-Host $Message }
+    'Normal'  { if ($Level -notin @('Debug','Trace')) { Write-Host $Message } }
+    'Verbose' { if ($Level -ne 'Trace') { Write-Host $Message } }
+    'Debug'   { Write-Host $Message }
   }
+}
+
+function Write-JsonEvent {
+  param([string]$Type,[hashtable]$Data)
+  if (-not $JsonLogPath) { return }
+  $payload = [ordered]@{
+    timestamp = (Get-Date).ToString('o')
+    type = $Type
+    level = 'info'
+  }
+  if ($Data) { foreach ($k in $Data.Keys) { $payload[$k] = $Data[$k] } }
+  try { ($payload | ConvertTo-Json -Compress) | Add-Content -Path $JsonLogPath } catch { Write-Detail "Failed JSON log append: $($_.Exception.Message)" 'Error' }
 }
 
 Write-Detail ("Resolved LogVerbosity=$LogVerbosity DryRun=$($DryRun.IsPresent) Simulate=$simulate") 'Debug'
 Write-Detail ("Invocation parameters (pre-run):" )
 Write-Detail (($invokeParams.Keys | Sort-Object | ForEach-Object { "  $_ = $($invokeParams[$_])" }) -join [Environment]::NewLine) 'Debug'
+Write-JsonEvent 'plan' (@{ simulate=$simulate; dryRun=$DryRun.IsPresent; maxIterations=$MaxIterations; interval=$IntervalSeconds; diffSummaryFormat=$DiffSummaryFormat })
 
 if ($DryRun) {
   Write-Detail 'Dry run requested; skipping Invoke-IntegrationCompareLoop execution.'
@@ -182,10 +212,12 @@ if ($DryRun) {
   if ($DiffSummaryPath) { Write-Detail "Would write diff summary to: $DiffSummaryPath" }
   if ($MetricsSnapshotEvery -gt 0) { Write-Detail "Would emit snapshots to: $MetricsSnapshotPath every $MetricsSnapshotEvery iteration(s)" }
   if ($RunSummaryJsonPath) { Write-Detail "Would write run summary JSON to: $RunSummaryJsonPath" }
+  Write-JsonEvent 'dryRun' @{ diffSummaryPath=$DiffSummaryPath; snapshots=$MetricsSnapshotPath; runSummary=$RunSummaryJsonPath }
   exit 0
 }
 
 $result = Invoke-IntegrationCompareLoop @invokeParams
+Write-JsonEvent 'result' (@{ iterations=$result.Iterations; diffs=$result.DiffCount; errors=$result.ErrorCount; succeeded=$result.Succeeded })
 
 # Emit concise console summary
 $summaryLines = @()
@@ -197,11 +229,13 @@ if ($result.Percentiles) { $summaryLines += "Latency p50/p90/p99: $($result.Perc
 if ($result.DiffSummary) { $summaryLines += 'Diff summary fragment emitted.' }
 if ($RunSummaryJsonPath -and (Test-Path $RunSummaryJsonPath)) { $summaryLines += "Run summary JSON: $RunSummaryJsonPath" }
 if ($MetricsSnapshotEvery -gt 0 -and (Test-Path $MetricsSnapshotPath)) { $summaryLines += "Snapshots NDJSON: $MetricsSnapshotPath" }
-$summaryLines | ForEach-Object { Write-Detail $_ }
+if (-not $NoConsoleSummary) { $summaryLines | ForEach-Object { Write-Detail $_ } } else { Write-Detail 'Console summary suppressed (-NoConsoleSummary).' 'Debug' }
 
 # Append diff summary fragment to GitHub step summary if running in Actions
-if ($env:GITHUB_STEP_SUMMARY -and $result.DiffSummary) {
-  try { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $result.DiffSummary } catch { Write-Warning "Failed to append to GITHUB_STEP_SUMMARY: $($_.Exception.Message)" }
+if (-not $NoStepSummary -and $env:GITHUB_STEP_SUMMARY -and $result.DiffSummary) {
+  try { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $result.DiffSummary; Write-JsonEvent 'stepSummaryAppended' @{ path=$env:GITHUB_STEP_SUMMARY } } catch { Write-Warning "Failed to append to GITHUB_STEP_SUMMARY: $($_.Exception.Message)" }
+} elseif ($result.DiffSummary) {
+  Write-Detail 'Step summary append skipped (suppressed or not in Actions).' 'Debug'
 }
 
 # Exit code semantics: 0 when succeeded (even if diffs unless FailOnDiff terminated early), 1 if any errors encountered
