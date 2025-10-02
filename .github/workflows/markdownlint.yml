@@ -1,0 +1,28 @@
+name: markdownlint
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install markdownlint-cli2
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npm install --no-save markdownlint-cli2@0.14.0 markdownlint-rule-search-replace@1.0.0
+
+      - name: Run markdownlint
+        run: |
+          npx markdownlint-cli2 "**/*.md" "!**/node_modules" || exit 1
