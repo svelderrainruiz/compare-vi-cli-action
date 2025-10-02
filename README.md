@@ -1051,6 +1051,42 @@ Consumers should check `schemaVersion` and handle unknown major versions gracefu
 
 ## For Developers
 
+### Transient Artifact Cleanup & Test Summary Publishing
+
+Two helper scripts support local development hygiene and richer CI feedback without committing volatile test outputs:
+
+1. `scripts/Clean-DevArtifacts.ps1`
+   - Removes transient files produced under `tests/results/` (e.g. `pester-results.xml`, summaries, delta/flaky JSON) and optional root strays (`final.json`, `testResults.xml`).
+   - Safe defaults: preserves `.gitkeep`, never touches `*.vi` or source files.
+   - Key switches:
+     - `-ListOnly` – enumerate what would be removed.
+     - `-IncludeAllVariants` – include secondary result folders like `tests/results-maxtestfiles`, `tests/tmp-timeout/results`.
+     - `-IncludeLoopArtifacts` – also remove loop `final.json` style documents.
+     - Supports `-WhatIf` / `-Confirm` via `SupportsShouldProcess`.
+   - Examples:
+
+     ```powershell
+     pwsh -File scripts/Clean-DevArtifacts.ps1 -ListOnly
+     pwsh -File scripts/Clean-DevArtifacts.ps1 -IncludeAllVariants -Verbose
+     pwsh -File scripts/Clean-DevArtifacts.ps1 -IncludeLoopArtifacts -WhatIf
+     ```
+
+2. `scripts/Write-PesterSummaryToStepSummary.ps1`
+   - Reads `tests/results/pester-summary.json` (fallback to `pester-summary.txt`) and emits a Markdown table to the GitHub Actions step summary (`$GITHUB_STEP_SUMMARY`).
+   - Optionally includes a Failed Tests table when `pester-failures.json` is present.
+   - Add to workflows **after** the test execution step:
+
+     ```yaml
+     - name: Publish Pester summary
+       if: always()
+       shell: pwsh
+       run: pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 -ResultsDir tests/results
+     ```
+
+Ignoring committed results: `.gitignore` now blocks committing these transient files; retain the directory structure with `tests/results/.gitkeep`.
+
+Recommendation: run the cleanup script before creating release branches or preparing large refactors to minimize accidental artifact churn.
+
 ### Testing
 
 This repository includes a comprehensive Pester test suite. To run tests:
