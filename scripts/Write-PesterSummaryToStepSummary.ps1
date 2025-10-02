@@ -22,14 +22,17 @@ param(
   [ValidateSet('None','Details','DetailsOpen')][string]$FailedTestsCollapseStyle = 'Details',
   [switch]$IncludeFailedDurations = $true,
   [ValidateSet('None','Relative')][string]$FailedTestsLinkStyle = 'None',
-  [switch]$EmitFailureBadge
+  [switch]$EmitFailureBadge,
+  [switch]$Compact,
+  [string]$CommentPath,
+  [string]$BadgeJsonPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if (-not $env:GITHUB_STEP_SUMMARY) {
-  Write-Warning 'GITHUB_STEP_SUMMARY not set; skipping summary emission.'
+if (-not $env:GITHUB_STEP_SUMMARY -and -not $CommentPath) {
+  Write-Warning 'GITHUB_STEP_SUMMARY not set and no -CommentPath provided; skipping summary emission.'
   return
 }
 
@@ -37,7 +40,19 @@ $summaryPath = Join-Path $ResultsDir 'pester-summary.json'
 $txtPath = Join-Path $ResultsDir 'pester-summary.txt'
 $xmlPath = Join-Path $ResultsDir 'pester-results.xml'
 
-function Write-Line($s) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $s -Encoding UTF8 }
+$_accumulatedLines = [System.Collections.Generic.List[string]]::new()
+function Add-Line($s) { $_accumulatedLines.Add([string]$s) | Out-Null }
+function Flush-Outputs {
+  param()
+  if ($env:GITHUB_STEP_SUMMARY) {
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($_accumulatedLines -join [Environment]::NewLine) -Encoding UTF8
+  }
+  if ($CommentPath) {
+    $dir = Split-Path -Parent $CommentPath
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+    Set-Content -Path $CommentPath -Value ($_accumulatedLines -join [Environment]::NewLine) -Encoding UTF8
+  }
+}
 
 Write-Verbose "Using summary target: $env:GITHUB_STEP_SUMMARY"
 
@@ -58,33 +73,106 @@ elseif (Test-Path $txtPath) {
   if ($hash.Count) { $totals = [pscustomobject]@{ Total=$hash['Total Tests']; Passed=$hash['Passed']; Failed=$hash['Failed']; Errors=$hash['Errors']; Skipped=$hash['Skipped'] } }
 }
 
-Write-Line '## Pester Test Summary'
+Add-Line '## Pester Test Summary'
 
 # Optional badge line for quick copy into PR comments
-if ($EmitFailureBadge) {
-  $badge = if (($totals.Failed ?? $totals.failed) -gt 0) {
-    "**❌ Tests Failed:** $($totals.Failed ?? $totals.failed) of $($totals.Total ?? $totals.total)"
+if ($EmitFailureBadge -or $Compact) {
+  $failedCount = ($totals.Failed ?? $totals.failed)
+  $totalCount = ($totals.Total ?? $totals.total)
+  $badge = if ($failedCount -gt 0) {
+    "**❌ Tests Failed:** $failedCount of $totalCount"
   } else {
-    "**✅ All Tests Passed:** $($totals.Total ?? $totals.total)"
+    "**✅ All Tests Passed:** $totalCount"
   }
-  Write-Line ''
-  Write-Line $badge
+  Add-Line ''
+  Add-Line $badge
+  if ($BadgeJsonPath) {
+    $passedCount = ($totals.Passed ?? $totals.passed)
+    $errorsCount = ($totals.Errors ?? $totals.errors)
+    $skippedCount = ($totals.Skipped ?? $totals.skipped)
+    $duration = ($totals.Duration ?? $totals.duration)
+    $status = if ($failedCount -gt 0) { 'failed' } else { 'passed' }
+    $failJsonFile = Join-Path $ResultsDir 'pester-failures.json'
+    $failedNames = @()
+    if (Test-Path $failJsonFile) {
+      try {
+        $fj = Get-Content $failJsonFile -Raw | ConvertFrom-Json
+        $failedNames = @($fj.results | Where-Object { $_.result -eq 'Failed' } | ForEach-Object { $_.Name })
+      } catch { }
+    }
+    $badgeObj = [pscustomobject]@{
+      status = $status
+      total = $totalCount
+      passed = $passedCount
+      failed = $failedCount
+      errors = $errorsCount
+      skipped = $skippedCount
+      durationSeconds = $duration
+      badgeMarkdown = $badge
+      badgeText = ($badge -replace '\*','')
+      failedTests = $failedNames
+      generatedAt = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    try {
+      $badgeDir = Split-Path -Parent $BadgeJsonPath
+      if ($badgeDir -and -not (Test-Path $badgeDir)) { New-Item -ItemType Directory -Path $badgeDir | Out-Null }
+      Set-Content -Path $BadgeJsonPath -Value ($badgeObj | ConvertTo-Json -Depth 6) -Encoding UTF8
+    } catch {
+      Write-Warning ("Failed to write badge JSON: {0}" -f $_.Exception.Message)
+    }
+  }
 }
 
 if (-not $totals) {
-  Write-Line '> No Pester summary data found.'
+  Add-Line '> No Pester summary data found.'
+  Flush-Outputs
   return
 }
 
-Write-Line ''
-Write-Line '| Metric | Value |'
-Write-Line '|--------|-------|'
-Write-Line ("| Total | {0} |" -f ($totals.Total ?? $totals.total ?? $totals.Tests))
-Write-Line ("| Passed | {0} |" -f ($totals.Passed ?? $totals.passed))
-Write-Line ("| Failed | {0} |" -f ($totals.Failed ?? $totals.failed))
-if ($totals.Errors -ne $null -or $totals.errors -ne $null) { Write-Line ("| Errors | {0} |" -f ($totals.Errors ?? $totals.errors)) }
-if ($totals.Skipped -ne $null -or $totals.skipped -ne $null) { Write-Line ("| Skipped | {0} |" -f ($totals.Skipped ?? $totals.skipped)) }
-if ($totals.Duration -ne $null -or $totals.duration -ne $null) { Write-Line ("| Duration (s) | {0} |" -f ($totals.Duration ?? $totals.duration)) }
+# Compact mode: single concise block, no tables
+if ($Compact) {
+  $failedCount = ($totals.Failed ?? $totals.failed)
+  $passedCount = ($totals.Passed ?? $totals.passed)
+  $skippedCount = ($totals.Skipped ?? $totals.skipped)
+  $errorsCount = ($totals.Errors ?? $totals.errors)
+  $duration = ($totals.Duration ?? $totals.duration)
+  $totalCount = ($totals.Total ?? $totals.total)
+  $pieces = @()
+  $pieces += "$totalCount total"
+  $pieces += "$passedCount passed"
+  $pieces += "$failedCount failed"
+  if ($errorsCount -ne $null) { $pieces += "$errorsCount errors" }
+  if ($skippedCount -ne $null) { $pieces += "$skippedCount skipped" }
+  if ($duration -ne $null) { $pieces += ("{0}s" -f $duration) }
+  Add-Line ''
+  Add-Line ("**Totals:** {0}" -f ($pieces -join ' • '))
+  if ($failedCount -gt 0) {
+    # failed test names (short)
+    $failJsonPath = Join-Path $ResultsDir 'pester-failures.json'
+    if (Test-Path $failJsonPath) {
+      try {
+        $failData = Get-Content $failJsonPath -Raw | ConvertFrom-Json
+        $failedNames = @($failData.results | Where-Object { $_.result -eq 'Failed' } | ForEach-Object { $_.Name })
+        if ($failedNames.Count) {
+          Add-Line ("**Failures:** {0}" -f ($failedNames -join ', '))
+        }
+      } catch { Write-Warning 'Compact mode: failed to parse failure names.' }
+    }
+  }
+  Flush-Outputs
+  Write-Host 'Pester summary (compact) written.' -ForegroundColor Green
+  return
+}
+
+Add-Line ''
+Add-Line '| Metric | Value |'
+Add-Line '|--------|-------|'
+Add-Line ("| Total | {0} |" -f ($totals.Total ?? $totals.total ?? $totals.Tests))
+Add-Line ("| Passed | {0} |" -f ($totals.Passed ?? $totals.passed))
+Add-Line ("| Failed | {0} |" -f ($totals.Failed ?? $totals.failed))
+if ($totals.Errors -ne $null -or $totals.errors -ne $null) { Add-Line ("| Errors | {0} |" -f ($totals.Errors ?? $totals.errors)) }
+if ($totals.Skipped -ne $null -or $totals.skipped -ne $null) { Add-Line ("| Skipped | {0} |" -f ($totals.Skipped ?? $totals.skipped)) }
+if ($totals.Duration -ne $null -or $totals.duration -ne $null) { Add-Line ("| Duration (s) | {0} |" -f ($totals.Duration ?? $totals.duration)) }
 
 # Optional failed test details from failures JSON if present
 $failJson = Join-Path $ResultsDir 'pester-failures.json'
@@ -93,27 +181,27 @@ if (Test-Path $failJson) {
     $failData = Get-Content $failJson -Raw | ConvertFrom-Json
     $failed = @($failData.results | Where-Object { $_.result -eq 'Failed' })
     if ($failed.Count) {
-      Write-Line ''
+      Add-Line ''
       switch ($FailedTestsCollapseStyle) {
         'None' {
-          Write-Line '### Failed Tests'
-          Write-Line ''
+          Add-Line '### Failed Tests'
+          Add-Line ''
         }
         'Details' {
-          Write-Line '<details><summary><strong>Failed Tests</strong></summary>'
-          Write-Line ''
+          Add-Line '<details><summary><strong>Failed Tests</strong></summary>'
+          Add-Line ''
         }
         'DetailsOpen' {
-          Write-Line '<details open><summary><strong>Failed Tests</strong></summary>'
-          Write-Line ''
+          Add-Line '<details open><summary><strong>Failed Tests</strong></summary>'
+          Add-Line ''
         }
       }
       if ($IncludeFailedDurations) {
-        Write-Line '| Name | Duration (s) |'
-        Write-Line '|------|--------------|'
+        Add-Line '| Name | Duration (s) |'
+        Add-Line '|------|--------------|'
       } else {
-        Write-Line '| Name |'
-        Write-Line '|------|'
+        Add-Line '| Name |'
+        Add-Line '|------|'
       }
       foreach ($f in $failed) {
         $name = $f.Name
@@ -124,14 +212,15 @@ if (Test-Path $failJson) {
             $name = "[$($f.Name)]($fileRel)"
         }
         if ($IncludeFailedDurations) {
-          Write-Line ("| {0} | {1} |" -f ($name -replace '\|','/'), ($f.Duration ?? $f.duration))
+          Add-Line ("| {0} | {1} |" -f ($name -replace '\|','/'), ($f.Duration ?? $f.duration))
         } else {
-          Write-Line ("| {0} |" -f ($name -replace '\|','/'))
+          Add-Line ("| {0} |" -f ($name -replace '\|','/'))
         }
       }
-      if ($FailedTestsCollapseStyle -like 'Details*') { Write-Line '</details>' }
+      if ($FailedTestsCollapseStyle -like 'Details*') { Add-Line '</details>' }
     }
   } catch { Write-Warning ("Failed to parse failure JSON: {0}" -f $_.Exception.Message) }
 }
 
-Write-Host 'Pester summary written to GitHub step summary.' -ForegroundColor Green
+Flush-Outputs
+Write-Host 'Pester summary written.' -ForegroundColor Green

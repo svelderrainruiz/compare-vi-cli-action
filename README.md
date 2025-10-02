@@ -1080,6 +1080,9 @@ Two helper scripts support local development hygiene and richer CI feedback with
      - `-IncludeFailedDurations` (switch, default on) disable to narrow table (`Name` only).
      - `-FailedTestsLinkStyle` (`None` | `Relative`) when `Relative` wraps failed test names in repository-relative links (heuristic `tests/<Name>.Tests.ps1`).
      - `-EmitFailureBadge` emits a bold status line (`✅` / `❌`) above the metrics table for quick PR comment copy.
+     - `-Compact` produce a single concise block (badge + one-line totals + optional failed test list) – no tables (ideal for PR comments or chatops bots).
+     - `-CommentPath <file>` also write the generated markdown to a file (independent of `$GITHUB_STEP_SUMMARY`), enabling later use with `gh pr comment` or workflow commands even if `GITHUB_STEP_SUMMARY` is unset.
+     - `-BadgeJsonPath <file>` emit machine-readable JSON metadata for downstream tooling (status, counts, durations, failed test names, and the rendered badge markdown/text).
 
      - `Details`: closed `<details>` block
      - `DetailsOpen`: open by default on page load
@@ -1093,6 +1096,56 @@ Two helper scripts support local development hygiene and richer CI feedback with
        shell: pwsh
        run: pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 -ResultsDir tests/results -FailedTestsCollapseStyle DetailsOpen
      ```
+
+      **Compact mode example (for PR comment capture)**
+
+      ```yaml
+      - name: Publish (compact) Pester summary
+        if: always()
+        shell: pwsh
+        run: |
+          pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 `
+            -ResultsDir tests/results `
+            -Compact -EmitFailureBadge `
+            -CommentPath artifacts/pester-comment.md `
+            -BadgeJsonPath artifacts/pester-badge.json
+      - name: Add PR comment (if failures)
+        if: always() && github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          if (Test-Path artifacts/pester-badge.json) {
+            $meta = Get-Content artifacts/pester-badge.json -Raw | ConvertFrom-Json
+            if ($meta.status -eq 'failed') {
+              $body = Get-Content artifacts/pester-comment.md -Raw
+              echo "Adding PR comment with test failure summary";
+              gh pr comment $env:GITHUB_PR_NUMBER --body "$body"
+            }
+          }
+      ```
+
+      **Badge JSON shape** (example failing run):
+
+      ```jsonc
+      {
+        "status": "failed",
+        "total": 42,
+        "passed": 40,
+        "failed": 2,
+        "errors": 0,
+        "skipped": 0,
+        "durationSeconds": 12.345,
+        "badgeMarkdown": "**❌ Tests Failed:** 2 of 42",
+        "badgeText": "❌ Tests Failed: 2 of 42",
+        "failedTests": [ "ModuleA.FeatureX", "ModuleB.EdgeCase" ],
+        "generatedAt": "2025-10-02T12:34:56.789Z"
+      }
+      ```
+
+      Consumer guidance:
+      - Use `badgeMarkdown` directly in PR body/comments.
+      - `status` is `passed` or `failed` (no intermediate states currently).
+      - `failedTests` may be empty when status=`failed` if failure parsing was unavailable (treat absence gracefully).
+      - Timestamps are ISO-8601 UTC.
 
 Ignoring committed results: `.gitignore` now blocks committing these transient files; retain the directory structure with `tests/results/.gitkeep`.
 
