@@ -13,33 +13,36 @@ Describe 'Test-PesterAvailable' -Tag 'Unit' {
   }
 
   Context 'When Pester v5+ present' {
-    BeforeEach {
-      Mock Get-Module -ParameterFilter { $ListAvailable -and $Name -eq 'Pester' } -MockWith {
-        [pscustomobject]@{ Name='Pester'; Version=[version]'5.7.1' }
-      }
-    }
     It 'returns $true' {
+      function Get-Module { param([switch]$ListAvailable,[string]$Name)
+        if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'5.7.1' } }
+        Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+      }
       Test-PesterAvailable | Should -BeTrue
     }
   }
 
   Context 'When only older Pester present' {
-    BeforeEach {
-      Mock Get-Module -ParameterFilter { $ListAvailable -and $Name -eq 'Pester' } -MockWith {
-        [pscustomobject]@{ Name='Pester'; Version=[version]'4.10.1' }
-      }
-    }
     It 'returns $false' {
+      function Get-Module { param([switch]$ListAvailable,[string]$Name)
+        if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'4.10.1' } }
+        Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+      }
       Test-PesterAvailable | Should -BeFalse
     }
   }
 
   Context 'When Pester absent' {
-    BeforeEach {
-      Mock Get-Module -ParameterFilter { $ListAvailable -and $Name -eq 'Pester' } -MockWith { @() }
-    }
     It 'returns $false' {
+      function Get-Module { param([switch]$ListAvailable,[string]$Name)
+        if ($ListAvailable -and $Name -eq 'Pester') { return @() }
+        Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+      }
       Test-PesterAvailable | Should -BeFalse
     }
+  }
+
+  AfterEach {
+    Remove-Item Function:Get-Module -ErrorAction SilentlyContinue
   }
 }
