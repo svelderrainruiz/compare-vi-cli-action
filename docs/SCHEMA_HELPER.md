@@ -19,22 +19,43 @@ external dependencies or a heavy JSON Schema engine. It focuses on:
 ### Assert-JsonShape
 
 ```powershell
-Assert-JsonShape -Path <jsonFile> -Spec <SpecName>
+Assert-JsonShape -Path <jsonFile> -Spec <SpecName> [-Strict]
 ```
 
 Validates a single JSON document against a named spec. Throws with aggregated failures (missing
 required properties, predicate failures). Returns `$true` on success so it can be piped into Pester's
 `Should -BeTrue` if desired.
 
+Strict mode: add `-Strict` to also fail on any unexpected (extra) top-level property not declared in
+`Required`, `Optional`, or `Types`. This is useful for regression-style “producer must not add new
+fields” tests. Keep normal mode for forward-compatible validation.
+
 ### Assert-NdjsonShapes
 
 ```powershell
-Assert-NdjsonShapes -Path <ndjsonFile> -Spec <SpecName>
+Assert-NdjsonShapes -Path <ndjsonFile> -Spec <SpecName> [-Strict]
 ```
 
 Validates every non-empty line in a newline‑delimited JSON file (NDJSON). Each line is parsed, then
 re-serialized and passed through the same internal shape validator used by `Assert-JsonShape`.
-Stops on the first invalid line with a descriptive error (line number + predicate issues).
+Stops on the first invalid line with a descriptive error (line number + predicate issues). Supports
+`-Strict` to reject unknown properties per line.
+
+### Export-JsonShapeSchemas
+
+```powershell
+Export-JsonShapeSchemas -OutputDirectory schemas/ [-Overwrite]
+```
+
+Generates a minimal JSON Schema (Draft 2020-12 style) per spec (`<Spec>.schema.json`) with:
+
+- `required` array from the spec
+- all known properties under `properties` (Required + Optional)
+- `additionalProperties: false` mirroring Strict expectations
+
+
+Type predicates are not translated into formal JSON Schema types (kept loose by design); consumers
+can extend the generated schemas manually if needed.
 
 ## Available Specs
 
@@ -172,9 +193,9 @@ narrow the predicate (document any tightening in CHANGELOG along with spec adjus
 ## Future Enhancements (Potential)
 
 - Introduce a tiny caching layer for predicate delegates if perf becomes an issue.
-- Add an optional `Strict` switch that fails on unknown extra properties.
 - Provide helper to diff two JSON documents against the same spec (schema regression guard).
 - Emit machine-readable failure JSON (could integrate into CI artifacts).
+- Optional predicate-to-JSON-Schema type inference (best effort) for richer export.
 
 ## See Also
 

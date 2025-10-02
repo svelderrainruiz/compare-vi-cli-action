@@ -25,6 +25,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Test refactors to use shared schema assertions: `CompareLoop.RunSummary.Tests.ps1`, `CompareLoop.SnapshotEnrichment.Tests.ps1`, `Run-AutonomousIntegrationLoop.LogRotation.Tests.ps1`, `Run-AutonomousIntegrationLoop.EventSchema.Tests.ps1`.
 - NDJSON validator function `Assert-NdjsonShapes` for per-line event & snapshot validation.
 - Dispatcher & developer docs cross-links to schema helper (README, AGENTS.md, PESTER_DISPATCHER_REFINEMENT.md).
+- Strict mode (`-Strict`) for `Assert-JsonShape` / `Assert-NdjsonShapes` to fail on unexpected properties.
+- Schema export function `Export-JsonShapeSchemas` generating minimal draft JSON Schema files per spec.
 
 ### Tooling
 

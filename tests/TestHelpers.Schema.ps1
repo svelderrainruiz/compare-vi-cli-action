@@ -104,7 +104,8 @@ $script:JsonShapeSpecs['LoopEvent'] = [pscustomobject]@{
 function Assert-JsonShape {
   [CmdletBinding()] param(
     [Parameter(Mandatory)][string]$Path,
-    [Parameter(Mandatory)][string]$Spec
+    [Parameter(Mandatory)][string]$Spec,
+    [switch]$Strict
   )
   if (-not (Test-Path -LiteralPath $Path)) {
     throw "Assert-JsonShape: file not found: $Path"
@@ -129,6 +130,10 @@ function Assert-JsonShape {
     $name = $prop.Name
     $val  = $prop.Value
     $isKnown = $specDef.Required -contains $name -or $specDef.Optional -contains $name -or $specDef.Types.ContainsKey($name)
+    if (-not $isKnown -and $Strict) {
+      $errors.Add("unexpected property '$name' (Strict mode)")
+      continue
+    }
     if ($isKnown -and $specDef.Types.ContainsKey($name)) {
       $predicate = $specDef.Types[$name]
       $ok = & $predicate $val
@@ -146,7 +151,8 @@ function Assert-JsonShape {
 function Assert-NdjsonShapes {
   [CmdletBinding()] param(
     [Parameter(Mandatory)][string]$Path,
-    [Parameter(Mandatory)][string]$Spec
+    [Parameter(Mandatory)][string]$Spec,
+    [switch]$Strict
   )
   if (-not (Test-Path -LiteralPath $Path)) { throw "Assert-NdjsonShapes: file not found: $Path" }
   $lines = Get-Content -LiteralPath $Path -ErrorAction Stop
@@ -160,10 +166,48 @@ function Assert-NdjsonShapes {
     $temp = [IO.Path]::GetTempFileName()
     try {
       Set-Content -LiteralPath $temp -Value $json -Encoding UTF8
-      Assert-JsonShape -Path $temp -Spec $Spec | Out-Null
+      Assert-JsonShape -Path $temp -Spec $Spec -Strict:$Strict | Out-Null
     } finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
   }
   return $true
 }
 
 # Note: No Export-ModuleMember call here; this helper is dot-sourced (not a module).
+
+function Export-JsonShapeSchemas {
+  <#
+    .SYNOPSIS
+      Export lightweight JSON Schema (Draft 2020-12 flavored) documents for all registered specs.
+    .PARAMETER OutputDirectory
+      Directory to write schema files (one per spec: <spec>.schema.json)
+    .PARAMETER Overwrite
+      Overwrite existing files if present.
+    .NOTES
+      This generates a conservative schema: required properties enumerated, known optional properties allowed,
+      and additionalProperties=false to match Strict mode assumptions.
+  #>
+  [CmdletBinding()] param(
+    [Parameter(Mandatory)][string]$OutputDirectory,
+    [switch]$Overwrite
+  )
+  if (-not (Test-Path -LiteralPath $OutputDirectory)) { New-Item -ItemType Directory -Path $OutputDirectory | Out-Null }
+  foreach ($specName in $script:JsonShapeSpecs.Keys) {
+    $def = $script:JsonShapeSpecs[$specName]
+    $properties = @{}
+    foreach ($r in $def.Required) { $properties[$r] = @{ description = "Required field from spec '$specName'" } }
+    foreach ($o in $def.Optional) { if (-not $properties.ContainsKey($o)) { $properties[$o] = @{ description = "Optional field from spec '$specName'" } } }
+    $schema = [ordered]@{
+      '$schema' = 'https://json-schema.org/draft/2020-12/schema'
+      title = $specName
+      description = "Auto-generated minimal JSON Schema for spec '$specName'. Types are not enforced (predicate-based in tests)."
+      type = 'object'
+      required = @($def.Required)
+      properties = $properties
+      additionalProperties = $false
+    }
+    $outPath = Join-Path $OutputDirectory ("{0}.schema.json" -f $specName)
+    if ((Test-Path -LiteralPath $outPath) -and -not $Overwrite) { throw "Schema file already exists: $outPath (use -Overwrite)" }
+    ($schema | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $outPath -Encoding UTF8
+  }
+  return Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.schema.json'
+}
