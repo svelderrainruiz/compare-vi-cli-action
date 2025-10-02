@@ -38,6 +38,28 @@ Describe 'Write-PesterSummaryToStepSummary script' -Tag 'Unit' {
     $c2 | Should -Not -Match '<details>'
   }
 
+  It 'omits duration column when -IncludeFailedDurations:$false' {
+    $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'STEP_SUMMARY_nodurations.md'
+    & $scriptPath -ResultsDir $resultsDir -IncludeFailedDurations:$false
+    $c3 = Get-Content $env:GITHUB_STEP_SUMMARY -Raw
+    $c3 | Should -Not -Match 'Duration (s)'
+    # Table header single column
+  $c3 | Should -Match '\| Name \|\r?\n\|------\|'
+  }
+
+  It 'emits failure badge line when -EmitFailureBadge' {
+    $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'STEP_SUMMARY_badge.md'
+    & $scriptPath -ResultsDir $resultsDir -EmitFailureBadge
+    (Get-Content $env:GITHUB_STEP_SUMMARY -Raw) | Should -Match '\*\*❌ Tests Failed:\*\* 1 of 3'
+  }
+
+  It 'links failed test name when Relative link style selected' {
+    $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'STEP_SUMMARY_links.md'
+    & $scriptPath -ResultsDir $resultsDir -FailedTestsLinkStyle Relative
+    $c4 = Get-Content $env:GITHUB_STEP_SUMMARY -Raw
+    $c4 | Should -Match '\[Sample.Test\]\(tests/Sample.Test.Tests.ps1\)'
+  }
+
   It 'no-ops gracefully when GITHUB_STEP_SUMMARY unset' {
     Remove-Item Env:GITHUB_STEP_SUMMARY -ErrorAction SilentlyContinue
     # Create alternate directory with summary but unset env -> should not throw

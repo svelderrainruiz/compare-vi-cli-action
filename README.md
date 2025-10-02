@@ -1075,7 +1075,11 @@ Two helper scripts support local development hygiene and richer CI feedback with
 
    - Reads `tests/results/pester-summary.json` (fallback to `pester-summary.txt`) and emits a Markdown table to the GitHub Actions step summary (`$GITHUB_STEP_SUMMARY`).
    - Failed tests table (if failures exist) is collapsible by default via `<details>`.
-   - Parameter: `-FailedTestsCollapseStyle` (`Details` | `DetailsOpen` | `None`) default `Details`.
+   - Parameters:
+     - `-FailedTestsCollapseStyle` (`Details` | `DetailsOpen` | `None`) default `Details`.
+     - `-IncludeFailedDurations` (switch, default on) disable to narrow table (`Name` only).
+     - `-FailedTestsLinkStyle` (`None` | `Relative`) when `Relative` wraps failed test names in repository-relative links (heuristic `tests/<Name>.Tests.ps1`).
+     - `-EmitFailureBadge` emits a bold status line (`✅` / `❌`) above the metrics table for quick PR comment copy.
 
      - `Details`: closed `<details>` block
      - `DetailsOpen`: open by default on page load

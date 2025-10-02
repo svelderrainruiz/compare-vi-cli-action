@@ -19,7 +19,10 @@
 [CmdletBinding()]
 param(
   [string]$ResultsDir = 'tests/results',
-  [ValidateSet('None','Details','DetailsOpen')][string]$FailedTestsCollapseStyle = 'Details'
+  [ValidateSet('None','Details','DetailsOpen')][string]$FailedTestsCollapseStyle = 'Details',
+  [switch]$IncludeFailedDurations = $true,
+  [ValidateSet('None','Relative')][string]$FailedTestsLinkStyle = 'None',
+  [switch]$EmitFailureBadge
 )
 
 Set-StrictMode -Version Latest
@@ -56,6 +59,17 @@ elseif (Test-Path $txtPath) {
 }
 
 Write-Line '## Pester Test Summary'
+
+# Optional badge line for quick copy into PR comments
+if ($EmitFailureBadge) {
+  $badge = if (($totals.Failed ?? $totals.failed) -gt 0) {
+    "**❌ Tests Failed:** $($totals.Failed ?? $totals.failed) of $($totals.Total ?? $totals.total)"
+  } else {
+    "**✅ All Tests Passed:** $($totals.Total ?? $totals.total)"
+  }
+  Write-Line ''
+  Write-Line $badge
+}
 
 if (-not $totals) {
   Write-Line '> No Pester summary data found.'
@@ -94,9 +108,27 @@ if (Test-Path $failJson) {
           Write-Line ''
         }
       }
-      Write-Line '| Name | Duration (s) |'
-      Write-Line '|------|--------------|'
-      foreach ($f in $failed) { Write-Line ("| {0} | {1} |" -f ($f.Name -replace '\|','/'), ($f.Duration ?? $f.duration)) }
+      if ($IncludeFailedDurations) {
+        Write-Line '| Name | Duration (s) |'
+        Write-Line '|------|--------------|'
+      } else {
+        Write-Line '| Name |'
+        Write-Line '|------|'
+      }
+      foreach ($f in $failed) {
+        $name = $f.Name
+        if ($FailedTestsLinkStyle -eq 'Relative') {
+          $candidate = ($name -replace '::','.') -replace '\s+','.'
+            $leaf = ($candidate -split '[\s]')[0]
+            $fileRel = "tests/$leaf.Tests.ps1"
+            $name = "[$($f.Name)]($fileRel)"
+        }
+        if ($IncludeFailedDurations) {
+          Write-Line ("| {0} | {1} |" -f ($name -replace '\|','/'), ($f.Duration ?? $f.duration))
+        } else {
+          Write-Line ("| {0} |" -f ($name -replace '\|','/'))
+        }
+      }
       if ($FailedTestsCollapseStyle -like 'Details*') { Write-Line '</details>' }
     }
   } catch { Write-Warning ("Failed to parse failure JSON: {0}" -f $_.Exception.Message) }
