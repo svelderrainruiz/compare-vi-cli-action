@@ -208,6 +208,11 @@ Key env variables (optional unless noted):
 | `LOOP_JSON_LOG` | Path for NDJSON structured events | (disabled) |
 | `LOOP_NO_STEP_SUMMARY` | 1/true to suppress step summary append | off |
 | `LOOP_NO_CONSOLE_SUMMARY` | 1/true suppress console summary block | off |
+| `LOOP_JSON_LOG_MAX_BYTES` | Rotate JSON log when size exceeds bytes | (disabled) |
+| `LOOP_JSON_LOG_MAX_ROLLS` | Max rolled log files to retain | 5 |
+| `LOOP_DIFF_EXIT_CODE` | Custom process exit code when diffs>0 & no errors | (unset) |
+| `LOOP_JSON_LOG_MAX_AGE_SECONDS` | Rotate JSON log after this age (seconds) | (disabled) |
+| `LOOP_FINAL_STATUS_JSON` | Path to emit final status JSON document | (disabled) |
 
 Additional switches:
 
@@ -216,6 +221,10 @@ Additional switches:
 - `-NoStepSummary`: Prevent appending diff summary to `$GITHUB_STEP_SUMMARY` even if present.
 - `-NoConsoleSummary`: Suppress printing the human-readable summary block (useful when only JSON logs are desired).
 - `-JsonLogPath <file>`: Write structured NDJSON events (`plan`, `dryRun`, `result`, `stepSummaryAppended`).
+- `-DiffExitCode <int>`: When set and the loop succeeds with one or more diffs, exit using this code instead of 0.
+- Rotation: Set `LOOP_JSON_LOG_MAX_BYTES` and optionally `LOOP_JSON_LOG_MAX_ROLLS` (default 5) for rolling `*.roll` files.
+- Time-based rotation: Set `LOOP_JSON_LOG_MAX_AGE_SECONDS` to force age-based rotation.
+- Final status JSON: Provide `-FinalStatusJsonPath` or env `LOOP_FINAL_STATUS_JSON` to write a `loop-final-status-v1` JSON (separate from run summary JSON inside the loop module).
 
 Quick simulated run (no real LVCompare required):
 
@@ -250,6 +259,40 @@ Structured events sample (`loop-events.ndjson` first lines):
 {"timestamp":"2025-10-01T12:00:00.100Z","type":"plan","simulate":true,"dryRun":false,"maxIterations":15,"interval":0,"diffSummaryFormat":"Html"}
 {"timestamp":"2025-10-01T12:00:00.250Z","type":"result","iterations":15,"diffs":15,"errors":0,"succeeded":true}
 ```
+
+Event schema versioning:
+
+- Each event now includes `"schema":"loop-script-events-v1"`.
+- Meta events:
+  - `type=meta action=create` on new log creation
+  - `type=meta action=rotate` when rotation occurs (fields: `from`, `to`)
+- Backward compatibility: future minor additions will retain existing fields; consumers should ignore unknown properties.
+
+JSON Schemas:
+
+- `docs/schemas/loop-script-events-v1.schema.json`
+- `docs/schemas/loop-final-status-v1.schema.json`
+
+Final status example minimal structure:
+
+```jsonc
+{
+  "schema": "loop-final-status-v1",
+  "timestamp": "2025-10-01T12:34:56.789Z",
+  "iterations": 40,
+  "diffs": 12,
+  "errors": 0,
+  "succeeded": true,
+  "averageSeconds": 0.012,
+  "totalSeconds": 0.55,
+  "percentiles": { "p50": 0.010, "p90": 0.018, "p99": 0.024 },
+  "histogram": [ { "Index":0, "Start":0, "End":1, "Count":40 } ],
+  "diffSummaryEmitted": true,
+  "basePath": "Base.vi",
+  "headPath": "Head.vi"
+}
+```
+
 
 GitHub Actions step example (simulated):
 

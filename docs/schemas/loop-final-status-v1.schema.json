@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-ci.example.com/schemas/loop-final-status-v1.schema.json",
+  "title": "Loop Final Status (v1)",
+  "type": "object",
+  "required": ["schema","timestamp","iterations","diffs","errors","succeeded"],
+  "properties": {
+    "schema": {"const": "loop-final-status-v1"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "iterations": {"type": "integer", "minimum": 0},
+    "diffs": {"type": "integer", "minimum": 0},
+    "errors": {"type": "integer", "minimum": 0},
+    "succeeded": {"type": "boolean"},
+    "averageSeconds": {"type": "number", "minimum": 0},
+    "totalSeconds": {"type": "number", "minimum": 0},
+    "percentiles": {"type": "object", "additionalProperties": {"type": "number"}},
+    "histogram": {"type": ["array","null"], "items": {"type": "object"}},
+    "diffSummaryEmitted": {"type": "boolean"},
+    "basePath": {"type": "string"},
+    "headPath": {"type": "string"}
+  },
+  "additionalProperties": true
+}

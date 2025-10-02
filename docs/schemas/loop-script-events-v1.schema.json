@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-ci.example.com/schemas/loop-script-events-v1.schema.json",
+  "title": "Loop Script Event (v1)",
+  "type": "object",
+  "required": ["timestamp","type","schema"],
+  "properties": {
+    "timestamp": {"type": "string", "format": "date-time"},
+    "type": {"type": "string"},
+    "schema": {"const": "loop-script-events-v1"},
+    "level": {"type": "string"},
+    "simulate": {"type": "boolean"},
+    "dryRun": {"type": "boolean"},
+    "maxIterations": {"type": "integer", "minimum": 0},
+    "interval": {"type": "number", "minimum": 0},
+    "diffSummaryFormat": {"type": "string"},
+    "iterations": {"type": "integer", "minimum": 0},
+    "diffs": {"type": "integer", "minimum": 0},
+    "errors": {"type": "integer", "minimum": 0},
+    "succeeded": {"type": "boolean"},
+    "path": {"type": "string"},
+    "action": {"type": "string"},
+    "from": {"type": "string"},
+    "to": {"type": "string"}
+  },
+  "additionalProperties": true
+}

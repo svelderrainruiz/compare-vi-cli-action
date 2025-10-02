@@ -72,6 +72,21 @@
 .PARAMETER NoConsoleSummary
   Suppress the human-readable console summary block (or set env LOOP_NO_CONSOLE_SUMMARY=1). JSON logging unaffected.
 
+.PARAMETER DiffExitCode
+  When provided (or env LOOP_DIFF_EXIT_CODE) use this exit code if the loop succeeds and diffs were detected (ErrorCount=0, DiffCount>0). Default behavior leaves exit code 0.
+
+.PARAMETER JsonLogMaxBytes
+  Max file size in bytes before rotation (env LOOP_JSON_LOG_MAX_BYTES). If exceeded a numbered roll is performed.
+
+.PARAMETER JsonLogMaxRolls
+  Maximum number of rotated log files to retain (env LOOP_JSON_LOG_MAX_ROLLS). Oldest removed after exceeding.
+
+.PARAMETER JsonLogMaxAgeSeconds
+  Max age in seconds before forcing a rotation on next write regardless of size (env LOOP_JSON_LOG_MAX_AGE_SECONDS).
+
+.PARAMETER FinalStatusJsonPath
+  Emit machine-readable final status JSON document (env LOOP_FINAL_STATUS_JSON) containing core metrics & schema.
+
 .OUTPUTS
   Writes key result fields and optionally diff summary to stdout. Exit code 0 when Succeeded, 1 otherwise.
 
@@ -112,6 +127,11 @@ param(
   , [string]$JsonLogPath = $env:LOOP_JSON_LOG
   , [switch]$NoStepSummary
   , [switch]$NoConsoleSummary
+  , [int]$DiffExitCode = ($env:LOOP_DIFF_EXIT_CODE -as [int])
+  , [int]$JsonLogMaxBytes = ($env:LOOP_JSON_LOG_MAX_BYTES -as [int])
+  , [int]$JsonLogMaxRolls = ($env:LOOP_JSON_LOG_MAX_ROLLS -as [int])
+  , [int]$JsonLogMaxAgeSeconds = ($env:LOOP_JSON_LOG_MAX_AGE_SECONDS -as [int])
+  , [string]$FinalStatusJsonPath = $env:LOOP_FINAL_STATUS_JSON
 )
 
 # Defaults / fallbacks
@@ -192,13 +212,59 @@ function Write-Detail {
 function Write-JsonEvent {
   param([string]$Type,[hashtable]$Data)
   if (-not $JsonLogPath) { return }
+  $schemaVersion = 'loop-script-events-v1'
   $payload = [ordered]@{
     timestamp = (Get-Date).ToString('o')
     type = $Type
     level = 'info'
+    schema = $schemaVersion
   }
   if ($Data) { foreach ($k in $Data.Keys) { $payload[$k] = $Data[$k] } }
+  Ensure-JsonLog -Path $JsonLogPath
   try { ($payload | ConvertTo-Json -Compress) | Add-Content -Path $JsonLogPath } catch { Write-Detail "Failed JSON log append: $($_.Exception.Message)" 'Error' }
+}
+
+function Ensure-JsonLog {
+  param([string]$Path)
+  if (-not $Path) { return }
+  $dir = Split-Path -Parent $Path
+  if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+  if (-not (Test-Path $Path)) {
+    New-Item -ItemType File -Path $Path | Out-Null
+    # meta create event (cannot call Write-JsonEvent recursively before file exists safely)
+    ($([ordered]@{ timestamp=(Get-Date).ToString('o'); type='meta'; action='create'; target=$Path; schema='loop-script-events-v1' }) | ConvertTo-Json -Compress) | Add-Content -Path $Path
+    return
+  }
+  $needsRotate = $false
+  if ($JsonLogMaxBytes -and (Get-Item $Path).Length -gt $JsonLogMaxBytes) { $needsRotate = $true }
+  if ($JsonLogMaxAgeSeconds -and $JsonLogMaxAgeSeconds -gt 0) {
+    $ageSec = (New-TimeSpan -Start (Get-Item $Path).CreationTimeUtc -End (Get-Date).ToUniversalTime()).TotalSeconds
+    if ($ageSec -ge $JsonLogMaxAgeSeconds) { $needsRotate = $true }
+  }
+  if ($needsRotate) { Rotate-JsonLog -Path $Path }
+}
+
+function Rotate-JsonLog {
+  param([string]$Path)
+  try {
+    $base = Split-Path -Leaf $Path
+    $dir = Split-Path -Parent $Path
+    $rolls = Get-ChildItem -Path $dir -Filter "$base.*.roll" -ErrorAction SilentlyContinue | Sort-Object Name
+    $next = if ($rolls) { ([int]($rolls[-1].Name.Split('.')[-2]) + 1) } else { 1 }
+    $rolled = Join-Path $dir "$base.$next.roll"
+    Move-Item -Path $Path -Destination $rolled -Force
+    New-Item -ItemType File -Path $Path | Out-Null
+    ($([ordered]@{ timestamp=(Get-Date).ToString('o'); type='meta'; action='rotate'; from=$rolled; to=$Path; schema='loop-script-events-v1' }) | ConvertTo-Json -Compress) | Add-Content -Path $Path
+    if ($JsonLogMaxRolls -and $JsonLogMaxRolls -gt 0) {
+      $all = Get-ChildItem -Path $dir -Filter "$base.*.roll" | Sort-Object { $_.Name -replace '.*\\.(\d+)\.roll','$1' -as [int] }
+      if ($all.Count -gt $JsonLogMaxRolls) {
+        $remove = $all | Select-Object -First ($all.Count - $JsonLogMaxRolls)
+        foreach ($r in $remove) { Remove-Item -Path $r.FullName -Force -ErrorAction SilentlyContinue }
+      }
+    }
+  } catch {
+    Write-Detail "Log rotation failed: $($_.Exception.Message)" 'Error'
+  }
 }
 
 Write-Detail ("Resolved LogVerbosity=$LogVerbosity DryRun=$($DryRun.IsPresent) Simulate=$simulate") 'Debug'
@@ -218,6 +284,35 @@ if ($DryRun) {
 
 $result = Invoke-IntegrationCompareLoop @invokeParams
 Write-JsonEvent 'result' (@{ iterations=$result.Iterations; diffs=$result.DiffCount; errors=$result.ErrorCount; succeeded=$result.Succeeded })
+
+# Final status JSON emission (independent of run summary JSON produced by loop if that param was set)
+if ($FinalStatusJsonPath) {
+  try {
+    $obj = [ordered]@{
+      schema = 'loop-final-status-v1'
+      timestamp = (Get-Date).ToString('o')
+      iterations = $result.Iterations
+      diffs = $result.DiffCount
+      errors = $result.ErrorCount
+      succeeded = $result.Succeeded
+      averageSeconds = $result.AverageSeconds
+      totalSeconds = $result.TotalSeconds
+      percentiles = $result.Percentiles
+      histogram = $result.Histogram
+      diffSummaryEmitted = [bool]$result.DiffSummary
+      basePath = $result.BasePath
+      headPath = $result.HeadPath
+    }
+    $json = $obj | ConvertTo-Json -Depth 5
+    $finalDir = Split-Path -Parent $FinalStatusJsonPath
+    if ($finalDir -and -not (Test-Path $finalDir)) { New-Item -ItemType Directory -Path $finalDir | Out-Null }
+    Set-Content -Path $FinalStatusJsonPath -Value $json
+    Write-Detail "Final status JSON: $FinalStatusJsonPath" 'Debug'
+    Write-JsonEvent 'finalStatusEmitted' @{ path=$FinalStatusJsonPath }
+  } catch {
+    Write-Detail "Failed to write FinalStatusJsonPath: $($_.Exception.Message)" 'Error'
+  }
+}
 
 # Emit concise console summary
 $summaryLines = @()
@@ -239,4 +334,6 @@ if (-not $NoStepSummary -and $env:GITHUB_STEP_SUMMARY -and $result.DiffSummary) 
 }
 
 # Exit code semantics: 0 when succeeded (even if diffs unless FailOnDiff terminated early), 1 if any errors encountered
-if (-not $result.Succeeded) { exit 1 } else { exit 0 }
+if (-not $result.Succeeded) { exit 1 }
+if ($DiffExitCode -and $result.DiffCount -gt 0 -and $result.ErrorCount -eq 0) { exit $DiffExitCode }
+exit 0
