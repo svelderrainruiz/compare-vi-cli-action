@@ -58,6 +58,7 @@ It 'simulates older Pester' {
 ```
 
 Key guidelines:
+
 1. Define the shadowed function inside each `It` block (keeps scope predictable).
 2. Always remove it with `Remove-Item Function:Get-Module` at the end of the block.
 3. Avoid cross-test reuse—duplication is intentional for isolation.

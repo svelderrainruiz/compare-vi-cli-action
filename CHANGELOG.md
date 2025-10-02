@@ -74,7 +74,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Reservoir percentiles use linear interpolation—raise `-StreamCapacity` or enable `-ReconcileEvery` for more stable high-percentile (p99) estimates under bursty distributions.
 - Schema version policy: patch for strictly additive fields; minor for additive but monitored fields; major for breaking structural changes.
 
-
 ## [v0.2.0] - 2025-10-01
 
 ### Added (Initial Release)

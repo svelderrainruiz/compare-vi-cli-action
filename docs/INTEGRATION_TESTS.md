@@ -27,26 +27,26 @@ This design prevents container-level failures during discovery and keeps CI gree
 
 1. Install LabVIEW with the Compare feature (LVCompare) and (optionally) LabVIEW CLI.
 
-2. Set environment variables:
+1. Set environment variables:
 
-	```powershell
-	$env:LV_BASE_VI = 'C:\Path\To\Base.vi'
-	$env:LV_HEAD_VI = 'C:\Path\To\Head.vi'
-	```
+  ```powershell
+  $env:LV_BASE_VI = 'C:\Path\To\Base.vi'
+  $env:LV_HEAD_VI = 'C:\Path\To\Head.vi'
+  ```
 
-3. Verify paths:
+1. Verify paths:
 
-	```powershell
-	Test-Path 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-	Test-Path $env:LV_BASE_VI
-	Test-Path $env:LV_HEAD_VI
-	```
+  ```powershell
+  Test-Path 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+  Test-Path $env:LV_BASE_VI
+  Test-Path $env:LV_HEAD_VI
+  ```
 
-4. Run the dispatcher including integration tests:
+1. Run the dispatcher including integration tests:
 
-	```powershell
-	./Invoke-PesterTests.ps1 -IncludeIntegration true
-	```
+  ```powershell
+  ./Invoke-PesterTests.ps1 -IncludeIntegration true
+  ```
 
 To include HTML report tests also verify:
 
@@ -56,7 +56,7 @@ Test-Path 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEWCLI.exe'
 
 ## Initialization Approach
 
-The integration test script (`tests/CompareVI.Integration.Tests.ps1`) now performs prerequisite checks and initialization directly, without a separate helper function. 
+The integration test script (`tests/CompareVI.Integration.Tests.ps1`) now performs prerequisite checks and initialization directly, without a separate helper function.
 
 - Canonical paths and environment variable values are captured in the script.
 - Existence of required files is evaluated inline.
@@ -67,10 +67,12 @@ The integration test script (`tests/CompareVI.Integration.Tests.ps1`) now perfor
 ### Timing Metrics
 
 When using the action or calling `Invoke-CompareVI` directly, an execution duration (seconds) is recorded and surfaced as:
+
 - Return object property `CompareDurationSeconds` (renamed from `DurationSeconds`)
 - Step summary line `Duration (s): <value>`
 - Output file key `compareDurationSeconds=<value>` when `GitHubOutputPath` is used
 - HTML report field when `Render-CompareReport.ps1` is passed `-DurationSeconds`
+
 ```powershell
 ./scripts/Test-IntegrationEnvironment.ps1 -JsonPath tests/results/integration-env.json
 ```

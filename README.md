@@ -322,7 +322,6 @@ Final status example minimal structure:
 }
 ```
 
-
 GitHub Actions step example (simulated):
 
 ```yaml
@@ -374,11 +373,11 @@ Use this workflow to retain comparison evidence on every push or pull request wi
 Integration readiness
 
 Use the helper script to assess prerequisites before enabling integration tests:
- 
+
 ```powershell
 ./scripts/Test-IntegrationEnvironment.ps1 -JsonPath tests/results/integration-env.json
 ```
- 
+
 Exit code 0 means ready; 1 indicates missing prerequisites (non-fatal for CI gating).
 
 Troubleshooting unknown exit codes
@@ -627,7 +626,6 @@ param(
 "Notify: Run#$RunSequence Status=$Status Failed=$Failed/$Tests Skipped=$Skipped Class=$Classification (env=$env:WATCH_STATUS)"
 ```
 
-
 Integration compare control loop (developer scaffold)
 
 For rapid, iterative development against two real VIs (e.g. editing a feature branch VI and observing diff stability / timing) a lightweight polling loop script is provided:
@@ -809,7 +807,6 @@ Limitations:
 - Percentiles are limited to p50/p90/p99 (custom list planned as a future enhancement).
 - Loop mode intentionally does not expose raw per-iteration records via outputs—consume the JSON file if needed.
 
-
 ## Streaming quantile strategies (timing distribution)
 
 The compare loop module can estimate latency percentiles (p50/p90/p99) with bounded memory.
@@ -866,7 +863,6 @@ Tuning checklist:
 5. Tail (p99) noisy? Increase capacity or reconciliation frequency modestly.
 
 Future considerations (open to contributions): true P² marker implementation, advanced tail percentiles beyond those requested (e.g., p99.99), weighted / stratified sampling strategies.
-
 
 Switches `-SkipValidation` and `-PassThroughPaths` exist solely for unit-style testing; omit them in real usage.
 
@@ -957,7 +953,6 @@ Run summary schema excerpt:
   "percentiles": { "p50": 0.017, "p75": 0.020, "p90": 0.024, "p97_5": 0.025, "p99_9": 0.028 }
 }
 ```
-
 
 Dispatcher JSON outputs & customization
 
@@ -1102,5 +1097,3 @@ This project is licensed under the BSD 3-Clause License. See the [`LICENSE`](./L
 - **Discussions**: Ask questions or share ideas in [GitHub Discussions](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/discussions)
 - **Contributing**: See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for guidelines
 - **Security**: Report security vulnerabilities via [`SECURITY.md`](./SECURITY.md)
-
-
