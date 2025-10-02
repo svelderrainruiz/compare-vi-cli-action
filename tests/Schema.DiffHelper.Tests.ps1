@@ -1,8 +1,10 @@
 Set-StrictMode -Version Latest
 
-. "$PSScriptRoot/TestHelpers.Schema.ps1"
-
 Describe 'Compare-JsonShape diff helper' -Tag 'Unit' {
+  BeforeAll {
+    . "$PSScriptRoot/TestHelpers.Schema.ps1"
+  }
+
   It 'detects missing required properties and value diffs' {
     $base = Join-Path $TestDrive 'base.json'
     $cand = Join-Path $TestDrive 'cand.json'

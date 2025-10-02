@@ -189,14 +189,14 @@ jobs:
           # Report for Case 1 (diff=true)
           & $renderer `
             -Command '${{ steps.c1.outputs.command }}' `
-            -ExitCode [int]'${{ steps.c1.outputs.exitCode }}' `
+            -ExitCode ${{ steps.c1.outputs.exitCode }} `
             -Diff '${{ steps.c1.outputs.diff }}' `
             -CliPath '${{ steps.c1.outputs.cliPath }}' `
             -OutputPath (Join-Path $outDir 'case-1.html')
           # Report for Case 3 (no diff)
           & $renderer `
             -Command '${{ steps.c3.outputs.command }}' `
-            -ExitCode [int]'${{ steps.c3.outputs.exitCode }}' `
+            -ExitCode ${{ steps.c3.outputs.exitCode }} `
             -Diff '${{ steps.c3.outputs.diff }}' `
             -CliPath '${{ steps.c3.outputs.cliPath }}' `
             -OutputPath (Join-Path $outDir 'case-3.html')

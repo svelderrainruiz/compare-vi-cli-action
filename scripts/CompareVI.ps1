@@ -77,14 +77,14 @@ function Invoke-CompareVI {
 
     $cli = Resolve-Cli -Explicit $LvComparePath
 
-    $args = @()
+    $cliArgs = @()
     if ($LvCompareArgs) {
       $pattern = '"[^"]+"|\S+'
       $tokens = [regex]::Matches($LvCompareArgs, $pattern) | ForEach-Object { $_.Value }
-      foreach ($t in $tokens) { $args += $t.Trim('"') }
+      foreach ($t in $tokens) { $cliArgs += $t.Trim('"') }
     }
 
-    $cmdline = (@(Quote $cli; Quote $baseAbs; Quote $headAbs) + ($args | ForEach-Object { Quote $_ })) -join ' '
+    $cmdline = (@(Quote $cli; Quote $baseAbs; Quote $headAbs) + ($cliArgs | ForEach-Object { Quote $_ })) -join ' '
 
     # Measure execution time
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -92,11 +92,12 @@ function Invoke-CompareVI {
     $code = $null
     if ($Executor) {
       # Pass args as a single array to avoid unrolling
-      $code = & $Executor $cli $baseAbs $headAbs ,$args
+      $code = & $Executor $cli $baseAbs $headAbs ,$cliArgs
     }
     else {
-      & $cli $baseAbs $headAbs @args
-      $code = $LASTEXITCODE
+      & $cli $baseAbs $headAbs @cliArgs
+      # Capture exit code (use 0 as fallback if LASTEXITCODE not yet set in session)
+      $code = if (Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue) { $LASTEXITCODE } else { 0 }
     }
   $sw.Stop()
   $compareDurationSeconds = [math]::Round($sw.Elapsed.TotalSeconds, 3)

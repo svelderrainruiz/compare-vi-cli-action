@@ -1,5 +1,8 @@
 Describe 'Invoke-PesterTests Timeout Guard' -Tag 'Unit' {
-  $script:dispatcher = Join-Path $PSScriptRoot '..' 'Invoke-PesterTests.ps1'
+  BeforeAll {
+    $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+    $script:dispatcher = Join-Path $repoRoot 'Invoke-PesterTests.ps1'
+  }
 
   It 'emits timedOut=true in JSON when timeout triggers (simulated)' {
     # Create a temp tests dir with a long-running test (simulate via Start-Sleep)
@@ -18,7 +21,7 @@ Describe 'Invoke-PesterTests Timeout Guard' -Tag 'Unit' {
 
     $env:COMPARISON_ACTION_DEBUG='0'
     # Invoke dispatcher with very small timeout
-    pwsh -File $dispatcher -TestsPath $temp -ResultsPath $results -JsonSummaryPath $jsonSummary -TimeoutMinutes 0.01 -IncludeIntegration false -EmitFailuresJsonAlways | Out-Null
+    pwsh -File $script:dispatcher -TestsPath $temp -ResultsPath $results -JsonSummaryPath $jsonSummary -TimeoutMinutes 0.01 -IncludeIntegration false -EmitFailuresJsonAlways | Out-Null
 
     $summaryPath = Join-Path $results $jsonSummary
     Test-Path $summaryPath | Should -BeTrue

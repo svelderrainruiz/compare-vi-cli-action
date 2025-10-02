@@ -14,12 +14,12 @@ Describe 'Invoke-IntegrationCompareLoop percentile edge handling' -Tag 'Unit' {
   }
 
   It 'rejects out-of-range values (0 and 100)' {
-    { Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 1 -IntervalSeconds 0 -CompareExecutor { 0 } -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '0,50,99' } | Should -Throw '*out of range*'
-    { Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 1 -IntervalSeconds 0 -CompareExecutor { 0 } -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,100' } | Should -Throw '*out of range*'
+    { Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 1 -IntervalSeconds 0 -CompareExecutor { 0 } -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '0,50,99' } | Should -Throw '*out of range*'
+    { Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 1 -IntervalSeconds 0 -CompareExecutor { 0 } -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,100' } | Should -Throw '*out of range*'
   }
 
   It 'collapses duplicate percentile values' {
-    $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 3 -IntervalSeconds 0 -CompareExecutor { 0 } -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,50,90,90,99'
+    $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 3 -IntervalSeconds 0 -CompareExecutor { 0 } -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,50,90,90,99'
     $names = $r.Percentiles | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
     @($names | Where-Object { $_ -eq 'p50' }).Count | Should -Be 1
     @($names | Where-Object { $_ -eq 'p90' }).Count | Should -Be 1
@@ -27,13 +27,13 @@ Describe 'Invoke-IntegrationCompareLoop percentile edge handling' -Tag 'Unit' {
 
   It 'enforces maximum list length' {
     $values = (1..51) -join ','
-    { Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 1 -IntervalSeconds 0 -CompareExecutor { 0 } -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles $values } | Should -Throw '*Too many percentile values*'
+    { Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 1 -IntervalSeconds 0 -CompareExecutor { 0 } -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles $values } | Should -Throw '*Too many percentile values*'
   }
 
   It 'accepts fractional values and underscores label' {
     # Use executor with small sleep to ensure non-zero duration samples so percentile logic engages
   $exec = { param($cli,$b,$h,$lvArgs) Start-Sleep -Milliseconds 5; return 0 }
-    $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 4 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,97.5'
+    $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 4 -IntervalSeconds 0 -CompareExecutor $exec -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,97.5'
     $r.Percentiles.'p97_5' | Should -Not -BeNullOrEmpty
   }
 }
