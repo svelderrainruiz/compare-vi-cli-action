@@ -50,7 +50,7 @@ Describe 'Pester Summary Schema' {
       $req = 'schemaVersion','total','passed','failed','errors','skipped','duration_s','timestamp','pesterVersion','includeIntegration','discoveryFailures'
       foreach ($k in $req) { ($json.PSObject.Properties.Name -contains $k) | Should -BeTrue -Because "Missing field $k" }
 
-  $json.schemaVersion | Should -Be '1.4.0'
+  $json.schemaVersion | Should -Be '1.5.0'
       $json.total | Should -BeGreaterThan 0
       $json.passed | Should -BeGreaterThan 0
       $json.failed | Should -Be 0
@@ -66,6 +66,7 @@ Describe 'Pester Summary Schema' {
   ($json.PSObject.Properties.Name -contains 'run') | Should -BeFalse
   ($json.PSObject.Properties.Name -contains 'selection') | Should -BeFalse
   ($json.PSObject.Properties.Name -contains 'stability') | Should -BeFalse
+  ($json.PSObject.Properties.Name -contains 'discovery') | Should -BeFalse
     } finally {
       Pop-Location
       Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue

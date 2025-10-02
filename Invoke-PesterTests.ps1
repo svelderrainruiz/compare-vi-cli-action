@@ -59,6 +59,9 @@ param(
 ,
   [Parameter(Mandatory = $false)]
   [switch]$EmitStability
+,
+  [Parameter(Mandatory = $false)]
+  [switch]$EmitDiscoveryDetail
 )
 
 Set-StrictMode -Version Latest
@@ -70,7 +73,7 @@ if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds 
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.4.0'
+$SchemaSummaryVersion  = '1.5.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -826,6 +829,45 @@ try {
       }
       Add-Member -InputObject $jsonObj -Name stability -MemberType NoteProperty -Value $stabilityBlock
     } catch { Write-Warning "Failed to emit stability block: $_" }
+  }
+
+  # Optional discovery diagnostics block (schema v1.5.0+)
+  if ($EmitDiscoveryDetail) {
+    try {
+      $sampleLimit = 5
+      $patternsUsed = @($discoveryFailurePatterns)
+      $samples = @()
+      if ($discoveryFailureCount -gt 0) {
+        # Re-scan combined text capturing snippet lines around the match (first line only for now)
+        $scanSource = ''
+        try {
+          if ($capturedOutputLines.Count -gt 0) { $scanSource = ($capturedOutputLines -join [Environment]::NewLine) }
+          elseif ($partialLogPath -and (Test-Path -LiteralPath $partialLogPath)) { $scanSource = Get-Content -LiteralPath $partialLogPath -Raw }
+        } catch {}
+        if ($scanSource) {
+          $idx = 0
+          foreach ($pat in $discoveryFailurePatterns) {
+            foreach ($m in [regex]::Matches($scanSource,$pat,'IgnoreCase')) {
+              if ($samples.Count -ge $sampleLimit) { break }
+              $snippet = $m.Value
+              # Trim very long snippet to first 200 chars for compactness
+              if ($snippet.Length -gt 200) { $snippet = $snippet.Substring(0,200) + '…' }
+              $samples += [pscustomobject]@{ index = $idx; snippet = $snippet }
+              $idx++
+            }
+            if ($samples.Count -ge $sampleLimit) { break }
+          }
+        }
+      }
+      $discoveryBlock = [pscustomobject]@{
+        failureCount = $discoveryFailureCount
+        patterns     = $patternsUsed
+        sampleLimit  = $sampleLimit
+        samples      = $samples
+        truncated    = ($discoveryFailureCount -gt $samples.Count)
+      }
+      Add-Member -InputObject $jsonObj -Name discovery -MemberType NoteProperty -Value $discoveryBlock
+    } catch { Write-Warning "Failed to emit discovery diagnostics block: $_" }
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray

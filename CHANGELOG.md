@@ -11,6 +11,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 - Pester dispatcher schema v1.3.0 (`pester-summary-v1_3.schema.json`): optional `timing` block (opt-in via `-EmitTimingDetail`) with extended per-test duration statistics (count, totalMs, min/max/mean/median/stdDev, p50/p75/p90/p95/p99) while retaining legacy root timing fields.
 - Pester dispatcher schema v1.4.0 (`pester-summary-v1_4.schema.json`): optional `stability` block (opt-in via `-EmitStability`) providing scaffolding fields for future retry/flakiness detection (currently placeholder values / no retry engine).
+- Pester dispatcher schema v1.5.0 (`pester-summary-v1_5.schema.json`): optional `discovery` block (opt-in via `-EmitDiscoveryDetail`) surfacing patterns, sampleLimit, captured failure snippets, and truncation flag.
 
 ### Documentation
 

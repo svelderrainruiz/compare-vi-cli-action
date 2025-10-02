@@ -1,5 +1,5 @@
-Describe 'Pester Summary Stability Emission' {
-  It 'emits stability block with placeholder values when -EmitStability specified' {
+Describe 'Pester Summary Discovery Detail Emission' {
+  It 'emits discovery block with samples when -EmitDiscoveryDetail and discovery failures occur' {
     $scriptDir = $PSScriptRoot; if (-not $scriptDir -and $PSCommandPath) { $scriptDir = Split-Path -Parent $PSCommandPath }
     if (-not $scriptDir -and $MyInvocation.MyCommand.Path) { $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
     if (-not $scriptDir) { throw 'Unable to resolve test directory.' }
@@ -11,26 +11,29 @@ Describe 'Pester Summary Stability Emission' {
     $testsDir = Join-Path $tempDir 'tests'
     New-Item -ItemType Directory -Path $testsDir | Out-Null
 
-    $content = "Describe 'FlakyScaffold' { It 'passes' { 1 | Should -Be 1 } }"
-    Set-Content -LiteralPath (Join-Path $testsDir 'Flaky.Tests.ps1') -Value $content -Encoding UTF8
+    # Intentionally malformed test file to trigger discovery failure
+    $bad = @(
+      "Describe 'Broken' {",
+      "  It 'will not parse' {",  # Missing closing braces
+      ""
+    ) -join [Environment]::NewLine
+    Set-Content -LiteralPath (Join-Path $testsDir 'Broken.Tests.ps1') -Value $bad -Encoding UTF8
 
     Push-Location $root
     try {
       $resDir = Join-Path $tempDir 'results'
-      & pwsh -NoLogo -NoProfile -File $dispatcher -TestsPath $testsDir -ResultsPath $resDir -EmitStability | Out-Null
+      & pwsh -NoLogo -NoProfile -File $dispatcher -TestsPath $testsDir -ResultsPath $resDir -EmitDiscoveryDetail | Out-Null
       $summaryPath = Join-Path $resDir 'pester-summary.json'
       Test-Path $summaryPath | Should -BeTrue
       $json = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
 
-  $json.schemaVersion | Should -Be '1.5.0'
-      ($json.PSObject.Properties.Name -contains 'stability') | Should -BeTrue
-      $json.stability.supportsRetries | Should -BeFalse
-      $json.stability.retryAttempts | Should -Be 0
-      $json.stability.initialFailed | Should -BeGreaterOrEqual 0
-      $json.stability.finalFailed | Should -BeGreaterOrEqual 0
-      $json.stability.recovered | Should -BeFalse
-      $json.stability.flakySuspects.Count | Should -Be 0
-      $json.stability.retriedTestFiles.Count | Should -Be 0
+      $json.schemaVersion | Should -Be '1.5.0'
+      ($json.PSObject.Properties.Name -contains 'discovery') | Should -BeTrue
+      $json.discovery.failureCount | Should -BeGreaterOrEqual 1
+      $json.discovery.patterns.Count | Should -BeGreaterOrEqual 1
+      $json.discovery.sampleLimit | Should -BeGreaterThan 0
+      $json.discovery.samples.Count | Should -BeGreaterOrEqual 1
+      $json.discovery.samples[0].snippet | Should -Match 'Discovery in'
     } finally {
       Pop-Location
       Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue

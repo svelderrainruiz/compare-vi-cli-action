@@ -399,7 +399,7 @@ Marketplace
 
 Notes
 
-## Pester Test Dispatcher JSON Summary (Schema v1.4.0)
+## Pester Test Dispatcher JSON Summary (Schema v1.5.0)
 
 The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
 
@@ -407,7 +407,7 @@ Schema files:
 
 - Baseline (core fields) [`docs/schemas/pester-summary-v1_1.schema.json`](./docs/schemas/pester-summary-v1_1.schema.json)
 - Current (adds optional context blocks) [`docs/schemas/pester-summary-v1_2.schema.json`](./docs/schemas/pester-summary-v1_2.schema.json)
-- Latest (adds optional stability block) [`docs/schemas/pester-summary-v1_4.schema.json`](./docs/schemas/pester-summary-v1_4.schema.json)
+- Latest (adds optional discovery block) [`docs/schemas/pester-summary-v1_5.schema.json`](./docs/schemas/pester-summary-v1_5.schema.json)
 
 Validation tests:
 
@@ -418,7 +418,7 @@ Validation tests:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schemaVersion` | string (const `1.4.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `schemaVersion` | string (const `1.5.0`) | Version identifier (semantic). Additive fields bump minor only. |
 | `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
 | `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
 | `failed` | int >=0 | Assertion failures (Pester logical failures). |
@@ -523,6 +523,24 @@ Invocation example:
 ./Invoke-PesterTests.ps1 -EmitStability
 ```
 
+### New in 1.5.0: Discovery Diagnostics Block
+
+Opt-in (`-EmitDiscoveryDetail`) `discovery` object providing structured insight into discovery failures (previously counted only).
+
+| Field | Meaning |
+|-------|---------|
+| `failureCount` | Number of matches (mirrors root `discoveryFailures`). |
+| `patterns` | Array of regex patterns used for detection. |
+| `sampleLimit` | Max number of snippets captured. |
+| `samples[]` | Array of `{ index, snippet }` objects (snippet truncated to 200 chars). |
+| `truncated` | True if actual matches exceed captured samples. |
+
+Invocation example:
+
+```powershell
+./Invoke-PesterTests.ps1 -EmitDiscoveryDetail
+```
+
 ### Planned Incremental Enrichment (Roadmap)
 
 | Planned Version | Block | Purpose |
@@ -530,7 +548,7 @@ Invocation example:
 | 1.2.0 | `environment`, `run`, `selection` | Context (OS, PS version, run window, file selection stats) – IMPLEMENTED (opt-in via `-EmitContext`). |
 | 1.3.0 | `timing` (extended) | Rich percentile spread & optional per-test durations (flag‑gated) – IMPLEMENTED (opt-in via `-EmitTimingDetail`). |
 | 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced) – IMPLEMENTED (opt-in via `-EmitStability`). |
-| 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size). |
+| 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size) – IMPLEMENTED (opt-in via `-EmitDiscoveryDetail`). |
 | 1.6.0 | `outcome` | Unified status classification (`Passed\|Failed\|Errored\|TimedOut\|DiscoveryError`). |
 | 1.7.0 | `aggregationHints` | CI correlation (commit SHA, branch, shard id). |
 | 1.8.0 | `extensions` | Vendor / custom injection surface (namespaced flexible data). |
@@ -549,11 +567,11 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 - When aggregating trends, prefer stable ratios: pass rate = `(passed)/(total)`; failure density = `(failed+errors)/total`.
 
 
-### Example Minimal JSON (Default, No Context, No Timing, No Stability)
+### Example Minimal JSON (Default, No Context, No Timing, No Stability, No Discovery)
 
 ```jsonc
 {
-  "schemaVersion": "1.4.0",
+  "schemaVersion": "1.5.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -570,11 +588,11 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
   "discoveryFailures": 0
 }
 
-### Example With Context, Timing & Stability
+### Example With Context, Timing, Stability & Discovery
 
 ```jsonc
 {
-  "schemaVersion": "1.4.0",
+  "schemaVersion": "1.5.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -611,6 +629,13 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
     "recovered": false,
     "flakySuspects": [],
     "retriedTestFiles": []
+  },
+  "discovery": {
+    "failureCount": 1,
+    "patterns": ["(?s)Discovery in .*? failed with:"],
+    "sampleLimit": 5,
+    "samples": [{ "index": 0, "snippet": "Discovery in C:/path/Test.Tests.ps1 failed with: <error>" }],
+    "truncated": false
   },
   "environment": {
     "osDescription": "Microsoft Windows 11 Pro 10.0.22631",
