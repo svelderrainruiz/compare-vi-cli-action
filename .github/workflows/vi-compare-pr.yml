@@ -1,0 +1,56 @@
+name: PR VI Compare
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  vi-compare:
+    runs-on: [self-hosted, Windows]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Single compare (Base.vi vs Head.vi)
+        id: single
+        shell: pwsh
+        run: |
+          pwsh -File scripts/Generate-PullRequestCompareReport.ps1 -OutputDirectory compare-artifacts
+
+      - name: Loop compare (latency sample)
+        id: loop
+        shell: pwsh
+        run: |
+          pwsh -File scripts/Generate-PullRequestCompareReport.ps1 -OutputDirectory loop-artifacts -LoopMode -LoopIterations 25 -QuantileStrategy StreamingReservoir -StreamCapacity 300 -HistogramBins 5
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vi-compare-artifacts
+          path: |
+            compare-artifacts/*
+            loop-artifacts/*
+
+      - name: Append summary
+        if: always()
+        shell: pwsh
+        run: |
+          $single = Get-Content compare-artifacts/pr-diff-snippet.md -Raw
+          $loop = Get-Content loop-artifacts/pr-diff-snippet.md -Raw
+          Add-Content $env:GITHUB_STEP_SUMMARY "### VI Compare (Single Run)"; Add-Content $env:GITHUB_STEP_SUMMARY $single
+          Add-Content $env:GITHUB_STEP_SUMMARY "\n### VI Compare (Loop Mode)"; Add-Content $env:GITHUB_STEP_SUMMARY $loop
+
+      - name: Comment on PR
+        if: github.event.pull_request.number && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const single = fs.readFileSync('compare-artifacts/pr-diff-snippet.md','utf8');
+            const loop = fs.readFileSync('loop-artifacts/pr-diff-snippet.md','utf8');
+            const body = `### VI Compare (Single Run)\n${single}\n\n### VI Compare (Loop Mode)\n${loop}`;
+            const { owner, repo, number } = context.issue;
+            await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
+
