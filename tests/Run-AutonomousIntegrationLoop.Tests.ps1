@@ -3,6 +3,7 @@
 # environment-driven simulation (LOOP_SIMULATE) to avoid cross-process scriptblock passing.
 
 Describe 'Run-AutonomousIntegrationLoop FinalStatusJsonPath emission' -Tag 'Unit' {
+  BeforeAll { . "$PSScriptRoot/TestHelpers.Schema.ps1" }
   It 'emits final status JSON with expected shape in simulate mode' {
     $here = Split-Path -Parent $PSCommandPath
     $repoRoot = Resolve-Path (Join-Path $here '..')
@@ -27,7 +28,8 @@ exit `$LASTEXITCODE
     $exit | Should -Be 0
     Test-Path -LiteralPath $finalStatusPath | Should -BeTrue
     $json = (Get-Content -LiteralPath $finalStatusPath -Raw) | ConvertFrom-Json
-    $json.schema | Should -Be 'loop-final-status-v1'
+  $json.schema | Should -Be 'loop-final-status-v1'
+  Assert-JsonShape -Path $finalStatusPath -Spec 'FinalStatus' | Should -BeTrue
     $json.iterations | Should -Be 3
     $json.errors | Should -Be 0
     $json.succeeded | Should -BeTrue
@@ -37,6 +39,7 @@ exit `$LASTEXITCODE
 }
 
 Describe 'Run-AutonomousIntegrationLoop DiffExitCode behavior' -Tag 'Unit' {
+  BeforeAll { . "$PSScriptRoot/TestHelpers.Schema.ps1" }
   It 'returns custom diff exit code when diffs detected and no errors' {
     $here = Split-Path -Parent $PSCommandPath
     $repoRoot = Resolve-Path (Join-Path $here '..')
