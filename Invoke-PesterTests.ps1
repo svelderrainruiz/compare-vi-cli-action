@@ -48,7 +48,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.0.0'
+$SchemaSummaryVersion  = '1.1.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -125,10 +125,32 @@ function Write-ArtifactManifest {
       $artifacts += [PSCustomObject]@{ file = 'pester-failures.json'; type = 'jsonFailures'; schemaVersion = $SchemaFailuresVersion }
     }
     
+    # Optional: include lightweight metrics if summary JSON exists
+    $metrics = $null
+    try {
+      $jsonSummaryFile = Split-Path -Leaf $SummaryJsonPath
+      if ($jsonSummaryFile) {
+        $jsonPath = Join-Path $Directory $jsonSummaryFile
+        if (Test-Path -LiteralPath $jsonPath) {
+          $summaryJson = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -ErrorAction Stop
+          $metrics = [PSCustomObject]@{
+            totalTests = $summaryJson.total
+            failed     = $summaryJson.failed
+            skipped    = $summaryJson.skipped
+            duration_s = $summaryJson.duration_s
+            meanTest_ms = $summaryJson.meanTest_ms
+            p95Test_ms  = $summaryJson.p95Test_ms
+            maxTest_ms  = $summaryJson.maxTest_ms
+          }
+        }
+      }
+    } catch { Write-Warning "Failed to enrich manifest metrics: $_" }
+
     $manifest = [PSCustomObject]@{
       manifestVersion = $ManifestVersion
       generatedAt     = (Get-Date).ToString('o')
       artifacts       = $artifacts
+      metrics         = $metrics
     }
     $manifestPath = Join-Path $Directory 'pester-artifacts.json'
     $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath $manifestPath -Encoding utf8 -ErrorAction Stop
@@ -475,6 +497,21 @@ try {
   exit 1
 }
 
+# Derive per-test timing metrics if detailed result available
+$meanMs = $null; $p95Ms = $null; $maxMs = $null
+try {
+  if ($result -and $result.Tests) {
+    $durations = @($result.Tests | Where-Object { $_.Duration } | ForEach-Object { $_.Duration.TotalMilliseconds })
+    if ($durations.Count -gt 0) {
+      $meanMs = [math]::Round(($durations | Measure-Object -Average).Average,2)
+      $sorted = $durations | Sort-Object
+      $maxMs = [math]::Round(($sorted[-1]),2)
+      $pIndex = [int][math]::Floor(0.95 * ($sorted.Count - 1))
+      if ($pIndex -ge 0) { $p95Ms = [math]::Round($sorted[$pIndex],2) }
+    }
+  }
+} catch { Write-Warning "Failed to compute timing metrics: $_" }
+
 # Generate summary
 $summary = @(
   "=== Pester Test Summary ===",
@@ -483,7 +520,7 @@ $summary = @(
   "Failed: $failed",
   "Errors: $errors",
   "Skipped: $skipped",
-  "Duration: $($testDuration.TotalSeconds.ToString('F2'))s"
+  "Duration: $($testDuration.TotalSeconds.ToString('F2'))s" + $(if ($meanMs) { " (mean=${meanMs}ms p95=${p95Ms}ms max=${maxMs}ms)" } else { '' })
 ) -join [Environment]::NewLine
 
 Write-Host ""
@@ -512,6 +549,9 @@ try {
     timestamp          = (Get-Date).ToString('o')
     pesterVersion      = $loadedPester.Version.ToString()
     includeIntegration = [bool]$includeIntegrationBool
+    meanTest_ms        = $meanMs
+    p95Test_ms         = $p95Ms
+    maxTest_ms         = $maxMs
     schemaVersion      = $SchemaSummaryVersion
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
@@ -522,6 +562,19 @@ try {
 
 Write-Host "Results written to: $xmlPath" -ForegroundColor Gray
 Write-Host ""
+
+# Provide contextual note if integration was requested but effectively absent
+try {
+  if ($includeIntegrationBool) {
+    $hadIntegrationDescribe = $false
+    if ($result -and $result.Tests) {
+      $hadIntegrationDescribe = ($result.Tests | Where-Object { $_.Path -match 'Integration' -or $_.Tags -contains 'Integration' } | Measure-Object).Count -gt 0
+    }
+    if (-not $hadIntegrationDescribe) {
+      Write-Host "NOTE: Integration flag was enabled but no Integration-tagged tests were executed (prerequisites may be missing)." -ForegroundColor Yellow
+    }
+  }
+} catch { Write-Warning "Failed to evaluate integration execution note: $_" }
 
 # Exit with appropriate code
 if ($failed -gt 0 -or $errors -gt 0) {

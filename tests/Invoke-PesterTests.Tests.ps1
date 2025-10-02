@@ -2,8 +2,12 @@
 # Pester v5 tests for Invoke-PesterTests.ps1 dispatcher
 
 # Availability probe function (avoids discovery-time script variable lookups under StrictMode)
+$script:_pesterAvailableMemo = $null
 function Test-PesterAvailable {
-  return ($null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' }))
+  if ($script:_pesterAvailableMemo -ne $null) { return $script:_pesterAvailableMemo }
+  $available = ($null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' }))
+  $script:_pesterAvailableMemo = $available
+  return $available
 }
 
 BeforeAll {

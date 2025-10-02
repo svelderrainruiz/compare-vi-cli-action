@@ -41,6 +41,19 @@ Exit codes and step summary
 - Outputs (`diff`, `exitCode`, `cliPath`, `command`) are always emitted even when the step fails, to support branching and diagnostics.
 - A structured run report is appended to `$GITHUB_STEP_SUMMARY` with working directory, resolved paths, CLI path, command, exit code, and diff result.
 
+## Dispatcher Timing Metrics (Test Dispatcher)
+
+The Pester dispatcher (`Invoke-PesterTests.ps1`) emits a JSON summary (`pester-summary.json`) with schema version `1.1.0` including enhanced timing metrics:
+
+- `meanTest_ms`: Mean duration of individual test cases (ms)
+- `p95Test_ms`: 95th percentile test duration (ms)
+- `maxTest_ms`: Slowest test duration (ms)
+
+If durations are unavailable (e.g. discovery failure) these fields are `null`. A subset is mirrored into `pester-artifacts.json > metrics` for quick CI consumption.
+
+## Action Inputs & Outputs (Generated)
+
+The full composite action contract is generated automatically. See `docs/action-outputs.md` (regenerate locally with `npm run generate:outputs`).
 Usage (self-hosted Windows)
 
 ```yaml

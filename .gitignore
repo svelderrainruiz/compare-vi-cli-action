@@ -2,6 +2,8 @@
 bin/
 node_modules/
 tools/modules/
+dist/
+coverage/
 
 # Test results
 tests/results/
