@@ -399,6 +399,98 @@ Marketplace
 
 Notes
 
+## Pester Test Dispatcher JSON Summary (Schema v1.1.0)
+
+The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
+
+Schema file: [`docs/schemas/pester-summary-v1_1.schema.json`](./docs/schemas/pester-summary-v1_1.schema.json)  
+Validation test: [`tests/PesterSummary.Schema.Tests.ps1`](./tests/PesterSummary.Schema.Tests.ps1)
+
+### Core Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schemaVersion` | string (const `1.1.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
+| `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
+| `failed` | int >=0 | Assertion failures (Pester logical failures). |
+| `errors` | int >=0 | Infrastructure / discovery / execution errors elevated to error state. |
+| `skipped` | int >=0 | Skipped + not‑run tests aggregated. |
+| `duration_s` | number >=0 | Wall‑clock run duration in seconds (2 decimal precision). |
+| `timestamp` | string (ISO 8601) | Completion timestamp (UTC). |
+| `pesterVersion` | string | Resolved Pester module version used. |
+| `includeIntegration` | boolean | Whether Integration‑tagged tests were included. |
+| `meanTest_ms` | number or null | Mean test duration (ms) when per‑test durations available; otherwise null. |
+| `p95Test_ms` | number or null | 95th percentile test duration (ms) or null. |
+| `maxTest_ms` | number or null | Maximum single test duration (ms) or null. |
+| `timedOut` | boolean | True if a timeout guard stopped execution before completion. |
+| `discoveryFailures` | int >=0 | Count of discovery failure pattern matches (e.g. script parse/loader failures). Promoted to `errors` if no other failures/errors present. |
+
+Notes:
+
+- Timing distribution (`meanTest_ms`, `p95Test_ms`, `maxTest_ms`) is computed only when detailed result objects are available. Missing data yields `null` values without omitting keys.
+- A discovery failure (pattern: `Discovery in .* failed with:`) previously could yield a false green (0 tests). Logic now elevates such cases to `errors` and a non‑zero dispatcher exit code.
+- The dispatcher never uses additional exit codes: 0 = clean (no failures/errors), 1 = any failure/error/discovery anomaly/timeout.
+- All dynamic numeric fields use plain JSON numbers (no string wrapping) to simplify ingestion by metrics pipelines.
+
+### Versioning Policy
+
+1. Additive fields -> minor version bump (e.g. 1.1.0 → 1.2.0).
+2. Doc clarifications or non‑breaking constraint tightening -> patch bump (1.1.0 → 1.1.1).
+3. Field removal / rename / semantic type change -> major (2.0.0) and deprecation window communicated ahead of time.
+4. Older schema files remain immutable—never retro‑edit historical definitions.
+
+### Planned Incremental Enrichment (Roadmap)
+
+| Planned Version | Block | Purpose |
+|-----------------|-------|---------|
+| 1.2.0 | `environment`, `run`, `selection` | Context (OS, PS version, run window, file selection stats). |
+| 1.3.0 | `timing` (extended) | Rich percentile spread & optional per-test durations (flag‑gated). |
+| 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced). |
+| 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size). |
+| 1.6.0 | `outcome` | Unified status classification (`Passed\|Failed\|Errored\|TimedOut\|DiscoveryError`). |
+| 1.7.0 | `aggregationHints` | CI correlation (commit SHA, branch, shard id). |
+| 1.8.0 | `extensions` | Vendor / custom injection surface (namespaced flexible data). |
+| 1.9.0 | `meta` | Slim mode signalling, emittedFields manifest. |
+| 2.0.0 | Breaking consolidation | Potential migration of `discoveryFailures` → `discovery.failures`, counts object grouping, explicit `schema` slug addition. |
+
+All new blocks will be optional keys to preserve compatibility. Tests are added per phase to assert (a) absence by default and (b) presence + type integrity when enabled via new dispatcher switches.
+
+### Consumption Guidance
+
+
+- Treat unknown fields as ignorable (forward compatibility).
+- Use `schemaVersion` for branching logic instead of key presence when performing strict validation.
+
+- To gate CI: fail if `errors > 0` OR `failed > 0` OR (`discoveryFailures > 0` and `failed == 0`)
+- When aggregating trends, prefer stable ratios: pass rate = `(passed)/(total)`; failure density = `(failed+errors)/total`.
+
+
+### Example Minimal JSON
+
+```jsonc
+{
+  "schemaVersion": "1.1.0",
+  "total": 42,
+  "passed": 42,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "duration_s": 3.14,
+  "timestamp": "2025-10-02T10:00:00.000Z",
+  "pesterVersion": "5.7.1",
+  "includeIntegration": false,
+  "meanTest_ms": 75.12,
+  "p95Test_ms": 130.44,
+  "maxTest_ms": 180.02,
+  "timedOut": false,
+  "discoveryFailures": 0
+}
+```
+
+For questions or suggested fields open an issue with `area:schema` label.
+
+
 - This action maps `LVCompare.exe` exit codes to a boolean `diff` (0 = no diff, 1 = diff). Any other exit code fails the step.
 - **Canonical path policy**: Only `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe` is supported
 - Any `lvComparePath` or `LVCOMPARE_PATH` value must resolve to this exact canonical path or the action will fail
