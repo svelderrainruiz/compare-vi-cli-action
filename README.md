@@ -216,6 +216,7 @@ Tests
   - Run: `pwsh -File ./tools/Run-Pester.ps1 -IncludeIntegration`
   - Requires environment variables: `LV_BASE_VI` and `LV_HEAD_VI` pointing to test `.vi` files
   - See detailed prerequisites & skip behavior: [Integration Tests Guide](./docs/INTEGRATION_TESTS.md)
+- Test design & stability patterns (nested dispatcher, function shadowing vs mocks): [Testing Patterns](./docs/TESTING_PATTERNS.md)
 - CI workflows:
   - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
   - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI
@@ -258,7 +259,7 @@ Key options:
  - `-MappingConfig <file>`: JSON file mapping source glob patterns to one or more test files (augmenting `-InferTestsFromSource`).
  - `-OnlyFailed`: If the previous run had failing test files and no direct/inferred changes are detected this run, re-run only those failing test files.
  - `-NotifyScript <file>`: Post-run hook script invoked with named parameters & WATCH_* environment variables (see below).
- - `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N additional attempts (flaky mitigation). Classification becomes `improved` if failures clear on a retry.
+- `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N additional attempts (flaky mitigation). Classification becomes `improved` if failures clear on a retry.
 
 Selective runs:
 
@@ -352,7 +353,7 @@ Notes & limitations:
 
 - Inference is intentionally conservative; contribute mapping expansions if you have alternate naming schemes.
 - The delta JSON overwrites the same file each run (append-mode history could be added later).
- - Use `-DeltaHistoryPath` to enable append-mode history (JSON Lines) without overwriting.
+- Use `-DeltaHistoryPath` to enable append-mode history (JSON Lines) without overwriting.
 - `-BeepOnFail` may be suppressed in non-interactive consoles.
 - If Pester changes internal property names, the script falls back through multiple strategies to compute `tests`.
 
