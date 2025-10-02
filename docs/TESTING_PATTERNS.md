@@ -60,6 +60,32 @@ It 'returns $true for Pester v5+' {
 **When to still use `Mock`:** For pure, non-nested scenarios (most other test files) where you aren't spawning a secondary Pester process.
 
 ---
+
+### Helper: `Invoke-WithFunctionShadow`
+
+To reduce repetition and guarantee restoration, a reusable helper has been introduced in `tests/support/FunctionShadowing.ps1`:
+
+```powershell
+Invoke-WithFunctionShadow -Name Get-Module -Definition {
+  param([switch]$ListAvailable,[string]$Name)
+  if ($ListAvailable -and $Name -eq 'Pester') {
+    return [pscustomobject]@{ Name='Pester'; Version=[version]'5.7.1' }
+  }
+  Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+} -Body {
+  Test-PesterAvailable | Should -BeTrue
+}
+```
+
+The helper:
+
+- Captures any pre-existing function of the same name.
+- Writes the shadow to `Function:` drive (overriding cmdlet lookup).
+- Executes the `-Body` scriptblock and returns its output.
+- Restores (or removes) the original function in a `finally` block, even on exceptions.
+
+Prefer the helper over hand-written `function ...; try { ... } finally { Remove-Item Function:... }` boilerplate to avoid subtle restoration omissions.
+
 \n## Pattern: Per-`It` Setup Instead of `BeforeEach` for Fragile State
 
 If state can be mutated or invalidated by a nested run, move the setup directly inside each `It`. This confines surface area and guarantees the setup executes *after* any nested dispatcher activity that an earlier test may have triggered.
@@ -111,13 +137,11 @@ Key considerations
 - Do not rely on repository-level mocks or global variables inside the nested run.
 - Pass minimal config: tests path, results path, IncludeIntegration flag as needed.
 
----
-\n## Pattern: Explicit Timing Metrics Validation
+## Pattern: Explicit Timing Metrics Validation
 
 When asserting performance/timing derived fields (mean/p95/max), avoid hard-coded values; assert property *presence* and type unless stable synthetic timing is enforced. This keeps tests resilient across machine speed variance.
 
----
-\n## Quick Decision Matrix
+## Quick Decision Matrix
 
 | Scenario | Recommended Pattern |
 |----------|---------------------|
@@ -127,8 +151,7 @@ When asserting performance/timing derived fields (mean/p95/max), avoid hard-code
 | Flaky `$TestDrive` observed | Defensive fallback creation |
 | Need to ensure isolation of nested Pester run artifacts | Temp workspace per test |
 
----
-\n## Checklist for New Dispatcher-Oriented Tests
+## Checklist for New Dispatcher-Oriented Tests
 
 1. Will this test trigger a nested dispatcher run? If yes, avoid `Mock` of core cmdlets that inner runs also need.
 2. Does any function rely on script-scoped variables at discovery time? Refactor to a probe + conditional Describe.
@@ -137,9 +160,9 @@ When asserting performance/timing derived fields (mean/p95/max), avoid hard-code
 5. Is cleanup (function shadow removal, temp dirs) automatic via `$TestDrive` or explicit removal?
 
 ---
-\n## Future Enhancements
 
-- Helper: `Use-FunctionShadow -Name Get-Module -Intercept { ... } -PassThru` to reduce boilerplate.
+## Future Enhancements
+
 - Optional wrapper to run nested dispatcher in a separate PowerShell process to further insulate mock state.
 - Add a focused regression test ensuring PesterAvailability continues to pass after a nested dispatcher run with synthetic failures.
 

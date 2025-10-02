@@ -3,7 +3,7 @@
 
 Describe 'Test-PesterAvailable' -Tag 'Unit' {
   BeforeAll {
-    # Ensure function is available (loaded from existing tests file or re-define minimal shim if absent)
+    . "$PSScriptRoot/support/FunctionShadowing.ps1"
     if (-not (Get-Command Test-PesterAvailable -ErrorAction SilentlyContinue)) {
       function Test-PesterAvailable {
         $mods = Get-Module -ListAvailable -Name Pester | Where-Object { $_ -and $_.Version -ge '5.0.0' }
@@ -12,37 +12,41 @@ Describe 'Test-PesterAvailable' -Tag 'Unit' {
     }
   }
 
+  
+
   Context 'When Pester v5+ present' {
     It 'returns $true' {
-      function Get-Module { param([switch]$ListAvailable,[string]$Name)
+      Invoke-WithFunctionShadow -Name Get-Module -Definition {
+        param([switch]$ListAvailable,[string]$Name)
         if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'5.7.1' } }
         Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+      } -Body {
+        Test-PesterAvailable | Should -BeTrue
       }
-      Test-PesterAvailable | Should -BeTrue
     }
   }
 
   Context 'When only older Pester present' {
     It 'returns $false' {
-      function Get-Module { param([switch]$ListAvailable,[string]$Name)
+      Invoke-WithFunctionShadow -Name Get-Module -Definition {
+        param([switch]$ListAvailable,[string]$Name)
         if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'4.10.1' } }
         Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+      } -Body {
+        Test-PesterAvailable | Should -BeFalse
       }
-      Test-PesterAvailable | Should -BeFalse
     }
   }
 
   Context 'When Pester absent' {
     It 'returns $false' {
-      function Get-Module { param([switch]$ListAvailable,[string]$Name)
+      Invoke-WithFunctionShadow -Name Get-Module -Definition {
+        param([switch]$ListAvailable,[string]$Name)
         if ($ListAvailable -and $Name -eq 'Pester') { return @() }
         Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+      } -Body {
+        Test-PesterAvailable | Should -BeFalse
       }
-      Test-PesterAvailable | Should -BeFalse
     }
-  }
-
-  AfterEach {
-    Remove-Item Function:Get-Module -ErrorAction SilentlyContinue
   }
 }
