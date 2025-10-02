@@ -63,7 +63,7 @@ It 'returns $true for Pester v5+' {
 
 ### Helper: `Invoke-WithFunctionShadow`
 
-To reduce repetition and guarantee restoration, a reusable helper has been introduced in `tests/support/FunctionShadowing.ps1`:
+To reduce repetition and guarantee restoration, a reusable helper is exported by the test utils module `tests/support/CompareVI.TestUtils.psd1`:
 
 ```powershell
 Invoke-WithFunctionShadow -Name Get-Module -Definition {

@@ -3,11 +3,10 @@
 
 Describe 'Test-PesterAvailable' -Tag 'Unit' {
   BeforeAll {
-    . "$PSScriptRoot/support/FunctionShadowing.ps1"
     if (-not (Get-Command Test-PesterAvailable -ErrorAction SilentlyContinue)) {
       function Test-PesterAvailable {
-        $mods = Get-Module -ListAvailable -Name Pester | Where-Object { $_ -and $_.Version -ge '5.0.0' }
-        return ($mods -and $mods.Count -gt 0)
+        $mods = @(Get-Module -ListAvailable -Name Pester | Where-Object { $_ -and $_.Version -ge '5.0.0' })
+        return ($mods.Count -gt 0)
       }
     }
   }
@@ -16,37 +15,34 @@ Describe 'Test-PesterAvailable' -Tag 'Unit' {
 
   Context 'When Pester v5+ present' {
     It 'returns $true' {
-      Invoke-WithFunctionShadow -Name Get-Module -Definition {
-        param([switch]$ListAvailable,[string]$Name)
+      function Get-Module { param([switch]$ListAvailable,[string]$Name)
         if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'5.7.1' } }
         Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
-      } -Body {
-        Test-PesterAvailable | Should -BeTrue
       }
+      Test-PesterAvailable | Should -BeTrue
+      Remove-Item Function:Get-Module -ErrorAction SilentlyContinue
     }
   }
 
   Context 'When only older Pester present' {
     It 'returns $false' {
-      Invoke-WithFunctionShadow -Name Get-Module -Definition {
-        param([switch]$ListAvailable,[string]$Name)
+      function Get-Module { param([switch]$ListAvailable,[string]$Name)
         if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'4.10.1' } }
         Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
-      } -Body {
-        Test-PesterAvailable | Should -BeFalse
       }
+      Test-PesterAvailable | Should -BeFalse
+      Remove-Item Function:Get-Module -ErrorAction SilentlyContinue
     }
   }
 
   Context 'When Pester absent' {
     It 'returns $false' {
-      Invoke-WithFunctionShadow -Name Get-Module -Definition {
-        param([switch]$ListAvailable,[string]$Name)
+      function Get-Module { param([switch]$ListAvailable,[string]$Name)
         if ($ListAvailable -and $Name -eq 'Pester') { return @() }
         Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
-      } -Body {
-        Test-PesterAvailable | Should -BeFalse
       }
+      Test-PesterAvailable | Should -BeFalse
+      Remove-Item Function:Get-Module -ErrorAction SilentlyContinue
     }
   }
 }

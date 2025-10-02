@@ -42,6 +42,30 @@ This guide helps developers integrate and run the Pester test dispatcher (`Invok
 
 This runs all tests except those tagged with `Integration`.
 
+### Function Shadowing Approach (Updated)
+
+Tests that need to simulate different installed Pester versions now use simple inline function shadowing per test (defining a temporary `Get-Module` function inside the `It` block and removing it afterwards). A previously introduced reusable helper module was removed due to restoration complexity in nested dispatcher scenarios. The inline pattern proved more reliable and easier to reason about:
+
+```powershell
+It 'simulates older Pester' {
+  function Get-Module { param([switch]$ListAvailable,[string]$Name)
+    if ($ListAvailable -and $Name -eq 'Pester') { return [pscustomobject]@{ Name='Pester'; Version=[version]'4.10.1' } }
+    Microsoft.PowerShell.Core\Get-Module @PSBoundParameters
+  }
+  Test-PesterAvailable | Should -BeFalse
+  Remove-Item Function:Get-Module -ErrorAction SilentlyContinue
+}
+```
+
+Key guidelines:
+1. Define the shadowed function inside each `It` block (keeps scope predictable).
+2. Always remove it with `Remove-Item Function:Get-Module` at the end of the block.
+3. Avoid cross-test reuse—duplication is intentional for isolation.
+4. Prefer returning a `[pscustomobject]` with `Name` and `Version` for probe realism.
+5. Keep shadows minimal—only handle the parameter shapes your probe calls.
+
+This change eliminates brittle global or helper-managed restoration logic and ensures nested dispatcher invocations do not leak overridden functions back to the outer test context.
+
 #### Run All Tests (Including Integration)
 
 ```powershell
