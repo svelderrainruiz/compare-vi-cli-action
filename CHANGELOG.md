@@ -7,6 +7,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [v0.4.0] - 2025-10-02
+
 ### Added
 
 - Schema export type inference via `Export-JsonShapeSchemas -InferTypes` (best‑effort predicate text heuristics attaching JSON Schema `type` or union types).

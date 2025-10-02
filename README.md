@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Compare VIs
         id: compare
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
         with:
           base: path/to/base.vi
           head: path/to/head.vi
@@ -127,7 +127,7 @@ When your VIs are in a subdirectory, use `working-directory` to avoid repeating 
 
 ```yaml
 - name: Compare VIs
-  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
   with:
     working-directory: my-labview-project
     base: src/Base.vi
@@ -732,7 +732,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Simulated latency loop
         id: loop
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.3.0
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
         with:
           base: Base.vi
           head: Head.vi
@@ -760,7 +760,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Hybrid percentile soak
         id: loop
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.3.0
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
         with:
           base: path/to/base.vi
           head: path/to/head.vi
@@ -1082,7 +1082,7 @@ This regenerates [`docs/action-outputs.md`](./docs/action-outputs.md) with all i
 ### Release Process
 
 1. Update [`CHANGELOG.md`](./CHANGELOG.md) with changes for the new version
-2. Create and push a git tag (e.g., `v0.3.0`)
+2. Create and push a git tag (e.g., `v0.4.0`)
 3. The release workflow automatically creates a GitHub release with changelog content
 
 Tags follow semantic versioning. See [`.github/workflows/release.yml`](./.github/workflows/release.yml) for release automation details.
