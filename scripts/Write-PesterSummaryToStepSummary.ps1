@@ -18,7 +18,8 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$ResultsDir = 'tests/results'
+  [string]$ResultsDir = 'tests/results',
+  [ValidateSet('None','Details','DetailsOpen')][string]$FailedTestsCollapseStyle = 'Details'
 )
 
 Set-StrictMode -Version Latest
@@ -79,11 +80,24 @@ if (Test-Path $failJson) {
     $failed = @($failData.results | Where-Object { $_.result -eq 'Failed' })
     if ($failed.Count) {
       Write-Line ''
-      Write-Line '### Failed Tests'
-      Write-Line ''
+      switch ($FailedTestsCollapseStyle) {
+        'None' {
+          Write-Line '### Failed Tests'
+          Write-Line ''
+        }
+        'Details' {
+          Write-Line '<details><summary><strong>Failed Tests</strong></summary>'
+          Write-Line ''
+        }
+        'DetailsOpen' {
+          Write-Line '<details open><summary><strong>Failed Tests</strong></summary>'
+          Write-Line ''
+        }
+      }
       Write-Line '| Name | Duration (s) |'
       Write-Line '|------|--------------|'
       foreach ($f in $failed) { Write-Line ("| {0} | {1} |" -f ($f.Name -replace '\|','/'), ($f.Duration ?? $f.duration)) }
+      if ($FailedTestsCollapseStyle -like 'Details*') { Write-Line '</details>' }
     }
   } catch { Write-Warning ("Failed to parse failure JSON: {0}" -f $_.Exception.Message) }
 }

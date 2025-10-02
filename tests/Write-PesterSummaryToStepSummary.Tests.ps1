@@ -16,8 +16,8 @@ Describe 'Write-PesterSummaryToStepSummary script' -Tag 'Unit' {
     $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'STEP_SUMMARY.md'
   }
 
-  It 'writes Markdown summary with metrics and failed test table' {
-  & $scriptPath -ResultsDir $resultsDir
+  It 'writes Markdown summary with metrics and failed test table (details wrapper default)' {
+    & $scriptPath -ResultsDir $resultsDir
     Test-Path $env:GITHUB_STEP_SUMMARY | Should -BeTrue
     $content = Get-Content $env:GITHUB_STEP_SUMMARY -Raw
     $content | Should -Match '## Pester Test Summary'
@@ -25,8 +25,17 @@ Describe 'Write-PesterSummaryToStepSummary script' -Tag 'Unit' {
     $content | Should -Match '\| Total \| 3 \|'
     $content | Should -Match '\| Passed \| 2 \|'
     $content | Should -Match '\| Failed \| 1 \|'
-    $content | Should -Match '### Failed Tests'
+    $content | Should -Match '<details><summary><strong>Failed Tests</strong></summary>'
     $content | Should -Match 'Sample.Test'
+    $content | Should -Match '</details>'
+  }
+
+  It 'can emit failed tests without collapse when style=None' {
+    $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'STEP_SUMMARY_nocollapse.md'
+    & $scriptPath -ResultsDir $resultsDir -FailedTestsCollapseStyle None
+    $c2 = Get-Content $env:GITHUB_STEP_SUMMARY -Raw
+    $c2 | Should -Match '### Failed Tests'
+    $c2 | Should -Not -Match '<details>'
   }
 
   It 'no-ops gracefully when GITHUB_STEP_SUMMARY unset' {
