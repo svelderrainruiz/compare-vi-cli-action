@@ -135,14 +135,15 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
-        . "$PSScriptRoot\scripts\CompareVI.ps1"
+        $ActionPath = '${{ github.action_path }}'
+        . (Join-Path $ActionPath 'scripts' 'CompareVI.ps1')
 
         $loopEnabled = [System.Convert]::ToBoolean('${{ inputs.loop-enabled }}')
         if ($loopEnabled) {
           # --- Loop Mode Branch ---
           $outPath = $env:GITHUB_OUTPUT
           $sumPath = $env:GITHUB_STEP_SUMMARY
-          $modulePath = Join-Path $PSScriptRoot 'module' 'CompareLoop' 'CompareLoop.psd1'
+          $modulePath = Join-Path $ActionPath 'module' 'CompareLoop' 'CompareLoop.psd1'
           if (-not (Test-Path -LiteralPath $modulePath)) { throw "CompareLoop module not found: $modulePath" }
           Import-Module $modulePath -Force
 
