@@ -1,0 +1,2 @@
+# Treat LabVIEW VI artifacts as binary to avoid misguided text diffs/merges
+*.vi binary
