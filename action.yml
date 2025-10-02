@@ -172,7 +172,7 @@ runs:
           if (-not $loopRes) { throw 'Loop execution returned null result.' }
 
           # Basic outputs reused for backward compatibility (single compare semantics not available in loop path)
-          "diff=$([string]::Copy( if ($loopRes.DiffCount -gt 0) { 'true' } else { 'false' }))" >> $env:GITHUB_OUTPUT
+          "diff=$(if ($loopRes.DiffCount -gt 0) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
           "exitCode=0" >> $env:GITHUB_OUTPUT
           "cliPath=(loop-mode)" >> $env:GITHUB_OUTPUT
           "command=(loop-mode)" >> $env:GITHUB_OUTPUT
