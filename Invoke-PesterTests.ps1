@@ -274,7 +274,13 @@ if (-not $root) {
   exit 1
 }
 
-$testsDirRaw = Join-Path $root $TestsPath
+# Handle TestsPath - use absolute path if provided, otherwise resolve relative to root
+if ([System.IO.Path]::IsPathRooted($TestsPath)) {
+  $testsDirRaw = $TestsPath
+} else {
+  $testsDirRaw = Join-Path $root $TestsPath
+}
+
 # Accept single test file path as well as directory
 if ((Test-Path -LiteralPath $testsDirRaw -PathType Leaf) -and ($testsDirRaw -like '*.ps1')) {
   $singleTestFile = $testsDirRaw
@@ -284,7 +290,13 @@ if ((Test-Path -LiteralPath $testsDirRaw -PathType Leaf) -and ($testsDirRaw -lik
   $testsDir = $testsDirRaw
   $limitToSingle = $false
 }
-$resultsDir = Join-Path $root $ResultsPath
+
+# Handle ResultsPath - use absolute path if provided, otherwise resolve relative to root
+if ([System.IO.Path]::IsPathRooted($ResultsPath)) {
+  $resultsDir = $ResultsPath
+} else {
+  $resultsDir = Join-Path $root $ResultsPath
+}
 
 Write-Host "Resolved Paths:" -ForegroundColor Yellow
 Write-Host "  Script Root: $root"
