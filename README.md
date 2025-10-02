@@ -179,6 +179,76 @@ if ($r.DiffSummary -match '<li><strong>Diff Iterations:</strong> (\d+)</li>') { 
 
 See `docs/COMPARE_LOOP_MODULE.md` for deeper details including Markdown/Text formats.
 
+Autonomous integration loop runner
+
+A convenience script `scripts/Run-AutonomousIntegrationLoop.ps1` wraps `Invoke-IntegrationCompareLoop` with environment-driven defaults so you can start a soak / guard loop with zero parameters.
+
+Key env variables (optional unless noted):
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `LV_BASE_VI` | Base VI path (required unless passing -Base) | (none) |
+| `LV_HEAD_VI` | Head VI path (required unless passing -Head) | (none) |
+| `LOOP_MAX_ITERATIONS` | Iteration cap (0 = infinite) | 50 |
+| `LOOP_INTERVAL_SECONDS` | Delay between iterations (fractional ok) | 0 |
+| `LOOP_DIFF_SUMMARY_FORMAT` | `None`\|`Text`\|`Markdown`\|`Html` | None |
+| `LOOP_DIFF_SUMMARY_PATH` | Output path (auto inferred by format if omitted) | diff-summary.ext |
+| `LOOP_CUSTOM_PERCENTILES` | Custom percentile list (e.g. 50,75,90,97.5,99.9) | (none) |
+| `LOOP_SNAPSHOT_EVERY` | Emit snapshot every N iterations | (disabled) |
+| `LOOP_SNAPSHOT_PATH` | NDJSON snapshot file path | loop-snapshots.ndjson |
+| `LOOP_EMIT_RUN_SUMMARY` | When 1/true emit final run summary JSON | off |
+| `LOOP_RUN_SUMMARY_JSON` | Explicit run summary path | loop-run-summary.json |
+| `LOOP_FAIL_ON_DIFF` | 1/true to stop after first diff | true |
+| `LOOP_ADAPTIVE` | 1/true enable adaptive interval | false |
+| `LOOP_HISTOGRAM_BINS` | Histogram bin count (0 disables) | 0 |
+| `LOOP_SIMULATE` | 1/true use internal mock executor | false |
+| `LOOP_SIMULATE_EXIT_CODE` | Exit code for simulated executor | 1 |
+| `LOOP_SIMULATE_DELAY_MS` | Sleep per iteration (ms) during simulation | 5 |
+
+Quick simulated run (no real LVCompare required):
+
+```powershell
+$env:LV_BASE_VI = 'Base.vi'
+$env:LV_HEAD_VI = 'Head.vi'
+$env:LOOP_SIMULATE = '1'
+$env:LOOP_DIFF_SUMMARY_FORMAT = 'Html'
+$env:LOOP_MAX_ITERATIONS = '15'
+$env:LOOP_SNAPSHOT_EVERY = '5'
+$env:LOOP_EMIT_RUN_SUMMARY = '1'
+pwsh -File scripts/Run-AutonomousIntegrationLoop.ps1
+```
+
+Excerpt output:
+
+```text
+=== Integration Compare Loop Result ===
+Base: Base.vi
+Head: Head.vi
+Iterations: 15 (Diffs=15 Errors=0)
+Latency p50/p90/p99: 0.005/0.006/0.007 s
+Diff summary fragment emitted.
+Run summary JSON: loop-run-summary.json
+Snapshots NDJSON: loop-snapshots.ndjson
+```
+
+GitHub Actions step example (simulated):
+
+```yaml
+  - name: Autonomous integration loop (simulated)
+    shell: pwsh
+    run: |
+      $env:LV_BASE_VI = 'Base.vi'
+      $env:LV_HEAD_VI = 'Head.vi'
+      $env:LOOP_SIMULATE = '1'
+      $env:LOOP_MAX_ITERATIONS = '30'
+      $env:LOOP_INTERVAL_SECONDS = '0'
+      $env:LOOP_DIFF_SUMMARY_FORMAT = 'Markdown'
+      $env:LOOP_EMIT_RUN_SUMMARY = '1'
+      pwsh -File scripts/Run-AutonomousIntegrationLoop.ps1
+```
+
+If `GITHUB_STEP_SUMMARY` is present and a diff summary is generated it is appended automatically.
+
 Timing metrics
 
 - Each invocation now records wall-clock execution time and surfaces it via:
@@ -292,15 +362,15 @@ Key options:
 - `-RunAllOnStart`: Perform an initial full run.
 - `-SingleRun`: Run once (honoring targeting) and exit (useful for scripting).
 - `-Quiet`: Reduce output verbosity (summary only).
- - `-ChangedOnly`: Skip a run if no directly changed or inferred test files were detected.
- - `-InferTestsFromSource`: Attempt to map changed module/script files to corresponding `*.Tests.ps1` by basename.
- - `-BeepOnFail`: Emit an audible console beep when a run has failures.
- - `-DeltaJsonPath <file>`: Write a JSON artifact containing current stats, previous stats, deltas, and classification (`baseline|improved|worsened|unchanged`).
- - `-ShowFailed`: After summary, list failing test names (up to `-MaxFailedList`).
- - `-MaxFailedList <N>`: Cap the number of failing tests printed (default 10).
- - `-DeltaHistoryPath <file>`: Append each delta JSON payload (same schema as `-DeltaJsonPath`) as one line of JSON (JSON Lines / NDJSON). Useful for run history graphs.
- - `-MappingConfig <file>`: JSON file mapping source glob patterns to one or more test files (augmenting `-InferTestsFromSource`).
- - `-OnlyFailed`: If the previous run had failing test files and no direct/inferred changes are detected this run, re-run only those failing test files.
+- `-ChangedOnly`: Skip a run if no directly changed or inferred test files were detected.
+- `-InferTestsFromSource`: Attempt to map changed module/script files to corresponding `*.Tests.ps1` by basename.
+- `-BeepOnFail`: Emit an audible console beep when a run has failures.
+- `-DeltaJsonPath <file>`: Write a JSON artifact containing current stats, previous stats, deltas, and classification (`baseline|improved|worsened|unchanged`).
+- `-ShowFailed`: After summary, list failing test names (up to `-MaxFailedList`).
+- `-MaxFailedList <N>`: Cap the number of failing tests printed (default 10).
+- `-DeltaHistoryPath <file>`: Append each delta JSON payload (same schema as `-DeltaJsonPath`) as one line of JSON (JSON Lines / NDJSON). Useful for run history graphs.
+- `-MappingConfig <file>`: JSON file mapping source glob patterns to one or more test files (augmenting `-InferTestsFromSource`).
+- `-OnlyFailed`: If the previous run had failing test files and no direct/inferred changes are detected this run, re-run only those failing test files.
  - `-NotifyScript <file>`: Post-run hook script invoked with named parameters & WATCH_* environment variables (see below).
 - `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N additional attempts (flaky mitigation). Classification becomes `improved` if failures clear on a retry.
 
