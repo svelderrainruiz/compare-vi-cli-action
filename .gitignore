@@ -6,6 +6,14 @@ coverage/
 
 # Test results
 tests/results/
+tests/results
+tests/results/**
+# Root-level transient test artifacts (should not be committed)
+testResults.xml
+tests/results/pester-results.xml
+tests/results/pester-results*.xml
+pester-results.xml
+final.json
 
 # Temporary files
 *.tmp
