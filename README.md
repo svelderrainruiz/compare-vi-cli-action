@@ -7,54 +7,31 @@
 [![Test (mock)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml)
 [![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Action-blue?logo=github)](https://github.com/marketplace/actions/compare-vi-cli-action)
 
-Diff two LabVIEW `.vi` files using NI LVCompare CLI. Validated with LabVIEW 2025 Q3 on self-hosted Windows runners.
+## Purpose
 
-See also: [`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at `.github/workflows/release.yml`.
+This repository provides a **composite GitHub Action** for comparing two LabVIEW `.vi` files using National Instruments' LVCompare CLI tool. It enables CI/CD workflows to detect differences between LabVIEW virtual instruments, making it easy to integrate LabVIEW code reviews and diff checks into automated GitHub Actions workflows.
 
-Requirements
+The action wraps the LVCompare.exe command-line interface with intelligent path resolution, flexible argument pass-through, and structured output formats suitable for workflow branching and reporting. It supports both single-shot comparisons and experimental loop mode for latency profiling and stability testing.
+
+**Key Features:**
+
+- **Simple Integration**: Drop-in action for self-hosted Windows runners with LabVIEW installed
+- **Flexible Configuration**: Full pass-through of LVCompare CLI flags via `lvCompareArgs`
+- **Structured Outputs**: Exit codes, diff status, timing metrics, and command audit trails
+- **CI-Friendly**: Automatic step summaries, JSON artifacts, and configurable fail-on-diff behavior
+- **Loop Mode (Experimental)**: Aggregate metrics, percentile latencies, and histogram generation for performance analysis
+
+Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also: [`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at `.github/workflows/release.yml`.
+
+## Requirements
 
 - Self-hosted Windows runner with LabVIEW 2025 Q3 installed and licensed
 - `LVCompare.exe` installed at the **canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
 - Only the canonical path is supported; paths via `PATH`, `LVCOMPARE_PATH`, or `lvComparePath` must resolve to this exact location
 
-Inputs
+## Quick Start
 
-- `base` (required): Path to base `.vi`
-- `head` (required): Path to head `.vi`
-- `lvComparePath` (optional): Full path to `LVCompare.exe` if not on `PATH`
-- `lvCompareArgs` (optional): Extra CLI flags for `LVCompare.exe` (space-delimited; quotes supported)
-- `fail-on-diff` (optional, default `true`): Fail the job if differences are found
-- `working-directory` (optional): Directory to run the command from; relative `base`/`head` are resolved from here
-
-Outputs
-
-- `diff`: `true|false` whether differences were detected (based on exit code mapping 0=no diff, 1=diff)
-- `exitCode`: Raw exit code from the CLI
-- `cliPath`: Resolved path to the executable
-- `command`: The exact command line executed (quoted) for auditing
-- `compareDurationSeconds`: Elapsed execution time (float, seconds) for the LVCompare invocation (renamed from `durationSeconds`)
-- `compareDurationNanoseconds`: High-resolution elapsed time in nanoseconds (useful for profiling very fast comparisons)
-
-Exit codes and step summary
-
-- Exit code mapping: 0 = no diff, 1 = diff detected, any other code = failure.
-- Outputs (`diff`, `exitCode`, `cliPath`, `command`) are always emitted even when the step fails, to support branching and diagnostics.
-- A structured run report is appended to `$GITHUB_STEP_SUMMARY` with working directory, resolved paths, CLI path, command, exit code, and diff result.
-
-## Dispatcher Timing Metrics (Test Dispatcher)
-
-The Pester dispatcher (`Invoke-PesterTests.ps1`) emits a JSON summary (`pester-summary.json`) with schema version `1.1.0` including enhanced timing metrics:
-
-- `meanTest_ms`: Mean duration of individual test cases (ms)
-- `p95Test_ms`: 95th percentile test duration (ms)
-- `maxTest_ms`: Slowest test duration (ms)
-
-If durations are unavailable (e.g. discovery failure) these fields are `null`. A subset is mirrored into `pester-artifacts.json > metrics` for quick CI consumption.
-
-## Action Inputs & Outputs (Generated)
-
-The full composite action contract is generated automatically. See `docs/action-outputs.md` (regenerate locally with `npm run generate:outputs`).
-Usage (self-hosted Windows)
+### Basic Usage
 
 ```yaml
 jobs:
@@ -66,15 +43,9 @@ jobs:
         id: compare
         uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
         with:
-          working-directory: subfolder/with/vis
-          base: relative/path/to/base.vi   # resolved from working-directory if set
-          head: relative/path/to/head.vi   # resolved from working-directory if set
-          # Canonical path is enforced - set via LVCOMPARE_PATH env or omit if CLI is at canonical location
-          # lvComparePath: C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe
-          # Optional extra flags (space-delimited, quotes supported)
-          lvCompareArgs: "--some-flag --value \"C:\\Temp\\My Folder\\file.txt\""
-          # Built-in policy: fail on diff by default
-          fail-on-diff: "true"
+          base: path/to/base.vi
+          head: path/to/head.vi
+          fail-on-diff: true
 
       - name: Act on result
         if: steps.compare.outputs.diff == 'true'
@@ -83,39 +54,97 @@ jobs:
           Write-Host 'Differences detected.'
 ```
 
-UNC/long path guidance
+### Action Inputs
 
-- The action resolves `base`/`head` to absolute paths before invoking LVCompare.
-- If you encounter long-path or UNC issues, consider:
-  - Using shorter workspace-relative paths via `working-directory`.
-  - Mapping a drive on self-hosted runners for long UNC prefixes.
-  - Ensuring your LabVIEW/Windows environment supports long paths.
+- `base` (required): Path to base `.vi` file
+- `head` (required): Path to head `.vi` file
+- `lvComparePath` (optional): Full path to `LVCompare.exe` if not on `PATH`
+- `lvCompareArgs` (optional): Extra CLI flags for `LVCompare.exe` (space-delimited; quotes supported)
+- `fail-on-diff` (optional, default `true`): Fail the job if differences are found
+- `working-directory` (optional): Directory to run the command from; relative `base`/`head` are resolved from here
+- `loop-enabled` (optional, default `false`): Enable experimental loop mode for performance testing
 
-Common lvCompareArgs recipes (patterns)
+### Action Outputs
+
+- `diff`: `true|false` whether differences were detected (based on exit code mapping 0=no diff, 1=diff)
+- `exitCode`: Raw exit code from the CLI
+- `cliPath`: Resolved path to the executable
+- `command`: The exact command line executed (quoted) for auditing
+- `compareDurationSeconds`: Elapsed execution time (float, seconds) for the LVCompare invocation
+- `compareDurationNanoseconds`: High-resolution elapsed time in nanoseconds (useful for profiling very fast comparisons)
+- `compareSummaryPath`: Path to JSON summary file with comparison metadata
+
+Loop mode outputs (when `loop-enabled: true`): `iterations`, `diffCount`, `errorCount`, `averageSeconds`, `totalSeconds`, `p50`, `p90`, `p99`, `quantileStrategy`, `streamingWindowCount`, `loopResultPath`, `histogramPath`
+
+See [`docs/action-outputs.md`](./docs/action-outputs.md) for complete output documentation.
+
+### Exit Codes and Behavior
+
+- **Exit code mapping**: 0 = no diff, 1 = diff detected, any other code = failure
+- **Always-emit outputs**: `diff`, `exitCode`, `cliPath`, `command` are always emitted even when the step fails, to support workflow branching and diagnostics
+- **Step summary**: A structured run report is appended to `$GITHUB_STEP_SUMMARY` with working directory, resolved paths, CLI path, command, exit code, and diff result
+
+## Advanced Configuration
+
+### Working with lvCompareArgs
+
+The `lvCompareArgs` input accepts space-delimited CLI flags with full quote support for paths containing spaces.
 
 For comprehensive documentation on LVCompare CLI flags and Git integration, see [`docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md`](./docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md).
 
 **Recommended noise filters** (reduce cosmetic diff churn):
 
-- `lvCompareArgs: "-nobdcosm -nofppos -noattr"`
-  - `-nobdcosm` - Ignore block diagram cosmetic changes (position/size/appearance)
-  - `-nofppos` - Ignore front panel object position/size changes
-  - `-noattr` - Ignore VI attribute changes
+```yaml
+lvCompareArgs: "-nobdcosm -nofppos -noattr"
+```
+
+- `-nobdcosm` - Ignore block diagram cosmetic changes (position/size/appearance)
+- `-nofppos` - Ignore front panel object position/size changes
+- `-noattr` - Ignore VI attribute changes
 
 **LabVIEW version selection:**
 
-- `lvCompareArgs: '-lvpath "C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe"'`
+```yaml
+lvCompareArgs: '-lvpath "C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe"'
+```
 
 **Other common patterns:**
 
-- Pass a path with spaces:
-  - `lvCompareArgs: "--flag \"C:\\Path With Spaces\\out.txt\""`
-- Multiple flags:
-  - `lvCompareArgs: "--flag1 value1 --flag2 value2"`
-- Environment-driven values:
-  - `lvCompareArgs: "--flag \"${{ runner.temp }}\\out.txt\""`
+```yaml
+# Path with spaces
+lvCompareArgs: "--flag \"C:\\Path With Spaces\\out.txt\""
 
-HTML Comparison Reports
+# Multiple flags
+lvCompareArgs: "-nobdcosm -nofppos -noattr -lvpath \"C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe\""
+
+# Environment-driven values
+lvCompareArgs: "--log \"${{ runner.temp }}\\lvcompare.log\""
+```
+
+### Using working-directory
+
+When your VIs are in a subdirectory, use `working-directory` to avoid repeating path prefixes:
+
+```yaml
+- name: Compare VIs
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.2.0
+  with:
+    working-directory: my-labview-project
+    base: src/Base.vi
+    head: src/Head.vi
+    lvCompareArgs: "-nobdcosm -nofppos -noattr"
+```
+
+### Path Resolution and UNC Paths
+
+- The action resolves `base`/`head` to absolute paths before invoking LVCompare
+- Relative paths are resolved from `working-directory` if set, otherwise from the repository root
+- For long-path or UNC issues, consider:
+  - Using shorter workspace-relative paths via `working-directory`
+  - Mapping a drive on self-hosted runners for long UNC prefixes
+  - Ensuring your LabVIEW/Windows environment supports long paths
+
+## HTML Comparison Reports
 
 For CI/CD pipelines and code reviews, you can generate HTML comparison reports using **LabVIEWCLI** (requires LabVIEW 2025 Q3 or later):
 
