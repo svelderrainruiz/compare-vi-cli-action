@@ -50,7 +50,7 @@ jobs:
           $reportPath = Join-Path $outDir 'compare-report.html'
           & $renderer `
             -Command '${{ steps.compare.outputs.command }}' `
-            -ExitCode [int]'${{ steps.compare.outputs.exitCode }}' `
+            -ExitCode ${{ steps.compare.outputs.exitCode }} `
             -Diff '${{ steps.compare.outputs.diff }}' `
             -CliPath '${{ steps.compare.outputs.cliPath }}' `
             -DurationSeconds $dur `

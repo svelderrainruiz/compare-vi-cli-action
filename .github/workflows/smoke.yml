@@ -119,7 +119,7 @@ jobs:
           $renderer = Join-Path $env:GITHUB_WORKSPACE 'scripts' 'Render-CompareReport.ps1'
           & $renderer `
             -Command '${{ steps.compare.outputs.command }}' `
-            -ExitCode [int]'${{ steps.compare.outputs.exitCode }}' `
+            -ExitCode ${{ steps.compare.outputs.exitCode }} `
             -Diff '${{ steps.compare.outputs.diff }}' `
             -CliPath '${{ steps.compare.outputs.cliPath }}' `
             -OutputPath (Join-Path $outDir 'compare-report.html')
