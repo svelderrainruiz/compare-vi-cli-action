@@ -23,7 +23,8 @@ jobs:
 
       - name: Install actionlint
         run: |
-          curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- -b ./bin
+          mkdir -p ./bin
+          curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest ./bin
 
       - name: Run actionlint
         run: |

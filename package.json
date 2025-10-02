@@ -1,0 +1,17 @@
+{
+  "name": "compare-vi-cli-action",
+  "private": true,
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+  "generate:outputs": "node dist/generate-action-outputs.js"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "20.11.30",
+    "js-yaml": "4.1.0",
+    "typescript": "5.4.5"
+  }
+}

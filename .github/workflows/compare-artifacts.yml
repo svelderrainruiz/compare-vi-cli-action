@@ -1,0 +1,110 @@
+name: Compare VI artifact publish
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  publish:
+    runs-on: [self-hosted, Windows, X64]
+    env:
+      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
+      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
+      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve VI inputs (fallback to repo root files)
+        id: res
+        shell: pwsh
+        run: |
+          $base = $env:LV_BASE_VI
+          $head = $env:LV_HEAD_VI
+          
+          # Fallback to repo root Base.vi and Head.vi for publish validation
+          if ([string]::IsNullOrWhiteSpace($base) -or -not (Test-Path -LiteralPath $base)) {
+            $base = Join-Path $env:GITHUB_WORKSPACE 'Base.vi'
+            Write-Host "Using fallback Base.vi from repo root: $base"
+          }
+          if ([string]::IsNullOrWhiteSpace($head) -or -not (Test-Path -LiteralPath $head)) {
+            $head = Join-Path $env:GITHUB_WORKSPACE 'Head.vi'
+            Write-Host "Using fallback Head.vi from repo root: $head"
+          }
+          
+          # Validate files exist
+          if (-not (Test-Path -LiteralPath $base)) {
+            Write-Host "::error::Base VI file not found: $base"
+            exit 1
+          }
+          if (-not (Test-Path -LiteralPath $head)) {
+            Write-Host "::error::Head VI file not found: $head"
+            exit 1
+          }
+          
+          Write-Host "Base VI: $base"
+          Write-Host "Head VI: $head"
+          "base=$base" >> $env:GITHUB_OUTPUT
+          "head=$head" >> $env:GITHUB_OUTPUT
+
+      - name: Run compare
+        id: compare
+        uses: ./
+        with:
+          base: ${{ steps.res.outputs.base }}
+          head: ${{ steps.res.outputs.head }}
+          fail-on-diff: 'false'
+
+      - name: Generate HTML report
+        id: report
+        if: steps.compare.outcome == 'success'
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:RUNNER_TEMP 'compare-artifacts'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $renderer = Join-Path $env:GITHUB_WORKSPACE 'scripts' 'Render-CompareReport.ps1'
+          $dur = '${{ steps.compare.outputs.compareDurationSeconds }}'
+          if (-not [string]::IsNullOrWhiteSpace($dur)) { $dur = [double]$dur } else { $dur = 0 }
+          $reportPath = Join-Path $outDir 'compare-report.html'
+          & $renderer `
+            -Command '${{ steps.compare.outputs.command }}' `
+            -ExitCode ${{ steps.compare.outputs.exitCode }} `
+            -Diff '${{ steps.compare.outputs.diff }}' `
+            -CliPath '${{ steps.compare.outputs.cliPath }}' `
+            -DurationSeconds $dur `
+            -OutputPath $reportPath
+          Write-Host "HTML report generated at: $reportPath"
+          "reportPath=$reportPath" >> $env:GITHUB_OUTPUT
+
+      - name: Upload compare artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-vi-artifacts
+          path: |
+            ${{ steps.compare.outputs.compareSummaryPath }}
+            ${{ steps.report.outputs.reportPath }}
+          if-no-files-found: warn
+
+      - name: Append timing to job summary
+        if: steps.compare.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ns = '${{ steps.compare.outputs.compareDurationNanoseconds }}'
+          $sec = '${{ steps.compare.outputs.compareDurationSeconds }}'
+          $ms = ''
+          if ($sec) { $ms = [math]::Round([double]$sec * 1000,2) }
+          $combined = if ($sec) { "${sec}s (${ms} ms)" } else { 'n/a' }
+          $line = "### Compare VI Timing`n- Seconds: $sec`n- Nanoseconds: $ns`n- Combined: $combined" 
+          $line | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Echo outputs
+        if: steps.compare.outcome == 'success'
+        shell: pwsh
+        run: |
+          Write-Host "diff=${{ steps.compare.outputs.diff }}"
+          Write-Host "exitCode=${{ steps.compare.outputs.exitCode }}"
+          Write-Host "compareDurationSeconds=${{ steps.compare.outputs.compareDurationSeconds }}"
+          Write-Host "compareDurationNanoseconds=${{ steps.compare.outputs.compareDurationNanoseconds }}"

@@ -19,12 +19,36 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Run Pester on self-hosted
+      # Call the dispatcher directly (no external action dependency)
+      # This dispatcher assumes Pester v5+ is pre-installed on the self-hosted runner
+      - name: Run Pester tests via local dispatcher
         shell: pwsh
         run: |
-          $include = '${{ inputs.include_integration }}' -ieq 'true'
-          ./tools/Run-Pester.ps1 @{
-            IncludeIntegration = $include
+          ./Invoke-PesterTests.ps1 `
+            -TestsPath tests `
+            -IncludeIntegration '${{ inputs.include_integration }}' `
+            -ResultsPath tests/results
+
+      - name: Append test metrics to job summary
+        if: always()
+        shell: pwsh
+        run: |
+          $json = Join-Path 'tests/results' 'pester-summary.json'
+          if (Test-Path $json) {
+            $data = Get-Content $json -Raw | ConvertFrom-Json
+            $lines = @(
+              '### Pester Test Metrics',
+              "- Total: $($data.total)",
+              "- Passed: $($data.passed)",
+              "- Failed: $($data.failed)",
+              "- Errors: $($data.errors)",
+              "- Skipped: $($data.skipped)",
+              "- Duration (s): $($data.duration_s)",
+              "- Include Integration: $($data.includeIntegration)"
+            ) -join [Environment]::NewLine
+            $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            Write-Host '::warning::pester-summary.json not found.'
           }
 
       - name: Upload Pester artifacts
@@ -35,3 +59,7 @@ jobs:
           path: |
             tests/results/**/*.xml
             tests/results/**/*.txt
+            tests/results/**/*.html
+            tests/results/pester-summary.json
+            tests/results/pester-failures.json
+            tests/results/pester-artifacts.json

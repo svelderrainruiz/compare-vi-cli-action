@@ -5,15 +5,25 @@ param(
   [Parameter(Mandatory=$true)] [string]$CliPath,
   [string]$Base,
   [string]$Head,
-  [string]$OutputPath
+  [string]$OutputPath,
+  [double]$DurationSeconds
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Get-BaseHeadFromCommand([string]$cmd) {
-  # Tokenize respecting quotes: first token is exe, next two are base/head
-  $pattern = '"[^\"]+"|\S+'
-  $tokens = [regex]::Matches($cmd, $pattern) | ForEach-Object { $_.Value.Trim('"') }
+  # Tokenize respecting quotes: match quoted strings (preserving quotes) or non-space sequences
+  # This pattern matches: "quoted strings" OR non-whitespace sequences
+  $pattern = '"[^"]+"|\S+'
+  $tokens = [regex]::Matches($cmd, $pattern) | ForEach-Object { 
+    $val = $_.Value
+    # Remove surrounding quotes if present
+    if ($val.StartsWith('"') -and $val.EndsWith('"')) {
+      $val.Substring(1, $val.Length - 2)
+    } else {
+      $val
+    }
+  }
   if ($tokens.Count -ge 3) {
     return [pscustomobject]@{ Base = $tokens[1]; Head = $tokens[2] }
   }
@@ -71,7 +81,8 @@ $css
       <div class="key">Generated</div><div class="value">$now</div>
       <div class="key">Exit code</div><div class="value">$ExitCode ($exitText)</div>
       <div class="key">Diff</div><div class="value">$Diff</div>
-      <div class="key">CLI Path</div><div class="value">$CliPath</div>
+  <div class="key">CLI Path</div><div class="value">$CliPath</div>
+  <div class="key">Duration (s)</div><div class="value">$([string]::Format('{0:F3}', $DurationSeconds))</div>
       <div class="key">Base</div><div class="value">$Base</div>
       <div class="key">Head</div><div class="value">$Head</div>
     </div>

@@ -64,17 +64,28 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
     $sum = Join-Path $TestDrive 'sum.md'
     $res = Invoke-CompareVI -Base $a -Head $a -GitHubOutputPath $out -GitHubStepSummaryPath $sum -Executor { 0 }
     $res.Diff | Should -BeFalse
+    $res.CompareDurationSeconds | Should -BeGreaterOrEqual 0
+    $res.CompareDurationNanoseconds | Should -BeGreaterOrEqual 0
     (Get-Content $out -Raw) | Should -Match 'exitCode=0'
     (Get-Content $out -Raw) | Should -Match 'diff=false'
+    (Get-Content $out -Raw) | Should -Match 'compareDurationSeconds='
+    (Get-Content $out -Raw) | Should -Match 'compareDurationNanoseconds='
     (Get-Content $sum -Raw) | Should -Match 'Diff: false'
+    # Escape parentheses in regex
+    (Get-Content $sum -Raw) | Should -Match 'Duration \(s\):'
+    (Get-Content $sum -Raw) | Should -Match 'Duration \(ns\):'
   }
 
   It 'does not throw when fail-on-diff is false and exit code is 1 (diff=true)' {
     $out = Join-Path $TestDrive 'out.txt'
     $res = Invoke-CompareVI -Base $a -Head $b -GitHubOutputPath $out -FailOnDiff:$false -Executor { 1 }
     $res.Diff | Should -BeTrue
+    $res.CompareDurationSeconds | Should -BeGreaterOrEqual 0
+    $res.CompareDurationNanoseconds | Should -BeGreaterOrEqual 0
     (Get-Content $out -Raw) | Should -Match 'exitCode=1'
     (Get-Content $out -Raw) | Should -Match 'diff=true'
+    (Get-Content $out -Raw) | Should -Match 'compareDurationSeconds='
+    (Get-Content $out -Raw) | Should -Match 'compareDurationNanoseconds='
   }
 
   It 'writes outputs then throws for unknown exit code (diff=false)' {

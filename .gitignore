@@ -2,6 +2,7 @@
 bin/
 node_modules/
 tools/modules/
+coverage/
 
 # Test results
 tests/results/
@@ -9,3 +10,9 @@ tests/results/
 # Temporary files
 *.tmp
 .DS_Store
+actionlint
+
+# Test temporary directories and results
+tests/tmp-*/
+tests/results-*/
+home/

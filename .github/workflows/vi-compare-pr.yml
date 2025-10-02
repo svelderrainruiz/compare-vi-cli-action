@@ -1,0 +1,127 @@
+name: PR VI Compare (on label)
+
+on:
+  pull_request:
+    types: [labeled, reopened, synchronize]
+  workflow_dispatch: {}
+
+jobs:
+  vi-compare:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'vi-compare')
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate environment
+        shell: pwsh
+        run: |
+          $errors = @()
+          
+          # Check for LabVIEW Compare CLI
+          $cliPath = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          if (-not (Test-Path -LiteralPath $cliPath)) {
+            $errors += "LVCompare.exe not found at canonical path: $cliPath"
+            $errors += "Install LabVIEW 2025 Q3 or later with LabVIEW Compare CLI"
+          }
+          
+          if ($errors.Count -gt 0) {
+            Write-Host "Environment validation failed:"
+            $errors | ForEach-Object { Write-Host "  - $_" }
+            Write-Host ""
+            Write-Host "See docs/SELFHOSTED_CI_SETUP.md for setup instructions"
+            exit 1
+          }
+          
+          Write-Host "Environment validation passed:"
+          Write-Host "  - CLI: $cliPath"
+
+      - name: Single compare (Base.vi vs Head.vi)
+        id: single
+        shell: pwsh
+        run: |
+          pwsh -File scripts/Generate-PullRequestCompareReport.ps1 -OutputDirectory compare-artifacts
+
+      - name: Loop compare (latency sample)
+        id: loop
+        shell: pwsh
+        run: |
+          pwsh -File scripts/Generate-PullRequestCompareReport.ps1 -OutputDirectory loop-artifacts -LoopMode -LoopIterations 25 -QuantileStrategy StreamingReservoir -StreamCapacity 300 -HistogramBins 5
+
+      - name: Upload artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vi-compare-artifacts
+          path: |
+            compare-artifacts/*
+            loop-artifacts/*
+          if-no-files-found: warn
+
+      - name: Append summary
+        if: always()
+        shell: pwsh
+        run: |
+          $singlePath = 'compare-artifacts/pr-diff-snippet.md'
+          $loopPath = 'loop-artifacts/pr-diff-snippet.md'
+          
+          if (Test-Path $singlePath) {
+            $single = Get-Content $singlePath -Raw
+            Add-Content $env:GITHUB_STEP_SUMMARY "### VI Compare (Single Run)"
+            Add-Content $env:GITHUB_STEP_SUMMARY $single
+          } else {
+            Add-Content $env:GITHUB_STEP_SUMMARY "### VI Compare (Single Run)"
+            Add-Content $env:GITHUB_STEP_SUMMARY "_Results not available_"
+          }
+          
+          Add-Content $env:GITHUB_STEP_SUMMARY "`n### VI Compare (Loop Mode)"
+          
+          if (Test-Path $loopPath) {
+            $loop = Get-Content $loopPath -Raw
+            Add-Content $env:GITHUB_STEP_SUMMARY $loop
+          } else {
+            Add-Content $env:GITHUB_STEP_SUMMARY "_Results not available_"
+          }
+
+      - name: Comment on PR (using XCLI_PAT)
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event.pull_request.number)
+        shell: pwsh
+        env:
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          XCLI_PAT: ${{ secrets.XCLI_PAT }}
+        run: |
+          if (-not $env:XCLI_PAT) { Write-Host 'XCLI_PAT not available; skipping comment.'; exit 0 }
+          
+          $lines = @('### VI Compare Results (label-triggered)', '')
+          
+          # Add single run results if available
+          $singlePath = 'compare-artifacts/pr-diff-snippet.md'
+          if (Test-Path $singlePath) {
+            $single = Get-Content $singlePath -Raw
+            $lines += '#### Single Run'
+            $lines += $single
+            $lines += ''
+          } else {
+            $lines += '#### Single Run'
+            $lines += '_Results not available_'
+            $lines += ''
+          }
+          
+          # Add loop results if available
+          $loopPath = 'loop-artifacts/pr-diff-snippet.md'
+          if (Test-Path $loopPath) {
+            $loop = Get-Content $loopPath -Raw
+            $lines += '#### Loop Mode'
+            $lines += $loop
+          } else {
+            $lines += '#### Loop Mode'
+            $lines += '_Results not available_'
+          }
+          
+          $body = $lines -join "`n"
+          $payload = @{ body = $body } | ConvertTo-Json -Compress
+          $headers = @{ Authorization = "Bearer $env:XCLI_PAT"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'xcli-bot' }
+          $uri = "https://api.github.com/repos/$env:GH_REPO/issues/$env:PR_NUMBER/comments"
+          Invoke-RestMethod -Method POST -Uri $uri -Headers $headers -ContentType 'application/json' -Body $payload
+

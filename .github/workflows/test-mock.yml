@@ -1,10 +1,10 @@
-name: Test (mock LVCompare)
+name: Test (mock LVCompare) - DEPRECATED
+
+# NOTE: This workflow is deprecated with the canonical-only CLI path policy.
+# Use unit tests (test-pester.yml) for mock-based testing instead.
+# This workflow is kept for manual dispatch only for backward compatibility.
 
 on:
-  pull_request:
-    branches: [ main ]
-  push:
-    branches: [ main ]
   workflow_dispatch: {}
 
 jobs:
@@ -189,14 +189,14 @@ jobs:
           # Report for Case 1 (diff=true)
           & $renderer `
             -Command '${{ steps.c1.outputs.command }}' `
-            -ExitCode [int]'${{ steps.c1.outputs.exitCode }}' `
+            -ExitCode ${{ steps.c1.outputs.exitCode }} `
             -Diff '${{ steps.c1.outputs.diff }}' `
             -CliPath '${{ steps.c1.outputs.cliPath }}' `
             -OutputPath (Join-Path $outDir 'case-1.html')
           # Report for Case 3 (no diff)
           & $renderer `
             -Command '${{ steps.c3.outputs.command }}' `
-            -ExitCode [int]'${{ steps.c3.outputs.exitCode }}' `
+            -ExitCode ${{ steps.c3.outputs.exitCode }} `
             -Diff '${{ steps.c3.outputs.diff }}' `
             -CliPath '${{ steps.c3.outputs.cliPath }}' `
             -OutputPath (Join-Path $outDir 'case-3.html')

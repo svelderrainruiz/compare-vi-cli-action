@@ -1,0 +1,12 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false
+  },
+  "ignores": [
+    "**/node_modules/**",
+    "**/bin/**",
+    "**/docs/knowledgebase/**",
+    ".github/copilot-instructions.md"
+  ]
+}
