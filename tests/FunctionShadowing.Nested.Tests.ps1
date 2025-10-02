@@ -39,8 +39,20 @@ Describe "Inner Smoke" {
 
     Push-Location $workspace
     try {
-      $null = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' 2>&1
+      # Capture all output (stdout/stderr) from nested dispatcher to filter noisy, benign discovery error
+      $innerOutput = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' 2>&1
       $LASTEXITCODE | Should -Be 0
+
+      # Known benign noise pattern from inner discovery (Pester attempting Import-Module Microsoft.PowerShell.Core)
+  $noisePattern = "The module 'Microsoft.PowerShell.Core' could not be loaded"
+      $filtered = $innerOutput | Where-Object { $_ -notmatch [regex]::Escape($noisePattern) }
+
+      # (Optional) Uncomment to debug if pattern changes:
+      # Write-Host "[nested-filter] Original: $($innerOutput.Count) lines; Filtered: $($filtered.Count) lines"
+
+      # Assert that no unexpected severe errors slipped through (anything with CommandNotFound other than the known pattern)
+      $unexpected = $filtered | Where-Object { $_ -match 'CommandNotFoundException' -and $_ -notmatch [regex]::Escape($noisePattern) }
+      $unexpected | Should -BeNullOrEmpty
     } finally {
       Pop-Location
     }

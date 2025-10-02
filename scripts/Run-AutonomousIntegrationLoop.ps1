@@ -174,7 +174,9 @@ Import-Module (Join-Path $PSScriptRoot '../module/CompareLoop/CompareLoop.psd1')
 $exec = $null
 if ($CustomExecutor) { $exec = $CustomExecutor }
 elseif ($simulate) {
-  $exitCode = ($env:LOOP_SIMULATE_EXIT_CODE -as [int]); if (-not $exitCode) { $exitCode = 1 }
+  # Allow explicit simulation of exit code 0 (previous logic treated 0 as unset due to -not test)
+  $exitCode = ($env:LOOP_SIMULATE_EXIT_CODE -as [int])
+  if ([string]::IsNullOrWhiteSpace($env:LOOP_SIMULATE_EXIT_CODE)) { $exitCode = 1 }
   $delayMs = ($env:LOOP_SIMULATE_DELAY_MS -as [int]); if (-not $delayMs) { $delayMs = 5 }
   $exec = { param($CliPath,$Base,$Head,$ExecArgs) Start-Sleep -Milliseconds $using:delayMs; return $using:exitCode }
 }

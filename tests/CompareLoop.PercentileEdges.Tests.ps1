@@ -31,7 +31,9 @@ Describe 'Invoke-IntegrationCompareLoop percentile edge handling' -Tag 'Unit' {
   }
 
   It 'accepts fractional values and underscores label' {
-    $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 4 -IntervalSeconds 0 -CompareExecutor { 0 } -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,97.5'
+    # Use executor with small sleep to ensure non-zero duration samples so percentile logic engages
+  $exec = { param($cli,$b,$h,$lvArgs) Start-Sleep -Milliseconds 5; return 0 }
+    $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 4 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -Quiet -CustomPercentiles '50,97.5'
     $r.Percentiles.'p97_5' | Should -Not -BeNullOrEmpty
   }
 }
