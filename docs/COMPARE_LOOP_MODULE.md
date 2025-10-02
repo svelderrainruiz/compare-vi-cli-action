@@ -209,6 +209,52 @@ When one or more diffs occurred and `DiffSummaryFormat` != `None`, a simple summ
 
 If `DiffSummaryPath` is provided the summary is written to that file (overwriting).
 
+### HTML Summary Details
+
+When `-DiffSummaryFormat Html` is selected the renderer produces a minimal, safe fragment (not a full HTML document) with the following structure:
+
+```html
+<h3>VI Compare Diff Summary</h3>
+<ul>
+  <li><strong>Base:</strong> C:\path\to\Base.vi</li>
+  <li><strong>Head:</strong> C:\path\to\Head.vi</li>
+  <li><strong>Diff Iterations:</strong> 4</li>
+  <li><strong>Total Iterations:</strong> 12</li>
+</ul>
+```
+
+Key characteristics:
+
+1. Fragment Only: No `<html>`, `<head>`, or `<body>` wrapper so it can be embedded directly (e.g. into a larger report, GitHub Actions job summary, or a dashboard panel).
+2. Deterministic Order: List items always appear in the order Base, Head, Diff Iterations, Total Iterations for stable test assertions and easy parsing.
+3. HTML Encoding: All dynamic path/content values are HTML‑encoded (`&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`, `"` → `&quot;`, `'` → `&#39;`). This prevents markup breakage or script injection if file paths contain special characters. (Verified by dedicated Pester tests covering ampersand encoding.)
+4. Conditional Emission: The summary is generated only if `DiffCount > 0`. Runs with zero diffs leave `DiffSummary` = `$null` and do not write a file even if `DiffSummaryPath` was provided (tests assert the absence). This avoids misleading empty reports.
+5. Overwrite Behavior: When `DiffSummaryPath` is specified an existing file is replaced atomically for the final run state.
+
+Embedding example (GitHub Actions step) – write the fragment then append to the workflow summary:
+
+```powershell
+$result = Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 25 -IntervalSeconds 0.5 `
+  -DiffSummaryFormat Html -DiffSummaryPath diff-summary.html -SkipValidation -PassThroughPaths -Quiet
+if ($result.DiffSummary) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $result.DiffSummary }
+```
+
+Lightweight parsing example (PowerShell) to extract the diff count:
+
+```powershell
+$html = $result.DiffSummary
+if ($html -match '<li><strong>Diff Iterations:</strong> (\d+)</li>') {
+  $diffs = [int]$Matches[1]
+  "Diff iterations: $diffs"
+}
+```
+
+Testing Notes:
+
+- Encoding is validated in `CompareLoop.HtmlDiffSummary.Tests.ps1` (ampersand case). Additional characters (`<`, `>` etc.) are implicitly covered by using the platform encoder.
+- The absence case (no diffs) asserts both in‑memory `$null` and that no file is written when a path is provided.
+- Fragment approach keeps future extension simple (e.g. adding latency stats) without breaking existing embeddings, but consumers should treat the content as opaque HTML rather than rely on inner text ordering beyond the documented list sequence.
+
 ## Dependency Injection Pattern
 
 Provide a mock executor:

@@ -136,6 +136,49 @@ LabVIEWCLI -OperationName CreateComparisonReport `
 
 See the knowledgebase guide for more details on HTML report generation.
 
+HTML diff iteration summary (module)
+
+The `CompareLoop` module can emit a concise diff iteration summary after a run when at least one diff was observed via the `-DiffSummaryFormat` parameter. Supported formats: `Text`, `Markdown`, `Html`.
+
+When `Html` is selected a minimal fragment (no `<html>` wrapper) is produced:
+
+```html
+<h3>VI Compare Diff Summary</h3>
+<ul>
+  <li><strong>Base:</strong> C:\path\to\Base.vi</li>
+  <li><strong>Head:</strong> C:\path\to\Head.vi</li>
+  <li><strong>Diff Iterations:</strong> 4</li>
+  <li><strong>Total Iterations:</strong> 12</li>
+</ul>
+```
+
+Guarantees & behavior:
+
+- Only created when `DiffCount > 0`; otherwise `DiffSummary` is `$null` and no file is written (even if `-DiffSummaryPath` supplied).
+- All dynamic values (paths, counts) are HTML‑encoded (`&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`, quotes, apostrophes) to prevent markup breakage.
+- Deterministic ordering of list items for stable parsing.
+- Safe to append directly to `$GITHUB_STEP_SUMMARY` for GitHub Actions job summaries.
+
+Example (synthetic diff loop, embedding in Actions summary):
+
+```powershell
+Import-Module ./module/CompareLoop/CompareLoop.psd1 -Force
+# Simulated executor returning diff (exit code 1)
+$diffExec = { param($c,$b,$h,$a) 1 }
+$r = Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 5 -IntervalSeconds 0 `
+  -CompareExecutor $diffExec -SkipValidation -PassThroughPaths -BypassCliValidation `
+  -DiffSummaryFormat Html -DiffSummaryPath diff-summary.html -Quiet
+if ($r.DiffSummary) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $r.DiffSummary }
+```
+
+Quick regex extraction of diff count:
+
+```powershell
+if ($r.DiffSummary -match '<li><strong>Diff Iterations:</strong> (\d+)</li>') { [int]$Matches[1] }
+```
+
+See `docs/COMPARE_LOOP_MODULE.md` for deeper details including Markdown/Text formats.
+
 Timing metrics
 
 - Each invocation now records wall-clock execution time and surfaces it via:
