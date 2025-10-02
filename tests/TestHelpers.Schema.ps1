@@ -188,7 +188,8 @@ function Export-JsonShapeSchemas {
   #>
   [CmdletBinding()] param(
     [Parameter(Mandatory)][string]$OutputDirectory,
-    [switch]$Overwrite
+    [switch]$Overwrite,
+    [switch]$InferTypes
   )
   if (-not (Test-Path -LiteralPath $OutputDirectory)) { New-Item -ItemType Directory -Path $OutputDirectory | Out-Null }
   foreach ($specName in $script:JsonShapeSpecs.Keys) {
@@ -196,6 +197,23 @@ function Export-JsonShapeSchemas {
     $properties = @{}
     foreach ($r in $def.Required) { $properties[$r] = @{ description = "Required field from spec '$specName'" } }
     foreach ($o in $def.Optional) { if (-not $properties.ContainsKey($o)) { $properties[$o] = @{ description = "Optional field from spec '$specName'" } } }
+
+    if ($InferTypes) {
+      foreach ($pName in $def.Types.Keys) {
+        if (-not $properties.ContainsKey($pName)) { continue }
+        $text = $def.Types[$pName].ToString()
+        $types = New-Object System.Collections.Generic.HashSet[string]
+        if ($text -match '\[bool\]') { $types.Add('boolean') | Out-Null }
+        if ($text -match '\[string\]') { $types.Add('string') | Out-Null }
+        if ($text -match '\[int\]' -or $text -match '\[long\]') { $types.Add('integer') | Out-Null }
+        if ($text -match '\[double\]') { $types.Add('number') | Out-Null }
+        if ($text -match '\[pscustomobject\]' -or $text -match '\[hashtable\]') { $types.Add('object') | Out-Null }
+        if ($text -match 'object\[\]') { $types.Add('array') | Out-Null }
+        if ($types.Count -eq 0) { continue }
+        if ($types.Count -eq 1) { $properties[$pName] = ($properties[$pName] + @{ type = ($types | Select-Object -First 1) }) }
+        else { $properties[$pName] = ($properties[$pName] + @{ type = @($types) }) }
+      }
+    }
     $schema = [ordered]@{
       '$schema' = 'https://json-schema.org/draft/2020-12/schema'
       title = $specName
@@ -211,3 +229,64 @@ function Export-JsonShapeSchemas {
   }
   return Get-ChildItem -LiteralPath $OutputDirectory -Filter '*.schema.json'
 }
+
+function Compare-JsonShape {
+  <#
+    .SYNOPSIS
+      Compares two JSON documents against a spec and reports structural & value differences.
+    .OUTPUTS
+      PSCustomObject with properties: Spec, BaselinePath, CandidatePath, MissingInCandidate,
+      MissingInBaseline, UnexpectedInCandidate, PredicateFailuresCandidate, ValueDifferences.
+  #>
+  [CmdletBinding()] param(
+    [Parameter(Mandatory)][string]$BaselinePath,
+    [Parameter(Mandatory)][string]$CandidatePath,
+    [Parameter(Mandatory)][string]$Spec,
+    [switch]$Strict
+  )
+  # assumes helper already dot-sourced
+  foreach ($p in @($BaselinePath,$CandidatePath)) { if (-not (Test-Path -LiteralPath $p)) { throw "Compare-JsonShape: file not found: $p" } }
+  $specDef = $script:JsonShapeSpecs[$Spec]
+  $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
+  $candidate = Get-Content -LiteralPath $CandidatePath -Raw | ConvertFrom-Json
+  $result = [pscustomobject]@{
+    Spec = $Spec
+    BaselinePath = $BaselinePath
+    CandidatePath = $CandidatePath
+    MissingInCandidate = @()
+    MissingInBaseline = @()
+    UnexpectedInCandidate = @()
+    PredicateFailuresCandidate = @()
+    ValueDifferences = @()
+  }
+  $bProps = $baseline.PSObject.Properties.Name
+  $cProps = $candidate.PSObject.Properties.Name
+  foreach ($req in $specDef.Required) {
+    if (-not ($cProps -contains $req)) { $result.MissingInCandidate += $req }
+    if (-not ($bProps -contains $req)) { $result.MissingInBaseline += $req }
+  }
+  if ($Strict) {
+    foreach ($p in $cProps) {
+      $isKnown = $specDef.Required -contains $p -or $specDef.Optional -contains $p -or $specDef.Types.ContainsKey($p)
+      if (-not $isKnown) { $result.UnexpectedInCandidate += $p }
+    }
+  }
+  foreach ($p in $specDef.Types.Keys) {
+    if ($cProps -contains $p) {
+      $pred = $specDef.Types[$p]
+      if (-not (& $pred $candidate.$p)) { $result.PredicateFailuresCandidate += $p }
+    }
+  }
+  # simple scalar value differences for overlapping props (string/int/bool/double)
+  foreach ($p in ($bProps | Where-Object { $cProps -contains $_ })) {
+    $bv = $baseline.$p; $cv = $candidate.$p
+    $scalar = ($bv -is [string] -or $bv -is [int] -or $bv -is [double] -or $bv -is [long] -or $bv -is [bool]) -and ($cv -is [string] -or $cv -is [int] -or $cv -is [double] -or $cv -is [long] -or $cv -is [bool])
+    if ($scalar -and ($bv -ne $cv)) {
+      $result.ValueDifferences += [pscustomobject]@{ Property=$p; Baseline=$bv; Candidate=$cv }
+    }
+  }
+  return $result
+}
+
+# Enhanced failure JSON emission wrapper around existing assert functions
+Set-Alias -Name _OriginalAssertJsonShape -Value Assert-JsonShape -ErrorAction SilentlyContinue
