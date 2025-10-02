@@ -7,6 +7,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [v0.4.0] - 2025-10-02
+
 ### Added
 
 - Pester dispatcher schema v1.3.0 (`pester-summary-v1_3.schema.json`): optional `timing` block (opt-in via `-EmitTimingDetail`) with extended per-test duration statistics (count, totalMs, min/max/mean/median/stdDev, p50/p75/p90/p95/p99) while retaining legacy root timing fields.
@@ -15,6 +19,8 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Pester dispatcher schema v1.6.0 (`pester-summary-v1_6.schema.json`): optional `outcome` block (opt-in via `-EmitOutcome`) unifying run status classification (overallStatus, severityRank, flags, counts, exitCodeModel, classificationStrategy).
 - Pester dispatcher schema v1.7.0 (`pester-summary-v1_7.schema.json`): optional `aggregationHints` block (opt-in via `-EmitAggregationHints`) providing heuristic guidance (`dominantTags`, `fileBucketCounts`, `durationBuckets`, `suggestions`, `strategy`).
 - Pester dispatcher schema v1.7.1 (`pester-summary-v1_7_1.schema.json`): optional root metric `aggregatorBuildMs` emitted ONLY when `-EmitAggregationHints` is specified; captures the build time (milliseconds) for generating the `aggregationHints` heuristic block (Stopwatch measured). Absent otherwise to preserve baseline payload size.
+- Action output: `shortCircuitedIdentical` indicating identical-path preflight short-circuit (no LVCompare invocation, forces `diff=false`, `exitCode=0`).
+- Preflight guard: identical-path detection (short-circuit) and same-filename/different-path detection with actionable error message (prevents LVCompare IDE popup: "Comparing VIs with the same name is not supported").
 - Nested discovery suppression logic (default on) preventing false-positive `discoveryFailures` counts from nested dispatcher invocations; configurable via `SUPPRESS_NESTED_DISCOVERY=0` to disable suppression for diagnostics.
 - Debug discovery scan instrumentation (`DEBUG_DISCOVERY_SCAN=1`) emitting `[debug-discovery]` console lines and contextual `discovery-debug.log` snippets (400 char window per match) to accelerate root-cause analysis.
 - Integration test file pre-filter: automatic exclusion of `*.Integration.Tests.ps1` at file selection stage when integration is disabled (unless `DISABLE_INTEGRATION_FILE_PREFILTER=1`). Reduces discovery/parsing overhead and eliminates extraneous skip noise.

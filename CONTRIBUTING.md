@@ -52,3 +52,28 @@ Releases
 Maintainers
 
 - CODEOWNERS: `@svelderrainruiz`
+
+## Documentation Style
+
+Markdown lint configuration intentionally disables the MD013 (line length) rule globally.
+Rationale:
+
+- Technical tables, JSON fragments, and schema / command examples often exceed 160 chars and wrapping them reduces readability.
+- Large refactor risk: historical sections (dispatcher notes, loop mode tuning) rely on long inline code spans.
+
+Guidelines:
+
+- Prefer wrapping narrative paragraphs to a reasonable width (~120–160) for new content, but do not hard-wrap within embedded JSON, PowerShell code fences, or tables.
+- Break up extremely long explanatory list items (>220 chars) unless doing so fragments a schema or command.
+- Use concise language; remove redundant qualifiers (e.g., "in order to" → "to").
+- Keep bullet introductions on their own line before long wrapped sub-lines for scanability.
+
+When a single long line is clearer (e.g., a one-line JSON example), keep it—no inline disable needed since MD013 is off.
+
+If we later re-enable MD013:
+
+1. Reintroduce a `"MD013": { "line_length": 160 }` block in `.markdownlint.jsonc`.
+2. Add per-line opt-outs using `<!-- markdownlint-disable-next-line MD013 -->` above intentional long lines.
+3. Avoid splitting code spans across lines solely for lint; prefer disabling for that line.
+
+Always ensure examples remain copy/paste friendly (avoid trailing spaces, stray prompts inside code blocks).

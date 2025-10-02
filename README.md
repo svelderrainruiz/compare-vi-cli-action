@@ -9,9 +9,15 @@
 
 ## Purpose
 
-This repository provides a **composite GitHub Action** for comparing two LabVIEW `.vi` files using National Instruments' LVCompare CLI tool. It enables CI/CD workflows to detect differences between LabVIEW virtual instruments, making it easy to integrate LabVIEW code reviews and diff checks into automated GitHub Actions workflows.
+This repository provides a **composite GitHub Action** for comparing two LabVIEW `.vi` files
+using National Instruments' LVCompare CLI tool. It enables CI/CD workflows to detect
+differences between LabVIEW virtual instruments, making it easy to integrate LabVIEW code
+reviews and diff checks into automated GitHub Actions workflows.
 
-The action wraps the LVCompare.exe command-line interface with intelligent path resolution, flexible argument pass-through, and structured output formats suitable for workflow branching and reporting. It supports both single-shot comparisons and experimental loop mode for latency profiling and stability testing.
+The action wraps the `LVCompare.exe` command-line interface with intelligent path
+resolution, flexible argument pass-through, and structured output formats suitable for
+workflow branching and reporting. It supports both single-shot comparisons and
+experimental loop mode for latency profiling and stability testing.
 
 **Key Features:**
 
@@ -21,7 +27,9 @@ The action wraps the LVCompare.exe command-line interface with intelligent path 
 - **CI-Friendly**: Automatic step summaries, JSON artifacts, and configurable fail-on-diff behavior
 - **Loop Mode (Experimental)**: Aggregate metrics, percentile latencies, and histogram generation for performance analysis
 
-Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also: [`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at `.github/workflows/release.yml`.
+Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also:
+[`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at
+`.github/workflows/release.yml`.
 
 ## Requirements
 
@@ -66,23 +74,59 @@ jobs:
 
 ### Action Outputs
 
-- `diff`: `true|false` whether differences were detected (based on exit code mapping 0=no diff, 1=diff)
+- `diff`: `true|false` whether differences were detected (0 = no diff, 1 = diff)
 - `exitCode`: Raw exit code from the CLI
 - `cliPath`: Resolved path to the executable
-- `command`: The exact command line executed (quoted) for auditing
-- `compareDurationSeconds`: Elapsed execution time (float, seconds) for the LVCompare invocation
-- `compareDurationNanoseconds`: High-resolution elapsed time in nanoseconds (useful for profiling very fast comparisons)
-- `compareSummaryPath`: Path to JSON summary file with comparison metadata
+- `command`: Exact command line executed (quoted) for auditing
+- `compareDurationSeconds`: Elapsed execution time (float, seconds)
+- `compareDurationNanoseconds`: High-resolution elapsed time in nanoseconds
+- `compareSummaryPath`: Path to JSON summary file (comparison metadata)
+- `shortCircuitedIdentical`: `true|false` short‑circuit when `base` and `head` resolve identically (no process spawned)
 
-Loop mode outputs (when `loop-enabled: true`): `iterations`, `diffCount`, `errorCount`, `averageSeconds`, `totalSeconds`, `p50`, `p90`, `p99`, `quantileStrategy`, `streamingWindowCount`, `loopResultPath`, `histogramPath`
+Loop mode outputs (when `loop-enabled: true`): `iterations`, `diffCount`, `errorCount`,
+`averageSeconds`, `totalSeconds`, `p50`, `p90`, `p99`, `quantileStrategy`,
+`streamingWindowCount`, `loopResultPath`, `histogramPath`.
 
 See [`docs/action-outputs.md`](./docs/action-outputs.md) for complete output documentation.
 
 ### Exit Codes and Behavior
 
 - **Exit code mapping**: 0 = no diff, 1 = diff detected, any other code = failure
-- **Always-emit outputs**: `diff`, `exitCode`, `cliPath`, `command` are always emitted even when the step fails, to support workflow branching and diagnostics
-- **Step summary**: A structured run report is appended to `$GITHUB_STEP_SUMMARY` with working directory, resolved paths, CLI path, command, exit code, and diff result
+- **Identical path short-circuit**: If `base` and `head` resolve to the exact same absolute
+  path, the action skips invoking LVCompare and emits
+  `shortCircuitedIdentical=true`, `diff=false`, `exitCode=0`.
+- **Same filename / different directories**: LVCompare cannot compare two different VIs
+  with the *same leaf filename*. The action fails early with an explanatory error instead
+  of triggering an IDE dialog.
+
+### (Deprecated heading placeholder removed)
+
+```yaml
+  - name: Compare VIs
+    id: compare
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+    with:
+      base: Base.vi
+      head: Base.vi  # Intentional identical path
+      fail-on-diff: true
+
+  - name: Handle identical-path short-circuit
+    if: steps.compare.outputs.shortCircuitedIdentical == 'true'
+    shell: pwsh
+    run: |
+      Write-Host 'Identical file comparison short-circuited; no diff expected.'
+
+  - name: Handle real diff
+    if: steps.compare.outputs.shortCircuitedIdentical != 'true' && steps.compare.outputs.diff == 'true'
+    shell: pwsh
+    run: |
+      Write-Host 'Real differences detected.'
+```
+
+- **Always-emit outputs**: `diff`, `exitCode`, `cliPath`, `command` are always emitted
+  even when the step fails, to support workflow branching and diagnostics.
+- **Step summary**: A structured run report is appended to `$GITHUB_STEP_SUMMARY` with
+  working directory, resolved paths, CLI path, command, exit code, and diff result.
 
 ## Advanced Configuration
 
@@ -167,7 +211,9 @@ See the knowledgebase guide for more details on HTML report generation.
 
 HTML diff iteration summary (module)
 
-The `CompareLoop` module can emit a concise diff iteration summary after a run when at least one diff was observed via the `-DiffSummaryFormat` parameter. Supported formats: `Text`, `Markdown`, `Html`.
+The `CompareLoop` module can emit a concise diff iteration summary after a run when at
+least one diff was observed via the `-DiffSummaryFormat` parameter. Supported formats:
+`Text`, `Markdown`, `Html`.
 
 When `Html` is selected a minimal fragment (no `<html>` wrapper) is produced:
 
@@ -202,6 +248,54 @@ if ($r.DiffSummary) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $r.DiffS
 
 Quick regex extraction of diff count:
 
+### Workflow Branching & Short-Circuit Examples
+
+Below are practical GitHub Actions workflow patterns showing how to branch on:
+
+1. Identical path short-circuit (`shortCircuitedIdentical`)
+2. Real diff detection (`diff`)
+3. Loop diff summary emission (when using the loop module separately)
+
+Branching decision matrix:
+
+| Scenario | `shortCircuitedIdentical` | `diff` | `exitCode` | Interpretation | Typical Next Step |
+|----------|---------------------------|--------|-----------|----------------|-------------------|
+| Identical paths (preflight short-circuit) | true | false | 0 | Comparison skipped (paths identical) | Log & skip diff-dependent steps |
+| Different paths, no differences | false | false | 0 | Successful compare, no diff | Proceed with downstream build/test |
+| Different paths, differences found | false | true | 1 | Successful compare, diff present | Produce/report diff artifacts, maybe fail if policy requires |
+| CLI error / unexpected exit (e.g. missing file, non 0/1) | false | (not reliable) | >1 or <0 | Failure in LVCompare invocation | Surface logs, stop or mark job failed |
+| Loop mode run (any iteration mix) | always false | (aggregate not exposed as `diff`) | 0 (loop script) | Loop orchestrated; per-iteration diffs summarized separately | Parse loop summary / diff fragment |
+
+Loop mode note: The composite action sets `shortCircuitedIdentical=false` in loop mode
+because comparisons are iterative and may involve varying paths or simulated executors;
+identical-path short-circuit only applies to the single-run path.
+
+Basic short-circuit vs real diff (single run):
+
+```yaml
+  - name: Compare VIs
+    id: compare
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+    with:
+      base: Base.vi
+      head: Base.vi  # Intentional identical path
+      fail-on-diff: true
+
+  - name: Handle identical-path short-circuit
+    if: steps.compare.outputs.shortCircuitedIdentical == 'true'
+    shell: pwsh
+    run: |
+      Write-Host 'Identical file comparison short-circuited; no diff expected.'
+
+  - name: Handle real diff
+    if: steps.compare.outputs.shortCircuitedIdentical != 'true' && steps.compare.outputs.diff == 'true'
+    shell: pwsh
+    run: |
+      Write-Host 'Real differences detected.'
+```
+
+Advanced (extracting diff iteration count from loop HTML fragment — when running the loop separately and appending its summary):
+
 ```powershell
 if ($r.DiffSummary -match '<li><strong>Diff Iterations:</strong> (\d+)</li>') { [int]$Matches[1] }
 ```
@@ -210,7 +304,9 @@ See `docs/COMPARE_LOOP_MODULE.md` for deeper details including Markdown/Text for
 
 Autonomous integration loop runner
 
-A convenience script `scripts/Run-AutonomousIntegrationLoop.ps1` wraps `Invoke-IntegrationCompareLoop` with environment-driven defaults so you can start a soak / guard loop with zero parameters.
+A convenience script `scripts/Run-AutonomousIntegrationLoop.ps1` wraps
+`Invoke-IntegrationCompareLoop` with environment-driven defaults so you can start a
+soak / guard loop with zero parameters.
 
 Key env variables (optional unless noted):
 
@@ -253,7 +349,9 @@ Additional switches:
 - `-DiffExitCode <int>`: When set and the loop succeeds with one or more diffs, exit using this code instead of 0.
 - Rotation: Set `LOOP_JSON_LOG_MAX_BYTES` and optionally `LOOP_JSON_LOG_MAX_ROLLS` (default 5) for rolling `*.roll` files.
 - Time-based rotation: Set `LOOP_JSON_LOG_MAX_AGE_SECONDS` to force age-based rotation.
-- Final status JSON: Provide `-FinalStatusJsonPath` or env `LOOP_FINAL_STATUS_JSON` to write a `loop-final-status-v1` JSON (separate from run summary JSON inside the loop module).
+- Final status JSON: Provide `-FinalStatusJsonPath` or env `LOOP_FINAL_STATUS_JSON`
+  to write a `loop-final-status-v1` JSON (separate from run summary JSON inside the
+  loop module).
 
 Quick simulated run (no real LVCompare required):
 
@@ -401,7 +499,10 @@ Notes
 
 ## Pester Test Dispatcher JSON Summary (Schema v1.7.1)
 
-The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
+The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits
+a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables
+downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields
+without scraping console text.
 
 Schema files:
 
@@ -436,8 +537,12 @@ Validation tests:
 
 Notes:
 
-- Timing distribution (`meanTest_ms`, `p95Test_ms`, `maxTest_ms`) is computed only when detailed result objects are available. Missing data yields `null` values without omitting keys.
-- A discovery failure (pattern: `Discovery in .* failed with:`) previously could yield a false green (0 tests). Logic now elevates such cases to `errors` and a non‑zero dispatcher exit code.
+- Timing distribution (`meanTest_ms`, `p95Test_ms`, `maxTest_ms`) is computed only when
+  detailed result objects are available. Missing data yields `null` values without
+  omitting keys.
+- A discovery failure (pattern: `Discovery in .* failed with:`) previously could yield a
+  false green (0 tests). Logic now elevates such cases to `errors` and a non‑zero
+  dispatcher exit code.
 - The dispatcher never uses additional exit codes: 0 = clean (no failures/errors), 1 = any failure/error/discovery anomaly/timeout.
 - All dynamic numeric fields use plain JSON numbers (no string wrapping) to simplify ingestion by metrics pipelines.
 
@@ -450,7 +555,9 @@ Notes:
 
 ### New in 1.2.0: Optional Context Blocks
 
-Version 1.2.0 introduces three **optional** top-level objects emitted only when the dispatcher is invoked with the new switch `-EmitContext`. They are omitted by default to preserve the minimal footprint and backward compatibility with 1.1.0 consumers.
+Version 1.2.0 introduces three **optional** top-level objects emitted only when the
+dispatcher is invoked with the new switch `-EmitContext`. They are omitted by default to
+preserve the minimal footprint and backward compatibility with 1.1.0 consumers.
 
 | Block | Sample Keys | Purpose |
 |-------|-------------|---------|
@@ -474,7 +581,9 @@ Minimal (default) invocation still produces a schema-compliant document identica
 
 ### New in 1.3.0: Optional Timing Block
 
-Version 1.3.0 adds a `timing` object (opt-in via `-EmitTimingDetail`) containing richer per-test duration statistics while retaining legacy root fields (`meanTest_ms`, `p95Test_ms`, `maxTest_ms`) for backward compatibility.
+Version 1.3.0 adds a `timing` object (opt-in via `-EmitTimingDetail`) containing richer
+per-test duration statistics while retaining legacy root fields (`meanTest_ms`,
+`p95Test_ms`, `maxTest_ms`) for backward compatibility.
 
 Timing block fields:
 
@@ -503,7 +612,9 @@ Invocation example:
 
 ### New in 1.4.0: Stability (Flakiness) Scaffold
 
-Version 1.4.0 introduces an opt-in `stability` block (flag: `-EmitStability`) laying groundwork for future retry-based flaky detection. Until a retry engine is implemented all metrics are placeholders derived from the single pass.
+Version 1.4.0 introduces an opt-in `stability` block (flag: `-EmitStability`) laying
+groundwork for future retry-based flaky detection. Until a retry engine is implemented
+all metrics are placeholders derived from the single pass.
 
 Fields:
 
@@ -525,7 +636,8 @@ Invocation example:
 
 ### New in 1.5.0: Discovery Diagnostics Block
 
-Opt-in (`-EmitDiscoveryDetail`) `discovery` object providing structured insight into discovery failures (previously counted only).
+Opt-in (`-EmitDiscoveryDetail`) `discovery` object providing structured insight into
+discovery failures (previously counted only).
 
 | Field | Meaning |
 |-------|---------|
@@ -543,7 +655,8 @@ Invocation example:
 
 ### New in 1.7.0: Aggregation Hints Block
 
-Optional heuristic guidance to help downstream systems decide how to shard, bucket, or optimize test reporting. Enabled with `-EmitAggregationHints`.
+Optional heuristic guidance to help downstream systems decide how to shard, bucket, or
+optimize test reporting. Enabled with `-EmitAggregationHints`.
 
 Structure:
 
@@ -568,7 +681,8 @@ Guidelines:
 
 ### New in 1.6.0: Outcome Classification Block
 
-Opt-in (`-EmitOutcome`) `outcome` object providing a unified status classification derived from existing counters and timeout/discovery signals.
+Opt-in (`-EmitOutcome`) `outcome` object providing a unified status classification
+derived from existing counters and timeout/discovery signals.
 
 | Field | Meaning |
 |-------|---------|
@@ -587,7 +701,11 @@ Invocation example:
 
 ### New in 1.7.1: Aggregation Build Timing Metric
 
-When aggregation hints are requested (`-EmitAggregationHints`), the dispatcher now emits a root-level numeric field `aggregatorBuildMs` (milliseconds) measuring how long it took to construct the `aggregationHints` block. This field is omitted entirely when aggregation hints are not emitted (no null placeholder) to keep the default payload lean.
+When aggregation hints are requested (`-EmitAggregationHints`), the dispatcher now emits
+a root-level numeric field `aggregatorBuildMs` (milliseconds) measuring how long it took
+to construct the `aggregationHints` block. This field is omitted entirely when
+aggregation hints are not emitted (no null placeholder) to keep the default payload
+lean.
 
 Rationale:
 
@@ -616,7 +734,9 @@ Guarantees / Notes:
 | 1.9.0 | `meta` | Slim mode signalling, emittedFields manifest. |
 | 2.0.0 | Breaking consolidation | Potential migration of `discoveryFailures` → `discovery.failures`, counts object grouping, explicit `schema` slug addition. |
 
-All new blocks will be optional keys to preserve compatibility. Tests are added per phase to assert (a) absence by default and (b) presence + type integrity when enabled via new dispatcher switches.
+All new blocks will be optional keys to preserve compatibility. Tests are added per
+phase to assert (a) absence by default and (b) presence + type integrity when enabled
+via new dispatcher switches.
 
 ### Consumption Guidance
 
@@ -747,7 +867,12 @@ Troubleshooting
 
 ### Dispatcher discovery failures & diagnostic environment toggles
 
-The local Pester dispatcher (`Invoke-PesterTests.ps1`) performs a lightweight scan of console output to detect **discovery-time failures** (e.g. parse / variable resolution errors that prevent tests from loading). Historically a single integration test caused a persistent false positive; instrumentation plus safer test authoring resolved it. This section explains how to diagnose future issues and which environment variables influence behavior.
+The local Pester dispatcher (`Invoke-PesterTests.ps1`) performs a lightweight scan of
+console output to detect **discovery-time failures** (e.g. parse / variable resolution
+errors that prevent tests from loading). Historically a single integration test caused a
+persistent false positive; instrumentation plus safer test authoring resolved it. This
+section explains how to diagnose future issues and which environment variables influence
+behavior.
 
 Key principles:
 
@@ -772,8 +897,12 @@ JSON summary linkage:
 
 Best practices to avoid false positives:
 
-- Ensure any variables used inside `-Skip:` expressions are initialized **before** the `It` block is parsed (i.e., declare them at script top-level or use a `BeforeDiscovery` hook rather than `BeforeAll`). Uninitialized variables can cause discovery-time resolution errors that surface as false positives.
-- Avoid performing filesystem mutations (test file creation/deletion) at script top-level—keep them inside `BeforeAll`/`It` to prevent parse-time side effects.
+- Ensure any variables used inside `-Skip:` expressions are initialized **before** the
+  `It` block is parsed (declare at script top-level or use a `BeforeDiscovery` hook
+  rather than `BeforeAll`). Uninitialized variables can cause discovery-time resolution
+  errors surfaced as false positives.
+- Avoid performing filesystem mutations (test file creation/deletion) at script
+  top-level—keep them inside `BeforeAll`/`It` to prevent parse-time side effects.
 
 Quick diagnostic workflow (local):
 
@@ -783,7 +912,9 @@ pwsh -File ./Invoke-PesterTests.ps1 -EmitDiscoveryDetail | Tee-Object -Variable 
 Get-Content tests/results/discovery-debug.log | Select-Object -First 5
 ```
 
-If `discoveryFailures` returns to zero after moving variable initialization out of `BeforeAll`, you've resolved a discovery-time reference issue. Re-enable suppression defaults after diagnosis.
+If `discoveryFailures` returns to zero after moving variable initialization out of
+`BeforeAll`, you've resolved a discovery-time reference issue. Re-enable suppression
+defaults after diagnosis.
 
 
 Tests
@@ -807,9 +938,13 @@ Tests
 RunSummary renderer test restoration
 
 - The original renderer tool tests were temporarily quarantined due to a discovery-time PowerShell parameter binding anomaly injecting a null `-Path`.
-- Tests have been restored (`RunSummary.Tool.Restored.Tests.ps1`) using a safe pattern: all `$TestDrive` and dynamic file creation occurs inside `BeforeAll` or individual `It` blocks (never at script top-level during Pester discovery).
-- A minimal reproduction script (`tools/Binding-MinRepro.ps1`) plus diagnostic test (`Binding.MinRepro.Tests.ps1`) are included for future investigations.
-- If adding new renderer-related tests, avoid performing filesystem or `$TestDrive` operations outside of runtime blocks to prevent reintroducing the anomaly.
+- Tests have been restored (`RunSummary.Tool.Restored.Tests.ps1`) using a safe pattern:
+  all `$TestDrive` and dynamic file creation occurs inside `BeforeAll` or individual `It`
+  blocks (never at script top-level during Pester discovery).
+- A minimal reproduction script (`tools/Binding-MinRepro.ps1`) plus diagnostic test
+  (`Binding.MinRepro.Tests.ps1`) are included for future investigations.
+- If adding new renderer-related tests, avoid performing filesystem or `$TestDrive`
+  operations outside of runtime blocks to prevent reintroducing the anomaly.
 
 Continuous local dev loop (watch mode)
 
@@ -835,11 +970,15 @@ Key options:
 - `-DeltaJsonPath <file>`: Write a JSON artifact containing current stats, previous stats, deltas, and classification (`baseline|improved|worsened|unchanged`).
 - `-ShowFailed`: After summary, list failing test names (up to `-MaxFailedList`).
 - `-MaxFailedList <N>`: Cap the number of failing tests printed (default 10).
-- `-DeltaHistoryPath <file>`: Append each delta JSON payload (same schema as `-DeltaJsonPath`) as one line of JSON (JSON Lines / NDJSON). Useful for run history graphs.
+- `-DeltaHistoryPath <file>`: Append each delta JSON payload (same schema as
+  `-DeltaJsonPath`) as one line of JSON (JSON Lines / NDJSON). Useful for run history
+  graphs.
 - `-MappingConfig <file>`: JSON file mapping source glob patterns to one or more test files (augmenting `-InferTestsFromSource`).
 - `-OnlyFailed`: If the previous run had failing test files and no direct/inferred changes are detected this run, re-run only those failing test files.
 - `-NotifyScript <file>`: Post-run hook script invoked with named parameters & WATCH_* environment variables (see below).
-- `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N additional attempts (flaky mitigation). Classification becomes `improved` if failures clear on a retry.
+- `-RerunFailedAttempts <N>`: Automatically re-run failing test file containers up to N
+  additional attempts (flaky mitigation). Classification becomes `improved` if failures
+  clear on a retry.
 
 Selective runs:
 
@@ -1056,12 +1195,16 @@ Invoke-IntegrationCompareLoop -Base 'C:\repos\main\ControlLoop.vi' -Head 'C:\rep
 
 ## Composite Action Loop Mode (Experimental)
 
-The composite action now supports an optional **loop mode** (`loop-enabled: true`) that delegates to the `CompareLoop` module to collect multiple LVCompare iterations and export aggregate latency metrics, percentiles, and (optionally) a histogram.
+The composite action supports an optional **loop mode** (`loop-enabled: true`) that
+delegates to the `CompareLoop` module to collect multiple LVCompare iterations and
+export aggregate latency metrics, percentiles, and (optionally) a histogram.
 
 When loop mode is enabled, the action:
 
 1. Executes up to `loop-max-iterations` iterations (or fewer if canceled / job ends).
-2. Uses a simulated executor by default (`loop-simulate: true`) so percentile telemetry can run on GitHub-hosted runners without LabVIEW installed. Set `loop-simulate: false` to run real comparisons (requires canonical CLI path).
+2. Simulated executor by default (`loop-simulate: true`) allows percentile telemetry on
+  GitHub-hosted runners without LabVIEW. Set `loop-simulate: false` for real comparisons
+  (requires canonical CLI path).
 3. Emits additional outputs for downstream workflows (average latency, p50/p90/p99, counts, reservoir window size, etc.).
 4. Writes a `compare-loop-summary.json` (aggregate) and optional histogram JSON file into the runner temp directory.
 
@@ -1196,9 +1339,13 @@ Supported `-QuantileStrategy` values:
 
 Additional parameters:
 
-- `-StreamCapacity <int>`: Reservoir size (default 500, minimum 10). Larger improves tail stability but increases memory and sort cost per percentile snapshot.
+- `-StreamCapacity <int>`: Reservoir size (default 500, minimum 10). Larger improves
+  tail stability but increases memory and sort cost per percentile snapshot.
 - `-HybridExactThreshold <int>`: Number of iterations to collect exact samples before switching in `Hybrid`.
-- `-ReconcileEvery <int>`: If > 0 and streaming active, periodically rebuilds the reservoir from all collected durations using a uniform stride subsample. Helps reduce drift in long, highly non-stationary runs. Set to a multiple of `StreamCapacity` (e.g. capacity 500, reconcile every 2000 iterations) for a balance of freshness vs. overhead.
+- `-ReconcileEvery <int>`: If > 0 and streaming active, periodically rebuilds the
+  reservoir from collected durations using a uniform stride subsample. Helps reduce
+  drift in long, highly non-stationary runs. Use a multiple of `StreamCapacity` (e.g.
+  capacity 500 → reconcile every 2000) for freshness vs. overhead.
 
 Result object fields (selected):
 
@@ -1212,7 +1359,8 @@ Legacy alias:
 
 Accuracy guidance:
 
-- For relatively stable latency distributions, `StreamCapacity=300-500` keeps p50/p90 within a few milliseconds (or a few percent relative error) versus exact in typical quick-iteration scenarios.
+- For relatively stable latency distributions, `StreamCapacity=300-500` keeps p50/p90
+  within a few ms (or a few percent relative error) versus exact in quick iterations.
 - Increase capacity or enable reconciliation if p99 drifts (especially with bimodal or bursty latency patterns).
 - Hybrid mode is helpful when early, small-sample percentiles must be exact for initial diagnostics, but you still want bounded memory for a long soak run.
 
@@ -1237,7 +1385,8 @@ Tuning checklist:
 4. Observing drift over hours? Introduce `-ReconcileEvery` at a multiple of capacity.
 5. Tail (p99) noisy? Increase capacity or reconciliation frequency modestly.
 
-Future considerations (open to contributions): true P² marker implementation, advanced tail percentiles beyond those requested (e.g., p99.99), weighted / stratified sampling strategies.
+Future considerations (open to contributions): true P² markers, advanced tail percentiles
+ (e.g., p99.99), weighted / stratified sampling strategies.
 
 Switches `-SkipValidation` and `-PassThroughPaths` exist solely for unit-style testing; omit them in real usage.
 

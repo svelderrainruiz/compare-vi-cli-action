@@ -191,3 +191,13 @@ Loop mode: sample count retained in streaming reservoir
 ### totalSeconds
 
 Loop mode: total elapsed time (s)
+
+### shortCircuitedIdentical
+
+`true|false`. `true` only when (single-run mode) the action detects that `base` and `head` resolve to the **same absolute path** and it short-circuits (no LVCompare spawn) producing `exitCode=0`, `diff=false`, near‑zero duration. Prevents the LabVIEW IDE popup and unnecessary process launch.
+
+Notes:
+
+- Always `false` in loop mode (the iterative path never short-circuits by identical path preflight; it still validates once up front).
+- Always `false` for normal (non-identical) comparisons that execute LVCompare.
+- Included in the JSON summary (`compareSummaryPath`).
