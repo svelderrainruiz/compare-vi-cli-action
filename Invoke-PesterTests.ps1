@@ -51,6 +51,11 @@ param(
 
   [Parameter(Mandatory = $false)]
   [int]$MaxTestFiles = 0
+,
+  [Parameter(Mandatory = $false)]
+  [switch]$EmitContext,
+  [Parameter(Mandatory = $false)]
+  [switch]$EmitTimingDetail
 )
 
 Set-StrictMode -Version Latest
@@ -62,7 +67,7 @@ if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds 
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.1.0'
+$SchemaSummaryVersion  = '1.3.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -317,12 +322,15 @@ if ($limitToSingle) {
   Write-Host "Running single test file: $singleTestFile" -ForegroundColor Green
 } else {
   $testFiles = @(Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File | Sort-Object FullName)
-  Write-Host "Found $($testFiles.Count) test file(s) in tests directory" -ForegroundColor Green
+  $originalTestFileCount = $testFiles.Count
+  Write-Host "Found $originalTestFileCount test file(s) in tests directory" -ForegroundColor Green
   if ($MaxTestFiles -gt 0 -and $testFiles.Count -gt $MaxTestFiles) {
     Write-Host "Selecting first $MaxTestFiles test file(s) for execution (loop count mode)." -ForegroundColor Yellow
     $selected = $testFiles | Select-Object -First $MaxTestFiles
     $testFiles = @($selected)
   }
+  $selectedTestFileCount = $testFiles.Count
+  $maxTestFilesApplied = ($MaxTestFiles -gt 0 -and $originalTestFileCount -gt $selectedTestFileCount)
 }
 
 # Early exit path when zero tests discovered: emit minimal artifacts for stable downstream handling
@@ -459,6 +467,7 @@ if (-not $includeIntegrationBool) {
 
 # Configure output
 $conf.Output.Verbosity = 'Detailed'
+$conf.Run.PassThru = $true
 
 # Configure test results
 $conf.TestResult.Enabled = $true
@@ -672,14 +681,15 @@ try {
   exit 1
 }
 
-# Derive per-test timing metrics if detailed result available
+# Derive per-test timing metrics if detailed result available (legacy root fields)
 $meanMs = $null; $p95Ms = $null; $maxMs = $null
+$_timingDurations = @()
 try {
   if ($result -and $result.Tests) {
-    $durations = @($result.Tests | Where-Object { $_.Duration } | ForEach-Object { $_.Duration.TotalMilliseconds })
-    if ($durations.Count -gt 0) {
-      $meanMs = [math]::Round(($durations | Measure-Object -Average).Average,2)
-      $sorted = $durations | Sort-Object
+    $_timingDurations = @($result.Tests | Where-Object { $_.Duration } | ForEach-Object { $_.Duration.TotalMilliseconds })
+    if ($_timingDurations.Count -gt 0) {
+      $meanMs = [math]::Round(($_timingDurations | Measure-Object -Average).Average,2)
+      $sorted = $_timingDurations | Sort-Object
       $maxMs = [math]::Round(($sorted[-1]),2)
       $pIndex = [int][math]::Floor(0.95 * ($sorted.Count - 1))
       if ($pIndex -ge 0) { $p95Ms = [math]::Round($sorted[$pIndex],2) }
@@ -730,6 +740,70 @@ try {
     schemaVersion      = $SchemaSummaryVersion
     timedOut           = $timedOut
     discoveryFailures  = $discoveryFailureCount
+  }
+
+  # Optional context enrichment (schema v1.2.0+)
+  if ($EmitContext) {
+    try {
+      $envBlock = [PSCustomObject]@{
+        osPlatform       = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+        psVersion        = $PSVersionTable.PSVersion.ToString()
+        pesterModulePath = $loadedPester.Path
+      }
+      $runBlock = [PSCustomObject]@{
+        startTime        = $testStartTime.ToString('o')
+        endTime          = $testEndTime.ToString('o')
+        wallClockSeconds = [double]::Parse($testDuration.TotalSeconds.ToString('F3'))
+      }
+      $selectionBlock = [PSCustomObject]@{
+        totalDiscoveredFileCount = $originalTestFileCount
+        selectedTestFileCount    = $selectedTestFileCount
+        maxTestFilesApplied      = $maxTestFilesApplied
+      }
+      Add-Member -InputObject $jsonObj -Name environment -MemberType NoteProperty -Value $envBlock
+      Add-Member -InputObject $jsonObj -Name run -MemberType NoteProperty -Value $runBlock
+      Add-Member -InputObject $jsonObj -Name selection -MemberType NoteProperty -Value $selectionBlock
+    } catch { Write-Warning "Failed to emit context blocks: $_" }
+  }
+
+  # Optional extended timing block (schema v1.3.0+)
+  if ($EmitTimingDetail) {
+    try {
+      if ($_timingDurations.Count -gt 0) {
+        $sortedAll = $_timingDurations | Sort-Object
+        function _pct { param($p,[double[]]$arr) if ($arr.Count -eq 0) { return $null } $idx = [math]::Floor(($p/100) * ($arr.Count - 1)); return [math]::Round($arr[[int]$idx],2) }
+        $minMs = [math]::Round($sortedAll[0],2)
+        $medianMs = _pct 50 $sortedAll
+        $p50Ms = $medianMs
+        $p75Ms = _pct 75 $sortedAll
+        $p90Ms = _pct 90 $sortedAll
+        $p95dMs = _pct 95 $sortedAll
+        $p99Ms = _pct 99 $sortedAll
+        # std dev (population)
+        $meanAll = ($sortedAll | Measure-Object -Average).Average
+        $variance = 0
+        foreach ($v in $sortedAll) { $variance += [math]::Pow(($v - $meanAll),2) }
+        $variance = $variance / $sortedAll.Count
+        $stdDevMs = [math]::Round([math]::Sqrt($variance),2)
+        $timingBlock = [PSCustomObject]@{
+          count        = $sortedAll.Count
+          totalMs      = [math]::Round(($_timingDurations | Measure-Object -Sum).Sum,2)
+          minMs        = $minMs
+          maxMs        = $maxMs
+          meanMs       = $meanMs
+          medianMs     = $medianMs
+          stdDevMs     = $stdDevMs
+          p50Ms        = $p50Ms
+          p75Ms        = $p75Ms
+          p90Ms        = $p90Ms
+          p95Ms        = $p95dMs
+          p99Ms        = $p99Ms
+        }
+      } else {
+        $timingBlock = [PSCustomObject]@{ count = 0; totalMs = 0; minMs = $null; maxMs = $null; meanMs = $null; medianMs = $null; stdDevMs = $null; p50Ms=$null; p75Ms=$null; p90Ms=$null; p95Ms=$null; p99Ms=$null }
+      }
+      Add-Member -InputObject $jsonObj -Name timing -MemberType NoteProperty -Value $timingBlock
+    } catch { Write-Warning "Failed to emit extended timing block: $_" }
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray

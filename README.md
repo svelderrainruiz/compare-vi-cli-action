@@ -399,18 +399,26 @@ Marketplace
 
 Notes
 
-## Pester Test Dispatcher JSON Summary (Schema v1.1.0)
+## Pester Test Dispatcher JSON Summary (Schema v1.3.0)
 
 The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
 
-Schema file: [`docs/schemas/pester-summary-v1_1.schema.json`](./docs/schemas/pester-summary-v1_1.schema.json)  
-Validation test: [`tests/PesterSummary.Schema.Tests.ps1`](./tests/PesterSummary.Schema.Tests.ps1)
+Schema files:
+
+- Baseline (core fields) [`docs/schemas/pester-summary-v1_1.schema.json`](./docs/schemas/pester-summary-v1_1.schema.json)
+- Current (adds optional context blocks) [`docs/schemas/pester-summary-v1_2.schema.json`](./docs/schemas/pester-summary-v1_2.schema.json)
+- Latest (adds optional timing block) [`docs/schemas/pester-summary-v1_3.schema.json`](./docs/schemas/pester-summary-v1_3.schema.json)
+
+Validation tests:
+
+- Baseline absence of optional blocks: [`tests/PesterSummary.Schema.Tests.ps1`](./tests/PesterSummary.Schema.Tests.ps1)
+- Context emission (when opt-in flag used): [`tests/PesterSummary.Context.Tests.ps1`](./tests/PesterSummary.Context.Tests.ps1)
 
 ### Core Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schemaVersion` | string (const `1.1.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `schemaVersion` | string (const `1.3.0`) | Version identifier (semantic). Additive fields bump minor only. |
 | `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
 | `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
 | `failed` | int >=0 | Assertion failures (Pester logical failures). |
@@ -440,12 +448,65 @@ Notes:
 3. Field removal / rename / semantic type change -> major (2.0.0) and deprecation window communicated ahead of time.
 4. Older schema files remain immutable—never retro‑edit historical definitions.
 
+### New in 1.2.0: Optional Context Blocks
+
+Version 1.2.0 introduces three **optional** top-level objects emitted only when the dispatcher is invoked with the new switch `-EmitContext`. They are omitted by default to preserve the minimal footprint and backward compatibility with 1.1.0 consumers.
+
+| Block | Sample Keys | Purpose |
+|-------|-------------|---------|
+| `environment` | `osDescription`, `powerShellVersion`, `pesterModulePath` | Host/runtime details for traceability & fleet variability studies. |
+| `run` | `startedAt`, `endedAt`, `wallClockSeconds` | Precise run window & duration envelope (independent of per-test timing). |
+| `selection` | `originalTestFileCount`, `selectedTestFileCount`, `maxTestFilesApplied` | Visibility into pre-execution file selection / capping heuristics. |
+
+Emission rules:
+
+- Blocks are either all present or all absent (single opt-in switch ensures atomic context capture).
+- No existing core field semantics change; absence MUST NOT be interpreted as an error.
+- Future context-related fields (e.g. shard IDs) will follow the same optional additive pattern (minor version bump only).
+
+Invocation example (emit context):
+
+```powershell
+./Invoke-PesterTests.ps1 -EmitContext
+```
+
+Minimal (default) invocation still produces a schema-compliant document identical (save for `schemaVersion`) to prior 1.1.0 output.
+
+### New in 1.3.0: Optional Timing Block
+
+Version 1.3.0 adds a `timing` object (opt-in via `-EmitTimingDetail`) containing richer per-test duration statistics while retaining legacy root fields (`meanTest_ms`, `p95Test_ms`, `maxTest_ms`) for backward compatibility.
+
+Timing block fields:
+
+| Field | Meaning |
+|-------|---------|
+| `count` | Number of tests with measured durations. |
+| `totalMs` | Sum of all test durations (ms). |
+| `minMs` / `maxMs` | Extremes (ms). |
+| `meanMs` | Arithmetic mean (ms). |
+| `medianMs` / `p50Ms` | 50th percentile (identical values). |
+| `p75Ms`, `p90Ms`, `p95Ms`, `p99Ms` | Percentile cut points (nearest-rank). |
+| `stdDevMs` | Population standard deviation (ms). |
+
+Emission rules:
+
+- Only present when `-EmitTimingDetail` is passed.
+- Null-able metrics (e.g., min/max) become null if `count=0`.
+- Does not remove or alter legacy root timing summary fields.
+
+
+Invocation example:
+
+```powershell
+./Invoke-PesterTests.ps1 -EmitTimingDetail
+```
+
 ### Planned Incremental Enrichment (Roadmap)
 
 | Planned Version | Block | Purpose |
 |-----------------|-------|---------|
-| 1.2.0 | `environment`, `run`, `selection` | Context (OS, PS version, run window, file selection stats). |
-| 1.3.0 | `timing` (extended) | Rich percentile spread & optional per-test durations (flag‑gated). |
+| 1.2.0 | `environment`, `run`, `selection` | Context (OS, PS version, run window, file selection stats) – IMPLEMENTED (opt-in via `-EmitContext`). |
+| 1.3.0 | `timing` (extended) | Rich percentile spread & optional per-test durations (flag‑gated) – IMPLEMENTED (opt-in via `-EmitTimingDetail`). |
 | 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced). |
 | 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size). |
 | 1.6.0 | `outcome` | Unified status classification (`Passed\|Failed\|Errored\|TimedOut\|DiscoveryError`). |
@@ -466,11 +527,11 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 - When aggregating trends, prefer stable ratios: pass rate = `(passed)/(total)`; failure density = `(failed+errors)/total`.
 
 
-### Example Minimal JSON
+### Example Minimal JSON (Default, No Context, No Timing)
 
 ```jsonc
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.3.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -486,7 +547,63 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
   "timedOut": false,
   "discoveryFailures": 0
 }
+
+### Example With Context & Timing
+
+```jsonc
+{
+  "schemaVersion": "1.3.0",
+  "total": 42,
+  "passed": 42,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "duration_s": 3.14,
+  "timestamp": "2025-10-02T10:00:00.000Z",
+  "pesterVersion": "5.7.1",
+  "includeIntegration": false,
+  "meanTest_ms": 75.12,
+  "p95Test_ms": 130.44,
+  "maxTest_ms": 180.02,
+  "timedOut": false,
+  "discoveryFailures": 0,
+  "timing": {
+    "count": 42,
+    "totalMs": 3150.5,
+    "minMs": 5.12,
+    "maxMs": 180.02,
+    "meanMs": 75.12,
+    "medianMs": 70.10,
+    "stdDevMs": 12.55,
+    "p50Ms": 70.10,
+    "p75Ms": 90.44,
+    "p90Ms": 120.33,
+    "p95Ms": 130.44,
+    "p99Ms": 178.91
+  },
+  "environment": {
+    "osDescription": "Microsoft Windows 11 Pro 10.0.22631",
+    "powerShellVersion": "7.4.4",
+    "pesterModulePath": "C:/Users/runneradmin/Documents/PowerShell/Modules/Pester/5.7.1/Pester.psd1"
+  },
+  "run": {
+    "startedAt": "2025-10-02T10:00:00.000Z",
+    "endedAt": "2025-10-02T10:00:03.140Z",
+    "wallClockSeconds": 3.14
+  },
+  "selection": {
+    "originalTestFileCount": 27,
+    "selectedTestFileCount": 27,
+    "maxTestFilesApplied": false
+  }
+}
 ```
+
+Notes:
+
+- Paths / versions are illustrative.
+- Consumers must treat unknown future fields as ignorable.
+- Absence of `environment` (etc.) indicates the dispatcher was run without `-EmitContext`.
 
 For questions or suggested fields open an issue with `area:schema` label.
 

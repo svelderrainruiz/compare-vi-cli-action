@@ -7,6 +7,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- Pester dispatcher schema v1.3.0 (`pester-summary-v1_3.schema.json`): optional `timing` block (opt-in via `-EmitTimingDetail`) with extended per-test duration statistics (count, totalMs, min/max/mean/median/stdDev, p50/p75/p90/p95/p99) while retaining legacy root timing fields.
+
+### Documentation
+
+- README updated to reflect schema v1.3.0 and usage examples for `-EmitTimingDetail`.
+
+### Tests
+
+- Added `PesterSummary.Timing.Tests.ps1` validating timing block emission; updated existing schema/context tests to expect `schemaVersion` 1.3.0.
+
 ## [v0.4.0-rc.1] - 2025-10-02
 
 ### Added
@@ -15,6 +27,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Machine-readable failure capture for schema assertions using `-FailureJsonPath` on `Assert-JsonShape` / `Assert-NdjsonShapes` (produces `errors` or `lineErrors` arrays with timestamps).
 - Diff helper `Compare-JsonShape` returning structured comparison object (missing, unexpected, predicate failures, scalar value differences) for regression-style assertions.
 - Tests covering: type inference export (`Schema.TypeInference.Tests.ps1`), failure JSON emission (`Schema.FailureJson.Tests.ps1`), diff helper behavior (`Schema.DiffHelper.Tests.ps1`).
+- Pester dispatcher JSON summary schema v1.2.0 (`pester-summary-v1_2.schema.json`) introducing optional context blocks (`environment`, `run`, `selection`) emitted only with new `-EmitContext` switch (default output unchanged except version bump 1.1.0 → 1.2.0).
 
 ### Tooling
 
@@ -23,11 +36,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Documentation
 
 - Module guide updated with Run Summary section and schema example; README “What’s New” section expanded.
+- README updated to document schema v1.2.0, `-EmitContext`, and new optional context blocks.
 
 ### Tests
 
 - Restored run summary renderer tests (`RunSummary.Tool.Restored.Tests.ps1`) using safe initialization (all `$TestDrive` usage inside `BeforeAll`/`It`) eliminating prior discovery-time null `-Path` anomaly.
 - Removed quarantine placeholder (`RunSummary.Tool.Quarantined.Tests.ps1`); anomaly documented in issue template with reproduction script (`Binding-MinRepro.Tests.ps1`).
+- Added `PesterSummary.Context.Tests.ps1` verifying context block emission; updated baseline schema test to expect `schemaVersion` 1.2.0 and absence of context when `-EmitContext` not used.
 
 ### Removed
 
