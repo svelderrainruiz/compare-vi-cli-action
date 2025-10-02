@@ -393,6 +393,7 @@ Tests
   - Requires environment variables: `LV_BASE_VI` and `LV_HEAD_VI` pointing to test `.vi` files
   - See detailed prerequisites & skip behavior: [Integration Tests Guide](./docs/INTEGRATION_TESTS.md)
 - Test design & stability patterns (nested dispatcher, function shadowing vs mocks): [Testing Patterns](./docs/TESTING_PATTERNS.md)
+- JSON/NDJSON schema validation helper (Run Summary, Snapshot v2, Loop Events, Final Status): [Schema Helper](./docs/SCHEMA_HELPER.md)
 - CI workflows:
   - `.github/workflows/test-pester.yml` - runs unit tests on GitHub-hosted Windows runners
   - `.github/workflows/pester-selfhosted.yml` - runs integration tests on self-hosted runners with real CLI

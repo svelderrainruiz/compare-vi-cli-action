@@ -560,6 +560,7 @@ Describe 'MyFeature' -Tag 'Unit' {
 - [Dispatcher Architecture](./PESTER_DISPATCHER_REFINEMENT.md)
 - [Self-Hosted CI Setup](./docs/SELFHOSTED_CI_SETUP.md)
 - [Implementation Status](./IMPLEMENTATION_STATUS.md)
+- [JSON Schema Helper (Test Shapes)](./docs/SCHEMA_HELPER.md)
 
 ## Support
 
