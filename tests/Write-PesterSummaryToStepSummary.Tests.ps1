@@ -1,0 +1,40 @@
+Describe 'Write-PesterSummaryToStepSummary script' -Tag 'Unit' {
+  BeforeAll {
+  $scriptPath = Join-Path (Join-Path $PSScriptRoot '..') 'scripts/Write-PesterSummaryToStepSummary.ps1'
+    $resultsDir = Join-Path $TestDrive 'results'
+    New-Item -ItemType Directory -Path $resultsDir | Out-Null
+    # Minimal summary JSON
+    $summary = [pscustomobject]@{
+      total = 3; passed = 2; failed = 1; errors = 0; skipped = 0; duration = 1.23
+    } | ConvertTo-Json -Depth 5
+    Set-Content -Path (Join-Path $resultsDir 'pester-summary.json') -Value $summary -Encoding UTF8
+    # Failures JSON (single failure)
+    $fail = [pscustomobject]@{
+      results = @([pscustomobject]@{ Name = 'Sample.Test'; result = 'Failed'; Duration = 0.45 })
+    } | ConvertTo-Json -Depth 5
+    Set-Content -Path (Join-Path $resultsDir 'pester-failures.json') -Value $fail -Encoding UTF8
+    $env:GITHUB_STEP_SUMMARY = Join-Path $TestDrive 'STEP_SUMMARY.md'
+  }
+
+  It 'writes Markdown summary with metrics and failed test table' {
+  & $scriptPath -ResultsDir $resultsDir
+    Test-Path $env:GITHUB_STEP_SUMMARY | Should -BeTrue
+    $content = Get-Content $env:GITHUB_STEP_SUMMARY -Raw
+    $content | Should -Match '## Pester Test Summary'
+    $content | Should -Match '\| Metric \| Value \|'
+    $content | Should -Match '\| Total \| 3 \|'
+    $content | Should -Match '\| Passed \| 2 \|'
+    $content | Should -Match '\| Failed \| 1 \|'
+    $content | Should -Match '### Failed Tests'
+    $content | Should -Match 'Sample.Test'
+  }
+
+  It 'no-ops gracefully when GITHUB_STEP_SUMMARY unset' {
+    Remove-Item Env:GITHUB_STEP_SUMMARY -ErrorAction SilentlyContinue
+    # Create alternate directory with summary but unset env -> should not throw
+    $alt = Join-Path $TestDrive 'alt-results'
+    New-Item -ItemType Directory -Path $alt | Out-Null
+    Set-Content -Path (Join-Path $alt 'pester-summary.json') -Value '{"total":0,"passed":0,"failed":0}' -Encoding UTF8
+  { & $scriptPath -ResultsDir $alt } | Should -Not -Throw
+  }
+}

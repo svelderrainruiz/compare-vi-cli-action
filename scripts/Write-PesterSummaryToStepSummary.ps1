@@ -39,7 +39,7 @@ Write-Verbose "Using summary target: $env:GITHUB_STEP_SUMMARY"
 
 $summary = $null
 if (Test-Path $summaryPath) {
-  try { $summary = Get-Content $summaryPath -Raw | ConvertFrom-Json } catch { Write-Warning "Failed to parse $summaryPath: $($_.Exception.Message)" }
+  try { $summary = Get-Content $summaryPath -Raw | ConvertFrom-Json } catch { Write-Warning ("Failed to parse {0}: {1}" -f $summaryPath, $_.Exception.Message) }
 }
 
 $totals = $null
@@ -85,7 +85,7 @@ if (Test-Path $failJson) {
       Write-Line '|------|--------------|'
       foreach ($f in $failed) { Write-Line ("| {0} | {1} |" -f ($f.Name -replace '\|','/'), ($f.Duration ?? $f.duration)) }
     }
-  } catch { Write-Warning "Failed to parse failure JSON: $($_.Exception.Message)" }
+  } catch { Write-Warning ("Failed to parse failure JSON: {0}" -f $_.Exception.Message) }
 }
 
 Write-Host 'Pester summary written to GitHub step summary.' -ForegroundColor Green
