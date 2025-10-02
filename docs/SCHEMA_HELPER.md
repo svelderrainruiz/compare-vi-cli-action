@@ -19,7 +19,7 @@ external dependencies or a heavy JSON Schema engine. It focuses on:
 ### Assert-JsonShape
 
 ```powershell
-Assert-JsonShape -Path <jsonFile> -Spec <SpecName> [-Strict]
+Assert-JsonShape -Path <jsonFile> -Spec <SpecName> [-Strict] [-FailureJsonPath <path>] [-NoThrow]
 ```
 
 Validates a single JSON document against a named spec. Throws with aggregated failures (missing
@@ -30,21 +30,53 @@ Strict mode: add `-Strict` to also fail on any unexpected (extra) top-level prop
 `Required`, `Optional`, or `Types`. This is useful for regression-style “producer must not add new
 fields” tests. Keep normal mode for forward-compatible validation.
 
+Failure capture: specify `-FailureJsonPath` to emit a machine-readable JSON report when validation
+fails. The file structure:
+
+```jsonc
+{
+  "spec": "RunSummary",
+  "path": "C:/full/path/run-summary.json",
+  "timestamp": "2025-10-01T12:34:56.1234567Z",
+  "errors": [
+    "missing required property 'schema'",
+    "property 'iterations' failed type predicate (value='-1')"
+  ]
+}
+```
+
+Use `-NoThrow` alongside `-FailureJsonPath` if you want to collect errors without aborting the test
+immediately (e.g. multi-file aggregation scenarios). Without `-NoThrow`, the function throws after
+writing the failure JSON.
+
 ### Assert-NdjsonShapes
 
 ```powershell
-Assert-NdjsonShapes -Path <ndjsonFile> -Spec <SpecName> [-Strict]
+Assert-NdjsonShapes -Path <ndjsonFile> -Spec <SpecName> [-Strict] [-FailureJsonPath <path>] [-NoThrow]
 ```
 
 Validates every non-empty line in a newline‑delimited JSON file (NDJSON). Each line is parsed, then
 re-serialized and passed through the same internal shape validator used by `Assert-JsonShape`.
-Stops on the first invalid line with a descriptive error (line number + predicate issues). Supports
-`-Strict` to reject unknown properties per line.
+Validates every non-empty line. On failure with `-FailureJsonPath`, produces payload:
+
+```jsonc
+{
+  "spec": "SnapshotV2",
+  "path": "C:/full/path/metrics.ndjson",
+  "timestamp": "2025-10-01T12:34:56.1234567Z",
+  "lineErrors": [
+    { "line": 2, "errors": ["missing required property 'iteration'"] },
+    { "line": 3, "errors": ["invalid JSON: Unexpected character"] }
+  ]
+}
+```
+
+`-NoThrow` mirrors the single-document behavior.
 
 ### Export-JsonShapeSchemas
 
 ```powershell
-Export-JsonShapeSchemas -OutputDirectory schemas/ [-Overwrite]
+Export-JsonShapeSchemas -OutputDirectory schemas/ [-Overwrite] [-InferTypes]
 ```
 
 Generates a minimal JSON Schema (Draft 2020-12 style) per spec (`<Spec>.schema.json`) with:
@@ -54,8 +86,51 @@ Generates a minimal JSON Schema (Draft 2020-12 style) per spec (`<Spec>.schema.j
 - `additionalProperties: false` mirroring Strict expectations
 
 
-Type predicates are not translated into formal JSON Schema types (kept loose by design); consumers
-can extend the generated schemas manually if needed.
+By default, predicates are emitted without types. Add `-InferTypes` for a best‑effort scan of each
+predicate scriptblock's text to attach a `type` (or array of types) when recognizable. Inference is
+heuristic (regex on `[bool]`, `[string]`, `[int]`/`[long]`, `[double]`, hashtable/object/array
+patterns) and intentionally conservative—if no clear mapping is found, the property is left
+untyped.
+
+Example (excerpt) with `-InferTypes`:
+
+```jsonc
+{
+  "properties": {
+    "schema": { "type": "string", "description": "Required field from spec 'RunSummary'" },
+    "iterations": { "type": ["string","integer","number"], "description": "Required field..." },
+    "succeeded": { "type": "boolean", "description": "Optional field..." }
+  }
+}
+```
+
+Note: Inference favors breadth over strictness (e.g. numeric counters accepting string digits result
+in a union type). Tighten predicates first if you need narrower schema output.
+
+### Compare-JsonShape
+
+```powershell
+$diff = Compare-JsonShape -BaselinePath base.json -CandidatePath candidate.json -Spec FinalStatus [-Strict]
+```
+
+Produces a structured object for regression style tests without throwing:
+
+| Property | Meaning |
+|----------|---------|
+| `MissingInCandidate` | Required props present in baseline but absent in candidate |
+| `MissingInBaseline` | Required props in candidate missing from baseline (useful for drift) |
+| `UnexpectedInCandidate` | Extra props in candidate when `-Strict` specified |
+| `PredicateFailuresCandidate` | Props in candidate failing predicate scripts |
+| `ValueDifferences` | Array of `{ Property, Baseline, Candidate }` for scalar mismatches |
+
+Typical assertion pattern:
+
+```powershell
+$r = Compare-JsonShape -BaselinePath $expected -CandidatePath $actual -Spec RunSummary -Strict
+$r.MissingInCandidate | Should -BeEmpty
+$r.PredicateFailuresCandidate | Should -BeEmpty
+($r.ValueDifferences | Where-Object Property -eq 'iterations').Count | Should -Be 0
+```
 
 ## Available Specs
 
@@ -193,9 +268,10 @@ narrow the predicate (document any tightening in CHANGELOG along with spec adjus
 ## Future Enhancements (Potential)
 
 - Introduce a tiny caching layer for predicate delegates if perf becomes an issue.
-- Provide helper to diff two JSON documents against the same spec (schema regression guard).
-- Emit machine-readable failure JSON (could integrate into CI artifacts).
-- Optional predicate-to-JSON-Schema type inference (best effort) for richer export.
+- (DONE) Provide helper to diff two JSON documents (`Compare-JsonShape`).
+- (DONE) Emit machine-readable failure JSON via `-FailureJsonPath`.
+- (DONE) Optional predicate-to-JSON-Schema type inference via `-InferTypes`.
+- Potential: pluggable inference strategies (e.g., numeric-range hints), structured predicate DSL.
 
 ## See Also
 
