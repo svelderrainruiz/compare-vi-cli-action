@@ -1,6 +1,11 @@
 #Requires -Version 7.0
 # Pester v5 tests for Invoke-PesterTests.ps1 dispatcher
 
+# Availability probe function (avoids discovery-time script variable lookups under StrictMode)
+function Test-PesterAvailable {
+  return ($null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' }))
+}
+
 BeforeAll {
   $here = Split-Path -Parent $PSCommandPath
   $root = Resolve-Path (Join-Path $here '..')
@@ -358,108 +363,106 @@ Describe 'Sample' {
   }
 }
 
-## Pre-initialize integration availability flag to avoid StrictMode retrieval errors
-## In some discovery flows the -Skip parameter evaluation can occur before the in-Describe
-## assignment executes; defining it here ensures a defined (false) value under all circumstances.
-$script:pesterAvailable = $false
+# Integration tests are only defined if Pester v5+ is actually available.
+if (Test-PesterAvailable) {
+  Describe 'Invoke-PesterTests.ps1 Integration' -Tag 'Integration' {
+    BeforeAll {
+      # Defensive fallback for $TestDrive (rare null condition seen under filtered tag runs)
+      if (-not $TestDrive) {
+        $fallback = Join-Path ([IO.Path]::GetTempPath()) ("pester-int-fallback-" + [guid]::NewGuid())
+        try { New-Item -ItemType Directory -Force -Path $fallback | Out-Null } catch {}
+        Set-Variable -Name TestDrive -Value $fallback -Scope Global -Force
+      }
+    }
 
-Describe 'Invoke-PesterTests.ps1 Integration' -Tag 'Integration' {
-  # Check Pester availability during discovery (required for -Skip evaluation)
-  $script:pesterAvailable = $null -ne (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' })
-  
-  BeforeAll {
-    if (-not $script:pesterAvailable) {
-      Write-Host "Pester v5+ not available, skipping integration tests"
-    }
-    # Defensive fallback for $TestDrive (rare null condition seen under filtered tag runs)
-    if (-not $TestDrive) {
-      $fallback = Join-Path ([IO.Path]::GetTempPath()) ("pester-int-fallback-" + [guid]::NewGuid())
-      try { New-Item -ItemType Directory -Force -Path $fallback | Out-Null } catch {}
-      Set-Variable -Name TestDrive -Value $fallback -Scope Global -Force
-    }
-  }
-  
-  It 'executes successfully with valid parameters' -Skip:(-not $script:pesterAvailable) {
-    # Create test workspace
-    $workspace = Join-Path $TestDrive 'integration-test'
-    New-Item -ItemType Directory -Path $workspace -Force | Out-Null
-    
-    $testsDir = Join-Path $workspace 'tests'
-    New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
-    
-    # Create a simple passing test
-    $testFile = Join-Path $testsDir 'Simple.Tests.ps1'
-    @'
+    It 'executes successfully with valid parameters' {
+      # Create test workspace
+      $workspace = Join-Path $TestDrive 'integration-test'
+      New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+
+      $testsDir = Join-Path $workspace 'tests'
+      New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
+
+      # Create a simple passing test file consumed by the dispatcher
+      $testFile = Join-Path $testsDir 'Simple.Tests.ps1'
+      @'
 Describe 'Simple Test' {
   It 'should pass' {
     1 + 1 | Should -Be 2
   }
 }
 '@ | Set-Content -Path $testFile
-    
-    # Copy dispatcher to workspace
-    $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
-    Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
-    
-    # Execute dispatcher
-    $resultsPath = Join-Path $workspace 'results'
-  & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' 2>&1 | Out-Null
-    
-    # Verify results
-    $LASTEXITCODE | Should -Be 0
-    Test-Path (Join-Path $resultsPath 'pester-results.xml') | Should -BeTrue
-    Test-Path (Join-Path $resultsPath 'pester-summary.txt') | Should -BeTrue
-    Test-Path (Join-Path $resultsPath 'pester-summary.json') | Should -BeTrue
-  }
 
-  It 'generates manifest with required structure' -Skip:(-not $script:pesterAvailable) {
-    # Create test workspace
-    $workspace = Join-Path $TestDrive 'manifest-test'
-    New-Item -ItemType Directory -Path $workspace -Force | Out-Null
-    
-    $testsDir = Join-Path $workspace 'tests'
-    New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
-    
-    # Create a simple passing test
-    $testFile = Join-Path $testsDir 'Pass.Tests.ps1'
-    @'
+      # Copy dispatcher to isolated workspace
+      $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
+      Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
+
+      # Execute dispatcher (unit style run - integration off for speed here)
+      $resultsPath = Join-Path $workspace 'results'
+      & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' 2>&1 | Out-Null
+
+      # Verify result artifacts
+      $LASTEXITCODE | Should -Be 0
+      Test-Path (Join-Path $resultsPath 'pester-results.xml') | Should -BeTrue
+      Test-Path (Join-Path $resultsPath 'pester-summary.txt') | Should -BeTrue
+      Test-Path (Join-Path $resultsPath 'pester-summary.json') | Should -BeTrue
+    }
+
+    It 'generates manifest with required structure' {
+      # Create test workspace
+      $workspace = Join-Path $TestDrive 'manifest-test'
+      New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+
+      $testsDir = Join-Path $workspace 'tests'
+      New-Item -ItemType Directory -Path $testsDir -Force | Out-Null
+
+      # Create a simple passing test consumed by dispatcher
+      $testFile = Join-Path $testsDir 'Pass.Tests.ps1'
+      @'
 Describe 'Passing Test' {
   It 'passes' {
     $true | Should -Be $true
   }
 }
 '@ | Set-Content -Path $testFile
-    
-    # Copy dispatcher to workspace
-    $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
-    Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
-    
-    # Execute dispatcher
-    $resultsPath = Join-Path $workspace 'results'
-  $null = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' -EmitFailuresJsonAlways 2>&1
-    
-    # Verify manifest exists
-    $manifestPath = Join-Path $resultsPath 'pester-artifacts.json'
-    Test-Path $manifestPath | Should -BeTrue
-    
-    # Parse manifest
-    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-    
-    # Verify required fields
-    $manifest.manifestVersion | Should -Not -BeNullOrEmpty
-    $manifest.generatedAt | Should -Not -BeNullOrEmpty
-    $manifest.artifacts | Should -Not -BeNullOrEmpty
-    
-    # Verify minimum artifact entries
-    $manifest.artifacts.Count | Should -BeGreaterOrEqual 3
-    $artifactFiles = $manifest.artifacts | Select-Object -ExpandProperty file
-    $artifactFiles | Should -Contain 'pester-results.xml'
-    $artifactFiles | Should -Contain 'pester-summary.txt'
-    $artifactFiles | Should -Contain 'pester-summary.json'
-    
-    # Verify JSON artifacts have schemaVersion
-    $jsonSummary = $manifest.artifacts | Where-Object { $_.file -eq 'pester-summary.json' }
-    $jsonSummary.schemaVersion | Should -Not -BeNullOrEmpty
-  }
 
+      # Copy dispatcher
+      $dispatcherCopy = Join-Path $workspace 'Invoke-PesterTests.ps1'
+      Copy-Item -Path $dispatcherPath -Destination $dispatcherCopy
+
+      # Execute dispatcher with failure artifact emission always on
+      $resultsPath = Join-Path $workspace 'results'
+      $null = & $dispatcherCopy -TestsPath 'tests' -IncludeIntegration 'false' -ResultsPath 'results' -EmitFailuresJsonAlways 2>&1
+
+      # Verify manifest exists
+      $manifestPath = Join-Path $resultsPath 'pester-artifacts.json'
+      Test-Path $manifestPath | Should -BeTrue
+
+      # Parse manifest
+      $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+
+      # Verify required fields
+      $manifest.manifestVersion | Should -Not -BeNullOrEmpty
+      $manifest.generatedAt | Should -Not -BeNullOrEmpty
+      $manifest.artifacts | Should -Not -BeNullOrEmpty
+
+      # Verify minimum artifact entries
+      $manifest.artifacts.Count | Should -BeGreaterOrEqual 3
+      $artifactFiles = $manifest.artifacts | Select-Object -ExpandProperty file
+      $artifactFiles | Should -Contain 'pester-results.xml'
+      $artifactFiles | Should -Contain 'pester-summary.txt'
+      $artifactFiles | Should -Contain 'pester-summary.json'
+
+      # Verify JSON summary has schemaVersion
+      $jsonSummary = $manifest.artifacts | Where-Object { $_.file -eq 'pester-summary.json' }
+      $jsonSummary.schemaVersion | Should -Not -BeNullOrEmpty
+    }
+  }
+}
+else {
+  Describe 'Invoke-PesterTests.ps1 Integration (Skipped - Pester Missing)' -Tag 'Integration' {
+    It 'skips because Pester v5+ not available' {
+      Set-ItResult -Skipped -Because 'Pester v5+ not available'
+    }
+  }
 }
