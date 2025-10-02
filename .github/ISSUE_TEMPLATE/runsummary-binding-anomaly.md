@@ -8,6 +8,7 @@ assignees: ''
 # RunSummary Tool Binding Anomaly
 
 ## Summary
+
 A persistent parameter binding error occurs only in the test host when invoking the RunSummary renderer (wrapper or module):
 
 ```text
@@ -77,10 +78,12 @@ The exception is raised before any custom renderer logic (debug output inside fu
 - Enumerate loaded modules in failing session: `Get-Module | Select Name,Version,Path`.
 - Use `Set-PSDebug -Trace 1` around a minimal reproduction to capture pre-execution argument binding.
 - Create minimal reproduction script outside repo containing only:
+
   ```powershell
   param([string]$Path)
   'OK'
   ```
+
   invoked as `pwsh -File .\mini.ps1 foo` inside the host (observe if same error surfaces).
 - If reproducible, capture `$PSVersionTable` and host details: `[System.Environment]::CommandLine`.
 
@@ -92,6 +95,7 @@ The exception is raised before any custom renderer logic (debug output inside fu
 ## Temporary Workaround
 
 Renderer can be exercised manually:
+
 ```powershell
 pwsh -NoProfile -File tools/Render-RunSummary.ps1 .\path\to\run-summary.json -Format Markdown
 ```
