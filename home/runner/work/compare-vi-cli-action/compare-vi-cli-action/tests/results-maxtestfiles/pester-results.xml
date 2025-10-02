@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="3" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-10-02" time="07:04:08">
+  <environment nunit-version="2.5.8.0" os-version="6.11.0-1018-azure" user="runner" cwd="/home/runner/work/compare-vi-cli-action/compare-vi-cli-action" machine-name="runnervm3ublj" clr-version="8.0.19" platform="Linux" user-domain="" />
+  <culture-info current-culture="" current-uiculture="" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Success" success="True" time="0.9444" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="/home/runner/work/compare-vi-cli-action/compare-vi-cli-action/tests/Action.CompositeOutputs.Tests.ps1" executed="True" result="Success" success="True" time="0.9444" asserts="0" description="/home/runner/work/compare-vi-cli-action/compare-vi-cli-action/tests/Action.CompositeOutputs.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Composite action output shape (emulated)" executed="True" result="Success" success="True" time="0.6312" asserts="0" description="Composite action output shape (emulated)">
+            <results>
+              <test-case description="produces all expected duration-related outputs" name="Composite action output shape (emulated).produces all expected duration-related outputs" time="0.3772" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="writes both duration outputs to a mock GITHUB_OUTPUT file" name="Composite action output shape (emulated).writes both duration outputs to a mock GITHUB_OUTPUT file" time="0.037" asserts="0" success="True" result="Success" executed="True" />
+              <test-case description="loop mode emits percentile and loop outputs (simulated executor)" name="Composite action output shape (emulated).loop mode emits percentile and loop outputs (simulated executor)" time="0.1772" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>

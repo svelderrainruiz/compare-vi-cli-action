@@ -1,0 +1,1 @@
+/home/runner/work/compare-vi-cli-action/compare-vi-cli-action/tests/Action.CompositeOutputs.Tests.ps1

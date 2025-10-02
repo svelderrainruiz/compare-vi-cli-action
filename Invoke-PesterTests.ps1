@@ -41,15 +41,14 @@ param(
   [string]$JsonSummaryPath = 'pester-summary.json',
 
   [Parameter(Mandatory = $false)]
-  [switch]$EmitFailuresJsonAlways
-
-  ,
+  [switch]$EmitFailuresJsonAlways,
 
   [Parameter(Mandatory = $false)]
   [double]$TimeoutMinutes = 0,
+
   [Parameter(Mandatory = $false)]
-  [double]$TimeoutSeconds = 0
-  ,
+  [double]$TimeoutSeconds = 0,
+
   [Parameter(Mandatory = $false)]
   [int]$MaxTestFiles = 0
 )
@@ -277,7 +276,7 @@ if (-not $root) {
 
 $testsDirRaw = Join-Path $root $TestsPath
 # Accept single test file path as well as directory
-if (Test-Path -LiteralPath $testsDirRaw -PathType Leaf -and ($testsDirRaw -like '*.ps1')) {
+if ((Test-Path -LiteralPath $testsDirRaw -PathType Leaf) -and ($testsDirRaw -like '*.ps1')) {
   $singleTestFile = $testsDirRaw
   $testsDir = Split-Path -Parent $singleTestFile
   $limitToSingle = $true
