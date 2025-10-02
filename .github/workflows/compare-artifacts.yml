@@ -38,6 +38,7 @@ jobs:
           fail-on-diff: 'false'
 
       - name: Generate HTML report
+        id: report
         if: steps.compare.outcome == 'success'
         shell: pwsh
         run: |
@@ -46,14 +47,16 @@ jobs:
           $renderer = Join-Path $env:GITHUB_WORKSPACE 'scripts' 'Render-CompareReport.ps1'
           $dur = '${{ steps.compare.outputs.compareDurationSeconds }}'
           if (-not [string]::IsNullOrWhiteSpace($dur)) { $dur = [double]$dur } else { $dur = 0 }
+          $reportPath = Join-Path $outDir 'compare-report.html'
           & $renderer `
             -Command '${{ steps.compare.outputs.command }}' `
             -ExitCode [int]'${{ steps.compare.outputs.exitCode }}' `
             -Diff '${{ steps.compare.outputs.diff }}' `
             -CliPath '${{ steps.compare.outputs.cliPath }}' `
             -DurationSeconds $dur `
-            -OutputPath (Join-Path $outDir 'compare-report.html')
-          Write-Host "HTML report generated"
+            -OutputPath $reportPath
+          Write-Host "HTML report generated at: $reportPath"
+          "reportPath=$reportPath" >> $env:GITHUB_OUTPUT
 
       - name: Upload compare artifacts
         if: always()
@@ -61,8 +64,8 @@ jobs:
         with:
           name: compare-vi-artifacts
           path: |
-            ${{ runner.temp }}/compare-summary.json
-            ${{ runner.temp }}/compare-artifacts/compare-report.html
+            ${{ steps.compare.outputs.compareSummaryPath }}
+            ${{ steps.report.outputs.reportPath }}
           if-no-files-found: warn
 
       - name: Append timing to job summary
