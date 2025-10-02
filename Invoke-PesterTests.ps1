@@ -64,7 +64,9 @@ param(
   [switch]$EmitDiscoveryDetail
 ,
   [Parameter(Mandatory = $false)]
-  [switch]$EmitOutcome
+  [switch]$EmitOutcome,
+  # Optional: emit aggregationHints block (schema v1.7.0+)
+  [switch]$EmitAggregationHints
 )
 
 Set-StrictMode -Version Latest
@@ -76,7 +78,7 @@ if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds 
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
-$SchemaSummaryVersion  = '1.6.0'
+$SchemaSummaryVersion  = '1.7.0'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 
@@ -895,6 +897,41 @@ try {
       }
       Add-Member -InputObject $jsonObj -Name outcome -MemberType NoteProperty -Value $outcomeBlock
     } catch { Write-Warning "Failed to emit outcome classification block: $_" }
+  }
+  # Optional aggregation hints (schema v1.7.0+) - placeholder structure until schema bump
+  if ($EmitAggregationHints) {
+    try {
+      $aggScript = Join-Path $PSScriptRoot 'scripts' 'AggregationHints.Internal.ps1'
+      if (Test-Path -LiteralPath $aggScript) { . $aggScript }
+      # Derive lightweight grouping hints to aid external summarizers.
+      # Contract (initial):
+      #   - dominantTags: top N (<=5) most frequent test tags (excluding Integration by default)
+      #   - fileBucketCounts: size categories by test file test counts (small/medium/large)
+      #   - durationBuckets: count of tests by duration ranges
+      #   - suggestions: advisory strings for potential aggregation strategies
+      if (Get-Command Get-AggregationHintsBlock -ErrorAction SilentlyContinue) {
+        $testsForAgg = @()
+        if ($result -and $result.Tests) { $testsForAgg = $result.Tests }
+        $aggBlock = Get-AggregationHintsBlock -Tests $testsForAgg
+        Add-Member -InputObject $jsonObj -Name aggregationHints -MemberType NoteProperty -Value $aggBlock
+        $aggSuccess = $true
+      } else {
+        $aggSuccess = $false
+      }
+      if (-not $aggSuccess) { throw 'Aggregation helper not loaded' }
+    } catch {
+      Write-Warning "Failed to emit aggregation hints: $_"
+      try {
+        $fallback = [pscustomobject]@{
+          dominantTags     = @()
+          fileBucketCounts = [ordered]@{ small=0; medium=0; large=0 }
+          durationBuckets  = [ordered]@{ subSecond=0; oneToFive=0; overFive=0 }
+          suggestions      = @('aggregation-error')
+          strategy         = 'heuristic/v1'
+        }
+        Add-Member -InputObject $jsonObj -Name aggregationHints -MemberType NoteProperty -Value $fallback -Force
+      } catch { Write-Warning "Failed to attach fallback aggregation hints: $_" }
+    }
   }
   $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryPath -Encoding utf8 -ErrorAction Stop
   Write-Host "JSON summary written to: $jsonSummaryPath" -ForegroundColor Gray

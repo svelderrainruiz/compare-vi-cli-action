@@ -399,7 +399,7 @@ Marketplace
 
 Notes
 
-## Pester Test Dispatcher JSON Summary (Schema v1.6.0)
+## Pester Test Dispatcher JSON Summary (Schema v1.7.0)
 
 The repository ships a PowerShell test dispatcher (`Invoke-PesterTests.ps1`) that emits a machine‑readable JSON summary (`pester-summary.json`) for every run. This enables downstream tooling (dashboards, PR annotations, quality gates) to consume stable fields without scraping console text.
 
@@ -418,7 +418,7 @@ Validation tests:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schemaVersion` | string (const `1.6.0`) | Version identifier (semantic). Additive fields bump minor only. |
+| `schemaVersion` | string (const `1.7.0`) | Version identifier (semantic). Additive fields bump minor only. |
 | `total` | int >=0 | Total discovered tests (failed + passed + errors + skipped). |
 | `passed` | int >=0 | Count of tests whose `Result` was `Passed`. |
 | `failed` | int >=0 | Assertion failures (Pester logical failures). |
@@ -541,6 +541,31 @@ Invocation example:
 ./Invoke-PesterTests.ps1 -EmitDiscoveryDetail
 ```
 
+### New in 1.7.0: Aggregation Hints Block
+
+Optional heuristic guidance to help downstream systems decide how to shard, bucket, or optimize test reporting. Enabled with `-EmitAggregationHints`.
+
+Structure:
+
+```json
+"aggregationHints": {
+  "dominantTags": ["Slow", "Integration"],
+  "fileBucketCounts": { "small": 25, "medium": 4, "large": 1 },
+  "durationBuckets": { "subSecond": 90, "oneToFive": 12, "overFive": 3 },
+  "suggestions": ["split-large-files", "isolate-slow-tests"],
+  "strategy": "heuristic/v1"
+}
+```
+
+Guidelines:
+
+- `dominantTags`: Up to 5 most frequent tags (frequency-descending).
+- `fileBucketCounts`: Test file size categories (<=5 small, 6–15 medium, >15 large).
+- `durationBuckets`: Rough latency distribution of individual tests (<1s, 1–<5s, >=5s).
+- `suggestions`: Advisory hints; current set may include `split-large-files`, `isolate-slow-tests`, `tag-more-tests`.
+- `strategy`: Versioned heuristic identifier.
+
+
 ### New in 1.6.0: Outcome Classification Block
 
 Opt-in (`-EmitOutcome`) `outcome` object providing a unified status classification derived from existing counters and timeout/discovery signals.
@@ -569,6 +594,7 @@ Invocation example:
 | 1.4.0 | `stability` | Flakiness scaffolding (initial counts zero until retry engine introduced) – IMPLEMENTED (opt-in via `-EmitStability`). |
 | 1.5.0 | `discovery` (expanded) | Detailed discovery diagnostics (patterns, snippets, scanned size) – IMPLEMENTED (opt-in via `-EmitDiscoveryDetail`). |
 | 1.6.0 | `outcome` | Unified status classification (implemented; opt-in via `-EmitOutcome`). |
+| 1.7.0 | `aggregationHints` | Heuristic grouping guidance (implemented; opt-in via `-EmitAggregationHints`). |
 | 1.7.0 | `aggregationHints` | CI correlation (commit SHA, branch, shard id). |
 | 1.8.0 | `extensions` | Vendor / custom injection surface (namespaced flexible data). |
 | 1.9.0 | `meta` | Slim mode signalling, emittedFields manifest. |
@@ -590,7 +616,7 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 
 ```jsonc
 {
-  "schemaVersion": "1.6.0",
+  "schemaVersion": "1.7.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
@@ -611,7 +637,7 @@ All new blocks will be optional keys to preserve compatibility. Tests are added 
 
 ```jsonc
 {
-  "schemaVersion": "1.6.0",
+  "schemaVersion": "1.7.0",
   "total": 42,
   "passed": 42,
   "failed": 0,
