@@ -96,8 +96,12 @@ function Invoke-CompareVI {
     }
     else {
       & $cli $baseAbs $headAbs @cliArgs
-      # Capture exit code (use 0 as fallback if LASTEXITCODE not yet set in session)
-      $code = if (Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue) { $LASTEXITCODE } else { 0 }
+      # Capture exit code; throw if LASTEXITCODE is not set to avoid masking failures
+      if (Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue) {
+        $code = $LASTEXITCODE
+      } else {
+        throw "Could not determine exit code from LVCompare.exe; LASTEXITCODE is not set."
+      }
     }
   $sw.Stop()
   $compareDurationSeconds = [math]::Round($sw.Elapsed.TotalSeconds, 3)
