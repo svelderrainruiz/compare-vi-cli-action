@@ -15,14 +15,38 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Pester dispatcher schema v1.6.0 (`pester-summary-v1_6.schema.json`): optional `outcome` block (opt-in via `-EmitOutcome`) unifying run status classification (overallStatus, severityRank, flags, counts, exitCodeModel, classificationStrategy).
 - Pester dispatcher schema v1.7.0 (`pester-summary-v1_7.schema.json`): optional `aggregationHints` block (opt-in via `-EmitAggregationHints`) providing heuristic guidance (`dominantTags`, `fileBucketCounts`, `durationBuckets`, `suggestions`, `strategy`).
 - Pester dispatcher schema v1.7.1 (`pester-summary-v1_7_1.schema.json`): optional root metric `aggregatorBuildMs` emitted ONLY when `-EmitAggregationHints` is specified; captures the build time (milliseconds) for generating the `aggregationHints` heuristic block (Stopwatch measured). Absent otherwise to preserve baseline payload size.
+- Nested discovery suppression logic (default on) preventing false-positive `discoveryFailures` counts from nested dispatcher invocations; configurable via `SUPPRESS_NESTED_DISCOVERY=0` to disable suppression for diagnostics.
+- Debug discovery scan instrumentation (`DEBUG_DISCOVERY_SCAN=1`) emitting `[debug-discovery]` console lines and contextual `discovery-debug.log` snippets (400 char window per match) to accelerate root-cause analysis.
+- Integration test file pre-filter: automatic exclusion of `*.Integration.Tests.ps1` at file selection stage when integration is disabled (unless `DISABLE_INTEGRATION_FILE_PREFILTER=1`). Reduces discovery/parsing overhead and eliminates extraneous skip noise.
+- Environment toggle `ENABLE_AGG_INT=1` to opt-in the aggregationHints integration smoke test (requires canonical LVCompare path + `LV_BASE_VI` + `LV_HEAD_VI`).
+- Dispatcher parameter echo block gated by `COMPARISON_ACTION_DEBUG=1` listing all bound parameters for reproducible issue reports.
+- README troubleshooting section documenting discovery failure diagnostics, suppression toggles, and variable initialization guidance for `-Skip` expressions.
 
 ### Documentation
 
 - README updated to reflect schema v1.3.0 and usage examples for `-EmitTimingDetail`.
+- README further updated for schemas up through v1.7.1, aggregation build timing metric (`aggregatorBuildMs`), and new discovery diagnostics environment variables (`SUPPRESS_NESTED_DISCOVERY`, `DEBUG_DISCOVERY_SCAN`, `DISABLE_INTEGRATION_FILE_PREFILTER`, `ENABLE_AGG_INT`, `COMPARISON_ACTION_DEBUG`).
+- Added variable initialization best-practice note (ensure variables referenced in `-Skip:` expressions are defined at script top-level to avoid discovery-time errors).
 
 ### Tests
 
 - Added `PesterSummary.Timing.Tests.ps1` validating timing block emission; updated existing schema/context tests to expect `schemaVersion` 1.3.0.
+- Extended / updated schema tests to cover additive versions 1.4.0–1.7.1 and presence/absence rules for new optional blocks & `aggregatorBuildMs` timing metric.
+- Added / updated integration smoke test for aggregationHints (`PesterSummary.Aggregation.Integration.Tests.ps1`) with corrected variable scoping to avoid discovery-time uninitialized variable errors.
+- Added guard & regression coverage around discovery failure detection ensuring nested dispatcher matches are suppressed and zero false positives when integration tests are skipped.
+
+### Changed
+
+- Discovery failure classification now elevates matches to `errors` only when there are no existing test failures or errors, preserving primary failure semantics while still preventing silent green runs.
+- File selection phase emits `pester-selected-files.txt` earlier for improved debuggability before Pester execution.
+- Aggregation hints generation now records build duration (`aggregatorBuildMs`) making performance of heuristic calculation observable in downstream manifests.
+
+### Fixed
+
+- Resolved persistent false-positive `discoveryFailures=1` caused by an integration test referencing an uninitialized `$script:shouldRun` inside a `-Skip:` expression (moved initialization to discovery scope).
+- Eliminated spurious nested dispatcher discovery failure matches by counting summary headers and suppressing nested contexts (reduces noisy false error promotions).
+- Stabilized discovery scan output ordering & ANSI stripping ensuring deterministic test assertions across consoles.
+- Ensured `pester-summary.json` remains minimal when optional blocks not requested (no accidental emission of timing/stability/aggregation keys on baseline runs).
 
 ## [v0.4.0-rc.1] - 2025-10-02
 
