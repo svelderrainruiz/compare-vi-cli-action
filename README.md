@@ -39,6 +39,30 @@ Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also:
 - `LVCompare.exe` installed at the **canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
 - Only the canonical path is supported; paths via `PATH`, `LVCOMPARE_PATH`, or `lvComparePath` must resolve to this exact location
 
+## Fixture Artifacts (VI1.vi / VI2.vi)
+
+Two canonical LabVIEW VI files live at the repository root:
+
+| File | Role |
+|------|------|
+| `VI1.vi` | Canonical base fixture |
+| `VI2.vi` | Canonical head fixture |
+
+Purpose:
+ 
+- Fallback pair for examples, smoke workflows, and quick local validation.
+- Guard test anchor ensuring legacy `Base.vi` / `Head.vi` names are not reintroduced.
+- Stable targets for loop / latency simulation when no custom inputs provided.
+- External dispatcher compatibility (LabVIEW-hosted tooling can intentionally evolve them in controlled commits).
+
+Phase 1 Policy (enforced by tests & `tools/Validate-Fixtures.ps1`):
+ 
+- Files MUST exist, be git-tracked, and be non-trivial in size (minimum enforced).
+- Do not delete or rename them without a migration plan.
+- Intentional content changes should include a rationale in the commit message (future phases may require a token such as `[fixture-update]`).
+
+Future phases will optionally introduce hash manifest verification and controlled update workflows.
+
 ## Quick Start
 
 ### Basic Usage
