@@ -34,8 +34,6 @@
 
 ## Deferred Issues (Future Releases)
 
-## Deferred Issues (Future Releases)
-
 These issues are well-documented in `issues-drafts/` and can be implemented in subsequent releases without blocking v0.5.0.
 
 ### ⏸️ 2. Outcome Classification Enhancements
