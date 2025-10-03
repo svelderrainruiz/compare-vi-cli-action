@@ -227,6 +227,8 @@ function Invoke-CompareVI {
       Diff                   = $diff
       CompareDurationSeconds     = $compareDurationSeconds
       CompareDurationNanoseconds = $compareDurationNanoseconds
+      # Always include this flag for downstream consumers (action.yml) to avoid property-missing errors
+      ShortCircuitedIdenticalPath = $false
     }
   }
   finally {
