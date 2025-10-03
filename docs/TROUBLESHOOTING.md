@@ -20,6 +20,7 @@ This guide covers common issues and solutions when using the compare-vi-cli-acti
 **Resolution:**
 
 1. Verify LVCompare is installed at the exact canonical path:
+
    ```powershell
    Test-Path 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
    ```
@@ -36,7 +37,7 @@ This guide covers common issues and solutions when using the compare-vi-cli-acti
 
 The action requires the CLI to exist at the canonical path. Custom paths are validated but must ultimately resolve to:
 
-```
+```text
 C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe
 ```
 
@@ -102,8 +103,11 @@ The action maps LVCompare exit codes to outputs:
 **Resolution:**
 
 1. Use `loop-interval-seconds: 0` for maximum throughput
+
 2. Consider streaming percentile strategy for lower memory overhead
+
 3. Check system resources (CPU, memory, disk I/O)
+
 4. Review `averageSeconds` and `totalSeconds` outputs for bottlenecks
 
 ## Path Resolution Problems
@@ -115,12 +119,14 @@ The action maps LVCompare exit codes to outputs:
 **Resolution:**
 
 1. Verify current working directory:
+
    ```yaml
    - name: Show working directory
      run: pwd
    ```
 
 2. Use `working-directory` input to set base path:
+
    ```yaml
    with:
      working-directory: my-project
@@ -137,11 +143,13 @@ The action maps LVCompare exit codes to outputs:
 **Resolution:**
 
 1. Map a drive letter on self-hosted runner:
+
    ```powershell
    net use Z: \\server\share
    ```
 
 2. Enable long path support in Windows:
+
    ```powershell
    New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
      -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
@@ -215,6 +223,7 @@ with:
 **Resolution:**
 
 1. Increase `stream-capacity`:
+
    ```yaml
    with:
      quantile-strategy: StreamingReservoir
@@ -222,6 +231,7 @@ with:
    ```
 
 2. Enable periodic reconciliation:
+
    ```yaml
    with:
      quantile-strategy: Hybrid
@@ -241,17 +251,20 @@ with:
 Prerequisites are missing. Verify:
 
 1. **LVCompare installed at canonical path:**
+
    ```powershell
    Test-Path 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
    ```
 
 2. **Environment variables set:**
+
    ```powershell
    $env:LV_BASE_VI = 'C:\Path\To\VI1.vi'
    $env:LV_HEAD_VI = 'C:\Path\To\VI2.vi'
    ```
 
 3. **VI files exist:**
+
    ```powershell
    Test-Path $env:LV_BASE_VI
    Test-Path $env:LV_HEAD_VI

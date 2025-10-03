@@ -153,14 +153,8 @@ The action supports an experimental loop mode for performance testing and stabil
 ```
 
 Loop mode outputs include: `iterations`, `diffCount`, `errorCount`, `averageSeconds`, `totalSeconds`, `p50`, `p90`, `p99`, and more.
-- `-DiffExitCode <int>`: When set and the loop succeeds with one or more diffs, exit using this code instead of 0.
-- Rotation: Set `LOOP_JSON_LOG_MAX_BYTES` and optionally `LOOP_JSON_LOG_MAX_ROLLS` (default 5) for rolling `*.roll` files.
-- Time-based rotation: Set `LOOP_JSON_LOG_MAX_AGE_SECONDS` to force age-based rotation.
-- Final status JSON: Provide `-FinalStatusJsonPath` or env `LOOP_FINAL_STATUS_JSON`
-  to write a `loop-final-status-v1` JSON (separate from run summary JSON inside the
-  loop module).
 
-Quick simulated run (no real LVCompare required):
+### Autonomous Integration Loop Runner
 
 ```powershell
 $env:LV_BASE_VI = 'VI1.vi'
