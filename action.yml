@@ -293,6 +293,8 @@ runs:
         "diff=$diffLower"                 >> $env:GITHUB_OUTPUT
         "compareDurationSeconds=$($result.CompareDurationSeconds)" >> $env:GITHUB_OUTPUT
         "compareDurationNanoseconds=$($result.CompareDurationNanoseconds)" >> $env:GITHUB_OUTPUT
+        $shortCircuitLower = if ($result.ShortCircuitedIdenticalPath -eq $true) { 'true' } else { 'false' }
+        "shortCircuitedIdentical=$shortCircuitLower" >> $env:GITHUB_OUTPUT
         $summaryJsonPath = Join-Path $env:RUNNER_TEMP 'compare-summary.json'
         [pscustomobject]@{
           base = $result.Base
