@@ -581,6 +581,60 @@ To retain the rendered summary as an artifact for external dashboards, append:
 
 Set `SUMMARY_VERBOSE: 'true'` (or run the `Validate` workflow manually with the input `summary-verbose: true`) to enrich `fixture-summary.md` with detailed sections.
 
+## Fixture Drift Composite Action (Validation + Artifacts + PR Comment)
+
+This repository includes a local composite action to validate fixture integrity, orchestrate drift artifacts, upload them, write a job summary, and post a sticky PR comment with direct artifact download links.
+
+- Action path: `./.github/actions/fixture-drift`
+- Intended usage: in a Windows runner job on pull requests and manual dispatch.
+- Use alongside branch protection to mark the job “Fixture Drift” as a required check.
+
+Example workflow usage:
+
+```yaml
+name: Fixture Drift Validation
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Fixture Drift
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fixture Drift Orchestrator
+        uses: ./.github/actions/fixture-drift
+        with:
+          render-report: 'true'            # Generate compare-report.html when LVCompare is present
+          comment-on-fail: 'true'          # Sticky PR comment on failure (skips forked PRs)
+          upload-artifacts: 'true'         # Upload results (see only-upload-on-failure)
+          only-upload-on-failure: 'true'   # Upload only when status != ok
+          artifact-name: fixture-drift
+          retention-days: '7'
+```
+
+Outputs (from the composite):
+
+- `status` – `ok | drift | fail-structural | unknown`
+- `summary_path` – absolute path to the `drift-summary.json` if available
+
+To enforce as a required check:
+
+1. Go to repository Settings → Branches → Branch protection rules.
+2. Edit or create the rule for your main branch.
+3. Add “Fixture Drift” to Required status checks.
+
+Notes:
+
+- LVCompare must exist at the canonical path: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`.
+- Direct artifact download URLs use the GitHub REST API and require `actions: read` permission.
+- PR comments are skipped for forked PRs (no write permission).
+
 
 For information on testing, building, documentation generation, and the release process, see the **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**.
 
