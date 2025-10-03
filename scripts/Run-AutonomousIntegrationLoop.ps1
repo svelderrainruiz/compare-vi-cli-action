@@ -112,7 +112,7 @@ param(
   [int]$MaxIterations = ($env:LOOP_MAX_ITERATIONS -as [int]),
   [double]$IntervalSeconds = ($env:LOOP_INTERVAL_SECONDS -as [double]),
   [ValidateSet('None','Text','Markdown','Html')]
-  [string]$DiffSummaryFormat = (if ($env:LOOP_DIFF_SUMMARY_FORMAT) { $env:LOOP_DIFF_SUMMARY_FORMAT } else { 'None' }),
+  [string]$DiffSummaryFormat = $( if ($env:LOOP_DIFF_SUMMARY_FORMAT) { $env:LOOP_DIFF_SUMMARY_FORMAT } else { 'None' } ),
   [string]$DiffSummaryPath = $env:LOOP_DIFF_SUMMARY_PATH,
   [string]$CustomPercentiles = $env:LOOP_CUSTOM_PERCENTILES,
   [string]$RunSummaryJsonPath = $env:LOOP_RUN_SUMMARY_JSON,
@@ -123,7 +123,7 @@ param(
   [int]$HistogramBins = ($env:LOOP_HISTOGRAM_BINS -as [int]),
   [scriptblock]$CustomExecutor
   , [switch]$DryRun
-  , [ValidateSet('Quiet','Normal','Verbose','Debug')][string]$LogVerbosity = (if ($env:LOOP_LOG_VERBOSITY) { $env:LOOP_LOG_VERBOSITY } else { 'Normal' })
+  , [ValidateSet('Quiet','Normal','Verbose','Debug')][string]$LogVerbosity = $( if ($env:LOOP_LOG_VERBOSITY) { $env:LOOP_LOG_VERBOSITY } else { 'Normal' } )
   , [string]$JsonLogPath = $env:LOOP_JSON_LOG
   , [switch]$NoStepSummary
   , [switch]$NoConsoleSummary
@@ -178,7 +178,10 @@ elseif ($simulate) {
   $exitCode = ($env:LOOP_SIMULATE_EXIT_CODE -as [int])
   if ([string]::IsNullOrWhiteSpace($env:LOOP_SIMULATE_EXIT_CODE)) { $exitCode = 1 }
   $delayMs = ($env:LOOP_SIMULATE_DELAY_MS -as [int]); if (-not $delayMs) { $delayMs = 5 }
-  $exec = { param($CliPath,$Base,$Head,$ExecArgs) Start-Sleep -Milliseconds $using:delayMs; return $using:exitCode }
+  $localDelay = $delayMs; if (-not $localDelay) { $localDelay = 5 }
+  $localExit = $exitCode
+  # Lexical closure: variables from outer scope ($localDelay,$localExit) are captured automatically
+  $exec = { param($CliPath,$Base,$Head,$ExecArgs) Start-Sleep -Milliseconds $localDelay; return $localExit }
 }
 
 $invokeParams = @{
