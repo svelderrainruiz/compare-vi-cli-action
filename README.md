@@ -61,7 +61,15 @@ Phase 1 Policy (enforced by tests & `tools/Validate-Fixtures.ps1`):
 - Do not delete or rename them without a migration plan.
 - Intentional content changes should include a rationale in the commit message (future phases may require a token such as `[fixture-update]`).
 
-Future phases will optionally introduce hash manifest verification and controlled update workflows.
+Phase 2 adds a hash manifest (`fixtures.manifest.json`) validated by `tools/Validate-Fixtures.ps1`.
+If you intentionally change fixture contents, include `[fixture-update]` in the commit message and
+regenerate the manifest via:
+
+```powershell
+pwsh -File tools/Update-FixtureManifest.ps1 -Allow
+```
+
+Without the token, hash mismatches fail validation (exit code 6). Manifest parse errors exit 7.
 
 ## Quick Start
 

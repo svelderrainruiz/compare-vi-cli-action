@@ -1,0 +1,18 @@
+{
+  "schema": "fixture-manifest-v1",
+  "generatedAt": "2025-10-03T00:00:00Z",
+  "items": [
+    {
+      "path": "VI1.vi",
+      "sha256": "E7F639FC897E5D3215BA43DE07428CDEFFE5EE76BAF90ABB8BAB366B07C2F7CB",
+      "minBytes": 32,
+      "role": "base"
+    },
+    {
+      "path": "VI2.vi",
+      "sha256": "443E21BC7DB990F45E4595F64BA0058365261FA0751DBEED07B542E6F33B3C0A",
+      "minBytes": 32,
+      "role": "head"
+    }
+  ]
+}
