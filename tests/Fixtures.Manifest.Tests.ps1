@@ -58,6 +58,9 @@ Describe 'Fixture manifest enforcement' -Tag 'Unit' {
       $json.fixtureCount | Should -Be 2
       $json.issues.Count | Should -Be 0
       $json.fixtures.Count | Should -Be 2
+      $json.summaryCounts.missing | Should -Be 0
+      $json.summaryCounts.hashMismatch | Should -Be 0
+      $json.summaryCounts.schema | Should -Be 0
     } finally {
       $originalManifest | Set-Content -LiteralPath $manifest -Encoding utf8
     }

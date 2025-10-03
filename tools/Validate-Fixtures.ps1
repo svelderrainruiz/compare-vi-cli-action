@@ -119,7 +119,10 @@ if (($allowOverride -or $TestAllowFixtureUpdate) -and $hashMismatch) {
 if (-not $missing -and -not $untracked -and -not $tooSmall -and -not $manifestError -and -not $hashMismatch -and -not $duplicateEntries) {
   if ($EmitJson) {
     $names = @($fixtures | ForEach-Object { $_.Name })
-    $okObj = [ordered]@{ ok=$true; exitCode=0; summary='Fixture validation succeeded'; issues=@(); fixtures=$names; checked=$names; fixtureCount=$names.Count; manifestPresent=[bool]$manifest }
+    $okObj = [ordered]@{ 
+      ok=$true; exitCode=0; summary='Fixture validation succeeded'; issues=@(); fixtures=$names; checked=$names; fixtureCount=$names.Count; manifestPresent=[bool]$manifest; 
+      summaryCounts = [ordered]@{ missing=0; untracked=0; tooSmall=0; hashMismatch=0; manifestError=0; duplicate=0; schema=0 }
+    }
     $okObj | ConvertTo-Json -Depth 6
     exit 0
   }
@@ -150,6 +153,15 @@ if ($EmitJson) {
     manifestPresent = [bool]$manifest
     fixtureCount = $fixtures.Count
     checked = @($fixtures | ForEach-Object { $_.Name })
+    summaryCounts = [ordered]@{
+      missing = ($missing).Count
+      untracked = ($untracked).Count
+      tooSmall = ($tooSmall).Count
+      hashMismatch = ($hashMismatch).Count
+      manifestError = [int]($manifestError)
+      duplicate = ($duplicateEntries).Count
+      schema = ($schemaIssues).Count
+    }
   }
   $obj | ConvertTo-Json -Depth 8
 }
