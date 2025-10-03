@@ -18,8 +18,8 @@ $script:HeadVi = $env:LV_HEAD_VI
 # Authoritative fallback: always try to resolve repo-root VIs; environment vars override only if valid.
 try {
   $repoRootForFallback = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-  $fallbackBase = Resolve-Path (Join-Path $repoRootForFallback 'Base.vi') -ErrorAction SilentlyContinue
-  $fallbackHead = Resolve-Path (Join-Path $repoRootForFallback 'Head.vi') -ErrorAction SilentlyContinue
+  $fallbackBase = Resolve-Path (Join-Path $repoRootForFallback 'VI1.vi') -ErrorAction SilentlyContinue
+  $fallbackHead = Resolve-Path (Join-Path $repoRootForFallback 'VI2.vi') -ErrorAction SilentlyContinue
   if (-not $script:BaseVi -or -not (Test-Path -LiteralPath $script:BaseVi -PathType Leaf)) {
     if ($fallbackBase) { $script:BaseVi = $fallbackBase.Path }
   }

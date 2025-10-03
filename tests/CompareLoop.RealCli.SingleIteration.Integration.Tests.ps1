@@ -9,11 +9,11 @@ $script:HeadVi = $env:LV_HEAD_VI
 try {
   $repoRootForFallback = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
   if (-not $script:BaseVi -or -not (Test-Path -LiteralPath $script:BaseVi -PathType Leaf)) {
-    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'Base.vi') -ErrorAction SilentlyContinue
+    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'VI1.vi') -ErrorAction SilentlyContinue
     if ($candidate) { $script:BaseVi = $candidate.Path }
   }
   if (-not $script:HeadVi -or -not (Test-Path -LiteralPath $script:HeadVi -PathType Leaf)) {
-    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'Head.vi') -ErrorAction SilentlyContinue
+    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'VI2.vi') -ErrorAction SilentlyContinue
     if ($candidate) { $script:HeadVi = $candidate.Path }
   }
 } catch { Write-Verbose "Fallback resolution failed: $($_.Exception.Message)" -Verbose }

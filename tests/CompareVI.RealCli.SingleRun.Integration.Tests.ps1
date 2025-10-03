@@ -9,11 +9,11 @@ $script:HeadVi = $env:LV_HEAD_VI
 try {
   $repoRootForFallback = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
   if (-not $script:BaseVi -or -not (Test-Path -LiteralPath $script:BaseVi -PathType Leaf)) {
-    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'Base.vi') -ErrorAction SilentlyContinue
+    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'VI1.vi') -ErrorAction SilentlyContinue
     if ($candidate) { $script:BaseVi = $candidate.Path }
   }
   if (-not $script:HeadVi -or -not (Test-Path -LiteralPath $script:HeadVi -PathType Leaf)) {
-    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'Head.vi') -ErrorAction SilentlyContinue
+    $candidate = Resolve-Path (Join-Path $repoRootForFallback 'VI2.vi') -ErrorAction SilentlyContinue
     if ($candidate) { $script:HeadVi = $candidate.Path }
   }
 } catch { Write-Verbose "Fallback resolution failed: $($_.Exception.Message)" -Verbose }
@@ -47,7 +47,7 @@ BeforeAll {
   New-Item -ItemType Directory -Path $script:ResultsDir -Force | Out-Null
 }
 
-Describe 'Single real LVCompare invocation (repo Base.vi vs Head.vi)' -Tag Integration {
+Describe 'Single real LVCompare invocation (repo VI1.vi vs VI2.vi)' -Tag Integration {
   It 'produces expected diff outputs and HTML report' -Skip:(-not $script:Prereqs) {
   $cliPath = if ($Canonical) { $Canonical } else { $script:Canonical }
   if (-not $cliPath) { Set-ItResult -Skipped -Because 'Canonical path unavailable'; return }
