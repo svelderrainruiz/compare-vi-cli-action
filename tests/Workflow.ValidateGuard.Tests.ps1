@@ -11,5 +11,6 @@ Describe 'Validate workflow guard (delta integration)' -Tag 'Unit' {
     ($wf -match 'Save current snapshot to cache') | Should -BeTrue
     ($wf -match 'Lite schema validate') | Should -BeTrue
     ($wf -match 'Append fixture summary') | Should -BeTrue
+    ($wf -match 'Upload fixture summary artifact') | Should -BeTrue
   }
 }

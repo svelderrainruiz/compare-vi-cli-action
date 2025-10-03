@@ -16,6 +16,7 @@ function Test-TypeMatch {
     'string' { if (-not ($val -is [string])) { return "Field '$path' expected type string" } }
     'boolean' { if (-not ($val -is [bool])) { return "Field '$path' expected type boolean" } }
     'integer' { if (-not ($val -is [int] -or $val -is [long])) { return "Field '$path' expected integer" } }
+    'number'  { if (-not ($val -is [double] -or $val -is [float] -or $val -is [decimal] -or $val -is [int] -or $val -is [long])) { return "Field '$path' expected number" } }
     'object' { if (-not ($val -is [psobject])) { return "Field '$path' expected object" } }
     'array' { if (-not ($val -is [System.Array])) { return "Field '$path' expected array" } }
   }
@@ -39,7 +40,10 @@ function Invoke-ValidateNode {
           $tm = Test-TypeMatch -val $val -type $spec.type -path ("$path$name")
           if ($tm) { $errs += $tm; continue }
         }
-        if ($spec.const -and $val -ne $spec.const) { $errs += "Field '$path$name' const mismatch (expected $($spec.const))" }
+  if ($spec.const -and $val -ne $spec.const) { $errs += "Field '$path$name' const mismatch (expected $($spec.const))" }
+  if ($spec.enum -and $spec.enum.Count -gt 0 -and ($spec.enum -notcontains $val)) { $errs += "Field '$path$name' value '$val' not in enum [$($spec.enum -join ', ')]" }
+  if ($spec.minimum -ne $null -and ($spec.type -in @('integer','number')) -and $val -lt $spec.minimum) { $errs += "Field '$path$name' value $val below minimum $($spec.minimum)" }
+  if ($spec.maximum -ne $null -and ($spec.type -in @('integer','number')) -and $val -gt $spec.maximum) { $errs += "Field '$path$name' value $val above maximum $($spec.maximum)" }
         if ($spec.type -eq 'object' -and $spec.properties) {
           $errs += Invoke-ValidateNode -node $val -schemaNode $spec -path $childPath
         } elseif ($spec.type -eq 'array' -and $spec.items -and ($val -is [System.Array])) {

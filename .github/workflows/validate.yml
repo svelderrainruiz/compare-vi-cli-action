@@ -95,6 +95,16 @@ jobs:
       - name: Append fixture summary
         shell: pwsh
         run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json
+      - name: Write fixture summary file
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json -SummaryPath fixture-summary.md
+      - name: Upload fixture summary artifact
+        if: always() && hashFiles('fixture-summary.md') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-validation-summary
+          path: fixture-summary.md
       - name: Save current snapshot to cache
         uses: actions/cache/save@v4
         with:

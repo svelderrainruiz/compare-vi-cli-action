@@ -488,6 +488,60 @@ Key fields (see schema `docs/schemas/fixture-validation-delta-v1.schema.json`):
 
 This pattern allows longitudinal tracking without hard-failing when no prior snapshot exists (first run).
 
+### Fixture Validation Reporting Enhancements
+
+The validate workflow now supports:
+
+- `FAIL_ON_NEW_STRUCTURAL` (env) – set to `true` to fail the job when a new structural issue category first appears (duplicate, hashMismatch, schema, etc.).
+- `SUMMARY_VERBOSE` (env) – set to `true` to expand the job summary with detailed change lists and per‑category structural deltas.
+- Recursive schema-lite validation – `tools/Invoke-JsonSchemaLite.ps1` performs a lightweight recursive check of required fields, property types, array item types, `const`, `additionalProperties=false`, plus support for `enum`, `minimum`, and `maximum` (integers / numbers). This is intentionally minimal (no refs, no oneOf/anyOf) to stay dependency‑free.
+
+Example snippet for enabling verbose summary & strict failure:
+
+```yaml
+env:
+  FAIL_ON_NEW_STRUCTURAL: 'true'
+  SUMMARY_VERBOSE: 'true'
+```
+
+### Enum and Range Validation (Schema-Lite)
+
+When adding to a JSON schema consumed by `Invoke-JsonSchemaLite.ps1`, you can specify:
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "warn", "error"] },
+    "retryCount": { "type": "integer", "minimum": 0, "maximum": 5 }
+  },
+  "required": ["status"]
+}
+```
+
+Violations surface as `[schema-lite] error:` lines and produce exit code `3`.
+
+### Summary Artifact Upload
+
+To retain the rendered summary as an artifact for external dashboards, append:
+
+```yaml
+  - name: Write fixture summary to file
+    if: always()
+    shell: pwsh
+    run: |
+      pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json -SummaryPath fixture-summary.md
+
+  - name: Upload fixture summary
+    if: always() && hashFiles('fixture-summary.md') != ''
+    uses: actions/upload-artifact@v4
+    with:
+      name: fixture-validation-summary
+      path: fixture-summary.md
+```
+
+Set `SUMMARY_VERBOSE: 'true'` to enrich `fixture-summary.md` with the detailed sections.
+
 
 For information on testing, building, documentation generation, and the release process, see the **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**.
 
