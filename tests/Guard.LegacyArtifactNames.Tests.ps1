@@ -38,12 +38,18 @@ Describe 'Legacy artifact name guard (Base.vi / Head.vi)' -Tag 'Unit','Guard' {
   It 'finds no Base.vi references in scripts, tests, or module code (excluding allowlist)' {
     $extensions = @('*.ps1','*.psm1','*.psd1')
     $hits = @()
+    $root = (Resolve-Path $repoRoot).Path
     foreach ($ext in $extensions) {
-      $files = Get-ChildItem -Path $repoRoot -Recurse -File -Filter $ext -ErrorAction SilentlyContinue | Where-Object {
-        $rel = (Resolve-Path $_.FullName).Path.Replace((Resolve-Path $repoRoot).Path,'').TrimStart('\\','/')
-        # Exclude allowlisted paths (directory segment or exact file)
+      $files = Get-ChildItem -Path $repoRoot -Recurse -File -Filter $ext -ErrorAction SilentlyContinue | ForEach-Object {
+        $full = $_.FullName
+        if ($full.StartsWith($root)) {
+          $rel = $full.Substring($root.Length)
+          while ($rel.StartsWith('\') -or $rel.StartsWith('/')) { $rel = $rel.Substring(1) }
+        } else { $rel = $_.Name }
         $segments = $rel -split '[\\/]'
-        ($segments | ForEach-Object { if ($allowSet.Contains($_)) { $true } }) -notcontains $true
+        $excluded = $false
+        foreach ($seg in $segments) { if ($allowSet.Contains($seg)) { $excluded = $true; break } }
+        if (-not $excluded) { $_ }
       }
       foreach ($f in $files) {
         $contentHits = Select-String -LiteralPath $f.FullName -Pattern 'Base\.vi' -SimpleMatch -ErrorAction SilentlyContinue
@@ -57,11 +63,18 @@ Describe 'Legacy artifact name guard (Base.vi / Head.vi)' -Tag 'Unit','Guard' {
   It 'finds no Head.vi references in scripts, tests, or module code (excluding allowlist)' {
     $extensions = @('*.ps1','*.psm1','*.psd1')
     $hits = @()
+    $root = (Resolve-Path $repoRoot).Path
     foreach ($ext in $extensions) {
-      $files = Get-ChildItem -Path $repoRoot -Recurse -File -Filter $ext -ErrorAction SilentlyContinue | Where-Object {
-        $rel = (Resolve-Path $_.FullName).Path.Replace((Resolve-Path $repoRoot).Path,'').TrimStart('\\','/')
+      $files = Get-ChildItem -Path $repoRoot -Recurse -File -Filter $ext -ErrorAction SilentlyContinue | ForEach-Object {
+        $full = $_.FullName
+        if ($full.StartsWith($root)) {
+          $rel = $full.Substring($root.Length)
+          while ($rel.StartsWith('\') -or $rel.StartsWith('/')) { $rel = $rel.Substring(1) }
+        } else { $rel = $_.Name }
         $segments = $rel -split '[\\/]'
-        ($segments | ForEach-Object { if ($allowSet.Contains($_)) { $true } }) -notcontains $true
+        $excluded = $false
+        foreach ($seg in $segments) { if ($allowSet.Contains($seg)) { $excluded = $true; break } }
+        if (-not $excluded) { $_ }
       }
       foreach ($f in $files) {
         $contentHits = Select-String -LiteralPath $f.FullName -Pattern 'Head\.vi' -SimpleMatch -ErrorAction SilentlyContinue
