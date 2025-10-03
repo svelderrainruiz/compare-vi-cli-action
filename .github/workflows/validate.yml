@@ -42,8 +42,40 @@ jobs:
           if (-not $data.ok) {
             Write-Host 'Fixture validation issues detected. (Non-fatal: continuing for now)'
           }
+      - name: Restore previous fixture validation snapshot (cache)
+        id: restore_prev_fixture_validation
+        uses: actions/cache/restore@v4
+        with:
+          path: fixture-validation-prev.json
+          key: fixture-validation-${{ github.sha }}
+          restore-keys: |
+            fixture-validation-
+      - name: Compute delta vs previous snapshot
+        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true'
+        shell: pwsh
+        run: |
+          Write-Host 'Previous snapshot restored. Computing delta.'
+          pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline fixture-validation-prev.json -Current fixture-validation.json -FailOnNewStructuralIssue > fixture-validation-delta.json
+          if ($LASTEXITCODE -eq 3) {
+            Write-Host 'New structural fixture issues detected (delta willFail=true).'
+            # Non-fatal here; choose to fail later if policy changes
+          }
+      - name: Upload fixture validation delta JSON
+        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && exists('fixture-validation-delta.json')
+        uses: actions/upload-artifact@v4
+        with:
+          name: validate-fixture-validation-delta-json
+          path: fixture-validation-delta.json
       - name: Upload fixture validation JSON
         uses: actions/upload-artifact@v4
         with:
           name: validate-fixture-validation-json
           path: fixture-validation.json
+      - name: Save current snapshot to cache
+        uses: actions/cache/save@v4
+        with:
+          path: fixture-validation.json
+          key: fixture-validation-${{ github.sha }}
+      - name: Copy snapshot for next run reference
+        shell: pwsh
+        run: Copy-Item -LiteralPath fixture-validation.json -Destination fixture-validation-prev.json -Force

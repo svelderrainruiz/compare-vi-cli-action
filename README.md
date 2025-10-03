@@ -396,6 +396,99 @@ Notes
 
 ## For Developers
 
+## Fixture Validation Delta (Trending)
+
+The repository ships a helper script `tools/Diff-FixtureValidationJson.ps1` for **comparing two JSON snapshots** produced by `tools/Validate-Fixtures.ps1 -Json`.
+
+Use cases:
+
+- Detect introduction of new structural issue types (e.g., a first duplicate entry) between two commits.
+- Generate a compact delta artifact for observability dashboards.
+- Gate CI on unexpected structural regressions while allowing benign size/hash churn.
+
+### Invocation
+
+```powershell
+pwsh -File tools/Validate-Fixtures.ps1 -Json > validate-current.json
+# (Obtain or restore a previous snapshot as validate-prev.json)
+pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline validate-prev.json -Current validate-current.json > delta.json
+```
+
+Fail the build if a new structural issue category appears:
+
+```powershell
+pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline validate-prev.json -Current validate-current.json -FailOnNewStructuralIssue
+if ($LASTEXITCODE -eq 3) { throw 'New structural fixture issues detected.' }
+```
+
+### Exit Codes (Delta Script)
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, no disallowed new structural issue categories |
+| 2 | Input / parse error (missing files or invalid JSON) |
+| 3 | New structural issue category detected and `-FailOnNewStructuralIssue` specified |
+
+Structural issue categories monitored: `missing`, `untracked`, `hashMismatch`, `manifestError`, `duplicate`, `schema` (excludes `tooSmall`).
+
+### Output JSON (`fixture-validation-delta-v1`)
+
+Key fields (see schema `docs/schemas/fixture-validation-delta-v1.schema.json`):
+
+```jsonc
+{
+  "schema": "fixture-validation-delta-v1",
+  "baselinePath": "validate-prev.json",
+  "currentPath": "validate-current.json",
+  "baselineOk": true,
+  "currentOk": false,
+  "deltaCounts": { "duplicate": 1 },    // Only non-zero deltas
+  "changes": [ { "category": "duplicate", "baseline": 0, "current": 1, "delta": 1 } ],
+  "newStructuralIssues": [ { "category": "duplicate", "baseline": 0, "current": 1, "delta": 1 } ],
+  "failOnNewStructuralIssue": true,
+  "willFail": true
+}
+```
+
+### Workflow Example (Delta Comparison)
+
+```yaml
+  - name: Validate fixtures (current)
+    shell: pwsh
+    run: pwsh -File tools/Validate-Fixtures.ps1 -Json -DisableToken > validate-current.json
+
+  - name: Restore previous snapshot (cache)
+    uses: actions/cache/restore@v4
+    with:
+      path: validate-prev.json
+      key: fixture-validation-${{ github.sha }}
+      restore-keys: |
+        fixture-validation-
+
+  - name: Diff against previous snapshot
+    if: exists('validate-prev.json')
+    shell: pwsh
+    run: |
+      pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline validate-prev.json -Current validate-current.json -FailOnNewStructuralIssue > delta.json
+      if ($LASTEXITCODE -eq 3) { Write-Host 'New structural issues introduced.'; exit 3 }
+
+  - name: Save current snapshot for future runs
+    uses: actions/cache/save@v4
+    with:
+      path: validate-current.json
+      key: fixture-validation-${{ github.sha }}
+
+  - name: Upload delta artifact
+    if: exists('delta.json')
+    uses: actions/upload-artifact@v4
+    with:
+      name: fixture-validation-delta
+      path: delta.json
+```
+
+This pattern allows longitudinal tracking without hard-failing when no prior snapshot exists (first run).
+
+
 For information on testing, building, documentation generation, and the release process, see the **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**.
 
 ### Quick Links
