@@ -71,6 +71,70 @@ pwsh -File tools/Update-FixtureManifest.ps1 -Allow
 
 Without the token, hash mismatches fail validation (exit code 6). Manifest parse errors exit 7.
 
+### Fixture Validator (Refined)
+
+`tools/Validate-Fixtures.ps1` now supports structured JSON output and stricter manifest governance.
+
+Supported exit codes:
+
+| Code | Meaning |
+|------|---------|
+| 0 | OK (all checks passed) |
+| 2 | Missing fixture |
+| 3 | Untracked fixture (not in git index) |
+| 4 | Too small (size < effective minBytes) |
+| 5 | Multiple issue categories present (aggregation) |
+| 6 | Hash mismatch (no override token / flag) |
+| 7 | Manifest error (parse, schema, or hash computation failure) |
+| 8 | Duplicate manifest entry |
+
+Flags:
+
+```text
+  -MinBytes <n>             Global minimum size (fallback when item.minBytes absent)
+  -Quiet / -QuietOutput     Suppress non-error console lines
+  -Json                     Emit single JSON object (suppresses human lines)
+  -TestAllowFixtureUpdate   INTERNAL: ignore hash mismatches (used in tests)
+  -DisableToken             INTERNAL: disable commit message token override for tests
+```
+
+JSON output fields:
+
+```json
+{
+  "ok": true|false,
+  "exitCode": <int>,
+  "summary": "text",
+  "issues": [ { type, ... } ],
+  "manifestPresent": true|false,
+  "fixtureCount": 2,
+  "fixtures": ["VI1.vi","VI2.vi"],
+  "checked": ["VI1.vi","VI2.vi"]
+}
+```
+
+Issue objects may include:
+
+- `missing` { fixture }
+- `untracked` { fixture }
+- `tooSmall` { fixture, length, min }
+- `hashMismatch` { fixture, actual, expected }
+- `manifestError` { }
+- `duplicate` { path }
+- `schema` { detail }
+
+Update helper enhancements:
+
+`tools/Update-FixtureManifest.ps1` now supports:
+
+```text
+  -Allow              Required (or -Force) to write new manifest
+  -DryRun             Show whether an update is needed without writing
+  -Output <file>      Alternate manifest path (default fixtures.manifest.json)
+```
+
+It preserves existing per-item `minBytes` unless changed manually.
+
 ## Quick Start
 
 ### Basic Usage

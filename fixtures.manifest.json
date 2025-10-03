@@ -4,7 +4,7 @@
   "items": [
     {
       "path": "VI1.vi",
-      "sha256": "E7F639FC897E5D3215BA43DE07428CDEFFE5EE76BAF90ABB8BAB366B07C2F7CB",
+      "sha256": "BADHASH",
       "minBytes": 32,
       "role": "base"
     },
@@ -16,3 +16,5 @@
     }
   ]
 }
+
+
