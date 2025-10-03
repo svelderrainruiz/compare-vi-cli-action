@@ -15,6 +15,7 @@ $delta = Get-JsonContent $DeltaJson
 
 if (-not $SummaryPath) { Write-Host 'No GITHUB_STEP_SUMMARY set; printing summary instead.' }
 
+$verbose = ($env:SUMMARY_VERBOSE -eq 'true')
 $lines = @('# Fixture Validation Summary')
 if ($validation) {
   $lines += ''
@@ -31,13 +32,27 @@ if ($delta) {
   $lines += '## Delta'
   if ($delta.deltaCounts) {
     $pairs = @()
-    foreach ($kv in $delta.deltaCounts.GetEnumerator()) { $pairs += ("{0}={1}" -f $kv.Key,$kv.Value) }
+    foreach ($prop in $delta.deltaCounts.PSObject.Properties) { $pairs += ("{0}={1}" -f $prop.Name,$prop.Value) }
     $lines += ('Changed Categories: ' + ($pairs -join ', '))
   } else {
     $lines += 'Changed Categories: (none)'
   }
   $lines += ('New Structural Issues: ' + $delta.newStructuralIssues.Count)
   $lines += ('Will Fail: ' + $delta.willFail)
+  if ($verbose -and $delta.newStructuralIssues.Count -gt 0) {
+    $lines += ''
+    $lines += '### New Structural Issues Detail'
+    foreach ($i in $delta.newStructuralIssues) {
+      $lines += ('- {0}: baseline={1} current={2} delta={3}' -f $i.category,$i.baseline,$i.current,$i.delta)
+    }
+  }
+  if ($verbose -and $delta.changes.Count -gt 0) {
+    $lines += ''
+    $lines += '### All Changes'
+    foreach ($c in $delta.changes) {
+      $lines += ('- {0}: {1} -> {2} (Δ {3})' -f $c.category,$c.baseline,$c.current,$c.delta)
+    }
+  }
 }
 
 $body = ($lines -join [Environment]::NewLine)
