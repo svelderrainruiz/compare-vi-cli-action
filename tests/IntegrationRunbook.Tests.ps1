@@ -46,8 +46,8 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
 
   It 'supports Loop phase selection (simulation suppressed) without requiring CLI' {
     # Provide fake base/head to satisfy ViInputs when requested
-    $baseFile = Join-Path $runRoot 'Base.vi'
-    $headFile = Join-Path $runRoot 'Head.vi'
+    $baseFile = Join-Path $runRoot 'VI1.vi'
+    $headFile = Join-Path $runRoot 'VI2.vi'
     Set-Content $baseFile 'dummy' -Encoding utf8
     Set-Content $headFile 'dummy2' -Encoding utf8
     try {

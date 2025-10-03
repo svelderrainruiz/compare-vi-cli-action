@@ -17,7 +17,7 @@ This runbook standardizes bringing a self‑hosted Windows runner (or local work
 You can automate these via `scripts/Invoke-IntegrationRunbook.ps1`.
 
 ---
- 
+
 ## Canonical Path Policy
 
 LVCompare must exist at:
@@ -35,7 +35,7 @@ Test-Path 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVC
 ```
 
 ---
- 
+
 ## Environment Variables
 
 | Variable | Purpose | Required |
@@ -48,7 +48,7 @@ Test-Path 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVC
 Both VI paths must exist. If they resolve to the same absolute path the compare short‑circuits (no CLI call, diff=false).
 
 ---
- 
+
 ## Orchestration Script (Quick Start)
 
 ```pwsh
@@ -76,7 +76,7 @@ JSON result schema (excerpt):
 Status values: `Passed | Failed | Skipped`.
 
 ---
- 
+
 ## Single Compare (Manual)
 
 ```pwsh
@@ -88,16 +88,17 @@ $res | Format-List
 Key fields: `ExitCode` (0|1), `Diff` (bool), `CompareDurationSeconds`, `ShortCircuitedIdenticalPath`.
 
 ---
- 
+
 ## Running Integration Tests
 
 ```pwsh
 pwsh -File Invoke-PesterTests.ps1 -IncludeIntegration true
 ```
+
 Result summary is written to `tests/results/pester-summary.txt`.
 
 ---
- 
+
 ## Real Loop Mode
 
 ```pwsh
@@ -116,7 +117,7 @@ $env:LOOP_HISTOGRAM_BINS='20'
 ```
 
 ---
- 
+
 ## Diagnostics Capture (Manual)
 
 ```pwsh
@@ -130,7 +131,7 @@ Set-Content lvcompare-stderr.txt $stderr -Encoding utf8
 ```
 
 ---
- 
+
 ## Troubleshooting Quick Table
 
 | Symptom | Cause | Action |
@@ -143,19 +144,19 @@ Set-Content lvcompare-stderr.txt $stderr -Encoding utf8
 | Histogram absent | `LOOP_HISTOGRAM_BINS` unset | Set a positive bin count |
 
 ---
- 
+
 ## Orchestration Script Reference
 
 See `scripts/Invoke-IntegrationRunbook.ps1 -Help` for parameters.
 
 ---
- 
+
 ## Schema & Versioning
 
 Runbook JSON schema: `integration-runbook-v1` (additive fields allowed; do not rename existing keys without a major schema bump).
 
 ---
- 
+
 ## Next Enhancements (Future Ideas)
 
 * Optional code coverage integration for integration-tagged tests.
