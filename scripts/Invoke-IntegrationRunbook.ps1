@@ -54,20 +54,25 @@ function Write-PhaseBanner([string]$name) {
 
 function New-PhaseResult([string]$name){ [pscustomobject]@{ name=$name; status='Skipped'; details=@{} } }
 
-$selected = if ($All) { $allPhaseNames } elseif ($Phases) {
-  # Split comma or whitespace separated names
-  $flat = $Phases -join ' '
-  $flat -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { $_ }
-} else {
-  $base = @('Prereqs','CanonicalCli','ViInputs','Compare')
-  if ($Loop) { $base += 'Loop' }
-  $base
+# Determine selected phases explicitly (avoid inline ternary style that can confuse parsing in some contexts)
+$selected = $null
+if ($All) {
+    $selected = $allPhaseNames
+}
+elseif ($Phases) {
+    # Split comma or whitespace separated names
+    $flat = $Phases -join ' '
+    $selected = $flat -split '[,\s]+' | Where-Object { $_ }
+}
+else {
+    $base = @('Prereqs','CanonicalCli','ViInputs','Compare')
+    if ($Loop) { $base += 'Loop' }
+    $selected = $base
 }
 
 $selected = $selected | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 $invalid = $selected | Where-Object { $_ -notin $allPhaseNames }
 if ($invalid) { throw "Unknown phase(s): $($invalid -join ', ')" }
-# Preserve original ordering reference
 $ordered = $allPhaseNames | Where-Object { $_ -in $selected }
 
 # Result container
@@ -117,7 +122,13 @@ function Invoke-PhaseViInputs {
 function Invoke-PhaseCompare {
   param($r,$ctx)
   Write-PhaseBanner $r.name
-  . "$PSScriptRoot/CompareVI.ps1"
+  $compareScript = Join-Path -Path $PSScriptRoot -ChildPath 'CompareVI.ps1'
+  if (-not (Test-Path $compareScript)) {
+    $alt = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath 'scripts') -ChildPath 'CompareVI.ps1'
+    if (Test-Path $alt) { $compareScript = $alt }
+  }
+  if (-not (Test-Path $compareScript)) { throw "CompareVI.ps1 not found at expected locations (tried: $compareScript)" }
+  . $compareScript
   try {
     $compare = Invoke-CompareVI -Base $ctx.basePath -Head $ctx.headPath -LvCompareArgs '-nobdcosm -nofppos -noattr' -FailOnDiff:$false
     $ctx.compareResult = $compare
@@ -141,9 +152,9 @@ function Invoke-PhaseTests {
   Write-PhaseBanner $r.name
   $inc = $IncludeIntegrationTests.IsPresent
   try {
-  $invokeArgs = @('-File','Invoke-PesterTests.ps1')
-  if ($inc) { $invokeArgs += '-IncludeIntegration'; $invokeArgs += 'true' }
-  $proc = Start-Process -FilePath 'pwsh' -ArgumentList $invokeArgs -NoNewWindow -PassThru -Wait
+    $invokeArgs = @('-File','Invoke-PesterTests.ps1')
+    if ($inc) { $invokeArgs += '-IncludeIntegration'; $invokeArgs += 'true' }
+    $proc = Start-Process -FilePath 'pwsh' -ArgumentList $invokeArgs -NoNewWindow -PassThru -Wait
     $code = $proc.ExitCode
     $r.details.exitCode = $code
     $r.details.integrationIncluded = $inc
@@ -216,10 +227,10 @@ $final = [pscustomobject]@{
   schema = $script:Schema
   generated = (Get-Date).ToString('o')
   phases = $results
-  overallStatus = if ($overallFailed) { 'Failed' } else { 'Passed' }
+  overallStatus = $( if ($overallFailed) { 'Failed' } else { 'Passed' } )
 }
 
-Write-Host "Overall Status: $($final.overallStatus)" -ForegroundColor (if ($overallFailed) { 'Red' } else { 'Green' })
+Write-Host "Overall Status: $($final.overallStatus)" -ForegroundColor $( if ($overallFailed) { 'Red' } else { 'Green' } )
 
 if ($JsonReport) {
   $json = $final | ConvertTo-Json -Depth 6
