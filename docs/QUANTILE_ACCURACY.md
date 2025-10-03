@@ -23,6 +23,7 @@ The module supports three percentile computation strategies:
 ### StreamingReservoir Error Bounds
 
 Accuracy depends on:
+
 - **Capacity**: Number of samples retained (default: 500)
 - **Distribution shape**: Uniform, normal, heavy-tail, multimodal
 - **Reconciliation frequency**: Optional periodic re-seeding with recent samples
@@ -41,11 +42,13 @@ Empirical relative error (95th percentile of absolute error vs Exact, 10 runs ea
 ### Hybrid Strategy Trade-offs
 
 Hybrid seeding provides:
+
 - **High initial accuracy**: Exact computation during threshold phase (e.g., first 200 iterations)
 - **Stable long-run**: Switches to streaming after threshold, capping memory
 - **Transition overhead**: Brief spike at switchover as streaming reservoir initializes
 
 Recommended thresholds:
+
 - **Short soak** (<500 iterations): Use Exact or set threshold=infinity (stays Exact)
 - **Medium soak** (500-2000): Threshold=200-500
 - **Long soak** (2000+ iterations): Threshold=100-200 (transition early to conserve memory)
@@ -64,10 +67,12 @@ Higher capacity improves accuracy but increases memory:
 ### Reconciliation (`-ReconcileEvery`)
 
 Optional periodic re-build of the reservoir using the most recent N samples. Helps with:
+
 - **Drift detection**: Workload characteristics change over time
 - **Stable metrics**: Reduces oscillation in reported percentiles
 
 Guidance:
+
 - **Disabled** (default, `ReconcileEvery=0`): Suitable for stable workloads
 - **Enabled** (e.g., `ReconcileEvery=100`): Use when latency distribution shifts during run (warm-up effects, resource contention)
 
