@@ -1691,6 +1691,21 @@ $env:LV_HEAD_VI='Head.vi'
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for contribution guidelines and development workflow.
 
+### Integration Runbook
+
+For a phased checklist (prereqs, single compare, integration tests, real loop, diagnostics) and an orchestration helper script, see:
+
+- Runbook document: [`docs/INTEGRATION_RUNBOOK.md`](./docs/INTEGRATION_RUNBOOK.md)
+- Orchestration script: `scripts/Invoke-IntegrationRunbook.ps1`
+
+Example full run with JSON report:
+
+```powershell
+pwsh -File scripts/Invoke-IntegrationRunbook.ps1 -All -JsonReport runbook-result.json
+```
+
+Status summary is printed to console; JSON schema id: `integration-runbook-v1`.
+
 ### Building and Generating Documentation
 
 The action documentation is auto-generated from `action.yml`:
