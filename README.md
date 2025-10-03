@@ -1217,7 +1217,7 @@ When loop mode is enabled, the action:
 | `loop-enabled` | `false` | Enable loop mode branch. |
 | `loop-max-iterations` | `25` | Cap on iterations (0 = run until diff only if `fail-on-diff` is false; otherwise treat as finite). |
 | `loop-interval-seconds` | `0` | Delay between iterations (fractional seconds supported). |
-| `quantile-strategy` | `StreamingReservoir` | `Exact` \| `StreamingReservoir` \| `Hybrid`. |
+| `quantile-strategy` | `StreamingReservoir` | `Exact` \| `StreamingReservoir` \| `Hybrid`. See [Quantile Accuracy Guide](docs/QUANTILE_ACCURACY.md) for tuning. |
 | `stream-capacity` | `500` | Reservoir capacity (min 10). |
 | `reconcile-every` | `0` | Reservoir rebuild cadence (0 = disabled). |
 | `hybrid-exact-threshold` | `200` | Exact seed iterations before streaming when `Hybrid` is chosen. |

@@ -57,7 +57,7 @@ Key capabilities:
 | `HistogramBins` | int | 5 | Number of bins for latency histogram (>=1) |
 | `MetricsSnapshotEvery` | int | 0 | Emit per-iteration metrics snapshot every N iterations (0 disables) |
 | `MetricsSnapshotPath` | string | (none) | Destination file for NDJSON (one JSON object per line) snapshots |
-| `QuantileStrategy` | enum | `Exact` | Allowed: `Exact`, `StreamingP2`, `Hybrid` (streaming variants pending) |
+| `QuantileStrategy` | enum | `Exact` | Allowed: `Exact`, `StreamingP2`, `Hybrid`. See [Quantile Accuracy Guide](QUANTILE_ACCURACY.md) for tuning guidance. |
 | `HybridExactThreshold` | int | 500 | Iteration count threshold where Hybrid would switch to streaming (future) |
 | `CustomPercentiles` | string | (none) | Comma/space list of percentile values (0-100 exclusive) for dynamic metric keys (e.g. `"50,75,90,97.5,99.9"`) |
 | `RunSummaryJsonPath` | string | (none) | If set, writes a final consolidated JSON object (schema `compare-loop-run-summary-v1`) after loop completion |
