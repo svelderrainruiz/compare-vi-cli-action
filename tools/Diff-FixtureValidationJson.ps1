@@ -82,7 +82,8 @@ $structural = 'missing','untracked','hashMismatch','manifestError','duplicate','
 $newStructural = @($changeList | Where-Object { $_.category -in $structural -and $_.baseline -eq 0 -and $_.current -gt 0 })
 
 $schemaVersion = 'fixture-validation-delta-v1'
-if ($UseV2Schema -or $env:DELTA_SCHEMA_VERSION -eq 'v2') { $schemaVersion = 'fixture-validation-delta-v2' }
+if ($env:DELTA_FORCE_V2 -eq 'true') { $schemaVersion = 'fixture-validation-delta-v2' }
+elseif ($UseV2Schema -or $env:DELTA_SCHEMA_VERSION -eq 'v2') { $schemaVersion = 'fixture-validation-delta-v2' }
 
 $result = [ordered]@{
   schema = $schemaVersion

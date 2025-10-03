@@ -26,6 +26,7 @@ function Test-TypeMatch {
 function Invoke-ValidateNode {
   param($node,$schemaNode,[string]$path)
   $errs = @()
+  if ($schemaNode -isnot [psobject]) { return $errs } # ignore non-object schema nodes defensively
   if ($schemaNode.required) {
     foreach ($r in $schemaNode.required) {
       if ($node.PSObject.Properties.Name -notcontains $r) { $errs += "Missing required field '$path$r'" }
@@ -36,23 +37,29 @@ function Invoke-ValidateNode {
       $name = $p.Name; $spec = $p.Value; $childPath = "$path$name."
       if ($node.PSObject.Properties.Name -contains $name) {
         $val = $node.$name
-        if ($spec.type) {
+        if ($spec -is [psobject] -and $spec.type) {
           $tm = Test-TypeMatch -val $val -type $spec.type -path ("$path$name")
           if ($tm) { $errs += $tm; continue }
         }
-  if ($spec.const -and $val -ne $spec.const) { $errs += "Field '$path$name' const mismatch (expected $($spec.const))" }
-  if ($spec.enum -and $spec.enum.Count -gt 0 -and ($spec.enum -notcontains $val)) { $errs += "Field '$path$name' value '$val' not in enum [$($spec.enum -join ', ')]" }
-  if ($null -ne $spec.minimum -and ($spec.type -in @('integer','number')) -and $val -lt $spec.minimum) { $errs += "Field '$path$name' value $val below minimum $($spec.minimum)" }
-  if ($null -ne $spec.maximum -and ($spec.type -in @('integer','number')) -and $val -gt $spec.maximum) { $errs += "Field '$path$name' value $val above maximum $($spec.maximum)" }
-        if ($spec.type -eq 'object' -and $spec.properties) {
+        if ($spec -is [psobject] -and $spec.const -and $val -ne $spec.const) { $errs += "Field '$path$name' const mismatch (expected $($spec.const))" }
+        if ($spec -is [psobject] -and $spec.enum -and $spec.enum.Count -gt 0 -and ($spec.enum -notcontains $val)) { $errs += "Field '$path$name' value '$val' not in enum [$($spec.enum -join ', ')]" }
+        if ($spec -is [psobject] -and $null -ne $spec.minimum -and ($spec.type -in @('integer','number')) -and $val -lt $spec.minimum) { $errs += "Field '$path$name' value $val below minimum $($spec.minimum)" }
+        if ($spec -is [psobject] -and $null -ne $spec.maximum -and ($spec.type -in @('integer','number')) -and $val -gt $spec.maximum) { $errs += "Field '$path$name' value $val above maximum $($spec.maximum)" }
+        if ($spec.format -eq 'date-time' -and $val) {
+          # Basic ISO 8601 date-time pattern (no exhaustive validation)
+          if (-not ($val -is [datetime]) -and ($val -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}')) {
+            $errs += "Field '$path$name' expected RFC3339 date-time string"
+          }
+        }
+        if ($spec -is [psobject] -and $spec.type -eq 'object' -and $spec.properties) {
           $errs += Invoke-ValidateNode -node $val -schemaNode $spec -path $childPath
-        } elseif ($spec.type -eq 'array' -and $spec.items -and ($val -is [System.Array])) {
+        } elseif ($spec -is [psobject] -and $spec.type -eq 'array' -and $spec.items -and ($val -is [System.Array])) {
           for ($i=0; $i -lt $val.Count; $i++) {
             $itemVal = $val[$i]
             $tm2 = $null
-            if ($spec.items.type) { $tm2 = Test-TypeMatch -val $itemVal -type $spec.items.type -path ("$path$name[$i]") }
+            if ($spec.items -is [psobject] -and $spec.items.type) { $tm2 = Test-TypeMatch -val $itemVal -type $spec.items.type -path ("$path$name[$i]") }
             if ($tm2) { $errs += $tm2; continue }
-            if ($spec.items.type -eq 'object' -and $spec.items.properties) {
+            if ($spec.items -is [psobject] -and $spec.items.type -eq 'object' -and $spec.items.properties) {
               $errs += Invoke-ValidateNode -node $itemVal -schemaNode $spec.items -path ("$path$name[$i].")
             }
           }
@@ -70,14 +77,19 @@ function Invoke-ValidateNode {
       if (-not $schemaNode.properties -or $schemaNode.properties.PSObject.Properties.Name -notcontains $actual) {
         $val = $node.$actual
         $apSpec = $schemaNode.additionalProperties
-        if ($apSpec.type) {
+        if ($apSpec -is [psobject] -and $apSpec.type) {
           $tmAp = Test-TypeMatch -val $val -type $apSpec.type -path ("${path}$actual")
           if ($tmAp) { $errs += $tmAp; continue }
         }
-        if ($apSpec.enum -and $apSpec.enum.Count -gt 0 -and ($apSpec.enum -notcontains $val)) { $errs += "Field '${path}$actual' value '$val' not in enum [$($apSpec.enum -join ', ')]" }
-  if ($null -ne $apSpec.minimum -and ($apSpec.type -in @('integer','number')) -and $val -lt $apSpec.minimum) { $errs += "Field '${path}$actual' value $val below minimum $($apSpec.minimum)" }
-  if ($null -ne $apSpec.maximum -and ($apSpec.type -in @('integer','number')) -and $val -gt $apSpec.maximum) { $errs += "Field '${path}$actual' value $val above maximum $($apSpec.maximum)" }
-        if ($apSpec.type -eq 'object' -and $apSpec.properties) {
+        if ($apSpec -is [psobject] -and $apSpec.enum -and $apSpec.enum.Count -gt 0 -and ($apSpec.enum -notcontains $val)) { $errs += "Field '${path}$actual' value '$val' not in enum [$($apSpec.enum -join ', ')]" }
+        if ($apSpec -is [psobject] -and $null -ne $apSpec.minimum -and ($apSpec.type -in @('integer','number')) -and $val -lt $apSpec.minimum) { $errs += "Field '${path}$actual' value $val below minimum $($apSpec.minimum)" }
+        if ($apSpec -is [psobject] -and $null -ne $apSpec.maximum -and ($apSpec.type -in @('integer','number')) -and $val -gt $apSpec.maximum) { $errs += "Field '${path}$actual' value $val above maximum $($apSpec.maximum)" }
+        if ($apSpec.format -eq 'date-time' -and $val) {
+          if (-not ($val -is [datetime]) -and ($val -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}')) {
+            $errs += "Field '${path}$actual' expected RFC3339 date-time string"
+          }
+        }
+        if ($apSpec -is [psobject] -and $apSpec.type -eq 'object' -and $apSpec.properties) {
           $errs += Invoke-ValidateNode -node $val -schemaNode $apSpec -path ("${path}$actual.")
         }
       }

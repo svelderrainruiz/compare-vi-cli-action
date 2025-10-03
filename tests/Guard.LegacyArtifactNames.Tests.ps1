@@ -30,40 +30,46 @@ Describe 'Legacy artifact name guard (Base.vi / Head.vi)' -Tag 'Unit','Guard' {
       '.git'
     )
     
-    # Build grep exclude arguments
-    $excludeArgs = @()
-    foreach ($item in $allowlist) {
-      $excludeArgs += '--exclude-dir'
-      $excludeArgs += $item
-      $excludeArgs += '--exclude'
-      $excludeArgs += $item
-    }
+    # Build allowlist hash for fast exclusion
+    $allowSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($a in $allowlist) { [void]$allowSet.Add($a) }
   }
   
   It 'finds no Base.vi references in scripts, tests, or module code (excluding allowlist)' {
-    $pattern = 'Base\.vi'
-    $args = @('-r', '-l', $pattern, '--include=*.ps1', '--include=*.psm1', '--include=*.psd1') + $excludeArgs + @($repoRoot)
-    $result = & grep @args 2>&1 | Where-Object { $_ -notmatch '^grep:' }
-    
-    if ($result) {
-      $msg = "Found legacy 'Base.vi' references in:`n$($result -join "`n")"
-      throw $msg
+    $extensions = @('*.ps1','*.psm1','*.psd1')
+    $hits = @()
+    foreach ($ext in $extensions) {
+      $files = Get-ChildItem -Path $repoRoot -Recurse -File -Filter $ext -ErrorAction SilentlyContinue | Where-Object {
+        $rel = (Resolve-Path $_.FullName).Path.Replace((Resolve-Path $repoRoot).Path,'').TrimStart('\\','/')
+        # Exclude allowlisted paths (directory segment or exact file)
+        $segments = $rel -split '[\\/]'
+        ($segments | ForEach-Object { if ($allowSet.Contains($_)) { $true } }) -notcontains $true
+      }
+      foreach ($f in $files) {
+        $contentHits = Select-String -LiteralPath $f.FullName -Pattern 'Base\.vi' -SimpleMatch -ErrorAction SilentlyContinue
+        if ($contentHits) { $hits += $f.FullName }
+      }
     }
-    
-    $result | Should -BeNullOrEmpty
+    if ($hits.Count -gt 0) { throw "Found legacy 'Base.vi' references in:`n$($hits -join "`n")" }
+    $hits | Should -BeNullOrEmpty
   }
   
   It 'finds no Head.vi references in scripts, tests, or module code (excluding allowlist)' {
-    $pattern = 'Head\.vi'
-    $args = @('-r', '-l', $pattern, '--include=*.ps1', '--include=*.psm1', '--include=*.psd1') + $excludeArgs + @($repoRoot)
-    $result = & grep @args 2>&1 | Where-Object { $_ -notmatch '^grep:' }
-    
-    if ($result) {
-      $msg = "Found legacy 'Head.vi' references in:`n$($result -join "`n")"
-      throw $msg
+    $extensions = @('*.ps1','*.psm1','*.psd1')
+    $hits = @()
+    foreach ($ext in $extensions) {
+      $files = Get-ChildItem -Path $repoRoot -Recurse -File -Filter $ext -ErrorAction SilentlyContinue | Where-Object {
+        $rel = (Resolve-Path $_.FullName).Path.Replace((Resolve-Path $repoRoot).Path,'').TrimStart('\\','/')
+        $segments = $rel -split '[\\/]'
+        ($segments | ForEach-Object { if ($allowSet.Contains($_)) { $true } }) -notcontains $true
+      }
+      foreach ($f in $files) {
+        $contentHits = Select-String -LiteralPath $f.FullName -Pattern 'Head\.vi' -SimpleMatch -ErrorAction SilentlyContinue
+        if ($contentHits) { $hits += $f.FullName }
+      }
     }
-    
-    $result | Should -BeNullOrEmpty
+    if ($hits.Count -gt 0) { throw "Found legacy 'Head.vi' references in:`n$($hits -join "`n")" }
+    $hits | Should -BeNullOrEmpty
   }
   
   It 'confirms VI1.vi and VI2.vi artifact files exist at repository root' {

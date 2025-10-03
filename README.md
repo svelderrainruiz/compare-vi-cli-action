@@ -520,6 +520,7 @@ The validate workflow now supports:
 
 - `FAIL_ON_NEW_STRUCTURAL` (env) – set to `true` to fail the job when a new structural issue category first appears (duplicate, hashMismatch, schema, etc.).
 - `SUMMARY_VERBOSE` (env) – set to `true` to expand the job summary with detailed change lists and per‑category structural deltas. (Can also be toggled via manual workflow dispatch input `summary-verbose`.)
+- `DELTA_FORCE_V2` (env) – when set to `true`, the delta script unconditionally emits `fixture-validation-delta-v2` (bounded deltas) without requiring the `-UseV2Schema` switch. Useful once consumers have migrated and v1 is considered deprecated.
 - Recursive schema-lite validation – `tools/Invoke-JsonSchemaLite.ps1` performs a lightweight recursive check of required fields, property types, array item types, `const`, `additionalProperties=false`, plus support for `enum`, `minimum`, and `maximum` (integers / numbers). This is intentionally minimal (no refs, no oneOf/anyOf) to stay dependency‑free.
 
 Example snippet for enabling verbose summary & strict failure:
@@ -530,7 +531,7 @@ env:
   SUMMARY_VERBOSE: 'true'
 ```
 
-### Enum, Range, and additionalProperties Validation (Schema-Lite)
+### Enum, Range, additionalProperties, and Date-Time Validation (Schema-Lite)
 
 When adding to a JSON schema consumed by `Invoke-JsonSchemaLite.ps1`, you can specify:
 
@@ -554,6 +555,8 @@ You can now also use **object-form `additionalProperties`** to define a schema f
   "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 10 }
 }
 ```
+
+Date-time format (`"format": "date-time"`) receives a light validation pass: it accepts either a native PowerShell `DateTime` (after JSON round-trip) or a basic ISO 8601 / RFC3339-style string matching `YYYY-MM-DDTHH:MM:SS`. (Timezone / fractional seconds currently not strictly validated—future extensions may tighten this.)
 
 Violations surface as `[schema-lite] error:` lines and produce exit code `3`.
 
