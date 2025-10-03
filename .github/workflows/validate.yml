@@ -32,6 +32,8 @@ jobs:
 
   fixtures:
     runs-on: [self-hosted, Windows, X64]
+    env:
+      FAIL_ON_NEW_STRUCTURAL: 'false' # toggle to 'true' to fail job on new structural fixture issues
     steps:
       - uses: actions/checkout@v5
       - name: Run fixture validator (JSON)
@@ -58,13 +60,23 @@ jobs:
           pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline fixture-validation-prev.json -Current fixture-validation.json -FailOnNewStructuralIssue > fixture-validation-delta.json
           if ($LASTEXITCODE -eq 3) {
             Write-Host 'New structural fixture issues detected (delta willFail=true).'
-            # Non-fatal here; choose to fail later if policy changes
+            if ($env:FAIL_ON_NEW_STRUCTURAL -eq 'true') {
+              Write-Error 'Failing job due to FAIL_ON_NEW_STRUCTURAL=true'
+              exit 3
+            } else {
+              Write-Host 'FAIL_ON_NEW_STRUCTURAL=false -> continuing without failing.'
+            }
           }
       - name: Validate delta JSON schema (basic)
         if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
         shell: pwsh
         run: |
           pwsh -File tools/Test-FixtureValidationDeltaSchema.ps1 -DeltaJsonPath fixture-validation-delta.json
+      - name: Lite schema validate (delta)
+        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
+        shell: pwsh
+        run: |
+          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation-delta.json -SchemaPath docs/schemas/fixture-validation-delta-v1.schema.json
       - name: Upload fixture validation delta JSON
         if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
         uses: actions/upload-artifact@v4
@@ -76,6 +88,13 @@ jobs:
         with:
           name: validate-fixture-validation-json
           path: fixture-validation.json
+      - name: Lite schema validate (snapshot)
+        shell: pwsh
+        run: |
+          if (Test-Path fixture-validation.json) { pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation.json -SchemaPath docs/schemas/fixture-manifest-v1.schema.json 2>$null || Write-Host 'Snapshot schema-lite skipped or failed (non-fatal).' }
+      - name: Append fixture summary
+        shell: pwsh
+        run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json
       - name: Save current snapshot to cache
         uses: actions/cache/save@v4
         with:
