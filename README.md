@@ -31,6 +31,8 @@ Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also:
 [`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at
 `.github/workflows/release.yml`.
 
+> Migration Note (v0.4.0): Examples now use canonical artifact names `VI1.vi` / `VI2.vi` instead of legacy `Base.vi` / `Head.vi`. Public action input names (`base`, `head`) and environment variables (`LV_BASE_VI`, `LV_HEAD_VI`) are unchanged for backward compatibility. Fallback logic still accepts legacy filenames if `VI1.vi` / `VI2.vi` are absent.
+
 ## Requirements
 
 - Self-hosted Windows runner with LabVIEW 2025 Q3 installed and licensed
@@ -49,10 +51,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: Compare VIs
         id: compare
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.1
         with:
-          base: path/to/base.vi
-          head: path/to/head.vi
+          base: path/to/VI1.vi
+          head: path/to/VI2.vi
           fail-on-diff: true
 
       - name: Act on result
@@ -104,10 +106,10 @@ See [`docs/action-outputs.md`](./docs/action-outputs.md) for complete output doc
 ```yaml
   - name: Compare VIs
     id: compare
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.1
     with:
-      base: Base.vi
-      head: Base.vi  # Intentional identical path
+  base: VI1.vi
+  head: VI1.vi  # Intentional identical path
       fail-on-diff: true
 
   - name: Handle identical-path short-circuit
@@ -171,11 +173,11 @@ When your VIs are in a subdirectory, use `working-directory` to avoid repeating 
 
 ```yaml
 - name: Compare VIs
-  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.1
   with:
     working-directory: my-labview-project
-    base: src/Base.vi
-    head: src/Head.vi
+  base: src/VI1.vi
+  head: src/VI2.vi
     lvCompareArgs: "-nobdcosm -nofppos -noattr"
 ```
 
@@ -195,7 +197,7 @@ For CI/CD pipelines and code reviews, you can generate HTML comparison reports u
 ```powershell
 # Generate single-file HTML report
 LabVIEWCLI -OperationName CreateComparisonReport `
-  -vi1 "path\to\base.vi" -vi2 "path\to\head.vi" `
+  -vi1 "path\to\VI1.vi" -vi2 "path\to\VI2.vi" `
   -reportType HTMLSingleFile -reportPath "CompareReport.html" `
   -nobdcosm -nofppos -noattr
 ```
@@ -220,8 +222,8 @@ When `Html` is selected a minimal fragment (no `<html>` wrapper) is produced:
 ```html
 <h3>VI Compare Diff Summary</h3>
 <ul>
-  <li><strong>Base:</strong> C:\path\to\Base.vi</li>
-  <li><strong>Head:</strong> C:\path\to\Head.vi</li>
+  <li><strong>VI1:</strong> C:\path\to\VI1.vi</li>
+  <li><strong>VI2:</strong> C:\path\to\VI2.vi</li>
   <li><strong>Diff Iterations:</strong> 4</li>
   <li><strong>Total Iterations:</strong> 12</li>
 </ul>
@@ -240,7 +242,7 @@ Example (synthetic diff loop, embedding in Actions summary):
 Import-Module ./module/CompareLoop/CompareLoop.psd1 -Force
 # Simulated executor returning diff (exit code 1)
 $diffExec = { param($c,$b,$h,$a) 1 }
-$r = Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 5 -IntervalSeconds 0 `
+$r = Invoke-IntegrationCompareLoop -Base VI1.vi -Head VI2.vi -MaxIterations 5 -IntervalSeconds 0 `
   -CompareExecutor $diffExec -SkipValidation -PassThroughPaths -BypassCliValidation `
   -DiffSummaryFormat Html -DiffSummaryPath diff-summary.html -Quiet
 if ($r.DiffSummary) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $r.DiffSummary }
@@ -275,10 +277,10 @@ Basic short-circuit vs real diff (single run):
 ```yaml
   - name: Compare VIs
     id: compare
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.1
     with:
-      base: Base.vi
-      head: Base.vi  # Intentional identical path
+  base: VI1.vi
+  head: VI1.vi  # Intentional identical path
       fail-on-diff: true
 
   - name: Handle identical-path short-circuit
@@ -356,8 +358,8 @@ Additional switches:
 Quick simulated run (no real LVCompare required):
 
 ```powershell
-$env:LV_BASE_VI = 'Base.vi'
-$env:LV_HEAD_VI = 'Head.vi'
+$env:LV_BASE_VI = 'VI1.vi'
+$env:LV_HEAD_VI = 'VI2.vi'
 $env:LOOP_SIMULATE = '1'
 $env:LOOP_DIFF_SUMMARY_FORMAT = 'Html'
 $env:LOOP_MAX_ITERATIONS = '15'
@@ -371,8 +373,8 @@ Excerpt output:
 
 ```text
 === Integration Compare Loop Result ===
-Base: Base.vi
-Head: Head.vi
+VI1: VI1.vi
+VI2: VI2.vi
 Iterations: 15 (Diffs=15 Errors=0)
 Latency p50/p90/p99: 0.005/0.006/0.007 s
 Diff summary fragment emitted.
@@ -426,8 +428,8 @@ GitHub Actions step example (simulated):
   - name: Autonomous integration loop (simulated)
     shell: pwsh
     run: |
-      $env:LV_BASE_VI = 'Base.vi'
-      $env:LV_HEAD_VI = 'Head.vi'
+  $env:LV_BASE_VI = 'VI1.vi'
+  $env:LV_HEAD_VI = 'VI2.vi'
       $env:LOOP_SIMULATE = '1'
       $env:LOOP_MAX_ITERATIONS = '30'
       $env:LOOP_INTERVAL_SECONDS = '0'
@@ -1250,10 +1252,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: Simulated latency loop
         id: loop
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.1
         with:
-          base: Base.vi
-          head: Head.vi
+          base: VI1.vi
+          head: VI2.vi
           loop-enabled: true
           loop-max-iterations: 40
           loop-interval-seconds: 0
@@ -1278,10 +1280,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: Hybrid percentile soak
         id: loop
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.0
+  uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.4.1
         with:
-          base: path/to/base.vi
-          head: path/to/head.vi
+          base: path/to/VI1.vi
+          head: path/to/VI2.vi
           fail-on-diff: "false"            # keep iterating even if diffs occur
           loop-enabled: true
           loop-max-iterations: 2000
@@ -1369,7 +1371,7 @@ Example hybrid run with reconciliation:
 ```powershell
 Import-Module ./module/CompareLoop/CompareLoop.psm1 -Force
 $exec = { param($cli,$b,$h,$args) Start-Sleep -Milliseconds (5 + (Get-Random -Max 10)); 0 }
-$r = Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 2000 -IntervalSeconds 0 `
+$r = Invoke-IntegrationCompareLoop -Base VI1.vi -Head VI2.vi -MaxIterations 2000 -IntervalSeconds 0 `
   -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -Quiet `
   -QuantileStrategy Hybrid -HybridExactThreshold 400 -StreamCapacity 500 -ReconcileEvery 2000
 $r.Percentiles
@@ -1443,7 +1445,7 @@ Quick example (custom list + histogram + snapshots every 5 iterations):
 
 ```powershell
 $exec = { param($cli,$b,$h,$args) Start-Sleep -Milliseconds (5 + (Get-Random -Max 20)); 0 }
-Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 25 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -CustomPercentiles '50 75 90 97.5 99.9' -MetricsSnapshotEvery 5 -MetricsSnapshotPath snapshots.ndjson -IncludeSnapshotHistogram -Quiet
+Invoke-IntegrationCompareLoop -Base VI1.vi -Head VI2.vi -MaxIterations 25 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -CustomPercentiles '50 75 90 97.5 99.9' -MetricsSnapshotEvery 5 -MetricsSnapshotPath snapshots.ndjson -IncludeSnapshotHistogram -Quiet
 Get-Content snapshots.ndjson | Select-Object -First 2
 ```
 
@@ -1461,7 +1463,7 @@ Run summary quick example:
 
 ```powershell
 $exec = { param($cli,$b,$h,$args) Start-Sleep -Milliseconds (5 + (Get-Random -Max 20)); 0 }
-Invoke-IntegrationCompareLoop -Base Base.vi -Head Head.vi -MaxIterations 40 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -CustomPercentiles '50,75,90,97.5,99.9' -HistogramBins 8 -RunSummaryJsonPath run-summary.json -Quiet
+Invoke-IntegrationCompareLoop -Base VI1.vi -Head VI2.vi -MaxIterations 40 -IntervalSeconds 0 -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -CustomPercentiles '50,75,90,97.5,99.9' -HistogramBins 8 -RunSummaryJsonPath run-summary.json -Quiet
 $summary = Get-Content run-summary.json -Raw | ConvertFrom-Json
 "Final p90: $($summary.percentiles.p90) seconds (schema=$($summary.schema))"
 ```
@@ -1684,8 +1686,8 @@ This repository includes a comprehensive Pester test suite. To run tests:
 ./Invoke-PesterTests.ps1
 
 # Integration tests (requires LabVIEW and LVCompare at canonical path)
-$env:LV_BASE_VI='Base.vi'
-$env:LV_HEAD_VI='Head.vi'
+$env:LV_BASE_VI='VI1.vi'
+$env:LV_HEAD_VI='VI2.vi'
 ./Invoke-PesterTests.ps1 -IncludeIntegration true
 ```
 
