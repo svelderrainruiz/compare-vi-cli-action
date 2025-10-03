@@ -1,0 +1,27 @@
+{
+  "schema": "integration-runbook-v1",
+  "generated": "2025-10-03T07:59:25.7685177+00:00",
+  "phases": [
+    {
+      "name": "Prereqs",
+      "status": "Passed",
+      "details": {
+        "powerShellOk": true,
+        "powerShellVersion": "7.4.12"
+      }
+    },
+    {
+      "name": "ViInputs",
+      "status": "Failed",
+      "details": {
+        "base": null,
+        "head": null,
+        "missing": [
+          "LV_BASE_VI",
+          "LV_HEAD_VI"
+        ]
+      }
+    }
+  ],
+  "overallStatus": "Failed"
+}
