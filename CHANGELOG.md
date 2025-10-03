@@ -7,7 +7,54 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-_No changes yet._
+### Added
+
+- Auto-close loop resiliency: `LOOP_CLOSE_LABVIEW` (graceful close + kill fallback) and `LOOP_CLOSE_LABVIEW_FORCE` (post-close `taskkill /F /IM LabVIEW.exe /T`).
+- Bitness guard: `Resolve-Cli` now inspects PE Machine field and rejects 32-bit `LVCompare.exe` at canonical path, providing actionable remediation guidance.
+- Stray LVCompare mitigation: loop detects and terminates 32-bit `LVCompare` processes; emits `lvcompareStrayKill` JSON event (`detected`, `killed`).
+- Enhanced labview close event: `labviewCloseAttempt` now includes `forceKill`, `forceKillSuccess`, and `graceMs` fields.
+- JSON events reference documentation plus troubleshooting rows for modal dialogs and bitness mismatch in `INTEGRATION_RUNBOOK.md`.
+- Tests: `Loop.AutoClose.Tests.ps1`, force-kill path test, stray LVCompare kill test, and bitness guard test (`CompareVI.BitnessGuard.Tests.ps1`).
+
+### Changed
+
+- Loop summary now surfaces auto-close mode (grace + forceKill state) and adds contextual troubleshooting hints.
+- Executor baseline normalizes non-canonical LVCompare path to the canonical 64-bit path when available.
+
+### Fixed
+
+- Eliminated stale process handle retention by disposing LVCompare and LabVIEW processes after each iteration.
+- Corrected synthetic PE header generation in new tests (proper `e_lfanew` byte writes) ensuring reliable bitness simulation.
+
+## [v0.4.1] - 2025-10-03
+
+### Added
+
+- Runbook automation: `scripts/Invoke-IntegrationRunbook.ps1` plus new integration guidance file `docs/INTEGRATION_RUNBOOK.md` documenting end‑to‑end environment validation & troubleshooting flows.
+- Runbook JSON schema (`integration-runbook-v1.schema.json`) establishing a stable shape for future automated auditing of runbook executions.
+- Release verification tooling: `scripts/Verify-ReleaseChecklist.ps1` producing structured `release-verify-summary.json` (pre‑tag gating of CHANGELOG version/date, outputs/doc sync, helper artifact presence, markdown lint cleanliness).
+- Short-circuit contract test: `CompareVI.ShortCircuitContract.Tests.ps1` validating `shortCircuitedIdentical` output and exit semantics.
+- Release helper documentation set: `PR_NOTES.md`, `TAG_PREP_CHECKLIST.md`, `POST_RELEASE_FOLLOWUPS.md`, `ROLLBACK_PLAN.md` to standardize release and rollback procedures.
+- Artifact naming migration assets retained with explicit `VI1.vi` / `VI2.vi` presence (legacy names still available this release for compatibility) preparing consumers for removal window.
+
+### Changed
+
+- Updated `action.yml`, `docs/action-outputs.md`, and README to reflect finalized `shortCircuitedIdentical` output semantics introduced in v0.4.0 and now enforced by dedicated contract tests.
+- Strengthened naming migration messaging (runtime warning and docs) ensuring clearer guidance ahead of v0.5.0 legacy removal.
+
+### Fixed
+
+- Ensured annotated release preparation no longer depends on unstaged migration artifacts by codifying checklist verifications (prevents partial tag scenarios).
+
+### Migration / Deprecation
+
+- `Base.vi` / `Head.vi` remain deprecated; fallback resolution still active for one more release cycle. Preferred names: `VI1.vi` / `VI2.vi`.
+- Planned removal of legacy fallback and expansion of guard tests to scripts + documentation in v0.5.0 (next minor). Consumers should update workflows now to avoid disruption.
+
+### Notes
+
+- Remote pre-existing v0.4.0 tag preserved; this patch release (v0.4.1) aggregates the finalized migration scaffolding, runbook schema, and verification tooling without rewriting history.
+
 
 ## [v0.4.0] - 2025-10-02
 
@@ -24,6 +71,8 @@ _No changes yet._
 - Nested discovery suppression logic (default on) preventing false-positive `discoveryFailures` counts from nested dispatcher invocations; configurable via `SUPPRESS_NESTED_DISCOVERY=0` to disable suppression for diagnostics.
 - Debug discovery scan instrumentation (`DEBUG_DISCOVERY_SCAN=1`) emitting `[debug-discovery]` console lines and contextual `discovery-debug.log` snippets (400 char window per match) to accelerate root-cause analysis.
 - Integration test file pre-filter: automatic exclusion of `*.Integration.Tests.ps1` at file selection stage when integration is disabled (unless `DISABLE_INTEGRATION_FILE_PREFILTER=1`). Reduces discovery/parsing overhead and eliminates extraneous skip noise.
+- Naming migration groundwork: preferred artifact filenames `VI1.vi` / `VI2.vi` introduced (superseding legacy `Base.vi` / `Head.vi`). Fallback resolution added to integration tests, scripts, and helper tooling with explicit migration note in docs.
+- Runtime migration warning: `CompareVI.ps1` emits `[NamingMigrationWarning]` when legacy names are detected to prompt early adoption.
 - Environment toggle `ENABLE_AGG_INT=1` to opt-in the aggregationHints integration smoke test (requires canonical LVCompare path + `LV_BASE_VI` + `LV_HEAD_VI`).
 - Dispatcher parameter echo block gated by `COMPARISON_ACTION_DEBUG=1` listing all bound parameters for reproducible issue reports.
 - README troubleshooting section documenting discovery failure diagnostics, suppression toggles, and variable initialization guidance for `-Skip` expressions.
@@ -32,6 +81,7 @@ _No changes yet._
 
 - README updated to reflect schema v1.3.0 and usage examples for `-EmitTimingDetail`.
 - README further updated for schemas up through v1.7.1, aggregation build timing metric (`aggregatorBuildMs`), and new discovery diagnostics environment variables (`SUPPRESS_NESTED_DISCOVERY`, `DEBUG_DISCOVERY_SCAN`, `DISABLE_INTEGRATION_FILE_PREFILTER`, `ENABLE_AGG_INT`, `COMPARISON_ACTION_DEBUG`).
+- Added migration note (artifact naming: `VI1.vi` / `VI2.vi` preferred; legacy names scheduled for removal in v0.5.0) to README and integration guide; updated examples across docs and module guide JSON examples to reflect new filenames while preserving schema key stability (`basePath`, `headPath`).
 - Added variable initialization best-practice note (ensure variables referenced in `-Skip:` expressions are defined at script top-level to avoid discovery-time errors).
 
 ### Tests
@@ -46,6 +96,7 @@ _No changes yet._
 - Discovery failure classification now elevates matches to `errors` only when there are no existing test failures or errors, preserving primary failure semantics while still preventing silent green runs.
 - File selection phase emits `pester-selected-files.txt` earlier for improved debuggability before Pester execution.
 - Aggregation hints generation now records build duration (`aggregatorBuildMs`) making performance of heuristic calculation observable in downstream manifests.
+- Console and diff summary labeling updated from `Base`/`Head` to `VI1`/`VI2` in loop/module outputs (human-facing only; JSON schema keys unchanged) for consistency with migration.
 
 ### Fixed
 
@@ -53,6 +104,14 @@ _No changes yet._
 - Eliminated spurious nested dispatcher discovery failure matches by counting summary headers and suppressing nested contexts (reduces noisy false error promotions).
 - Stabilized discovery scan output ordering & ANSI stripping ensuring deterministic test assertions across consoles.
 - Ensured `pester-summary.json` remains minimal when optional blocks not requested (no accidental emission of timing/stability/aggregation keys on baseline runs).
+- Guard test (`Migration.Guard.Naming.Tests.ps1`) enforces absence of legacy names within module scope preventing regression prior to full-scope expansion post deprecation window.
+
+### Migration / Deprecation
+
+- Legacy artifact filenames `Base.vi` / `Head.vi` are deprecated. They continue to function for this release via fallback but emit a warning at compare runtime.
+- Preferred naming is now `VI1.vi` / `VI2.vi`. Update workflows, environment variables (`LV_BASE_VI`, `LV_HEAD_VI`), and repository test assets accordingly.
+- Planned removal of legacy fallback & names: v0.5.0 (next minor). Guard scope will expand to scripts & docs at that time.
+- Schema field names (`basePath`, `headPath`) remain unchanged to preserve consumer compatibility; only human-facing examples updated.
 
 ## [v0.4.0-rc.1] - 2025-10-02
 
