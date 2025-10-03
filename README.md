@@ -31,7 +31,7 @@ Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also:
 [`CHANGELOG.md`](./CHANGELOG.md) and the release workflow at
 `.github/workflows/release.yml`.
 
-> Migration Note (v0.4.0): Examples now use canonical artifact names `VI1.vi` / `VI2.vi` instead of legacy `Base.vi` / `Head.vi`. Public action input names (`base`, `head`) and environment variables (`LV_BASE_VI`, `LV_HEAD_VI`) are unchanged for backward compatibility. Fallback logic still accepts legacy filenames if `VI1.vi` / `VI2.vi` are absent.
+> **Breaking Change (v0.5.0)**: Legacy artifact names `Base.vi` / `Head.vi` are no longer supported. Use `VI1.vi` / `VI2.vi` exclusively. Public action input names (`base`, `head`) and environment variables (`LV_BASE_VI`, `LV_HEAD_VI`) remain unchanged.
 
 ## Requirements
 
@@ -417,8 +417,8 @@ Final status example minimal structure:
   "percentiles": { "p50": 0.010, "p90": 0.018, "p99": 0.024 },
   "histogram": [ { "Index":0, "Start":0, "End":1, "Count":40 } ],
   "diffSummaryEmitted": true,
-  "basePath": "Base.vi",
-  "headPath": "Head.vi"
+  "basePath": "VI1.vi",
+  "headPath": "VI2.vi"
 }
 ```
 

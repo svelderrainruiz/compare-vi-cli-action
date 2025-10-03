@@ -95,7 +95,7 @@
   pwsh -File scripts/Run-AutonomousIntegrationLoop.ps1
 
   # Simulated diff soak with snapshots
-  $env:LV_BASE_VI='Base.vi'; $env:LV_HEAD_VI='Head.vi'
+  $env:LV_BASE_VI='VI1.vi'; $env:LV_HEAD_VI='VI2.vi'
   $env:LOOP_SIMULATE=1
   $env:LOOP_DIFF_SUMMARY_FORMAT='Html'
   $env:LOOP_MAX_ITERATIONS=25
