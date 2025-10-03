@@ -9,6 +9,7 @@ This document summarizes the implementation status of the ten follow-up issues d
 **Status**: Fully implemented
 
 **Changes**:
+
 - Removed all references to `Base.vi`/`Head.vi` from scripts, tests, and documentation
 - Updated to use `VI1.vi`/`VI2.vi` exclusively
 - Updated files:
@@ -24,6 +25,7 @@ This document summarizes the implementation status of the ten follow-up issues d
 **Status**: Completed
 
 **Changes**:
+
 - Verified no stale migration notes remain in active documentation
 - Confirmed documentation structure is clean and non-redundant
 - Updated migration note in README to reflect v0.5.0 breaking change
@@ -33,6 +35,7 @@ This document summarizes the implementation status of the ten follow-up issues d
 **Status**: Fully implemented
 
 **Changes**:
+
 - Created new test file: `tests/CompareLoop.HtmlDiffDeterminism.Tests.ps1`
 - Test coverage includes:
   - Byte-for-byte stability across multiple invocations
@@ -47,6 +50,7 @@ This document summarizes the implementation status of the ten follow-up issues d
 **Status**: Fully implemented
 
 **Changes**:
+
 - Created comprehensive guide: `docs/QUANTILE_ACCURACY.md`
 - Content includes:
   - Strategy comparison table (Exact/StreamingReservoir/Hybrid)
@@ -63,6 +67,7 @@ This document summarizes the implementation status of the ten follow-up issues d
 **Status**: Completed
 
 **Changes**:
+
 - Added v0.5.0 section with breaking changes notice
 - Documented legacy artifact naming removal
 - Included migration guide for v0.4.x → v0.5.0
@@ -77,6 +82,7 @@ The following issues require more substantial code changes to module internals a
 **Reason for Deferral**: Requires dispatcher final aggregation changes and new JSON schema fields
 
 **Scope**:
+
 - Add `classificationBreakdown` object to outcome block
 - Requires modification of `Invoke-PesterTests.ps1` aggregation logic
 - Need to add schema tests and backward compatibility checks
@@ -86,6 +92,7 @@ The following issues require more substantial code changes to module internals a
 **Reason for Deferral**: Requires dispatcher infrastructure additions
 
 **Scope**:
+
 - Add `-EnableCoverage` switch to dispatcher
 - Integrate PSProfiler or alternative coverage tool
 - Add coverage artifact emission and tests
@@ -95,6 +102,7 @@ The following issues require more substantial code changes to module internals a
 **Reason for Deferral**: Requires data collection and analysis from production runs
 
 **Scope**:
+
 - Collect metrics on discovery failure frequency across v0.4.x runs
 - Analyze false positive rates
 - Make informed decision on default strictness
@@ -105,6 +113,7 @@ The following issues require more substantial code changes to module internals a
 **Reason for Deferral**: Requires module code changes and schema updates
 
 **Scope**:
+
 - Add exit code distribution tracking
 - Add first/last diff timestamps
 - Add error burst detection
@@ -116,6 +125,7 @@ The following issues require more substantial code changes to module internals a
 **Reason for Deferral**: Requires runbook script enhancements
 
 **Scope**:
+
 - Detect `GITHUB_ACTIONS` environment
 - Add `-UploadArtifacts` switch or env variable
 - Capture and write stdout/stderr/exitcode files
@@ -127,6 +137,7 @@ The following issues require more substantial code changes to module internals a
 **Reason for Deferral**: Requires new script creation and schema design
 
 **Scope**:
+
 - Create `scripts/Generate-ConsolidatedDiagnostics.ps1`
 - Design and implement `consolidated-diagnostics` schema
 - Aggregate data from multiple sources (loop summary, events, discovery)
@@ -136,15 +147,18 @@ The following issues require more substantial code changes to module internals a
 ## Testing Summary
 
 **Unit Tests**: All passing
+
 - Total: 132 tests
 - Passed: 128
 - Failed: 4 (expected - require LVCompare.exe installation)
 - Skipped: 17 (integration tests skipped without environment)
 
 **Markdown Linting**: Clean
+
 - All documentation files pass markdownlint
 
 **Integration Tests**: Not run in this environment
+
 - Require LabVIEW installation and canonical LVCompare path
 - Expected to pass on self-hosted runners with proper setup
 
