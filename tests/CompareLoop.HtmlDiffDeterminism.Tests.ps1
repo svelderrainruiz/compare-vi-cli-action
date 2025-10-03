@@ -59,40 +59,29 @@ Describe 'Invoke-IntegrationCompareLoop HTML diff summary determinism' -Tag 'Uni
   }
 
   It 'properly HTML-encodes special characters in file paths' {
-    # Windows disallows < > " in file/directory names; simulate by embedding safe tokens then substituting
-    $rawDirName = 'path & _LT_special_GT_ _DQ_chars_DQ_'
-    $specialDir = Join-Path $TestDrive $rawDirName
-    New-Item -ItemType Directory -Path $specialDir -Force | Out-Null
+    # Use synthetic raw paths (not touching filesystem) with characters requiring HTML encoding.
+    $baseRaw = 'C:\FAKE\path & one <base> "file".vi'
+    $headRaw = 'D:\VIRTUAL\another & two <head> "file".vi'
 
-    $rawBase = 'base & file.vi'
-    $rawHead = 'head < file >.vi'
-    # Replace disallowed characters in actual filesystem paths but keep raw for assertion mapping
-    $fsBaseName = $rawBase -replace '<','_LT_' -replace '>','_GT_' -replace '"','_DQ_'
-    $fsHeadName = $rawHead -replace '<','_LT_' -replace '>','_GT_' -replace '"','_DQ_'
-    $baseSpecial = Join-Path $specialDir $fsBaseName
-    $headSpecial = Join-Path $specialDir $fsHeadName
-    'A' | Set-Content -Path $baseSpecial -Encoding utf8
-    'B' | Set-Content -Path $headSpecial -Encoding utf8
-    
     $executor = { param($cli,$b,$h,$lvArgs) return 1 }
-    
-    $result = Invoke-IntegrationCompareLoop -Base $baseSpecial -Head $headSpecial `
+
+    $result = Invoke-IntegrationCompareLoop -Base $baseRaw -Head $headRaw `
       -MaxIterations 2 -IntervalSeconds 0 -CompareExecutor $executor `
       -SkipValidation -PassThroughPaths -BypassCliValidation `
       -DiffSummaryFormat Html -Quiet
 
     $html = $result.DiffSummary
-    
-    # Verify HTML encoding (ampersand present, synthetic < > and " tokens encoded after substitution)
-    $html | Should -Match '&amp;'  # ampersand encoded
-    # We expect encoded placeholders for raw head path (simulate < and >)
-    # Because actual filesystem lacked < >, we inject them into a virtual displayed path by reverse mapping in module output.
-    $html | Should -Match '&lt;'   # less-than encoded
-    $html | Should -Match '&gt;'   # greater-than encoded
-    $html | Should -Match '&quot;' -Because 'double quote should be encoded if present'
-    # Ensure unencoded raw sequences not present
-    $html | Should -Not -Match 'base & file.vi'
-    $html | Should -Not -Match 'head < file >.vi'
+    $html | Should -Not -BeNullOrEmpty
+
+    # Assert encoded entities present
+    $html | Should -Match '&amp;'
+    $html | Should -Match '&lt;'
+    $html | Should -Match '&gt;'
+    $html | Should -Match '&quot;'
+
+    # Assert raw unencoded sequences (with special chars) are not present
+    $html | Should -Not -Match 'path & one <base>'
+    $html | Should -Not -Match 'two <head>'
   }
 
   It 'does not emit HTML fragment when no diffs detected' {
