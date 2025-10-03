@@ -1,15 +1,19 @@
 {
   "ok": false,
-  "exitCode": 3,
+  "exitCode": 4,
   "summary": "Fixture validation failed",
   "issues": [
     {
-      "type": "untracked",
-      "fixture": "VI1.vi"
+      "type": "tooSmall",
+      "fixture": "VI1.vi",
+      "length": 19,
+      "min": 32
     },
     {
-      "type": "untracked",
-      "fixture": "VI2.vi"
+      "type": "tooSmall",
+      "fixture": "VI2.vi",
+      "length": 8,
+      "min": 32
     }
   ],
   "manifestPresent": true,
@@ -20,8 +24,8 @@
   ],
   "summaryCounts": {
     "missing": 0,
-    "untracked": 2,
-    "tooSmall": 0,
+    "untracked": 0,
+    "tooSmall": 2,
     "hashMismatch": 0,
     "manifestError": 0,
     "duplicate": 0,
