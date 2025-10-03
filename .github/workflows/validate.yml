@@ -60,8 +60,13 @@ jobs:
             Write-Host 'New structural fixture issues detected (delta willFail=true).'
             # Non-fatal here; choose to fail later if policy changes
           }
+      - name: Validate delta JSON schema (basic)
+        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
+        shell: pwsh
+        run: |
+          pwsh -File tools/Test-FixtureValidationDeltaSchema.ps1 -DeltaJsonPath fixture-validation-delta.json
       - name: Upload fixture validation delta JSON
-        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && exists('fixture-validation-delta.json')
+        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: validate-fixture-validation-delta-json
