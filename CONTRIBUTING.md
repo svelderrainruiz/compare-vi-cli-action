@@ -5,7 +5,7 @@ Thank you for contributing to `compare-vi-cli-action`!
 ## Prerequisites
 
 - Self-hosted Windows runner with LabVIEW 2025 Q3 installed and licensed
-- Ability to provide LVCompare path via PATH, `LVCOMPARE_PATH`, or `lvComparePath`
+- LVCompare must be installed at the canonical path: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`; `LVCOMPARE_PATH` or `lvComparePath` may be used only if they resolve to this canonical location (no alternative install paths supported)
 
 ## Getting Started
 
