@@ -72,6 +72,26 @@ jobs:
           name: fixture-validation-json
           path: fixture-validation.json
 
+      - name: Enforce fixture policy (fail on disallowed issues)
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path fixture-validation.json)) { Write-Host 'No fixture-validation.json found'; exit 0 }
+          $data = Get-Content fixture-validation.json -Raw | ConvertFrom-Json
+          if (-not $data.ok) {
+            $disallowed = @('missing','untracked','hashMismatch','manifestError','duplicate','schema')
+            $found = @($data.issues | Where-Object { $disallowed -contains $_.type })
+            if ($found.Count -gt 0) {
+              Write-Host 'Disallowed fixture issues detected:'
+              $found | ForEach-Object { Write-Host " - $($_.type)" }
+              Write-Error 'Failing smoke due to disallowed fixture validation issues.'
+            } else {
+              Write-Host 'Only size (tooSmall) issues present; continuing.'
+            }
+          } else {
+            Write-Host 'Fixture validation clean.'
+          }
+
       - name: Resolve inputs from repo variables when empty
         id: res
         shell: pwsh

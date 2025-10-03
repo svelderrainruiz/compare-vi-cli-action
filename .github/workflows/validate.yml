@@ -29,3 +29,21 @@ jobs:
       - name: Run actionlint
         run: |
           ./bin/actionlint -color
+
+  fixtures:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run fixture validator (JSON)
+        shell: pwsh
+        run: |
+          pwsh -File tools/Validate-Fixtures.ps1 -Json -MinBytes 32 > fixture-validation.json
+          $data = Get-Content fixture-validation.json -Raw | ConvertFrom-Json
+          if (-not $data.ok) {
+            Write-Host 'Fixture validation issues detected. (Non-fatal: continuing for now)'
+          }
+      - name: Upload fixture validation JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: validate-fixture-validation-json
+          path: fixture-validation.json
