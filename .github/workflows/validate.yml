@@ -5,7 +5,12 @@ on:
     branches: [ main ]
   push:
     branches: [ main ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      summary-verbose:
+        description: 'Emit verbose fixture summary (sets SUMMARY_VERBOSE=true)'
+        required: false
+        default: 'false'
 
 jobs:
   lint:
@@ -34,6 +39,7 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     env:
       FAIL_ON_NEW_STRUCTURAL: 'false' # toggle to 'true' to fail job on new structural fixture issues
+      SUMMARY_VERBOSE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.summary-verbose || 'false' }}
     steps:
       - uses: actions/checkout@v5
       - name: Run fixture validator (JSON)

@@ -431,9 +431,18 @@ if ($LASTEXITCODE -eq 3) { throw 'New structural fixture issues detected.' }
 
 Structural issue categories monitored: `missing`, `untracked`, `hashMismatch`, `manifestError`, `duplicate`, `schema` (excludes `tooSmall`).
 
-### Output JSON (`fixture-validation-delta-v1`)
+### Output JSON (Schemas `fixture-validation-delta-v1` / `fixture-validation-delta-v2`)
 
 Key fields (see schema `docs/schemas/fixture-validation-delta-v1.schema.json`):
+
+Two schema versions are supported:
+
+- `fixture-validation-delta-v1` (default): Original unbounded integer deltas (only non-zero keys emitted in `deltaCounts`).
+- `fixture-validation-delta-v2` (opt-in): Adds **bounded** numeric constraints (each delta in `deltaCounts` and `changes[].delta` must be between `-1000` and `1000`). This guards against pathological explosions in issue growth and surfaces out-of-range spikes early via schema-lite.
+
+Opt-in to v2 emission by setting environment variable `DELTA_SCHEMA_VERSION=v2` or passing `-UseV2Schema` to `tools/Diff-FixtureValidationJson.ps1`.
+
+Example (v1 style):
 
 ```jsonc
 {
@@ -442,11 +451,28 @@ Key fields (see schema `docs/schemas/fixture-validation-delta-v1.schema.json`):
   "currentPath": "validate-current.json",
   "baselineOk": true,
   "currentOk": false,
-  "deltaCounts": { "duplicate": 1 },    // Only non-zero deltas
+  "deltaCounts": { "duplicate": 1 },
   "changes": [ { "category": "duplicate", "baseline": 0, "current": 1, "delta": 1 } ],
   "newStructuralIssues": [ { "category": "duplicate", "baseline": 0, "current": 1, "delta": 1 } ],
   "failOnNewStructuralIssue": true,
   "willFail": true
+}
+```
+
+Example (v2 style identical structure – bounded values enforced by schema):
+
+```jsonc
+{
+  "schema": "fixture-validation-delta-v2",
+  "baselinePath": "validate-prev.json",
+  "currentPath": "validate-current.json",
+  "baselineOk": true,
+  "currentOk": true,
+  "deltaCounts": { "missing": 2 },
+  "changes": [ { "category": "missing", "baseline": 0, "current": 2, "delta": 2 } ],
+  "newStructuralIssues": [ { "category": "missing", "baseline": 0, "current": 2, "delta": 2 } ],
+  "failOnNewStructuralIssue": false,
+  "willFail": false
 }
 ```
 
@@ -493,7 +519,7 @@ This pattern allows longitudinal tracking without hard-failing when no prior sna
 The validate workflow now supports:
 
 - `FAIL_ON_NEW_STRUCTURAL` (env) – set to `true` to fail the job when a new structural issue category first appears (duplicate, hashMismatch, schema, etc.).
-- `SUMMARY_VERBOSE` (env) – set to `true` to expand the job summary with detailed change lists and per‑category structural deltas.
+- `SUMMARY_VERBOSE` (env) – set to `true` to expand the job summary with detailed change lists and per‑category structural deltas. (Can also be toggled via manual workflow dispatch input `summary-verbose`.)
 - Recursive schema-lite validation – `tools/Invoke-JsonSchemaLite.ps1` performs a lightweight recursive check of required fields, property types, array item types, `const`, `additionalProperties=false`, plus support for `enum`, `minimum`, and `maximum` (integers / numbers). This is intentionally minimal (no refs, no oneOf/anyOf) to stay dependency‑free.
 
 Example snippet for enabling verbose summary & strict failure:
@@ -504,7 +530,7 @@ env:
   SUMMARY_VERBOSE: 'true'
 ```
 
-### Enum and Range Validation (Schema-Lite)
+### Enum, Range, and additionalProperties Validation (Schema-Lite)
 
 When adding to a JSON schema consumed by `Invoke-JsonSchemaLite.ps1`, you can specify:
 
@@ -516,6 +542,16 @@ When adding to a JSON schema consumed by `Invoke-JsonSchemaLite.ps1`, you can sp
     "retryCount": { "type": "integer", "minimum": 0, "maximum": 5 }
   },
   "required": ["status"]
+}
+```
+
+You can now also use **object-form `additionalProperties`** to define a schema for arbitrary extra keys (recursively validated, including nested `enum`, `minimum`, `maximum`). Example:
+
+```jsonc
+{
+  "type": "object",
+  "properties": { "fixed": { "type": "string" } },
+  "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 10 }
 }
 ```
 
@@ -540,7 +576,7 @@ To retain the rendered summary as an artifact for external dashboards, append:
       path: fixture-summary.md
 ```
 
-Set `SUMMARY_VERBOSE: 'true'` to enrich `fixture-summary.md` with the detailed sections.
+Set `SUMMARY_VERBOSE: 'true'` (or run the `Validate` workflow manually with the input `summary-verbose: true`) to enrich `fixture-summary.md` with detailed sections.
 
 
 For information on testing, building, documentation generation, and the release process, see the **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**.

@@ -13,7 +13,7 @@ try { $schema = Get-Content -LiteralPath $SchemaPath -Raw | ConvertFrom-Json -Er
 function Test-TypeMatch {
   param($val,[string]$type,[string]$path)
   switch ($type) {
-    'string' { if (-not ($val -is [string])) { return "Field '$path' expected type string" } }
+  'string' { if (-not ($val -is [string] -or $val -is [datetime])) { return "Field '$path' expected type string" } }
     'boolean' { if (-not ($val -is [bool])) { return "Field '$path' expected type boolean" } }
     'integer' { if (-not ($val -is [int] -or $val -is [long])) { return "Field '$path' expected integer" } }
     'number'  { if (-not ($val -is [double] -or $val -is [float] -or $val -is [decimal] -or $val -is [int] -or $val -is [long])) { return "Field '$path' expected number" } }
@@ -42,8 +42,8 @@ function Invoke-ValidateNode {
         }
   if ($spec.const -and $val -ne $spec.const) { $errs += "Field '$path$name' const mismatch (expected $($spec.const))" }
   if ($spec.enum -and $spec.enum.Count -gt 0 -and ($spec.enum -notcontains $val)) { $errs += "Field '$path$name' value '$val' not in enum [$($spec.enum -join ', ')]" }
-  if ($spec.minimum -ne $null -and ($spec.type -in @('integer','number')) -and $val -lt $spec.minimum) { $errs += "Field '$path$name' value $val below minimum $($spec.minimum)" }
-  if ($spec.maximum -ne $null -and ($spec.type -in @('integer','number')) -and $val -gt $spec.maximum) { $errs += "Field '$path$name' value $val above maximum $($spec.maximum)" }
+  if ($null -ne $spec.minimum -and ($spec.type -in @('integer','number')) -and $val -lt $spec.minimum) { $errs += "Field '$path$name' value $val below minimum $($spec.minimum)" }
+  if ($null -ne $spec.maximum -and ($spec.type -in @('integer','number')) -and $val -gt $spec.maximum) { $errs += "Field '$path$name' value $val above maximum $($spec.maximum)" }
         if ($spec.type -eq 'object' -and $spec.properties) {
           $errs += Invoke-ValidateNode -node $val -schemaNode $spec -path $childPath
         } elseif ($spec.type -eq 'array' -and $spec.items -and ($val -is [System.Array])) {
@@ -63,6 +63,24 @@ function Invoke-ValidateNode {
   if ($schemaNode.additionalProperties -eq $false -and $schemaNode.properties) {
     foreach ($actual in $node.PSObject.Properties.Name) {
       if ($schemaNode.properties.PSObject.Properties.Name -notcontains $actual) { $errs += "Unexpected field '${path}$actual'" }
+    }
+  } elseif ($schemaNode.additionalProperties -is [psobject]) {
+    # Validate each extra property against the additionalProperties spec
+    foreach ($actual in $node.PSObject.Properties.Name) {
+      if (-not $schemaNode.properties -or $schemaNode.properties.PSObject.Properties.Name -notcontains $actual) {
+        $val = $node.$actual
+        $apSpec = $schemaNode.additionalProperties
+        if ($apSpec.type) {
+          $tmAp = Test-TypeMatch -val $val -type $apSpec.type -path ("${path}$actual")
+          if ($tmAp) { $errs += $tmAp; continue }
+        }
+        if ($apSpec.enum -and $apSpec.enum.Count -gt 0 -and ($apSpec.enum -notcontains $val)) { $errs += "Field '${path}$actual' value '$val' not in enum [$($apSpec.enum -join ', ')]" }
+  if ($null -ne $apSpec.minimum -and ($apSpec.type -in @('integer','number')) -and $val -lt $apSpec.minimum) { $errs += "Field '${path}$actual' value $val below minimum $($apSpec.minimum)" }
+  if ($null -ne $apSpec.maximum -and ($apSpec.type -in @('integer','number')) -and $val -gt $apSpec.maximum) { $errs += "Field '${path}$actual' value $val above maximum $($apSpec.maximum)" }
+        if ($apSpec.type -eq 'object' -and $apSpec.properties) {
+          $errs += Invoke-ValidateNode -node $val -schemaNode $apSpec -path ("${path}$actual.")
+        }
+      }
     }
   }
   return $errs

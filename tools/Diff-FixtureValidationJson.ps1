@@ -17,7 +17,8 @@ param(
   [Parameter(Mandatory)][string]$Baseline,
   [Parameter(Mandatory)][string]$Current,
   [string]$Output,
-  [switch]$FailOnNewStructuralIssue
+  [switch]$FailOnNewStructuralIssue,
+  [switch]$UseV2Schema # if set (or env DELTA_SCHEMA_VERSION=v2) emit fixture-validation-delta-v2 with bounded validation expectations
 )
 
 ${ErrorActionPreference} = 'Stop'
@@ -80,8 +81,11 @@ foreach ($c in $cats) {
 $structural = 'missing','untracked','hashMismatch','manifestError','duplicate','schema'
 $newStructural = @($changeList | Where-Object { $_.category -in $structural -and $_.baseline -eq 0 -and $_.current -gt 0 })
 
+$schemaVersion = 'fixture-validation-delta-v1'
+if ($UseV2Schema -or $env:DELTA_SCHEMA_VERSION -eq 'v2') { $schemaVersion = 'fixture-validation-delta-v2' }
+
 $result = [ordered]@{
-  schema = 'fixture-validation-delta-v1'
+  schema = $schemaVersion
   baselinePath = $Baseline
   currentPath = $Current
   generatedAt = (Get-Date).ToString('o')
