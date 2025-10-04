@@ -312,7 +312,7 @@ Symptom: LabVIEW or LVCompare processes remain running after tests, or backgroun
 Resolution:
 
 - The dispatcher (`Invoke-PesterTests.ps1`) supports opt-in leak detection and cleanup.
-- Enable detection and (optionally) auto-kill with new switches or environment variables:
+- Enable detection and (optionally) auto-kill with new switches or environment variables.
 
 Parameters (PowerShell):
 
@@ -323,13 +323,7 @@ Parameters (PowerShell):
 - `-KillLeaks` — attempt to stop leaked processes and Pester jobs automatically before reporting.
 - `-CleanLabVIEW` / `-CleanAfter` — best-effort pre/post cleanup of `LabVIEW` and `LVCompare`.
 
-Environment toggles:
-
-- `DETECT_LEAKS=1`, `FAIL_ON_LEAKS=1`
-- `LEAK_PROCESS_PATTERNS="LVCompare,LabVIEW,LabVIEWCLI"` (comma/semicolon-separated)
-- `LEAK_GRACE_SECONDS=0.5`
-- `KILL_LEAKS=1`
-- `CLEAN_LABVIEW=1`, `CLEAN_AFTER=1`
+For a comprehensive environment variables table covering leak detection, cleanup, and artifact tracking, see the Environment appendix: `docs/ENVIRONMENT.md`.
 
 Example (unit tests only):
 
@@ -346,20 +340,6 @@ Artifacts:
 
 - `tests/results/pester-leak-report.json` — rich report with before/after process/job state, actions taken, and detection result (schema: `docs/schemas/pester-leak-report-v1.schema.json`).
 - `tests/results/pester-artifacts-trail.json` — optional when `-TrackArtifacts` is enabled; includes `procsBefore`/`procsAfter` snapshots for additional diagnostics.
-
-Environment variables quick reference:
-
-| Variable | Purpose | Accepted values | Default |
-|---------|---------|------------------|---------|
-| `DETECT_LEAKS` | Enable leak detection during run | `1`/`0` | `0` |
-| `FAIL_ON_LEAKS` | Fail the run if leaks are detected | `1`/`0` | `0` |
-| `KILL_LEAKS` | Attempt to auto-stop leaked procs/jobs | `1`/`0` | `0` |
-| `LEAK_PROCESS_PATTERNS` | Comma/semicolon-separated process patterns | e.g., `LVCompare,LabVIEW,LabVIEWCLI` | `LVCompare,LabVIEW` |
-| `LEAK_GRACE_SECONDS` | Seconds to wait before final leak check | float (e.g., `0.25`) | `0` |
-| `CLEAN_LABVIEW` | Pre-run best-effort stop of `LabVIEW`/`LVCompare` | `1`/`0` | `0` |
-| `CLEAN_AFTER` | Post-run best-effort stop of `LabVIEW`/`LVCompare` | `1`/`0` | `0` |
-| `SCAN_ARTIFACTS` | Enable artifact trail (pre/post hashing) | `1`/`0` | `0` |
-| `ARTIFACT_GLOBS` | Roots to include in trail | `;` or `,` separated paths | repo defaults |
 
 ## Capturing Diagnostic Logs
 

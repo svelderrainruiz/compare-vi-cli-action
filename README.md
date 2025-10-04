@@ -6,6 +6,7 @@
 [![Smoke test](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/smoke.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/smoke.yml)
 [![Test (mock)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml)
 [![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Action-blue?logo=github)](https://github.com/marketplace/actions/compare-vi-cli-action)
+[![Environment](https://img.shields.io/badge/docs-Environment%20Vars-6A5ACD)](./docs/ENVIRONMENT.md)
 
 ## Purpose
 
@@ -229,6 +230,8 @@ See [`docs/action-outputs.md`](./docs/action-outputs.md) for complete output doc
 ## Advanced Configuration
 
 For advanced configuration including lvCompareArgs recipes, working-directory usage, path resolution, and HTML report generation, see the **[Usage Guide](./docs/USAGE_GUIDE.md)**.
+
+Tip: Environment variables quick reference moved to the **[Environment appendix](./docs/ENVIRONMENT.md)**.
 
 ## Loop Mode
 
