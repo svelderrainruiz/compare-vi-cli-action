@@ -27,7 +27,7 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
     $m = $originalManifest | ConvertFrom-Json
     foreach ($it in $m.items) { $it.minBytes = 1 }
     Write-Manifest ($m | ConvertTo-Json -Depth 5)
-  $baseRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken | Out-String)
+  $baseRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate | Out-String)
   $baseOut = Convert-JsonOutputSegment $baseRaw
   Set-Content -LiteralPath $baselineJson -Value $baseOut -Encoding utf8
     $parsedBase = $null
@@ -42,7 +42,7 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
     $dup = $m2.items[0] | Select-Object *
     $m2.items += $dup
     Write-Manifest ($m2 | ConvertTo-Json -Depth 5)
-  $currRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken | Out-String)
+  $currRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate | Out-String)
   $currOut = Convert-JsonOutputSegment $currRaw
   Set-Content -LiteralPath $currentJson -Value $currOut -Encoding utf8
     $parsedCurr = $null

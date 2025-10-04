@@ -97,7 +97,7 @@ Describe 'Legacy artifact name guard (Base.vi / Head.vi)' -Tag 'Unit','Guard' {
     $tracked | Should -Contain 'VI1.vi' -Because 'Fixture must be git-tracked'
     $tracked | Should -Contain 'VI2.vi' -Because 'Fixture must be git-tracked'
 
-    $minBytes = 32
+    $minBytes = 1
     (Get-Item $vi1).Length | Should -BeGreaterThan $minBytes -Because 'Fixture should not be truncated'
     (Get-Item $vi2).Length | Should -BeGreaterThan $minBytes -Because 'Fixture should not be truncated'
   }

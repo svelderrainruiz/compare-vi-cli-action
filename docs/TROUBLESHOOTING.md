@@ -305,6 +305,48 @@ PowerShell parameter binding anomaly can inject null values during Pester discov
 
 Ensure all `$TestDrive` and dynamic file creation occurs inside `BeforeAll` or `It` blocks, never at script top-level during discovery.
 
+### Leak Detection and Cleanup
+
+Symptom: LabVIEW or LVCompare processes remain running after tests, or background Pester jobs persist between runs.
+
+Resolution:
+
+- The dispatcher (`Invoke-PesterTests.ps1`) supports opt-in leak detection and cleanup.
+- Enable detection and (optionally) auto-kill with new switches or environment variables:
+
+Parameters (PowerShell):
+
+- `-DetectLeaks` — emit `tests/results/pester-leak-report.json` describing leaked processes/jobs.
+- `-FailOnLeaks` — fail the run if leaks are detected.
+- `-LeakProcessPatterns` — array of process name patterns (wildcards allowed) to treat as leaks. Default: `LVCompare`, `LabVIEW`.
+- `-LeakGraceSeconds` — wait this many seconds before final leak check to allow natural shutdown.
+- `-KillLeaks` — attempt to stop leaked processes and Pester jobs automatically before reporting.
+- `-CleanLabVIEW` / `-CleanAfter` — best-effort pre/post cleanup of `LabVIEW` and `LVCompare`.
+
+Environment toggles:
+
+- `DETECT_LEAKS=1`, `FAIL_ON_LEAKS=1`
+- `LEAK_PROCESS_PATTERNS="LVCompare,LabVIEW,LabVIEWCLI"` (comma/semicolon-separated)
+- `LEAK_GRACE_SECONDS=0.5`
+- `KILL_LEAKS=1`
+- `CLEAN_LABVIEW=1`, `CLEAN_AFTER=1`
+
+Example (unit tests only):
+
+```powershell
+pwsh -File ./Invoke-PesterTests.ps1 `
+   -IncludeIntegration false `
+   -CleanLabVIEW -CleanAfter `
+   -DetectLeaks -FailOnLeaks -KillLeaks `
+   -LeakProcessPatterns LVCompare,LabVIEW `
+   -LeakGraceSeconds 0.25
+```
+
+Artifacts:
+
+- `tests/results/pester-leak-report.json` — rich report with before/after process/job state, actions taken, and detection result (schema: `docs/schemas/pester-leak-report-v1.schema.json`).
+- `tests/results/pester-artifacts-trail.json` — optional when `-TrackArtifacts` is enabled; includes `procsBefore`/`procsAfter` snapshots for additional diagnostics.
+
 ## Capturing Diagnostic Logs
 
 ### LVCompare stderr/stdout

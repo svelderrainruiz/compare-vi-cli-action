@@ -16,7 +16,16 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
   It 'emits JSON with expected schema id and core properties (subset phases)' {
     $tmp = Join-Path $runRoot 'tmp-runbook.json'
     if (Test-Path $tmp) { Remove-Item $tmp -Force }
-    $proc = Start-Process pwsh -ArgumentList '-NoLogo','-NoProfile','-File',$runScript,'-Phases','Prereqs,ViInputs','-JsonReport',$tmp -PassThru -Wait
+    # Provide real VI inputs to satisfy ViInputs phase
+    $oldBase = $env:LV_BASE_VI; $oldHead = $env:LV_HEAD_VI
+    try {
+      $env:LV_BASE_VI = (Join-Path $runRoot 'VI1.vi')
+      $env:LV_HEAD_VI = (Join-Path $runRoot 'VI2.vi')
+      $proc = Start-Process pwsh -ArgumentList '-NoLogo','-NoProfile','-File',$runScript,'-Phases','Prereqs,ViInputs','-JsonReport',$tmp -PassThru -Wait
+    } finally {
+      if ($null -ne $oldBase) { $env:LV_BASE_VI = $oldBase } else { Remove-Item Env:LV_BASE_VI -ErrorAction SilentlyContinue }
+      if ($null -ne $oldHead) { $env:LV_HEAD_VI = $oldHead } else { Remove-Item Env:LV_HEAD_VI -ErrorAction SilentlyContinue }
+    }
     $proc.ExitCode | Should -Be 0
     Test-Path $tmp | Should -BeTrue
     $json = Get-Content $tmp -Raw | ConvertFrom-Json
@@ -45,11 +54,19 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
   }
 
   It 'supports Loop phase selection (simulation suppressed) without requiring CLI' {
-    # Provide fake base/head to satisfy ViInputs when requested
+    # Provide base/head to satisfy ViInputs; prefer committed fixtures, otherwise create temp stand-ins
     $baseFile = Join-Path $runRoot 'VI1.vi'
     $headFile = Join-Path $runRoot 'VI2.vi'
-    Set-Content $baseFile 'dummy' -Encoding utf8
-    Set-Content $headFile 'dummy2' -Encoding utf8
+    $createdTemp = $false
+    if (-not (Test-Path $baseFile) -or -not (Test-Path $headFile)) {
+      $tmpDir = Join-Path $runRoot 'tmp-runbook-fixtures'
+      if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir | Out-Null }
+      $baseFile = Join-Path $tmpDir 'VI1.vi'
+      $headFile = Join-Path $tmpDir 'VI2.vi'
+      Set-Content $baseFile 'dummy' -Encoding utf8
+      Set-Content $headFile 'dummy2' -Encoding utf8
+      $createdTemp = $true
+    }
     try {
       $env:LV_BASE_VI = $baseFile
       $env:LV_HEAD_VI = $headFile
@@ -61,8 +78,12 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
       $json = Get-Content $tmp -Raw | ConvertFrom-Json
       ($json.phases | ForEach-Object name) -contains 'Loop' | Should -BeTrue
     } finally {
-      Remove-Item $baseFile -ErrorAction SilentlyContinue
-      Remove-Item $headFile -ErrorAction SilentlyContinue
+      if ($createdTemp) {
+        Remove-Item $baseFile -ErrorAction SilentlyContinue
+        Remove-Item $headFile -ErrorAction SilentlyContinue
+        $tmpDir = Join-Path $runRoot 'tmp-runbook-fixtures'
+        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+      }
       Remove-Item Env:LV_BASE_VI -ErrorAction SilentlyContinue
       Remove-Item Env:LV_HEAD_VI -ErrorAction SilentlyContinue
     }

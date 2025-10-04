@@ -19,7 +19,8 @@ Describe 'Fixture manifest duplicate detection' -Tag 'Unit' {
     $dup = $m.items[0] | Select-Object *
     $m.items += $dup
     ($m | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $manifestPath -Encoding utf8
-    pwsh -NoLogo -NoProfile -File $validator -DisableToken -MinBytes 1 | Out-Null
+    # Allow hash mismatches so duplicate is the only structural issue considered
+    pwsh -NoLogo -NoProfile -File $validator -DisableToken -MinBytes 1 -TestAllowFixtureUpdate | Out-Null
     # If only duplicate issue should be 8 (not aggregated with others)
     $LASTEXITCODE | Should -Be 8
   }

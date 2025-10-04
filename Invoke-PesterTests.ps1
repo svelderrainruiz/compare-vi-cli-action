@@ -66,11 +66,57 @@ param(
   [Parameter(Mandatory = $false)]
   [switch]$EmitOutcome,
   # Optional: emit aggregationHints block (schema v1.7.1+ with timing metric)
-  [switch]$EmitAggregationHints
+  [switch]$EmitAggregationHints,
+
+  # Opt-in: ensure LabVIEW/LVCompare are not left running before/after tests
+  [Parameter(Mandatory = $false)]
+  [switch]$CleanLabVIEW,
+
+  # Opt-in: also close LVCompare/LabVIEW after tests complete
+  [Parameter(Mandatory = $false)]
+  [switch]$CleanAfter,
+
+  # Opt-in: track artifacts created/modified/deleted by the test run
+  [Parameter(Mandatory = $false)]
+  [switch]$TrackArtifacts,
+  # Optional glob/paths (relative to repo root or absolute) to include in tracking
+  [Parameter(Mandatory = $false)]
+  [string[]]$ArtifactGlobs,
+
+  # Leak detection: detect lingering LabVIEW/LVCompare processes or Pester jobs
+  [Parameter(Mandatory = $false)]
+  [switch]$DetectLeaks,
+  # When set, fail the run if leaks are detected
+  [Parameter(Mandatory = $false)]
+  [switch]$FailOnLeaks,
+
+  # Leak detection options (additive):
+  # - Custom process name patterns (wildcards allowed) to consider as leaks (default: 'LVCompare','LabVIEW')
+  [Parameter(Mandatory = $false)]
+  [string[]]$LeakProcessPatterns,
+  # - Grace period (seconds) to wait before final leak check (allows natural shutdown)
+  [Parameter(Mandatory = $false)]
+  [double]$LeakGraceSeconds = 0,
+  # - Attempt automatic cleanup of detected leaks (stop processes and jobs)
+  [Parameter(Mandatory = $false)]
+  [switch]$KillLeaks
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Env toggle support: CLEAN_LABVIEW=1 and/or CLEAN_AFTER=1 act as implicit switches
+if (-not $CleanLabVIEW) { $CleanLabVIEW = ($env:CLEAN_LABVIEW -eq '1') }
+if (-not $CleanAfter)   { $CleanAfter   = ($env:CLEAN_AFTER   -eq '1') }
+if (-not $TrackArtifacts) { $TrackArtifacts = ($env:SCAN_ARTIFACTS -eq '1') }
+if (-not $ArtifactGlobs -and $env:ARTIFACT_GLOBS) { $ArtifactGlobs = ($env:ARTIFACT_GLOBS -split ';|,') }
+if (-not $DetectLeaks) { $DetectLeaks = ($env:DETECT_LEAKS -eq '1') }
+if (-not $FailOnLeaks) { $FailOnLeaks = ($env:FAIL_ON_LEAKS -eq '1') }
+if (-not $LeakProcessPatterns -and $env:LEAK_PROCESS_PATTERNS) { $LeakProcessPatterns = ($env:LEAK_PROCESS_PATTERNS -split ';|,') }
+if ($env:LEAK_GRACE_SECONDS) {
+  try { $LeakGraceSeconds = [double]$env:LEAK_GRACE_SECONDS } catch {}
+}
+if (-not $KillLeaks) { $KillLeaks = ($env:KILL_LEAKS -eq '1') }
 
 # Derive effective timeout seconds (seconds param takes precedence if >0)
 $effectiveTimeoutSeconds = 0
@@ -81,6 +127,7 @@ elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinu
 $SchemaSummaryVersion  = '1.7.1'
 $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
+${SchemaLeakReportVersion} = '1.0.0'
 
 function Ensure-FailuresJson {
   param(
@@ -153,6 +200,14 @@ function Write-ArtifactManifest {
     $failuresPath = Join-Path $Directory 'pester-failures.json'
     if (Test-Path -LiteralPath $failuresPath) {
       $artifacts += [PSCustomObject]@{ file = 'pester-failures.json'; type = 'jsonFailures'; schemaVersion = $SchemaFailuresVersion }
+    }
+    $trailPath = Join-Path $Directory 'pester-artifacts-trail.json'
+    if (Test-Path -LiteralPath $trailPath) {
+      $artifacts += [PSCustomObject]@{ file = 'pester-artifacts-trail.json'; type = 'jsonTrail' }
+    }
+    $leakPath = Join-Path $Directory 'pester-leak-report.json'
+    if (Test-Path -LiteralPath $leakPath) {
+      $artifacts += [PSCustomObject]@{ file = 'pester-leak-report.json'; type = 'jsonLeaks'; schemaVersion = $SchemaLeakReportVersion }
     }
     
     # Optional: include lightweight metrics if summary JSON exists
@@ -278,6 +333,18 @@ Write-Host "  Emit Failures JSON Always: $EmitFailuresJsonAlways"
 Write-Host "  Timeout Minutes: $TimeoutMinutes"
 Write-Host "  Timeout Seconds: $TimeoutSeconds"
 Write-Host "  Max Test Files: $MaxTestFiles"
+Write-Host "  Clean LabVIEW before: $CleanLabVIEW"
+Write-Host "  Clean after run: $CleanAfter"
+Write-Host "  Track Artifacts: $TrackArtifacts"
+if ($ArtifactGlobs) { Write-Host ("  Artifact Roots: {0}" -f ($ArtifactGlobs -join ', ')) }
+Write-Host "  Detect Leaks: $DetectLeaks"
+Write-Host "  Fail On Leaks: $FailOnLeaks"
+if ($DetectLeaks) {
+  $dbgLeakTargets = if ($LeakProcessPatterns -and $LeakProcessPatterns.Count -gt 0) { $LeakProcessPatterns } else { @('LVCompare','LabVIEW') }
+  Write-Host ("  Leak Targets: {0}" -f ($dbgLeakTargets -join ', '))
+  Write-Host ("  Leak Grace Seconds: {0}" -f $LeakGraceSeconds)
+  Write-Host ("  Kill Leaks: {0}" -f $KillLeaks)
+}
 Write-Host ""
 
 # Debug instrumentation (opt-in via COMPARISON_ACTION_DEBUG=1)
@@ -332,6 +399,115 @@ if (-not (Test-Path -LiteralPath $testsDir -PathType Container)) {
   exit 1
 }
 
+# Lightweight helpers to close LVCompare/LabVIEW (Windows-only). Best-effort; never throw.
+function _Stop-ProcsSafely {
+  param([string[]]$Names)
+  foreach ($n in $Names) {
+    try { Stop-Process -Name $n -Force -ErrorAction SilentlyContinue } catch {}
+  }
+}
+function _Report-Procs {
+  param([string[]]$Names)
+  try {
+    $live = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $Names -contains $_.ProcessName })
+    if ($live.Count -gt 0) {
+      $list = ($live | Select-Object -First 5 | ForEach-Object { "{0}(PID {1})" -f $_.ProcessName,$_.Id }) -join ', '
+      Write-Host "[proc] still running: $list" -ForegroundColor DarkYellow
+    } else {
+      Write-Host "[proc] none running: $($Names -join ', ')" -ForegroundColor DarkGray
+    }
+  } catch {}
+}
+
+# Summarize targeted processes (for diagnostics in artifact trail)
+function _Get-ProcsSummary {
+  param([string[]]$Names)
+  try {
+    $live = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $Names -contains $_.ProcessName })
+    $arr = @()
+    foreach ($p in $live) { $arr += [pscustomobject]@{ name=$p.ProcessName; pid=$p.Id; startTime=$p.StartTime } }
+    return $arr
+  } catch { return @() }
+}
+
+# Find processes by name patterns (wildcards allowed, case-insensitive)
+function _Find-ProcsByPattern {
+  param([string[]]$Patterns)
+  try {
+    if (-not $Patterns -or $Patterns.Count -eq 0) { return @() }
+    $all = @(Get-Process -ErrorAction SilentlyContinue)
+    $hits = @()
+    foreach ($p in $all) {
+      foreach ($pat in $Patterns) {
+        if ([string]::IsNullOrWhiteSpace($pat)) { continue }
+        if ($p.ProcessName -like $pat) { $hits += $p; break }
+      }
+    }
+    return $hits
+  } catch { return @() }
+}
+
+# Stop jobs safely matching Pester-related names
+function _Stop-JobsSafely {
+  param([System.Collections.IEnumerable]$Jobs)
+  foreach ($j in $Jobs) {
+    try { Stop-Job -Job $j -ErrorAction SilentlyContinue } catch {}
+    try { Remove-Job -Job $j -Force -ErrorAction SilentlyContinue } catch {}
+  }
+}
+
+# Resolve artifact roots against repo root
+function _Resolve-ArtifactRoots {
+  param([string[]]$Roots,[string]$Base)
+  $uniq = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($r in $Roots) {
+    if ([string]::IsNullOrWhiteSpace($r)) { continue }
+    $path = if ([System.IO.Path]::IsPathRooted($r)) { $r } else { Join-Path $Base $r }
+    try { $full = (Resolve-Path -LiteralPath $path -ErrorAction SilentlyContinue).Path } catch { $full = $path }
+    [void]$uniq.Add($full)
+  }
+  return @($uniq)
+}
+
+# Build file snapshot with SHA256 (best-effort)
+function _Build-Snapshot {
+  param([string[]]$Roots,[string]$Base)
+  $index = @{}
+  foreach ($dir in $Roots) {
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
+    $files = @(Get-ChildItem -LiteralPath $dir -Recurse -File -ErrorAction SilentlyContinue)
+    foreach ($f in $files) {
+      try {
+        $rel = if ($f.FullName.StartsWith($Base,[System.StringComparison]::OrdinalIgnoreCase)) { $f.FullName.Substring($Base.Length).TrimStart('\\','/') } else { $f.FullName }
+        $hash = $null
+        try { $hash = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256 -ErrorAction Stop).Hash } catch {}
+        $index[$rel] = [pscustomobject]@{ path=$rel; length=$f.Length; lastWrite=($f.LastWriteTimeUtc.ToString('o')); sha256=$hash }
+      } catch {}
+    }
+  }
+  return $index
+}
+
+# Pre-clean if requested
+if ($CleanLabVIEW) {
+  Write-Host "Pre-run cleanup: stopping LabVIEW.exe and LVCompare.exe" -ForegroundColor DarkGray
+  _Stop-ProcsSafely -Names @('LVCompare','LabVIEW')
+  Start-Sleep -Milliseconds 200
+  _Report-Procs -Names @('LVCompare','LabVIEW')
+}
+
+# Artifact tracking pre-snapshot (optional)
+$script:artifactTrail = $null
+$preIndex = $null
+$artifactRoots = @()
+if ($TrackArtifacts) {
+  if (-not $ArtifactGlobs -or $ArtifactGlobs.Count -eq 0) {
+    $ArtifactGlobs = @('tests/results','results','tmp-agg/results','scratch-schema-test/results')
+  }
+  $artifactRoots = _Resolve-ArtifactRoots -Roots $ArtifactGlobs -Base $root
+  try { $preIndex = _Build-Snapshot -Roots $artifactRoots -Base $root } catch { $preIndex = @{} }
+}
+
 # Count test files (respect single file mode)
 if ($limitToSingle) {
   $testFiles = @([IO.FileInfo]::new($singleTestFile))
@@ -378,6 +554,51 @@ if ($testFiles.Count -eq 0) {
   if (-not (Test-Path -LiteralPath $jsonSummaryEarly)) {
     $jsonObj = [pscustomobject]@{ total=0; passed=0; failed=0; errors=0; skipped=0; duration_s=0.0; timestamp=(Get-Date).ToString('o'); pesterVersion=''; includeIntegration=$false; schemaVersion=$SchemaSummaryVersion }
     $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryEarly -Encoding utf8 -ErrorAction SilentlyContinue
+  }
+
+  # Optional: run leak detection even when no tests discovered
+  if ($DetectLeaks) {
+    try {
+      $leakTargets = if ($LeakProcessPatterns -and $LeakProcessPatterns.Count -gt 0) { $LeakProcessPatterns } else { @('LVCompare','LabVIEW') }
+      $procsBeforeLeak = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } })
+      $jobsBeforeLeak = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } })
+      $waitedMs = 0
+      if ($LeakGraceSeconds -gt 0) { $ms = [int]([math]::Round($LeakGraceSeconds*1000)); Start-Sleep -Milliseconds $ms; $waitedMs = $ms }
+      $procsAfter = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } })
+      $pesterJobs = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } })
+      $runningJobs = @($pesterJobs | Where-Object { $_.state -eq 'Running' -or $_.state -eq 'NotStarted' })
+      $leakDetected = (($procsAfter.Count -gt 0) -or ($runningJobs.Count -gt 0))
+      $actions=@(); $killed=@(); $stoppedJobs=@()
+      if ($leakDetected -and $KillLeaks) {
+        try { foreach ($p in (_Find-ProcsByPattern -Patterns $leakTargets)) { try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; $killed += [pscustomobject]@{ name=$p.ProcessName; pid=$p.Id } } catch {} } if ($killed.Count -gt 0) { $actions += ("killedProcs:{0}" -f $killed.Count) } } catch {}
+        try { $jobsForStop = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' }); foreach ($j in $jobsForStop) { $stoppedJobs += [pscustomobject]@{ id=$j.Id; name=$j.Name; state=$j.State } }; _Stop-JobsSafely -Jobs $jobsForStop; if ($jobsForStop.Count -gt 0) { $actions += ("stoppedJobs:{0}" -f $jobsForStop.Count) } } catch {}
+        try { $procsAfter = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } }) } catch {}
+        try { $pesterJobs = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } }) } catch {}
+        $runningJobs = @($pesterJobs | Where-Object { $_.state -eq 'Running' -or $_.state -eq 'NotStarted' })
+        $leakDetected = (($procsAfter.Count -gt 0) -or ($runningJobs.Count -gt 0))
+      }
+      $leakReport = [pscustomobject]@{
+        schema         = 'pester-leak-report/v1'
+        schemaVersion  = ${SchemaLeakReportVersion}
+        generatedAt    = (Get-Date).ToString('o')
+        targets        = $leakTargets
+        graceSeconds   = $LeakGraceSeconds
+        waitedMs       = $waitedMs
+        procsBefore    = $procsBeforeLeak
+        procsAfter     = $procsAfter
+        runningJobs    = $runningJobs
+        allJobs        = $pesterJobs
+        jobsBefore     = $jobsBeforeLeak
+        leakDetected   = $leakDetected
+        actions        = $actions
+        killedProcs    = $killed
+        stoppedJobs    = $stoppedJobs
+        notes          = @('Leak = LabVIEW/LVCompare (or configured targets) still running or Pester jobs still active after test run')
+      }
+      $leakPathOut = Join-Path $resultsDir 'pester-leak-report.json'
+      $leakReport | ConvertTo-Json -Depth 6 | Out-File -FilePath $leakPathOut -Encoding utf8 -ErrorAction SilentlyContinue
+      if ($leakDetected -and $FailOnLeaks) { Write-Error 'Failing run due to detected leaks (processes/jobs)'; exit 1 }
+    } catch { Write-Warning "Leak detection (early-exit) failed: $_" }
   }
   Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryEarly -ManifestVersion $SchemaManifestVersion
   Write-Host 'No test files found. Placeholder artifacts emitted.' -ForegroundColor Yellow
@@ -525,6 +746,7 @@ $testStartTime = Get-Date
 $capturedOutputLines = @()  # Will hold textual console lines for discovery failure scanning (non-timeout path)
 $partialLogPath = $null     # Set when timeout job path uses partial logging
 $result = $null              # Initialize result object holder to satisfy StrictMode before first conditional access
+try {
 if ($effectiveTimeoutSeconds -gt 0) {
   Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
   $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
@@ -625,6 +847,37 @@ Write-Host "----------------------------------------" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "Test execution completed in $($testDuration.TotalSeconds.ToString('F2')) seconds" -ForegroundColor Green
 Write-Host ""
+
+# Artifact tracking post-snapshot and delta
+if ($TrackArtifacts) {
+  try {
+    $postIndex = _Build-Snapshot -Roots $artifactRoots -Base $root
+    $preKeys = @($preIndex.Keys)
+    $postKeys = @($postIndex.Keys)
+    $created = @($postKeys | Where-Object { $preKeys -notcontains $_ } | Sort-Object)
+    $deleted = @($preKeys | Where-Object { $postKeys -notcontains $_ } | Sort-Object)
+    $modified = @()
+    foreach ($k in ($postKeys | Where-Object { $preKeys -contains $_ })) {
+      $a = $preIndex[$k]; $b = $postIndex[$k]
+      if ($null -eq $a -or $null -eq $b) { continue }
+      if ($a.length -ne $b.length -or $a.sha256 -ne $b.sha256 -or $a.lastWrite -ne $b.lastWrite) { $modified += $k }
+    }
+    $script:artifactTrail = [pscustomobject]@{
+      schema       = 'pester-artifact-trail/v1'
+      generatedAt  = (Get-Date).ToString('o')
+      scanRoots    = $artifactRoots
+      basePath     = $root
+      hashAlgorithm= 'SHA256'
+      preCount     = $preIndex.Count
+      postCount    = $postIndex.Count
+      created      = @($created | ForEach-Object { $postIndex[$_] })
+      deleted      = @($deleted | ForEach-Object { $preIndex[$_] })
+      modified     = @($modified | Sort-Object | ForEach-Object { [pscustomobject]@{ path=$_; before=$preIndex[$_]; after=$postIndex[$_] } })
+      procsBefore  = @(_Get-ProcsSummary -Names @('LVCompare','LabVIEW'))
+      procsAfter   = @()
+    }
+  } catch { Write-Warning "Artifact trail build failed: $_" }
+}
 
 # Detect discovery failures in captured output (inline) or partial log (timeout path)
 $discoveryFailurePatterns = @(
@@ -778,6 +1031,17 @@ try {
   Write-Host "Summary written to: $summaryPath" -ForegroundColor Gray
 } catch {
   Write-Warning "Failed to write summary file: $_"
+}
+
+# Persist artifact trail (if collected)
+if ($TrackArtifacts -and $script:artifactTrail) {
+  try {
+    # Update procsAfter right before writing trail
+    $script:artifactTrail.procsAfter = @(_Get-ProcsSummary -Names @('LVCompare','LabVIEW'))
+    $trailPath = Join-Path $resultsDir 'pester-artifacts-trail.json'
+    $script:artifactTrail | ConvertTo-Json -Depth 6 | Out-File -FilePath $trailPath -Encoding utf8 -ErrorAction Stop
+    Write-Host "Artifact trail written to: $trailPath" -ForegroundColor Gray
+  } catch { Write-Warning "Failed to write artifact trail: $_" }
 }
 
 # Machine-readable JSON summary (adjacent enhancement for CI consumers)
@@ -1002,6 +1266,90 @@ try {
 Write-Host "Results written to: $xmlPath" -ForegroundColor Gray
 Write-Host ""
 
+# Leak detection (processes/jobs) and report
+if ($DetectLeaks) {
+  try {
+    # Determine targets and capture pre-state
+    $leakTargets = if ($LeakProcessPatterns -and $LeakProcessPatterns.Count -gt 0) { $LeakProcessPatterns } else { @('LVCompare','LabVIEW') }
+    $procsBeforeLeak = @()
+    try { $procsBeforeLeak = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } }) } catch {}
+    $jobsBeforeLeak = @()
+    try { $jobsBeforeLeak = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } }) } catch {}
+
+    # Optional grace wait before final evaluation
+    $waitedMs = 0
+    if ($LeakGraceSeconds -gt 0) {
+      $ms = [int]([math]::Round($LeakGraceSeconds * 1000))
+      Start-Sleep -Milliseconds $ms
+      $waitedMs = $ms
+    }
+
+    # Final state after grace period
+    $procsAfter = @()
+    try { $procsAfter = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } }) } catch {}
+    $pesterJobs = @()
+    try { $pesterJobs = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } }) } catch {}
+    $runningJobs = @($pesterJobs | Where-Object { $_.state -eq 'Running' -or $_.state -eq 'NotStarted' })
+    $leakDetected = (($procsAfter.Count -gt 0) -or ($runningJobs.Count -gt 0))
+
+    $actions = @()
+    $killed = @()
+    $stoppedJobs = @()
+    if ($leakDetected -and $KillLeaks) {
+      # Attempt to stop leaked processes
+      try {
+        $procsForKill = @(_Find-ProcsByPattern -Patterns $leakTargets)
+        foreach ($p in $procsForKill) {
+          try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; $killed += [pscustomobject]@{ name=$p.ProcessName; pid=$p.Id } } catch {}
+        }
+        if ($procsForKill.Count -gt 0) { $actions += ("killedProcs:{0}" -f $procsForKill.Count) }
+      } catch {}
+      # Attempt to stop/remove Pester jobs
+      try {
+        $jobsForStop = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' })
+        foreach ($j in $jobsForStop) {
+          $stoppedJobs += [pscustomobject]@{ id=$j.Id; name=$j.Name; state=$j.State }
+        }
+        _Stop-JobsSafely -Jobs $jobsForStop
+        if ($jobsForStop.Count -gt 0) { $actions += ("stoppedJobs:{0}" -f $jobsForStop.Count) }
+      } catch {}
+      # Recompute final state after actions
+      try { $procsAfter = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } }) } catch {}
+      try { $pesterJobs = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } }) } catch {}
+      $runningJobs = @($pesterJobs | Where-Object { $_.state -eq 'Running' -or $_.state -eq 'NotStarted' })
+      $leakDetected = (($procsAfter.Count -gt 0) -or ($runningJobs.Count -gt 0))
+    }
+
+    $leakReport = [pscustomobject]@{
+      schema         = 'pester-leak-report/v1'
+      schemaVersion  = ${SchemaLeakReportVersion}
+      generatedAt    = (Get-Date).ToString('o')
+      targets        = $leakTargets
+      graceSeconds   = $LeakGraceSeconds
+      waitedMs       = $waitedMs
+      procsBefore    = $procsBeforeLeak
+      procsAfter     = $procsAfter
+      runningJobs    = $runningJobs
+      allJobs        = $pesterJobs
+      jobsBefore     = $jobsBeforeLeak
+      leakDetected   = $leakDetected
+      actions        = $actions
+      killedProcs    = $killed
+      stoppedJobs    = $stoppedJobs
+      notes          = @('Leak = LabVIEW/LVCompare (or configured targets) still running or Pester jobs still active after test run')
+    }
+    $leakPathOut = Join-Path $resultsDir 'pester-leak-report.json'
+    $leakReport | ConvertTo-Json -Depth 6 | Out-File -FilePath $leakPathOut -Encoding utf8 -ErrorAction Stop
+    if ($leakDetected) {
+      Write-Warning "Leak detected: see $leakPathOut"
+      if ($FailOnLeaks) {
+        Write-Error "Failing run due to detected leaks (processes/jobs)"
+        exit 1
+      }
+    }
+  } catch { Write-Warning "Leak detection failed: $_" }
+}
+
 # Provide contextual note if integration was requested but effectively absent
 try {
   if ($includeIntegrationBool) {
@@ -1045,4 +1393,52 @@ if ($discoveryFailureCount -gt 0) {
 }
 if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Normalize -Quiet }
 Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
+} finally {
+  # Ensure any background Pester job is stopped/removed to avoid lingering runs across sessions
+  try {
+    if ($null -ne $job -and ($job.State -eq 'Running' -or $job.State -eq 'NotStarted')) {
+      Stop-Job -Job $job -ErrorAction SilentlyContinue | Out-Null
+    }
+    if ($null -ne $job) { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null }
+  } catch {}
+  if ($CleanAfter) {
+    Write-Host "Post-run cleanup: stopping LabVIEW.exe and LVCompare.exe" -ForegroundColor DarkGray
+    _Stop-ProcsSafely -Names @('LVCompare','LabVIEW')
+    Start-Sleep -Milliseconds 200
+    _Report-Procs -Names @('LVCompare','LabVIEW')
+  }
+  # Always write a leak report adjacent to results if one isn't present yet
+  try {
+    if ($resultsDir -and (Test-Path -LiteralPath $resultsDir -PathType Container)) {
+      $finalLeakPath = Join-Path $resultsDir 'pester-leak-report.json'
+      if (-not (Test-Path -LiteralPath $finalLeakPath)) {
+        $leakTargets = if ($LeakProcessPatterns -and $LeakProcessPatterns.Count -gt 0) { $LeakProcessPatterns } else { @('LVCompare','LabVIEW') }
+        $procsNow = @(_Find-ProcsByPattern -Patterns $leakTargets | ForEach-Object { [pscustomobject]@{ name=$_.ProcessName; pid=$_.Id; startTime=$_.StartTime } })
+        $jobsNow  = @(Get-Job -ErrorAction SilentlyContinue | Where-Object { $_.Command -like '*Invoke-Pester*' -or $_.Name -like '*Pester*' } | ForEach-Object { [pscustomobject]@{ id=$_.Id; name=$_.Name; state=$_.State; hasMoreOutput=$_.HasMoreData } })
+        $runningNow = @($jobsNow | Where-Object { $_.state -eq 'Running' -or $_.state -eq 'NotStarted' })
+        $report = [pscustomobject]@{
+          schema        = 'pester-leak-report/v1'
+          schemaVersion = ${SchemaLeakReportVersion}
+          generatedAt   = (Get-Date).ToString('o')
+          targets       = $leakTargets
+          graceSeconds  = 0
+          waitedMs      = 0
+          procsBefore   = @()  # not tracked in final sweep
+          procsAfter    = $procsNow
+          runningJobs   = $runningNow
+          allJobs       = $jobsNow
+          jobsBefore    = @()
+          leakDetected  = (($procsNow.Count -gt 0) -or ($runningNow.Count -gt 0))
+          actions       = @()
+          killedProcs   = @()
+          stoppedJobs   = @()
+          notes         = @('Final sweep leak report to ensure artifact presence; see main leak block for full details when enabled')
+        }
+        $report | ConvertTo-Json -Depth 6 | Out-File -FilePath $finalLeakPath -Encoding utf8 -ErrorAction SilentlyContinue
+        # Opportunistically refresh manifest to include jsonLeaks entry
+        try { Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath (Join-Path $resultsDir $JsonSummaryPath) -ManifestVersion $SchemaManifestVersion } catch {}
+      }
+    }
+  } catch { Write-Warning "Failed to emit final sweep leak report: $_" }
+}
 exit 0
