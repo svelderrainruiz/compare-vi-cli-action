@@ -5,7 +5,7 @@
 [![Validate](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/validate.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/validate.yml)
 [![Smoke test](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/smoke.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/smoke.yml)
 [![Test (mock)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml/badge.svg)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml)
-[![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Action-blue?logo=github)](https://github.com/marketplace/actions/compare-vi-cli-action)
+[![Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action)
 [![Environment](https://img.shields.io/badge/docs-Environment%20Vars-6A5ACD)](./docs/ENVIRONMENT.md)
 
 ## Purpose
@@ -50,14 +50,14 @@ Two canonical LabVIEW VI files live at the repository root:
 | `VI2.vi` | Canonical head fixture |
 
 Purpose:
- 
+
 - Fallback pair for examples, smoke workflows, and quick local validation.
 - Guard test anchor ensuring legacy `Base.vi` / `Head.vi` names are not reintroduced.
 - Stable targets for loop / latency simulation when no custom inputs provided.
 - External dispatcher compatibility (LabVIEW-hosted tooling can intentionally evolve them in controlled commits).
 
 Phase 1 Policy (enforced by tests & `tools/Validate-Fixtures.ps1`):
- 
+
 - Files MUST exist, be git-tracked, and be non-trivial in size (minimum enforced).
 - Do not delete or rename them without a migration plan.
 - Intentional content changes should include a rationale in the commit message (future phases may require a token such as `[fixture-update]`).
@@ -232,6 +232,7 @@ See [`docs/action-outputs.md`](./docs/action-outputs.md) for complete output doc
 For advanced configuration including lvCompareArgs recipes, working-directory usage, path resolution, and HTML report generation, see the **[Usage Guide](./docs/USAGE_GUIDE.md)**.
 
 Tip: Environment variables quick reference moved to the **[Environment appendix](./docs/ENVIRONMENT.md)**.
+Note: For CI integration test runs, consider setting CLEAN_AFTER=1, KILL_LEAKS=1, and `LEAK_GRACE_SECONDS`≈1.0 to avoid lingering LabVIEW/LVCompare processes; see Troubleshooting → Leak Detection and the Environment appendix for details.
 
 ## Loop Mode
 
@@ -392,8 +393,8 @@ Smoke test workflow
 
 Marketplace
 
-- Listing: [GitHub Marketplace listing](https://github.com/marketplace/actions/compare-vi-cli-action)
-- After publication, keep the badge/link updated to the final marketplace URL and ensure the README usage references the latest tag.
+- Listing: Pending publication (use the [repository README](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action#readme) for latest instructions).
+- After publication, update the badge/link to the final marketplace URL and ensure the README usage references the latest tag.
 
 Notes
 
@@ -637,6 +638,19 @@ Notes:
 - LVCompare must exist at the canonical path: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`.
 - Direct artifact download URLs use the GitHub REST API and require `actions: read` permission.
 - PR comments are skipped for forked PRs (no write permission).
+
+### Make it a Required Check
+
+To enforce Fixture Drift as a branch protection rule:
+
+1. Open repository Settings → Branches → Branch protection rules.
+2. Edit the rule for your main branch.
+3. Enable “Require status checks to pass before merging”.
+4. Add “Fixture Drift” to Required status checks.
+
+Optional badge (replace workflow path if customized):
+
+`[![Fixture Drift](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/fixture-drift.yml/badge.svg)](.github/workflows/fixture-drift.yml)`
 
 
 For information on testing, building, documentation generation, and the release process, see the **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**.
