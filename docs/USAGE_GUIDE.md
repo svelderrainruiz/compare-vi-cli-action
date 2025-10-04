@@ -190,4 +190,5 @@ When base and head resolve to the same path, the action short-circuits without i
 - [Loop Mode Guide](./COMPARE_LOOP_MODULE.md) - Experimental loop mode for performance testing
 - [Integration Tests](./INTEGRATION_TESTS.md) - Running tests with real LabVIEW
 - [Troubleshooting](./TROUBLESHOOTING.md) - Common issues and solutions
+  - See “Leak Detection and Cleanup” for enabling leak scans (-DetectLeaks), always-on final-sweep reports, and cleanups; direct link: [Troubleshooting#leak-detection-and-cleanup](./TROUBLESHOOTING.md#leak-detection-and-cleanup)
 - [Developer Guide](./DEVELOPER_GUIDE.md) - Testing and building the action
