@@ -192,3 +192,4 @@ When base and head resolve to the same path, the action short-circuits without i
 - [Troubleshooting](./TROUBLESHOOTING.md) - Common issues and solutions
   - See “Leak Detection and Cleanup” for enabling leak scans (-DetectLeaks), always-on final-sweep reports, and cleanups; direct link: [Troubleshooting#leak-detection-and-cleanup](./TROUBLESHOOTING.md#leak-detection-and-cleanup)
 - [Developer Guide](./DEVELOPER_GUIDE.md) - Testing and building the action
+- [Environment appendix](./ENVIRONMENT.md) - Environment variables for tests, leak detection, loop mode, and fixture validation
