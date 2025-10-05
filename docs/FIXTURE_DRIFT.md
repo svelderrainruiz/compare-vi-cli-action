@@ -3,6 +3,7 @@
 This repository tracks canonical fixtures (`VI1.vi`, `VI2.vi`) and a JSON manifest (`fixtures.manifest.json`) that records their `bytes` and `sha256`.
 
 ## Validator Behavior
+
 - Run locally: `pwsh -File tools/Validate-Fixtures.ps1 -Json`
 
 - Exit codes (subset):
@@ -17,25 +18,36 @@ This repository tracks canonical fixtures (`VI1.vi`, `VI2.vi`) and a JSON manife
   - `autoManifest.path`: path to the written manifest
 
 ## Deterministic Flag
+
 When both fixtures change together, the validator treats this as a deterministic drift signal and writes a new `fixtures.manifest.json`.
 
 CI can gate on either:
+
 - Non‑zero validator `exitCode`, or
+
 - `autoManifest.written == true`
 
 ## CI Integration
+
 The `Fixture Drift` composite action:
 
 - Runs the validator in strict and override modes (`strict.json`, `override.json`).
+
 - Appends a “Fixture Manifest Refresh” note to the job summary when `autoManifest.written` is true.
+
 - Uploads the refreshed `fixtures.manifest.json` as an artifact for review.
 
 ## Updating the Manifest Intentionally
+
 For intentional fixture updates (outside auto‑refresh):
 
 - Regenerate locally: `pwsh -File tools/Update-FixtureManifest.ps1 -Allow`
+
 - Commit with message containing `[fixture-update]` to acknowledge the change.
 
 ## Notes
+
 - The manifest uses `bytes` (exact size) and `sha256` for integrity.
+
 - CI retains the non‑zero exit to keep drift visible; the summary and artifact help reviewers confirm expectations.
+
