@@ -22,9 +22,6 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 45
     env:
-      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
-      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
-      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH }}
       UNBLOCK_GUARD: '1'
     steps:
       - uses: actions/checkout@v5
@@ -40,35 +37,22 @@ jobs:
           if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
           Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
 
-      - name: Resolve VI inputs (fallback to repo root files)
-        id: res
+      - name: Prepare fixture copies (base/head)
+        id: prep
         shell: pwsh
         run: |
-          $base = $env:LV_BASE_VI
-          $head = $env:LV_HEAD_VI
-          
-          # Fallback to repo root VI1.vi and VI2.vi for publish validation
-          if ([string]::IsNullOrWhiteSpace($base) -or -not (Test-Path -LiteralPath $base)) {
-            $base = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
-            Write-Host "Using fallback VI1.vi from repo root: $base"
-          }
-          if ([string]::IsNullOrWhiteSpace($head) -or -not (Test-Path -LiteralPath $head)) {
-            $head = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
-            Write-Host "Using fallback VI2.vi from repo root: $head"
-          }
-          
-          # Validate files exist
-          if (-not (Test-Path -LiteralPath $base)) {
-            Write-Host "::error::Base VI file not found: $base"
-            exit 1
-          }
-          if (-not (Test-Path -LiteralPath $head)) {
-            Write-Host "::error::Head VI file not found: $head"
-            exit 1
-          }
-          
-          Write-Host "Base VI: $base"
-          Write-Host "Head VI: $head"
+          $ErrorActionPreference = 'Stop'
+          $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
+          $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
+          if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI file not found: $srcBase"; exit 1 }
+          if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI file not found: $srcHead"; exit 1 }
+          $tmp = Join-Path $env:RUNNER_TEMP ("artifacts-" + [guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $base = Join-Path $tmp 'base.vi'
+          $head = Join-Path $tmp 'head.vi'
+          Copy-Item -LiteralPath $srcBase -Destination $base -Force
+          Copy-Item -LiteralPath $srcHead -Destination $head -Force
+          Write-Host "Prepared temp fixtures: base=$base head=$head"
           "base=$base" >> $env:GITHUB_OUTPUT
           "head=$head" >> $env:GITHUB_OUTPUT
 
@@ -76,8 +60,8 @@ jobs:
         id: compare
         uses: ./
         with:
-          base: ${{ steps.res.outputs.base }}
-          head: ${{ steps.res.outputs.head }}
+          base: ${{ steps.prep.outputs.base }}
+          head: ${{ steps.prep.outputs.head }}
           fail-on-diff: 'false'
 
       - name: Generate HTML report

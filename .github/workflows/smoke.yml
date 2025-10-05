@@ -66,9 +66,6 @@ jobs:
     needs: preflight
     timeout-minutes: 3
     env:
-      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
-      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
-      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH }}
       UNBLOCK_GUARD: '1'
       WATCH_CONSOLE: '1'
     steps:
@@ -124,47 +121,39 @@ jobs:
             Write-Host 'Fixture validation clean.'
           }
 
-      - name: Resolve inputs from repo variables when empty
-        id: res
+      - name: Prepare fixture copies (base/head)
+        id: prep
         shell: pwsh
         run: |
-          $base = '${{ github.event.inputs.base }}'
-          if ([string]::IsNullOrWhiteSpace($base)) { $base = $env:LV_BASE_VI }
-          $head = '${{ github.event.inputs.head }}'
-          if ([string]::IsNullOrWhiteSpace($head)) { $head = $env:LV_HEAD_VI }
-          $cli  = '${{ github.event.inputs.lvComparePath }}'
-          if ([string]::IsNullOrWhiteSpace($cli))  { $cli  = $env:LVCOMPARE_PATH }
-          $wd   = '${{ github.event.inputs.working_directory }}'
-          # Fallback to repo root VI1.vi / VI2.vi when still empty or file missing
-          if ([string]::IsNullOrWhiteSpace($base) -or -not (Test-Path -LiteralPath $base)) {
-            $fallbackBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
-            if (Test-Path -LiteralPath $fallbackBase) { $base = $fallbackBase }
-          }
-          if ([string]::IsNullOrWhiteSpace($head) -or -not (Test-Path -LiteralPath $head)) {
-            $fallbackHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
-            if (Test-Path -LiteralPath $fallbackHead) { $head = $fallbackHead }
-          }
-          if ([string]::IsNullOrWhiteSpace($base) -or [string]::IsNullOrWhiteSpace($head)) {
-            Write-Host '::error::Base or Head path is empty after resolution. Set inputs or repository variables LV_BASE_VI/LV_HEAD_VI.'
-            exit 1
-          }
+          $ErrorActionPreference = 'Stop'
+          # Prefer explicit inputs when provided; otherwise use repo root VI1/VI2
+          $srcBase = '${{ github.event.inputs.base }}'
+          $srcHead = '${{ github.event.inputs.head }}'
+          if ([string]::IsNullOrWhiteSpace($srcBase)) { $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi' }
+          if ([string]::IsNullOrWhiteSpace($srcHead)) { $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi' }
+          if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI not found: $srcBase"; exit 1 }
+          if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI not found: $srcHead"; exit 1 }
+          $tmp = Join-Path $env:RUNNER_TEMP ("fixtures-" + [guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $base = Join-Path $tmp 'base.vi'
+          $head = Join-Path $tmp 'head.vi'
+          Copy-Item -LiteralPath $srcBase -Destination $base -Force
+          Copy-Item -LiteralPath $srcHead -Destination $head -Force
           "base=$base"                 >> $env:GITHUB_OUTPUT
           "head=$head"                 >> $env:GITHUB_OUTPUT
-          "lvComparePath=$cli"         >> $env:GITHUB_OUTPUT
           "lvCompareArgs=${{ github.event.inputs.lvCompareArgs }}" >> $env:GITHUB_OUTPUT
           "fail_on_diff=${{ github.event.inputs.fail_on_diff }}"   >> $env:GITHUB_OUTPUT
-          "working_directory=$wd"      >> $env:GITHUB_OUTPUT
+          "working_directory=${{ github.event.inputs.working_directory }}" >> $env:GITHUB_OUTPUT
 
       - name: Run local action
         id: compare
         uses: ./
         with:
-          base: ${{ steps.res.outputs.base }}
-          head: ${{ steps.res.outputs.head }}
-          lvComparePath: ${{ steps.res.outputs.lvComparePath }}
-          lvCompareArgs: ${{ steps.res.outputs.lvCompareArgs }}
-          fail-on-diff: ${{ steps.res.outputs.fail_on_diff }}
-          working-directory: ${{ steps.res.outputs.working_directory }}
+          base: ${{ steps.prep.outputs.base }}
+          head: ${{ steps.prep.outputs.head }}
+          lvCompareArgs: ${{ steps.prep.outputs.lvCompareArgs }}
+          fail-on-diff: ${{ steps.prep.outputs.fail_on_diff }}
+          working-directory: ${{ steps.prep.outputs.working_directory }}
 
       - name: Echo outputs
         if: always()
