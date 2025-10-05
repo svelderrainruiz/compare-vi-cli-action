@@ -1,49 +1,40 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Structure & Modules
+- `scripts/` — core PowerShell modules/shims (compare/report/orchestrators). Prefer `Import-Module` over dot-sourcing.
+- `tools/` — developer utilities (smoke runs, validation, summaries, telemetry helpers).
+- `tests/` — Pester v5 suites. Use `$TestDrive` for temp files; tag tests as `Unit` or `Integration`.
+- `.github/workflows/` — CI jobs (self‑hosted Windows for LVCompare; hosted jobs for preflight/lint).
+- `Invoke-PesterTests.ps1` — local dispatcher for running tests with paths/filters and result outputs.
 
-- `scripts/` orchestration and helper scripts (drift, capture, dispatcher glue).
-- `tools/` developer utilities (validate/update manifest, diff helpers, link checks).
-- `tests/` Pester suites (`*.Tests.ps1`) tagged `Unit`/`Integration`.
-- `module/` reusable PowerShell modules (e.g., compare loops).
-- `docs/` guides and JSON schemas; `README.md` is the entry point.
-- Canonical fixtures live at repo root (`VI1.vi`, `VI2.vi`) with `fixtures.manifest.json`.
+## Build, Test, and Development
+- Unit tests (default): `./Invoke-PesterTests.ps1`
+- Include Integration: `./Invoke-PesterTests.ps1 -IncludeIntegration true`
+- Custom paths: `./Invoke-PesterTests.ps1 -TestsPath tests -ResultsPath tests/results`
+- Filter by pattern: `./Invoke-PesterTests.ps1 -IncludePatterns 'CompareVI.*'`
+- Quick smoke: `./tools/Quick-DispatcherSmoke.ps1 -Keep` (writes a minimal suite to a temp dir)
 
-## Build, Test, and Development Commands
-
-- Run unit tests: `./Invoke-PesterTests.ps1`
-- Include integration: `./Invoke-PesterTests.ps1 -IncludeIntegration true`
-- Quick smoke: `./tools/Quick-DispatcherSmoke.ps1`
-- Validate fixtures: `pwsh -File tools/Validate-Fixtures.ps1 -Json`
-- Update manifest: `pwsh -File tools/Update-FixtureManifest.ps1 -Allow`
-
-## Coding Style & Naming Conventions
-
-- PowerShell 7+; Pester 5+. Indent with 2 spaces; UTF-8.
-- Functions use PascalCase verbs (PowerShell-approved verbs). Locals are camelCase.
-- Filenames: tests as `Name.Tests.ps1`; helper modules as `Name.Functions.psm1`.
-- Prefer small, composable functions; no global state. Avoid writing outside `tests/results`.
+## Coding Style & Naming
+- PowerShell 7+; Pester v5+. 2–4 spaces indentation (match surrounding code).
+- Prefer modules (`Import-Module`) over dot-sourcing. Avoid nested `pwsh` spawns.
+- Only interface with `LVCompare.exe`; do not launch `LabVIEW.exe` directly.
+- Non-interactive by default in CI; avoid UI prompts/popups. Use hidden process start when feasible.
+- Functions use verb‑noun; tests use clear, behavior‑driven names.
 
 ## Testing Guidelines
+- Tag tests: `-Tag 'Unit'` or `-Tag 'Integration'`. Keep integration slow/isolated.
+- Use `$TestDrive` and per-test cleanup to prevent leftover files/processes.
+- For probe scenarios, prefer inline function shadowing inside `It {}` and remove afterwards.
+- Results live under `tests/results/` (e.g., `pester-summary.json`, `pester-results.xml`).
 
-- Framework: Pester v5. Tag slow/external as `Integration`.
-- Test names are behavior-focused: `Describe/Context/It`.
-- LVCompare path: `C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe`.
-- Integration requires `LV_BASE_VI` and `LV_HEAD_VI` set. No LabVIEW.exe orchestration.
+## Commit & PR Guidelines
+- Keep commits scoped and descriptive. Reference issues where applicable.
+- PRs should include: what/why, test evidence (summary or artifact paths), and any workflow impacts.
+- Ensure CI is green (lint + Pester). On Windows, verify no console popups and no lingering processes.
 
-## Commit & Pull Request Guidelines
-
-- Commits: imperative mood, scoped (e.g., "validator: enforce bytes field").
-- PRs must include: summary, risks, validation steps, and linked issues.
-- Do not start tests if `LabVIEW.exe` is running; close it first. Prefer leaving `LVCompare.exe` alone unless explicitly opted in.
-- Attach artifacts from `tests/results/` when relevant (summary/results XML/HTML).
-
-## Security & Configuration Tips
-
-- LVCompare-only interface; do not launch `LabVIEW.exe` from tools.
-- Manifest uses strict `bytes` and `sha256`; run validator before pushing.
-- Optional leak/cleanup flags: `DETECT_LEAKS=1`, `CLEAN_AFTER=1`, `CLEAN_LVCOMPARE=1`.
-
-## Agent-Specific Notes
-
-- Use `Invoke-PesterTests.ps1` locally and in CI. The dispatcher hard-gates on running `LabVIEW.exe` to keep runs stable. For docs hygiene, run `tools/Check-DocsLinks.ps1` before PRs.
+## Agent Runbook (Pinned)
+- Windows policy: self‑hosted Windows is the only variant used for LVCompare; hosted runners are for preflight/lint only.
+- LVCompare: canonical path `C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe`.
+- Invoker path: when present, prefer the invoker RPC (single execution path, hidden process, telemetry). Handshake phases: Reset → Start → Ready → Done. Artifacts include `tests/results/<phase>/console-spawns.ndjson` and `_handshake/*.json`.
+- Safe toggles: `LV_SUPPRESS_UI=1`, `WATCH_CONSOLE=1`, and non‑interactive flags in nested calls.
+- If blocked: check recent job step summary, confirm no `LabVIEW.exe` is left running, inspect `tests/results/*/pester-summary.json`, and review any compare/report artifacts.
