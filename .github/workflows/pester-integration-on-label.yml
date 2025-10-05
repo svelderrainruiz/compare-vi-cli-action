@@ -74,6 +74,14 @@ jobs:
             tests/results/**/*.xml
             tests/results/**/*.txt
 
+      - name: Upload session index (if present)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-integration-session-index
+          path: tests/results/session-index.json
+          if-no-files-found: warn
+
       - name: Validate session index schema (schema-lite, if present)
         if: always()
         shell: pwsh
