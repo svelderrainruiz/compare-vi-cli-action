@@ -64,3 +64,15 @@ jobs:
             tests/results/pester-artifacts-trail.json
             tests/results/pester-leak-report.json
             tests/results/session-index.json
+
+      - name: Validate session index schema (schema-lite)
+        if: always()
+        shell: pwsh
+        run: |
+          $idx = 'tests/results/session-index.json'
+          if (Test-Path $idx) {
+            pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $idx -SchemaPath docs/schemas/session-index-v1.schema.json
+            if ($LASTEXITCODE -ne 0) { Write-Host "Session index schema-lite returned code $LASTEXITCODE" }
+          } else {
+            Write-Host '::notice::session-index.json not present.'
+          }
