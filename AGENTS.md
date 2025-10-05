@@ -1,45 +1,49 @@
 # Repository Guidelines
 
-## Project Structure & Modules
+## Project Structure & Module Organization
 
-- Root dispatcher: `Invoke-PesterTests.ps1` (runs Pester, writes results to `tests/results/`).
-- Action definition: `action.yml`.
-- PowerShell scripts/modules: `scripts/` (integration loop, helpers) and `module/`.
-- Developer tools: `tools/` (Run/Watch Pester, smoke tests, schema utilities).
-- Tests: `tests/` with `*.Tests.ps1` plus `tests/helpers/` and `tests/support/`.
-- TypeScript utilities: `ts/` compiled to `dist/` via `tsc`.
-- Docs: `docs/` (usage, testing, CI) and workflows in `.github/`.
+- `scripts/` orchestration and helper scripts (drift, capture, dispatcher glue).
+- `tools/` developer utilities (validate/update manifest, diff helpers, link checks).
+- `tests/` Pester suites (`*.Tests.ps1`) tagged `Unit`/`Integration`.
+- `module/` reusable PowerShell modules (e.g., compare loops).
+- `docs/` guides and JSON schemas; `README.md` is the entry point.
+- Canonical fixtures live at repo root (`VI1.vi`, `VI2.vi`) with `fixtures.manifest.json`.
 
 ## Build, Test, and Development Commands
 
-- Unit tests (exclude Integration): `pwsh -File ./Invoke-PesterTests.ps1`.
-- All tests (incl. Integration): `pwsh -File ./Invoke-PesterTests.ps1 -IncludeIntegration true`.
-- Focus a test file: `pwsh -File ./tools/Run-Pester.ps1 -Path tests/CompareVI.Tests.ps1`.
-- Quick smoke: `pwsh -File ./tools/Quick-DispatcherSmoke.ps1`.
-- Build TS: `npm ci && npm run build` (outputs to `dist/`).
-- Lint Markdown: `npm run lint:md`. Workflow lint (if installed): `actionlint .github/workflows/*.yml`.
+- Run unit tests: `./Invoke-PesterTests.ps1`
+- Include integration: `./Invoke-PesterTests.ps1 -IncludeIntegration true`
+- Quick smoke: `./tools/Quick-DispatcherSmoke.ps1`
+- Validate fixtures: `pwsh -File tools/Validate-Fixtures.ps1 -Json`
+- Update manifest: `pwsh -File tools/Update-FixtureManifest.ps1 -Allow`
 
 ## Coding Style & Naming Conventions
 
-- PowerShell (PS 7+, Pester 5+): Verb-Noun with approved verbs, PascalCase identifiers, 2-space indent, use splatting for readability. Place reusable code in `scripts/` or `module/`.
-- Tests: name as `Something.Tests.ps1`; group helpers in `tests/helpers/`.
-- TypeScript: ESM, 2-space indent, sources in `ts/`, build artifacts in `dist/` (do not edit `dist/`).
+- PowerShell 7+; Pester 5+. Indent with 2 spaces; UTF-8.
+- Functions use PascalCase verbs (PowerShell-approved verbs). Locals are camelCase.
+- Filenames: tests as `Name.Tests.ps1`; helper modules as `Name.Functions.psm1`.
+- Prefer small, composable functions; no global state. Avoid writing outside `tests/results`.
 
 ## Testing Guidelines
 
-- Framework: Pester v5. Default run excludes `Integration`-tagged tests.
-- Integration prerequisites: LVCompare at `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe` and env vars `LV_BASE_VI`, `LV_HEAD_VI`.
-- Isolation: prefer `$TestDrive` for temp files and keep fixtures local to the repo.
-- Results: `tests/results/pester-results.xml` and `tests/results/pester-summary.txt`.
+- Framework: Pester v5. Tag slow/external as `Integration`.
+- Test names are behavior-focused: `Describe/Context/It`.
+- LVCompare path: `C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe`.
+- Integration requires `LV_BASE_VI` and `LV_HEAD_VI` set. No LabVIEW.exe orchestration.
 
 ## Commit & Pull Request Guidelines
 
-- Commits: concise, imperative subject; reference issues (e.g., `Fix summary aggregation (#123)`).
-- PRs: describe problem, approach, and risks; include test evidence (summary snippet or failing/passing case); link issues.
-- Required before merge: unit tests green; integration tests green when applicable; docs updated when flags or behavior change; `npm run lint:md` clean.
+- Commits: imperative mood, scoped (e.g., "validator: enforce bytes field").
+- PRs must include: summary, risks, validation steps, and linked issues.
+- Do not start tests if `LabVIEW.exe` is running; close it first. Prefer leaving `LVCompare.exe` alone unless explicitly opted in.
+- Attach artifacts from `tests/results/` when relevant (summary/results XML/HTML).
 
 ## Security & Configuration Tips
 
-- Do not commit secrets or machine paths. Use sample env and scripts in `tools/` or `docs/`.
-- Integration workflows should write only to `$TestDrive`/`tests/results/`. Avoid modifying files outside the workspace.
+- LVCompare-only interface; do not launch `LabVIEW.exe` from tools.
+- Manifest uses strict `bytes` and `sha256`; run validator before pushing.
+- Optional leak/cleanup flags: `DETECT_LEAKS=1`, `CLEAN_AFTER=1`, `CLEAN_LVCOMPARE=1`.
 
+## Agent-Specific Notes
+
+- Use `Invoke-PesterTests.ps1` locally and in CI. The dispatcher hard-gates on running `LabVIEW.exe` to keep runs stable. For docs hygiene, run `tools/Check-DocsLinks.ps1` before PRs.

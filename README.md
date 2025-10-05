@@ -58,7 +58,7 @@ Purpose:
 
 Phase 1 Policy (enforced by tests & `tools/Validate-Fixtures.ps1`):
 
-- Files MUST exist, be git-tracked, and be non-trivial in size (minimum enforced).
+- Files MUST exist, be git-tracked, and remain non-trivial in size (manifest records their exact byte length).
 - Do not delete or rename them without a migration plan.
 - Intentional content changes should include a rationale in the commit message (future phases may require a token such as `[fixture-update]`).
 
@@ -83,7 +83,7 @@ Supported exit codes:
 | 0 | OK (all checks passed) |
 | 2 | Missing fixture |
 | 3 | Untracked fixture (not in git index) |
-| 4 | Too small (size < effective minBytes) |
+| 4 | Size issue (actual bytes differ from manifest or below fallback) |
 | 5 | Multiple issue categories present (aggregation) |
 | 6 | Hash mismatch (no override token / flag) |
 | 7 | Manifest error (parse, schema, or hash computation failure) |
@@ -92,7 +92,7 @@ Supported exit codes:
 Flags:
 
 ```text
-  -MinBytes <n>             Global minimum size (fallback when item.minBytes absent)
+  -MinBytes <n>             Global minimum size fallback when an item lacks recorded bytes
   -Quiet / -QuietOutput     Suppress non-error console lines
   -Json                     Emit single JSON object (suppresses human lines)
   -TestAllowFixtureUpdate   INTERNAL: ignore hash mismatches (used in tests)
@@ -119,6 +119,7 @@ Issue objects may include:
 - `missing` { fixture }
 - `untracked` { fixture }
 - `tooSmall` { fixture, length, min }
+- `sizeMismatch` { fixture, actual, expected }
 - `hashMismatch` { fixture, actual, expected }
 - `manifestError` { }
 - `duplicate` { path }
@@ -134,7 +135,7 @@ Update helper enhancements:
   -Output <file>      Alternate manifest path (default fixtures.manifest.json)
 ```
 
-It preserves existing per-item `minBytes` unless changed manually.
+It records exact per-item `bytes`; rerun after intentional fixture changes.
 
 ## Quick Start
 

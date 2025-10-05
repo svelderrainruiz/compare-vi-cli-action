@@ -148,3 +148,36 @@ jobs:
       - name: Copy snapshot for next run reference
         shell: pwsh
         run: Copy-Item -LiteralPath fixture-validation.json -Destination fixture-validation-prev.json -Force
+
+  session-index:
+    runs-on: windows-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Pester v5
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
+
+      - name: Run dispatcher smoke to produce session index
+        shell: pwsh
+        run: |
+          $res = Join-Path $env:RUNNER_TEMP 'sessionindex'
+          New-Item -ItemType Directory -Force -Path $res | Out-Null
+          ./tools/Quick-DispatcherSmoke.ps1 -ResultsPath $res
+
+      - name: Validate session index schema (schema-lite)
+        shell: pwsh
+        run: |
+          $json = Join-Path $env:RUNNER_TEMP 'sessionindex' 'session-index.json'
+          if (-not (Test-Path $json)) { Write-Error "session-index.json not found at $json"; exit 2 }
+          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/session-index-v1.schema.json
+
+      - name: Upload session index artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validate-session-index
+          path: ${{ runner.temp }}/sessionindex/session-index.json
+          if-no-files-found: warn

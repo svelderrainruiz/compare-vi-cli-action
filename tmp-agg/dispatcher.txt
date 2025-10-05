@@ -242,10 +242,6 @@ function Write-ArtifactManifest {
     if (Test-Path -LiteralPath $trailPath) {
       $artifacts += [PSCustomObject]@{ file = 'pester-artifacts-trail.json'; type = 'jsonTrail' }
     }
-    $sessionIdx = Join-Path $Directory 'session-index.json'
-    if (Test-Path -LiteralPath $sessionIdx) {
-      $artifacts += [PSCustomObject]@{ file = 'session-index.json'; type = 'jsonSessionIndex' }
-    }
     $leakPath = Join-Path $Directory 'pester-leak-report.json'
     if (Test-Path -LiteralPath $leakPath) {
       $artifacts += [PSCustomObject]@{ file = 'pester-leak-report.json'; type = 'jsonLeaks'; schemaVersion = $SchemaLeakReportVersion }
@@ -557,138 +553,6 @@ if ($labviewOpen.Count -gt 0) {
   }
 }
 
-function Write-SessionIndex {
-  param(
-    [Parameter(Mandatory)] [string]$ResultsDirectory,
-    [Parameter(Mandatory)] [string]$SummaryJsonPath
-  )
-  try {
-    if (-not (Test-Path -LiteralPath $ResultsDirectory -PathType Container)) { return }
-    $idx = [ordered]@{
-      schema           = 'session-index/v1'
-      schemaVersion    = '1.0.0'
-      generatedAtUtc   = (Get-Date).ToUniversalTime().ToString('o')
-      resultsDir       = $ResultsDirectory
-      includeIntegration = [bool]$includeIntegrationBool
-      files            = [ordered]@{}
-    }
-    $addIf = {
-      param($name,$file)
-      $p = Join-Path $ResultsDirectory $file
-      if (Test-Path -LiteralPath $p -PathType Leaf) { $idx.files[$name] = $file }
-    }
-    & $addIf 'pesterResultsXml' 'pester-results.xml'
-    & $addIf 'pesterSummaryTxt' 'pester-summary.txt'
-    $jsonLeaf = Split-Path -Leaf $SummaryJsonPath
-    if ($jsonLeaf) {
-      & $addIf 'pesterSummaryJson' $jsonLeaf
-      # Optional: attach summary counts for convenience
-      try {
-        $sumPath = Join-Path $ResultsDirectory $jsonLeaf
-        if (Test-Path -LiteralPath $sumPath -PathType Leaf) {
-          $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
-          $idx['summary'] = [ordered]@{
-            total       = $s.total
-            passed      = $s.passed
-            failed      = $s.failed
-            errors      = $s.errors
-            skipped     = $s.skipped
-            duration_s  = $s.duration_s
-            meanTest_ms = $s.meanTest_ms
-            p95Test_ms  = $s.p95Test_ms
-            maxTest_ms  = $s.maxTest_ms
-            schemaVersion = $s.schemaVersion
-          }
-          # Derive simple session status and pre-render a concise step-summary block
-          $status = if (($s.failed -gt 0) -or ($s.errors -gt 0)) { 'fail' } else { 'ok' }
-          $idx['status'] = $status
-          # Compute repo-relative results path when possible
-          $resRel = $ResultsDirectory
-          try {
-            $cwd = (Get-Location).Path
-            if ($resRel.StartsWith($cwd,[System.StringComparison]::OrdinalIgnoreCase)) {
-              $rel = $resRel.Substring($cwd.Length).TrimStart('\\','/')
-              if (-not [string]::IsNullOrWhiteSpace($rel)) { $resRel = $rel }
-            }
-          } catch {}
-          $lines = @()
-          $lines += '### Session Overview'
-          $lines += ''
-          $lines += ("- Status: {0}" -f $status)
-          $lines += ("- Total: {0} | Passed: {1} | Failed: {2} | Errors: {3} | Skipped: {4}" -f $s.total,$s.passed,$s.failed,$s.errors,$s.skipped)
-          $lines += ("- Duration (s): {0}" -f $s.duration_s)
-          $lines += ("- Include Integration: {0}" -f [bool]$includeIntegrationBool)
-          $lines += ''
-          $lines += 'Artifacts (paths):'
-          $present = @()
-          foreach ($k in @('pesterSummaryJson','pesterResultsXml','pesterSummaryTxt','artifactManifestJson','artifactTrailJson','leakReportJson','compareReportHtml','resultsIndexHtml')) {
-            if ($idx.files[$k]) { $present += (Join-Path $resRel $idx.files[$k]) }
-          }
-          foreach ($p in $present) { $lines += ("- {0}" -f $p) }
-          $idx['stepSummary'] = ($lines -join "`n")
-        }
-      } catch {}
-    }
-    & $addIf 'pesterFailuresJson' 'pester-failures.json'
-    & $addIf 'artifactManifestJson' 'pester-artifacts.json'
-    & $addIf 'artifactTrailJson' 'pester-artifacts-trail.json'
-    & $addIf 'leakReportJson' 'pester-leak-report.json'
-    & $addIf 'compareReportHtml' 'compare-report.html'
-    & $addIf 'resultsIndexHtml' 'results-index.html'
-    try {
-      $driftRoot = Join-Path (Get-Location) 'results/fixture-drift'
-      if (Test-Path -LiteralPath $driftRoot -PathType Container) {
-        $latest = Get-ChildItem -LiteralPath $driftRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
-        if ($latest) {
-          $sumPath = Join-Path $latest.FullName 'drift-summary.json'
-          $status = $null
-          if (Test-Path -LiteralPath $sumPath) {
-            try { $j = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop; $status = $j.status } catch {}
-          }
-          $idx['drift'] = [ordered]@{
-            latestRunDir  = $latest.FullName
-            latestSummary = (Test-Path -LiteralPath $sumPath) ? $sumPath : $null
-            status        = $status
-          }
-        }
-      }
-    } catch {}
-    # Optional run context (CI / GitHub)
-    try {
-      $idx['runContext'] = [ordered]@{
-        repository  = $env:GITHUB_REPOSITORY
-        ref         = (if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF })
-        commitSha   = $env:GITHUB_SHA
-        workflow    = $env:GITHUB_WORKFLOW
-        runId       = $env:GITHUB_RUN_ID
-        runAttempt  = $env:GITHUB_RUN_ATTEMPT
-        job         = $env:GITHUB_JOB
-        runner      = $env:RUNNER_NAME
-        runnerOS    = $env:RUNNER_OS
-      }
-      # Optional well-known URLs for convenience (UI pages)
-      if ($env:GITHUB_REPOSITORY) {
-        $repoUrl = "https://github.com/$($env:GITHUB_REPOSITORY)"
-        $urls = [ordered]@{ repository = $repoUrl }
-        if ($env:GITHUB_RUN_ID) { $urls.run = "$repoUrl/actions/runs/$($env:GITHUB_RUN_ID)" }
-        if ($env:GITHUB_SHA)     { $urls.commit = "$repoUrl/commit/$($env:GITHUB_SHA)" }
-        # If PR number can be parsed from ref (refs/pull/{n}/...), include a PR URL
-        try {
-          $ref = $env:GITHUB_REF
-          if ($ref -and $ref -match 'refs/pull/(?<num>\d+)/') {
-            $urls.pullRequest = "$repoUrl/pull/$($Matches.num)"
-          }
-        } catch {}
-        $idx['urls'] = $urls
-      }
-    } catch {}
-
-    $dest = Join-Path $ResultsDirectory 'session-index.json'
-    $idx | ConvertTo-Json -Depth 6 | Out-File -FilePath $dest -Encoding utf8 -ErrorAction Stop
-    Write-Host "Session index written to: $dest" -ForegroundColor Gray
-  } catch { Write-Warning "Failed to write session index: $_" }
-}
-
 # Optional pre-clean of LabVIEW if explicitly requested
 if ($CleanLabVIEW) {
   Write-Host "Pre-run cleanup: stopping LabVIEW.exe" -ForegroundColor DarkGray
@@ -802,7 +666,6 @@ if ($testFiles.Count -eq 0) {
     } catch { Write-Warning "Leak detection (early-exit) failed: $_" }
   }
   Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryEarly -ManifestVersion $SchemaManifestVersion
-  Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryEarly
   Write-Host 'No test files found. Placeholder artifacts emitted.' -ForegroundColor Yellow
   exit 0
 }
@@ -1832,9 +1695,8 @@ if ($discoveryFailureCount -gt 0) {
   exit 1
 }
 if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Normalize -Quiet }
-  Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
-  Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPath
-  } finally {
+Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
+} finally {
   # Ensure any background Pester job is stopped/removed to avoid lingering runs across sessions
   try {
     if ($null -ne $job -and ($job.State -eq 'Running' -or $job.State -eq 'NotStarted')) {
@@ -1888,3 +1750,4 @@ if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Norma
   } catch { Write-Warning "Failed to emit final sweep leak report: $_" }
 }
 exit 0
+

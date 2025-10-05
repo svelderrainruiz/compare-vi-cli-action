@@ -16,6 +16,9 @@ jobs:
     env:
       LV_BASE_VI: ${{ vars.LV_BASE_VI }}
       LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
+      DETECT_LEAKS: '1'
+      CLEAN_AFTER: '1'
+      SCAN_ARTIFACTS: '1'
     steps:
       - uses: actions/checkout@v5
 
@@ -34,6 +37,7 @@ jobs:
         shell: pwsh
         run: |
           $json = Join-Path 'tests/results' 'pester-summary.json'
+          $idx  = Join-Path 'tests/results' 'session-index.json'
           if (Test-Path $json) {
             $data = Get-Content $json -Raw | ConvertFrom-Json
             $lines = @(
@@ -47,6 +51,16 @@ jobs:
               "- Include Integration: $($data.includeIntegration)"
             ) -join [Environment]::NewLine
             $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            if (Test-Path $idx) {
+              $ix = Get-Content $idx -Raw | ConvertFrom-Json
+              if ($ix.stepSummary) {
+                $intro = @('','### Session Overview','') -join "`n"
+                $intro | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+                $ix.stepSummary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              } else {
+                "\nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              }
+            }
           } else {
             Write-Host '::warning::pester-summary.json not found.'
           }
@@ -63,3 +77,18 @@ jobs:
             tests/results/pester-summary.json
             tests/results/pester-failures.json
             tests/results/pester-artifacts.json
+            tests/results/pester-artifacts-trail.json
+            tests/results/pester-leak-report.json
+            tests/results/session-index.json
+
+      - name: Validate session index schema (schema-lite)
+        if: always()
+        shell: pwsh
+        run: |
+          $idx = 'tests/results/session-index.json'
+          if (Test-Path $idx) {
+            pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $idx -SchemaPath docs/schemas/session-index-v1.schema.json
+            if ($LASTEXITCODE -ne 0) { Write-Host "Session index schema-lite returned code $LASTEXITCODE" }
+          } else {
+            Write-Host '::notice::session-index.json not present.'
+          }

@@ -14,11 +14,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "sha256", "minBytes", "role"],
+        "required": ["path", "sha256", "bytes", "role"],
         "properties": {
           "path": { "type": "string", "pattern": "^VI[0-9]+\\.vi$" },
           "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
-          "minBytes": { "type": "integer", "minimum": 1 },
+          "bytes": { "type": "integer", "minimum": 1 },
           "role": { "type": "string", "enum": ["base", "head"] }
         }
       }
