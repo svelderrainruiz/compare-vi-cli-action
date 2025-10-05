@@ -242,6 +242,10 @@ function Write-ArtifactManifest {
     if (Test-Path -LiteralPath $trailPath) {
       $artifacts += [PSCustomObject]@{ file = 'pester-artifacts-trail.json'; type = 'jsonTrail' }
     }
+    $sessionIdx = Join-Path $Directory 'session-index.json'
+    if (Test-Path -LiteralPath $sessionIdx) {
+      $artifacts += [PSCustomObject]@{ file = 'session-index.json'; type = 'jsonSessionIndex' }
+    }
     $leakPath = Join-Path $Directory 'pester-leak-report.json'
     if (Test-Path -LiteralPath $leakPath) {
       $artifacts += [PSCustomObject]@{ file = 'pester-leak-report.json'; type = 'jsonLeaks'; schemaVersion = $SchemaLeakReportVersion }
@@ -576,7 +580,28 @@ function Write-SessionIndex {
     & $addIf 'pesterResultsXml' 'pester-results.xml'
     & $addIf 'pesterSummaryTxt' 'pester-summary.txt'
     $jsonLeaf = Split-Path -Leaf $SummaryJsonPath
-    if ($jsonLeaf) { & $addIf 'pesterSummaryJson' $jsonLeaf }
+    if ($jsonLeaf) {
+      & $addIf 'pesterSummaryJson' $jsonLeaf
+      # Optional: attach summary counts for convenience
+      try {
+        $sumPath = Join-Path $ResultsDirectory $jsonLeaf
+        if (Test-Path -LiteralPath $sumPath -PathType Leaf) {
+          $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
+          $idx['summary'] = [ordered]@{
+            total       = $s.total
+            passed      = $s.passed
+            failed      = $s.failed
+            errors      = $s.errors
+            skipped     = $s.skipped
+            duration_s  = $s.duration_s
+            meanTest_ms = $s.meanTest_ms
+            p95Test_ms  = $s.p95Test_ms
+            maxTest_ms  = $s.maxTest_ms
+            schemaVersion = $s.schemaVersion
+          }
+        }
+      } catch {}
+    }
     & $addIf 'pesterFailuresJson' 'pester-failures.json'
     & $addIf 'artifactManifestJson' 'pester-artifacts.json'
     & $addIf 'artifactTrailJson' 'pester-artifacts-trail.json'
@@ -601,6 +626,21 @@ function Write-SessionIndex {
         }
       }
     } catch {}
+    # Optional run context (CI / GitHub)
+    try {
+      $idx['runContext'] = [ordered]@{
+        repository  = $env:GITHUB_REPOSITORY
+        ref         = (if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF })
+        commitSha   = $env:GITHUB_SHA
+        workflow    = $env:GITHUB_WORKFLOW
+        runId       = $env:GITHUB_RUN_ID
+        runAttempt  = $env:GITHUB_RUN_ATTEMPT
+        job         = $env:GITHUB_JOB
+        runner      = $env:RUNNER_NAME
+        runnerOS    = $env:RUNNER_OS
+      }
+    } catch {}
+
     $dest = Join-Path $ResultsDirectory 'session-index.json'
     $idx | ConvertTo-Json -Depth 6 | Out-File -FilePath $dest -Encoding utf8 -ErrorAction Stop
     Write-Host "Session index written to: $dest" -ForegroundColor Gray
@@ -1750,10 +1790,9 @@ if ($discoveryFailureCount -gt 0) {
   exit 1
 }
 if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Normalize -Quiet }
-Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
-Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPath
-Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPath
-} finally {
+  Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
+  Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPath
+  } finally {
   # Ensure any background Pester job is stopped/removed to avoid lingering runs across sessions
   try {
     if ($null -ne $job -and ($job.State -eq 'Running' -or $job.State -eq 'NotStarted')) {

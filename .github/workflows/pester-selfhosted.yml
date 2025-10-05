@@ -37,6 +37,7 @@ jobs:
         shell: pwsh
         run: |
           $json = Join-Path 'tests/results' 'pester-summary.json'
+          $idx  = Join-Path 'tests/results' 'session-index.json'
           if (Test-Path $json) {
             $data = Get-Content $json -Raw | ConvertFrom-Json
             $lines = @(
@@ -50,6 +51,9 @@ jobs:
               "- Include Integration: $($data.includeIntegration)"
             ) -join [Environment]::NewLine
             $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            if (Test-Path $idx) {
+              "\nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
           } else {
             Write-Host '::warning::pester-summary.json not found.'
           }
@@ -66,3 +70,6 @@ jobs:
             tests/results/pester-summary.json
             tests/results/pester-failures.json
             tests/results/pester-artifacts.json
+            tests/results/pester-artifacts-trail.json
+            tests/results/pester-leak-report.json
+            tests/results/session-index.json
