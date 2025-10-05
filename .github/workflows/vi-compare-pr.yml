@@ -114,6 +114,11 @@ jobs:
           Write-Host "Environment validation passed:"
           Write-Host "  - CLI: $cliPath"
 
+      - name: Apply determinism profile
+        uses: ./.github/actions/determinism-profile
+        with:
+          strict: 'true'
+
       - name: Single compare (temp base/head)
         id: single
         if: steps.docs.outputs.docs_only != 'true'
@@ -126,7 +131,7 @@ jobs:
         if: steps.docs.outputs.docs_only != 'true'
         shell: pwsh
         run: |
-          pwsh -File scripts/Generate-PullRequestCompareReport.ps1 -OutputDirectory loop-artifacts -LoopMode -LoopIterations 25 -QuantileStrategy StreamingReservoir -StreamCapacity 300 -HistogramBins 5 -BasePath "${{ steps.prep.outputs.base }}" -HeadPath "${{ steps.prep.outputs.head }}"
+          pwsh -File scripts/Generate-PullRequestCompareReport.ps1 -OutputDirectory loop-artifacts -LoopMode -LoopIterations 3 -LoopIntervalSeconds 0 -QuantileStrategy Exact -StreamCapacity 300 -HistogramBins 5 -BasePath "${{ steps.prep.outputs.base }}" -HeadPath "${{ steps.prep.outputs.head }}"
 
       - name: Append summary (docs-only)
         if: steps.docs.outputs.docs_only == 'true'

@@ -53,6 +53,20 @@ jobs:
         run: |
           markdownlint "**/*.md" --ignore node_modules
 
+      - name: Lint loop determinism (notice only on non-main)
+        if: github.ref_name != 'main'
+        shell: pwsh
+        run: |
+          $paths = Get-ChildItem -Path .github/workflows -Filter *.yml | ForEach-Object { $_.FullName }
+          if ($paths) { pwsh -File tools/Lint-LoopDeterminism.ps1 -Paths $paths } else { Write-Host '::notice::No workflow files to lint.' }
+
+      - name: Lint loop determinism (enforced on main)
+        if: github.ref_name == 'main'
+        shell: pwsh
+        run: |
+          $paths = Get-ChildItem -Path .github/workflows -Filter *.yml | ForEach-Object { $_.FullName }
+          if ($paths) { pwsh -File tools/Lint-LoopDeterminism.ps1 -Paths $paths -FailOnViolation } else { Write-Host '::notice::No workflow files to lint.' }
+
       - name: Local markdown link check (intra-repo)
         shell: pwsh
         run: |

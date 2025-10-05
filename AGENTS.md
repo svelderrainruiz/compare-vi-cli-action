@@ -64,5 +64,9 @@
 
 - Safe toggles: `LV_SUPPRESS_UI=1`, `WATCH_CONSOLE=1`, and non‑interactive flags in nested calls.
 
+- Determinism helpers (opt-in):
+  - Apply profile: `uses: ./.github/actions/determinism-profile` (caps iterations=3, interval=0, Exact quantiles).
+  - Lint loop usage: `pwsh -File tools/Lint-LoopDeterminism.ps1 -Paths .github/workflows/*.yml` (add `-FailOnViolation` to enforce).
+
 - If blocked: check recent job step summary, confirm no `LabVIEW.exe` is left running, inspect `tests/results/*/pester-summary.json`, and review any compare/report artifacts.
 
