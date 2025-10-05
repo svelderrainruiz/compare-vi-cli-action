@@ -26,7 +26,7 @@
 - Orchestrator: `scripts/On-FixtureValidationFail.ps1` routes drift report LVCompare execution via `CompareVI` (preflight), captures exit code/command/duration, generates HTML report.
 - Debug helper: `scripts/Capture-LVCompare.ps1` adds preflight guard and `CreateNoWindow` to reduce UI popups.
 - README updated for `sizeMismatch` and policy notes.
- - Dispatcher emits `session-index.json` (minimal pointers to summary, manifest, leak report, and compare/report artifacts when present).
+- Dispatcher emits `session-index.json` (minimal pointers to summary, manifest, leak report, and compare/report artifacts when present).
 
 ## Backwards compatibility
 
