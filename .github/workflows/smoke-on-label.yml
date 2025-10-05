@@ -3,6 +3,9 @@ name: Smoke test on PR label
 on:
   pull_request:
     types: [labeled, reopened, synchronize]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   workflow_dispatch: {}
 
 jobs:
