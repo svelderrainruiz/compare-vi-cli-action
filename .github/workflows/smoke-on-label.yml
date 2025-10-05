@@ -59,6 +59,10 @@ jobs:
     needs: pre-init
     if: contains(toJson(github.event.pull_request.labels), 'smoke') && needs.pre-init.outputs.docs_only != 'true'
     runs-on: [self-hosted, Windows, X64]
+    env:
+      UNBLOCK_GUARD: '1'
+      WATCH_CONSOLE: '1'
+      LV_SUPPRESS_UI: '1'
     steps:
       - uses: actions/checkout@v5
 
@@ -109,6 +113,14 @@ jobs:
           base: ${{ steps.prep.outputs.base }}
           head: ${{ steps.prep.outputs.head }}
           fail-on-diff: "true"
+
+      - name: Runner Unblock Guard
+        if: always()
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/runner-unblock-snapshot.json
+          cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 
       - name: Echo outputs
         if: always()
