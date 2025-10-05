@@ -78,7 +78,9 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Continue'
-        $outDir = if ('${{ inputs.output-dir }}') { '${{ inputs.output-dir }}' } else { Join-Path 'results' 'fixture-drift' }
+        # Let the orchestrator choose its timestamped subdirectory by default.
+        # Only pass -OutputDir when the caller provided a custom directory.
+        $outDir = '${{ inputs.output-dir }}'
         $strictPath = Join-Path (Get-Location) 'strict.json'
         $overridePath = Join-Path (Get-Location) 'override.json'
         $args = @('-StrictJson',$strictPath,'-OverrideJson',$overridePath)
@@ -86,7 +88,7 @@ runs:
         if ('${{ inputs.base-path }}') { $args += @('-BasePath','${{ inputs.base-path }}') }
         if ('${{ inputs.head-path }}') { $args += @('-HeadPath','${{ inputs.head-path }}') }
         if ('${{ inputs.lv-compare-args }}') { $args += @('-LvCompareArgs','${{ inputs.lv-compare-args }}') }
-        $args += @('-OutputDir',$outDir)
+        if ($outDir) { $args += @('-OutputDir',$outDir) }
         pwsh -NoLogo -NoProfile -File "${{ github.workspace }}/scripts/On-FixtureValidationFail.ps1" @args
         $exit = $LASTEXITCODE
         $root = Join-Path (Get-Location) 'results/fixture-drift'
@@ -98,6 +100,20 @@ runs:
           if (Test-Path $sumPath) {
             $j = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json
             if ($j.status) { $status = [string]$j.status }
+          }
+        }
+        # Fallback: handle callers that wrote directly to results/fixture-drift or a custom output directory without a timestamped child
+        if (-not $latest -and -not $sumPath) {
+          $directSum = Join-Path $root 'drift-summary.json'
+          if (Test-Path $directSum) { $sumPath = $directSum }
+        }
+        if (-not $sumPath -and $outDir) {
+          $odSum = Join-Path $outDir 'drift-summary.json'
+          if (Test-Path $odSum) { $sumPath = $odSum }
+        }
+        if (-not $status -or $status -eq 'unknown') {
+          if ($sumPath -and (Test-Path $sumPath)) {
+            try { $j2 = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json; if ($j2.status) { $status = [string]$j2.status } } catch {}
           }
         }
         "status=$status" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
