@@ -68,11 +68,11 @@ param(
   # Optional: emit aggregationHints block (schema v1.7.1+ with timing metric)
   [switch]$EmitAggregationHints,
 
-  # Opt-in: ensure LabVIEW/LVCompare are not left running before/after tests
+  # Opt-in: ensure LabVIEW is not left running before/after tests
   [Parameter(Mandatory = $false)]
   [switch]$CleanLabVIEW,
 
-  # Opt-in: also close LVCompare/LabVIEW after tests complete
+  # Opt-in: also close LabVIEW after tests complete
   [Parameter(Mandatory = $false)]
   [switch]$CleanAfter,
 
@@ -125,6 +125,9 @@ if ($env:LEAK_GRACE_SECONDS) {
   try { $LeakGraceSeconds = [double]$env:LEAK_GRACE_SECONDS } catch {}
 }
 if (-not $KillLeaks) { $KillLeaks = ($env:KILL_LEAKS -eq '1') }
+
+# Optional: allow explicit opt-in to clean LVCompare alongside LabVIEW during post-run cleanup
+$script:CleanLVCompare = ($env:CLEAN_LVCOMPARE -eq '1')
 # Helper to interpret truthy env toggles (1/true/yes/on)
 function _IsTruthyEnv {
   param([string]$Value)
@@ -531,12 +534,31 @@ function _Build-Snapshot {
   return $index
 }
 
-# Pre-clean if requested
+# Hard gate: never start tests while LabVIEW.exe is running
+$labviewOpen = @(_Find-ProcsByPattern -Patterns @('LabVIEW') )
+if ($labviewOpen.Count -gt 0) {
+  Write-Warning ("Detected running LabVIEW.exe processes: {0}" -f (($labviewOpen | ForEach-Object { $_.Id }) -join ','))
+  Write-Host 'Attempting to stop LabVIEW.exe before starting tests (policy: LVCompare-only interface)' -ForegroundColor Yellow
+  _Stop-ProcsSafely -Names @('LabVIEW')
+  # Wait briefly and re-check
+  $deadlinesec = 10
+  $t0 = Get-Date
+  do {
+    Start-Sleep -Milliseconds 250
+    $labviewOpen = @(_Find-ProcsByPattern -Patterns @('LabVIEW') )
+  } while ($labviewOpen.Count -gt 0 -and ((Get-Date) - $t0).TotalSeconds -lt $deadlinesec)
+  if ($labviewOpen.Count -gt 0) {
+    Write-Error 'LabVIEW.exe is still running after best-effort stop; aborting to avoid unstable run.'
+    exit 1
+  }
+}
+
+# Optional pre-clean of LabVIEW if explicitly requested
 if ($CleanLabVIEW) {
-  Write-Host "Pre-run cleanup: stopping LabVIEW.exe and LVCompare.exe" -ForegroundColor DarkGray
-  _Stop-ProcsSafely -Names @('LVCompare','LabVIEW')
+  Write-Host "Pre-run cleanup: stopping LabVIEW.exe" -ForegroundColor DarkGray
+  _Stop-ProcsSafely -Names @('LabVIEW')
   Start-Sleep -Milliseconds 200
-  _Report-Procs -Names @('LVCompare','LabVIEW')
+  _Report-Procs -Names @('LabVIEW')
 }
 
 # Artifact tracking pre-snapshot (optional)
@@ -1683,10 +1705,15 @@ Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath 
     if ($null -ne $job) { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null }
   } catch {}
   if ($CleanAfter) {
-    Write-Host "Post-run cleanup: stopping LabVIEW.exe and LVCompare.exe" -ForegroundColor DarkGray
-    _Stop-ProcsSafely -Names @('LVCompare','LabVIEW')
+    Write-Host "Post-run cleanup: stopping LabVIEW.exe" -ForegroundColor DarkGray
+    _Stop-ProcsSafely -Names @('LabVIEW')
+    if ($script:CleanLVCompare) {
+      Write-Host "Opt-in: also stopping LVCompare.exe (CLEAN_LVCOMPARE=1)" -ForegroundColor DarkGray
+      _Stop-ProcsSafely -Names @('LVCompare')
+    }
     Start-Sleep -Milliseconds 200
-    _Report-Procs -Names @('LVCompare','LabVIEW')
+    $namesToReport = @('LabVIEW'); if ($script:CleanLVCompare) { $namesToReport += 'LVCompare' }
+    _Report-Procs -Names $namesToReport
   }
   # Always write a leak report adjacent to results if one isn't present yet
   try {
