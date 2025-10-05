@@ -127,8 +127,14 @@ jobs:
           path: fixture-validation.json
       - name: Lite schema validate (snapshot)
         shell: pwsh
+        continue-on-error: true
         run: |
-          if (Test-Path fixture-validation.json) { pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation.json -SchemaPath docs/schemas/fixture-manifest-v1.schema.json 2>$null || Write-Host 'Snapshot schema-lite skipped or failed (non-fatal).' }
+          if (Test-Path fixture-validation.json) {
+            try {
+              pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation.json -SchemaPath docs/schemas/fixture-manifest-v1.schema.json
+              if ($LASTEXITCODE -ne 0) { Write-Host "::notice::Snapshot schema-lite returned $LASTEXITCODE (non-blocking)" }
+            } catch { Write-Host '::notice::Snapshot schema-lite skipped or failed (non-fatal).' }
+          }
       - name: Append fixture summary
         shell: pwsh
         run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json
