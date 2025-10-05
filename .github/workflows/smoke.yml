@@ -123,24 +123,11 @@ jobs:
 
       - name: Prepare fixture copies (base/head)
         id: prep
+        uses: ./.github/actions/prepare-fixtures
+      - name: Pass through inputs
+        id: passthrough
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          # Prefer explicit inputs when provided; otherwise use repo root VI1/VI2
-          $srcBase = '${{ github.event.inputs.base }}'
-          $srcHead = '${{ github.event.inputs.head }}'
-          if ([string]::IsNullOrWhiteSpace($srcBase)) { $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi' }
-          if ([string]::IsNullOrWhiteSpace($srcHead)) { $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi' }
-          if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI not found: $srcBase"; exit 1 }
-          if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI not found: $srcHead"; exit 1 }
-          $tmp = Join-Path $env:RUNNER_TEMP ("fixtures-" + [guid]::NewGuid().ToString())
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          $base = Join-Path $tmp 'base.vi'
-          $head = Join-Path $tmp 'head.vi'
-          Copy-Item -LiteralPath $srcBase -Destination $base -Force
-          Copy-Item -LiteralPath $srcHead -Destination $head -Force
-          "base=$base"                 >> $env:GITHUB_OUTPUT
-          "head=$head"                 >> $env:GITHUB_OUTPUT
           "lvCompareArgs=${{ github.event.inputs.lvCompareArgs }}" >> $env:GITHUB_OUTPUT
           "fail_on_diff=${{ github.event.inputs.fail_on_diff }}"   >> $env:GITHUB_OUTPUT
           "working_directory=${{ github.event.inputs.working_directory }}" >> $env:GITHUB_OUTPUT
@@ -151,9 +138,9 @@ jobs:
         with:
           base: ${{ steps.prep.outputs.base }}
           head: ${{ steps.prep.outputs.head }}
-          lvCompareArgs: ${{ steps.prep.outputs.lvCompareArgs }}
-          fail-on-diff: ${{ steps.prep.outputs.fail_on_diff }}
-          working-directory: ${{ steps.prep.outputs.working_directory }}
+          lvCompareArgs: ${{ steps.passthrough.outputs.lvCompareArgs }}
+          fail-on-diff: ${{ steps.passthrough.outputs.fail_on_diff }}
+          working-directory: ${{ steps.passthrough.outputs.working_directory }}
 
       - name: Echo outputs
         if: always()

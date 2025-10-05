@@ -1,0 +1,36 @@
+name: Prepare fixture copies (base/head)
+description: Copy VI1.vi and VI2.vi (or provided inputs) to temp base.vi/head.vi and expose outputs
+inputs:
+  base-path:
+    description: Optional explicit base VI path
+    required: false
+  head-path:
+    description: Optional explicit head VI path
+    required: false
+outputs:
+  base:
+    description: Temp base.vi path
+    value: ${{ steps.prep.outputs.base }}
+  head:
+    description: Temp head.vi path
+    value: ${{ steps.prep.outputs.head }}
+runs:
+  using: composite
+  steps:
+    - id: prep
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $srcBase = '${{ inputs.base-path }}'
+        $srcHead = '${{ inputs.head-path }}'
+        if ([string]::IsNullOrWhiteSpace($srcBase)) { $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi' }
+        if ([string]::IsNullOrWhiteSpace($srcHead)) { $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi' }
+        if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI not found: $srcBase"; exit 1 }
+        if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI not found: $srcHead"; exit 1 }
+        $tmp = Join-Path $env:RUNNER_TEMP ("fixtures-" + [guid]::NewGuid().ToString())
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        $base = Join-Path $tmp 'base.vi'
+        $head = Join-Path $tmp 'head.vi'
+        Copy-Item -LiteralPath $srcBase -Destination $base -Force
+        Copy-Item -LiteralPath $srcHead -Destination $head -Force
+        "base=$base`nhead=$head" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

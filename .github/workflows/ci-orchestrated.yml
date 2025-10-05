@@ -82,21 +82,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Prepare fixture copies (base/head)
+        id: fixtures
+        uses: ./.github/actions/prepare-fixtures
+      - name: Export fixture env for tests
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
-          $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
-          if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI not found: $srcBase"; exit 1 }
-          if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI not found: $srcHead"; exit 1 }
-          $tmp = Join-Path $env:RUNNER_TEMP ("fixtures-" + [guid]::NewGuid().ToString())
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          $base = Join-Path $tmp 'base.vi'
-          $head = Join-Path $tmp 'head.vi'
-          Copy-Item -LiteralPath $srcBase -Destination $base -Force
-          Copy-Item -LiteralPath $srcHead -Destination $head -Force
-          "LV_BASE_VI=$base" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "LV_HEAD_VI=$head" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LV_BASE_VI=${{ steps.fixtures.outputs.base }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LV_HEAD_VI=${{ steps.fixtures.outputs.head }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Run Pester tests via local dispatcher
         shell: pwsh
         run: |

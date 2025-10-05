@@ -39,22 +39,7 @@ jobs:
 
       - name: Prepare fixture copies (base/head)
         id: prep
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
-          $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
-          if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI file not found: $srcBase"; exit 1 }
-          if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI file not found: $srcHead"; exit 1 }
-          $tmp = Join-Path $env:RUNNER_TEMP ("artifacts-" + [guid]::NewGuid().ToString())
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          $base = Join-Path $tmp 'base.vi'
-          $head = Join-Path $tmp 'head.vi'
-          Copy-Item -LiteralPath $srcBase -Destination $base -Force
-          Copy-Item -LiteralPath $srcHead -Destination $head -Force
-          Write-Host "Prepared temp fixtures: base=$base head=$head"
-          "base=$base" >> $env:GITHUB_OUTPUT
-          "head=$head" >> $env:GITHUB_OUTPUT
+        uses: ./.github/actions/prepare-fixtures
 
       - name: Run compare
         id: compare
