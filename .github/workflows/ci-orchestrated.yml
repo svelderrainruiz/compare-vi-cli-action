@@ -73,8 +73,6 @@ jobs:
     timeout-minutes: 3
     needs: [normalize, preflight]
     env:
-      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
-      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
       DETECT_LEAKS: '1'
       CLEAN_AFTER: '1'
       SCAN_ARTIFACTS: '1'
@@ -83,6 +81,22 @@ jobs:
       WATCH_CONSOLE: '1'
     steps:
       - uses: actions/checkout@v5
+      - name: Prepare fixture copies (base/head)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $srcBase = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
+          $srcHead = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
+          if (-not (Test-Path -LiteralPath $srcBase)) { Write-Host "::error::Base VI not found: $srcBase"; exit 1 }
+          if (-not (Test-Path -LiteralPath $srcHead)) { Write-Host "::error::Head VI not found: $srcHead"; exit 1 }
+          $tmp = Join-Path $env:RUNNER_TEMP ("fixtures-" + [guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $base = Join-Path $tmp 'base.vi'
+          $head = Join-Path $tmp 'head.vi'
+          Copy-Item -LiteralPath $srcBase -Destination $base -Force
+          Copy-Item -LiteralPath $srcHead -Destination $head -Force
+          "LV_BASE_VI=$base" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LV_HEAD_VI=$head" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Run Pester tests via local dispatcher
         shell: pwsh
         run: |
