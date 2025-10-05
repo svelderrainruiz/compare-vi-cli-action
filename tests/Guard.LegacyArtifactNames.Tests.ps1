@@ -92,13 +92,16 @@ Describe 'Legacy artifact name guard (Base.vi / Head.vi)' -Tag 'Unit','Guard' {
     Test-Path $vi1 | Should -BeTrue -Because 'VI1.vi is the canonical base artifact'
     Test-Path $vi2 | Should -BeTrue -Because 'VI2.vi is the canonical head artifact'
 
-    # Phase 1 extended guard: ensure tracking & minimal size
+    # Phase 1 extended guard: ensure tracking & recorded size alignment
     $tracked = (& git ls-files) -split "`n" | Where-Object { $_ }
     $tracked | Should -Contain 'VI1.vi' -Because 'Fixture must be git-tracked'
     $tracked | Should -Contain 'VI2.vi' -Because 'Fixture must be git-tracked'
 
-    $minBytes = 1
-    (Get-Item $vi1).Length | Should -BeGreaterThan $minBytes -Because 'Fixture should not be truncated'
-    (Get-Item $vi2).Length | Should -BeGreaterThan $minBytes -Because 'Fixture should not be truncated'
+    $manifest = Get-Content -LiteralPath (Join-Path $repoRoot 'fixtures.manifest.json') -Raw | ConvertFrom-Json
+    foreach ($entry in $manifest.items) {
+      $path = Join-Path $repoRoot $entry.path
+      $actual = (Get-Item -LiteralPath $path).Length
+      $entry.bytes | Should -Be $actual -Because 'Manifest bytes should reflect actual fixture size'
+    }
   }
 }

@@ -8,22 +8,25 @@ Describe 'Fixture manifest enforcement' -Tag 'Unit' {
     $script:manifest = Join-Path $repoRoot 'fixtures.manifest.json'
     $script:vi1 = Join-Path $repoRoot 'VI1.vi'
     $script:originalManifest = Get-Content -LiteralPath $manifest -Raw
-    function Set-MinBytesForAll($value) {
+    function Set-ManifestBytesToActual {
       $m = Get-Content -LiteralPath $script:manifest -Raw | ConvertFrom-Json
-      foreach ($it in $m.items) { $it.minBytes = $value }
+      foreach ($it in $m.items) {
+        $path = Join-Path $repoRoot $it.path
+        $it.bytes = (Get-Item -LiteralPath $path).Length
+      }
       ($m | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $script:manifest -Encoding utf8 -NoNewline
     }
   }
 
   It 'baseline passes with size-only enforcement (hash mismatches ignored)' {
-    # Ignore hash mismatches; with current minBytes and committed fixtures, expect success
+    # Ignore hash mismatches; with recorded bytes matching fixtures, expect success
     pwsh -NoLogo -NoProfile -File $validator -TestAllowFixtureUpdate | Out-Null
     $LASTEXITCODE | Should -Be 0
   }
 
   It 'detects hash mismatch without token (exit 6 precedence when only mismatch)' {
     try {
-      Set-MinBytesForAll 1
+      Set-ManifestBytesToActual
       $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
       # Invalidate hash for VI1.vi
       ($m.items | Where-Object { $_.path -eq 'VI1.vi' }).sha256 = 'BADHASH'
@@ -37,7 +40,7 @@ Describe 'Fixture manifest enforcement' -Tag 'Unit' {
 
   It 'ignores hash mismatch with test override flag (returns ok when only mismatch)' {
     try {
-      Set-MinBytesForAll 1
+      Set-ManifestBytesToActual
       $m = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
       ($m.items | Where-Object { $_.path -eq 'VI2.vi' }).sha256 = 'DEADBEEF'
       ($m | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $manifest -Encoding utf8 -NoNewline
@@ -48,9 +51,9 @@ Describe 'Fixture manifest enforcement' -Tag 'Unit' {
     }
   }
 
-  It 'emits structured JSON with -Json flag (success after lowering minBytes)' {
+  It 'emits structured JSON with -Json flag (success with recorded bytes)' {
     try {
-      Set-MinBytesForAll 1
+      Set-ManifestBytesToActual
       # Ignore hash mismatches to assert clean JSON success when sizes are permissive
       $json = pwsh -NoLogo -NoProfile -File $validator -Json -TestAllowFixtureUpdate | Out-String | ConvertFrom-Json
       $json.ok | Should -Be $true

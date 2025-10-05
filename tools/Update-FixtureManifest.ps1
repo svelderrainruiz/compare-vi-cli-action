@@ -28,15 +28,8 @@ foreach ($t in $targets) {
   if (-not (Test-Path -LiteralPath $p)) { Write-Error "Fixture missing: $t"; exit 2 }
   $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToUpperInvariant()
   $role = if ($t -eq 'VI1.vi') { 'base' } else { 'head' }
-  # Preserve existing minBytes if manifest exists
-  $existingMin = 32
-  if (Test-Path -LiteralPath (Join-Path $repoRoot $Output)) {
-    try {
-      $existing = (Get-Content -LiteralPath (Join-Path $repoRoot $Output) -Raw | ConvertFrom-Json).items | Where-Object { $_.path -eq $t }
-      if ($existing -and $existing.minBytes) { $existingMin = [int]$existing.minBytes }
-    } catch { }
-  }
-  $items += [pscustomobject]@{ path=$t; sha256=$hash; minBytes=$existingMin; role=$role }
+  $bytes = (Get-Item -LiteralPath $p).Length
+  $items += [pscustomobject]@{ path=$t; sha256=$hash; bytes=$bytes; role=$role }
 }
 
 $manifest = [ordered]@{

@@ -22,7 +22,7 @@ for ($i=0; $i -lt $args.Length; $i++) {
 SYNOPSIS
   Validates canonical fixture VIs (Phase 1 + Phase 2 hash manifest, refined schema & JSON support).
 EXIT CODES
-  0 ok | 2 missing | 3 untracked | 4 too small | 5 multiple issues | 6 hash mismatch | 7 manifest error (schema / parse / hash compute) | 8 duplicate manifest entry
+  0 ok | 2 missing | 3 untracked | 4 size issue (bytes mismatch or below fallback) | 5 multiple issues | 6 hash mismatch | 7 manifest error (schema / parse / hash compute) | 8 duplicate manifest entry
 NOTES
   - When multiple categories occur exit code becomes 5 unless a manifest structural error (7) is sole issue.
   - Duplicate path entries trigger code 8 (or 5 if combined with others).
@@ -45,7 +45,7 @@ $fixtures = @(
   @{ Name='VI2.vi'; Path=(Join-Path $repoRoot 'VI2.vi') }
 )
 $tracked = (& git ls-files) -split "`n" | Where-Object { $_ }
-$missing = @(); $untracked = @(); $tooSmall = @(); $hashMismatch = @(); $manifestError = $false; $duplicateEntries = @(); $schemaIssues = @();
+$missing = @(); $untracked = @(); $tooSmall = @(); $sizeMismatch = @(); $hashMismatch = @(); $manifestError = $false; $duplicateEntries = @(); $schemaIssues = @();
 
 # Phase 2: Load manifest if present
 $manifestPath = Join-Path $repoRoot 'fixtures.manifest.json'
@@ -83,10 +83,16 @@ foreach ($f in $fixtures) {
   if (-not (Test-Path -LiteralPath $f.Path)) { $missing += $f; continue }
   if ($tracked -notcontains $f.Name) { $untracked += $f; continue }
   $len = (Get-Item -LiteralPath $f.Path).Length
-  # Enforce per-item minBytes (if manifest present) else global threshold
-  $effectiveMin = $MinBytes
-  if ($manifestIndex.ContainsKey($f.Name) -and $manifestIndex[$f.Name].minBytes) { $effectiveMin = [int]$manifestIndex[$f.Name].minBytes }
-  if ($len -lt $effectiveMin) { $tooSmall += @{ Name=$f.Name; Length=$len; Min=$effectiveMin } }
+  # Enforce recorded byte count when present; fall back to global minimum threshold otherwise
+  $expectedBytes = $null
+  if ($manifestIndex.ContainsKey($f.Name) -and $null -ne $manifestIndex[$f.Name].bytes) {
+    try { $expectedBytes = [int]$manifestIndex[$f.Name].bytes } catch { }
+  }
+  if ($null -ne $expectedBytes) {
+    if ($len -ne $expectedBytes) { $sizeMismatch += @{ Name=$f.Name; Actual=$len; Expected=$expectedBytes } }
+  } elseif ($len -lt $MinBytes) {
+    $tooSmall += @{ Name=$f.Name; Length=$len; Min=$MinBytes }
+  }
   # Hash verification (Phase 2) when manifest present
   if ($manifest -and $manifestIndex.ContainsKey($f.Name)) {
     try {
@@ -116,12 +122,12 @@ if (($allowOverride -or $TestAllowFixtureUpdate) -and $hashMismatch) {
   $hashMismatch = @() # neutralize
 }
 
-if (-not $missing -and -not $untracked -and -not $tooSmall -and -not $manifestError -and -not $hashMismatch -and -not $duplicateEntries) {
+if (-not $missing -and -not $untracked -and -not $tooSmall -and -not $sizeMismatch -and -not $manifestError -and -not $hashMismatch -and -not $duplicateEntries) {
   if ($EmitJson) {
     $names = @($fixtures | ForEach-Object { $_.Name })
     $okObj = [ordered]@{ 
       ok=$true; exitCode=0; summary='Fixture validation succeeded'; issues=@(); fixtures=$names; checked=$names; fixtureCount=$names.Count; manifestPresent=[bool]$manifest; 
-      summaryCounts = [ordered]@{ missing=0; untracked=0; tooSmall=0; hashMismatch=0; manifestError=0; duplicate=0; schema=0 }
+      summaryCounts = [ordered]@{ missing=0; untracked=0; tooSmall=0; sizeMismatch=0; hashMismatch=0; manifestError=0; duplicate=0; schema=0 }
     }
     $okObj | ConvertTo-Json -Depth 6
     exit 0
@@ -132,6 +138,7 @@ $exit = 0
 if ($missing) { $exit = 2; foreach ($m in $missing) { Emit error ("Missing canonical fixture {0}" -f $m.Name) 2 } }
 if ($untracked) { $exit = if ($exit -eq 0) { 3 } else { 5 }; foreach ($u in $untracked) { Emit error ("Fixture {0} is not git-tracked" -f $u.Name) 3 } }
 if ($tooSmall) { $exit = if ($exit -eq 0) { 4 } else { 5 }; foreach ($s in $tooSmall) { Emit error ("Fixture {0} length {1} < MinBytes {2}" -f $s.Name,$s.Length,$s.Min) 4 } }
+if ($sizeMismatch) { $exit = if ($exit -eq 0) { 4 } else { 5 }; foreach ($sm in $sizeMismatch) { Emit error ("Fixture {0} size mismatch (actual {1} expected {2})" -f $sm.Name,$sm.Actual,$sm.Expected) 4 } }
 if ($manifestError) { $exit = if ($exit -eq 0) { 7 } else { 5 } }
 if ($hashMismatch) { $exit = if ($exit -eq 0) { 6 } else { 5 }; foreach ($h in $hashMismatch) { Emit error ("Fixture {0} hash mismatch (actual {1} expected {2})" -f $h.Name,$h.Actual,$h.Expected) 6 } }
 if ($duplicateEntries) { $exit = if ($exit -eq 0) { 8 } else { 5 } }
@@ -141,6 +148,7 @@ if ($EmitJson) {
   foreach ($m in $missing) { $issues += [ordered]@{ type='missing'; fixture=$m.Name } }
   foreach ($u in $untracked) { $issues += [ordered]@{ type='untracked'; fixture=$u.Name } }
   foreach ($s in $tooSmall) { $issues += [ordered]@{ type='tooSmall'; fixture=$s.Name; length=$s.Length; min=$s.Min } }
+  foreach ($sm in $sizeMismatch) { $issues += [ordered]@{ type='sizeMismatch'; fixture=$sm.Name; actual=$sm.Actual; expected=$sm.Expected } }
   foreach ($h in $hashMismatch) { $issues += [ordered]@{ type='hashMismatch'; fixture=$h.Name; actual=$h.Actual; expected=$h.Expected } }
   if ($manifestError) { $issues += [ordered]@{ type='manifestError' } }
   foreach ($d in $duplicateEntries) { $issues += [ordered]@{ type='duplicate'; path=$d } }
@@ -157,6 +165,7 @@ if ($EmitJson) {
       missing = ($missing).Count
       untracked = ($untracked).Count
       tooSmall = ($tooSmall).Count
+      sizeMismatch = ($sizeMismatch).Count
       hashMismatch = ($hashMismatch).Count
       manifestError = [int]($manifestError)
       duplicate = ($duplicateEntries).Count

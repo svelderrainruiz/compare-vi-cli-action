@@ -14,7 +14,7 @@ Describe 'Fixture manifest duplicate detection' -Tag 'Unit' {
 
   It 'returns exit 8 for duplicate entries only' {
     $m = $original | ConvertFrom-Json
-    foreach ($it in $m.items) { $it.minBytes = 1 }
+    foreach ($it in $m.items) { $it.bytes = (Get-Item -LiteralPath (Join-Path $repoRoot $it.path)).Length }
     # Add a duplicate of first item
     $dup = $m.items[0] | Select-Object *
     $m.items += $dup

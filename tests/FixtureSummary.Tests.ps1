@@ -7,8 +7,8 @@ Describe 'Fixture summary script' -Tag 'Unit' {
     $validator = Join-Path $repoRoot 'tools' 'Validate-Fixtures.ps1'
     $diff = Join-Path $repoRoot 'tools' 'Diff-FixtureValidationJson.ps1'
     $summary = Join-Path $repoRoot 'tools' 'Write-FixtureValidationSummary.ps1'
-    $baseline = Join-Path $repoRoot 'baseline-fixture-validation.json'
-    $current  = Join-Path $repoRoot 'current-fixture-validation.json'
+    $baseline = Join-Path $TestDrive 'baseline-fixture-validation.json'
+    $current  = Join-Path $TestDrive 'current-fixture-validation.json'
 
     # Baseline
     $baseRaw = (pwsh -NoLogo -NoProfile -File $validator -Json -DisableToken | Out-String)
@@ -19,20 +19,25 @@ Describe 'Fixture summary script' -Tag 'Unit' {
     # Current with duplicate
     $manifestPath = Join-Path $repoRoot 'fixtures.manifest.json'
     $orig = Get-Content -LiteralPath $manifestPath -Raw
-    $m = $orig | ConvertFrom-Json
-    $dup = $m.items[0] | Select-Object *
-    $m.items += $dup
-    ($m | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $manifestPath -Encoding utf8
-    $currRaw = (pwsh -NoLogo -NoProfile -File $validator -Json -DisableToken | Out-String)
-    $currIdx = $currRaw.IndexOf('{'); $currEnd = $currRaw.LastIndexOf('}')
-    $currOut = $currRaw.Substring($currIdx, $currEnd-$currIdx+1)
-    Set-Content -LiteralPath $current -Value $currOut -Encoding utf8
-    $orig | Set-Content -LiteralPath $manifestPath -Encoding utf8 -NoNewline
+    try {
+      $m = $orig | ConvertFrom-Json
+      $dup = $m.items[0] | Select-Object *
+      $m.items += $dup
+      ($m | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $manifestPath -Encoding utf8
+      $currRaw = (pwsh -NoLogo -NoProfile -File $validator -Json -DisableToken | Out-String)
+      $currIdx = $currRaw.IndexOf('{'); $currEnd = $currRaw.LastIndexOf('}')
+      $currOut = $currRaw.Substring($currIdx, $currEnd-$currIdx+1)
+      Set-Content -LiteralPath $current -Value $currOut -Encoding utf8
+    }
+    finally {
+      $orig | Set-Content -LiteralPath $manifestPath -Encoding utf8 -NoNewline
+    }
 
-    pwsh -NoLogo -NoProfile -File $diff -Baseline $baseline -Current $current > delta.json
+    $deltaPath = Join-Path $TestDrive 'delta.json'
+    pwsh -NoLogo -NoProfile -File $diff -Baseline $baseline -Current $current > $deltaPath
     $env:SUMMARY_VERBOSE = 'true'
     # Pass empty SummaryPath to force stdout output instead of using inherited GITHUB_STEP_SUMMARY
-    $out = (pwsh -NoLogo -NoProfile -File $summary -ValidationJson $current -DeltaJson delta.json -SummaryPath '' | Out-String)
+    $out = (pwsh -NoLogo -NoProfile -File $summary -ValidationJson $current -DeltaJson $deltaPath -SummaryPath '' | Out-String)
     $out | Should -Match '### New Structural Issues Detail'
     $out | Should -Match 'duplicate'
     $out | Should -Match '### All Changes'

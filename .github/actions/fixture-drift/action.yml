@@ -78,7 +78,9 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Continue'
-        $outDir = if ('${{ inputs.output-dir }}') { '${{ inputs.output-dir }}' } else { Join-Path 'results' 'fixture-drift' }
+        # Let the orchestrator choose its timestamped subdirectory by default.
+        # Only pass -OutputDir when the caller provided a custom directory.
+        $outDir = '${{ inputs.output-dir }}'
         $strictPath = Join-Path (Get-Location) 'strict.json'
         $overridePath = Join-Path (Get-Location) 'override.json'
         $args = @('-StrictJson',$strictPath,'-OverrideJson',$overridePath)
@@ -86,7 +88,7 @@ runs:
         if ('${{ inputs.base-path }}') { $args += @('-BasePath','${{ inputs.base-path }}') }
         if ('${{ inputs.head-path }}') { $args += @('-HeadPath','${{ inputs.head-path }}') }
         if ('${{ inputs.lv-compare-args }}') { $args += @('-LvCompareArgs','${{ inputs.lv-compare-args }}') }
-        $args += @('-OutputDir',$outDir)
+        if ($outDir) { $args += @('-OutputDir',$outDir) }
         pwsh -NoLogo -NoProfile -File "${{ github.workspace }}/scripts/On-FixtureValidationFail.ps1" @args
         $exit = $LASTEXITCODE
         $root = Join-Path (Get-Location) 'results/fixture-drift'
@@ -100,9 +102,59 @@ runs:
             if ($j.status) { $status = [string]$j.status }
           }
         }
+        # Fallback: handle callers that wrote directly to results/fixture-drift or a custom output directory without a timestamped child
+        if (-not $latest -and -not $sumPath) {
+          $directSum = Join-Path $root 'drift-summary.json'
+          if (Test-Path $directSum) { $sumPath = $directSum }
+        }
+        if (-not $sumPath -and $outDir) {
+          $odSum = Join-Path $outDir 'drift-summary.json'
+          if (Test-Path $odSum) { $sumPath = $odSum }
+        }
+        if (-not $status -or $status -eq 'unknown') {
+          if ($sumPath -and (Test-Path $sumPath)) {
+            try { $j2 = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json; if ($j2.status) { $status = [string]$j2.status } } catch {}
+          }
+        }
         "status=$status" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         if ($sumPath) { "summary_path=$sumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8 }
         # Do not fail here to allow artifact upload and comment; a later step will enforce failure.
+
+        # DEBUG: emit breadcrumbs to console and step summary to aid diagnosis when status is unknown or artifacts are missing
+        try {
+          Write-Host "[drift-debug] orchestrator exit: $exit"
+          Write-Host "[drift-debug] results root: $root"
+          if (Test-Path $root) {
+            $latestName = if ($latest) { $latest.Name } else { '<none>' }
+            Write-Host "[drift-debug] latest dir: $latestName"
+            Write-Host "[drift-debug] summary path: $sumPath"
+            # Shallow list of latest dir
+            if ($latest) {
+              Get-ChildItem -LiteralPath $latest.FullName -Force -ErrorAction SilentlyContinue | ForEach-Object { Write-Host ("  - {0}" -f $_.Name) }
+            }
+          } else {
+            Write-Host "[drift-debug] results root missing: $root"
+          }
+          # If summary exists, echo a compact view and basic fields
+          if ($sumPath -and (Test-Path $sumPath)) {
+            try {
+              $raw = Get-Content -LiteralPath $sumPath -Raw
+              $j2 = $raw | ConvertFrom-Json -ErrorAction Stop
+              $catCnt = if ($j2.categories) { $j2.categories.Count } else { 0 }
+              Write-Host ("[drift-debug] summary: schema={0} status={1} exitCode={2} categories={3}" -f $j2.schema,$j2.status,$j2.exitCode,$catCnt)
+            } catch { Write-Host "[drift-debug] failed to parse drift-summary.json: $_" }
+          } else {
+            Write-Host "[drift-debug] drift-summary.json not found"
+          }
+          # Append to step summary (short block)
+          $lines = @('### Fixture Drift (debug)','')
+          $lines += ("- Orchestrator exit: {0}" -f $exit)
+          $lines += ("- Status: {0}" -f $status)
+          $lines += ("- Results root: {0}" -f $root)
+          $lines += ("- Latest dir: {0}" -f (if ($latest) { $latest.Name } else { '<none>' }))
+          $lines += ("- Summary path: {0}" -f (if ($sumPath) { $sumPath } else { '<none>' }))
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        } catch { Write-Host "[drift-debug] failed to emit debug breadcrumbs: $_" }
 
     - name: Upload drift artifacts (with retention)
       if: always() && inputs.upload-artifacts == 'true' && (inputs.only-upload-on-failure != 'true' || steps.orchestrate.outputs.status != 'ok') && inputs.retention-days != ''

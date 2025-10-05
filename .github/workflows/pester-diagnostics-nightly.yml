@@ -54,6 +54,18 @@ jobs:
             tests/results/pester-summary.txt
           if-no-files-found: warn
 
+      - name: Validate session index schema (schema-lite)
+        if: always()
+        shell: pwsh
+        run: |
+          $idx = 'tests/results/session-index.json'
+          if (Test-Path $idx) {
+            pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $idx -SchemaPath docs/schemas/session-index-v1.schema.json
+            if ($LASTEXITCODE -ne 0) { Write-Host "Session index schema-lite returned code $LASTEXITCODE" }
+          } else {
+            Write-Host '::notice::session-index.json not present in nightly diagnostics run.'
+          }
+
       - name: Mark workflow success regardless of test exit
         if: always()
         shell: pwsh
