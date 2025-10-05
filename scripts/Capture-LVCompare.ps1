@@ -135,7 +135,9 @@ $cmdTokens = @($cliPath, $basePath, $headPath) + @($argsList)
 $commandDisplay = ($cmdTokens | ForEach-Object { Format-QuotedToken $_ }) -join ' '
 
 # Invoke and capture
-$sw = [System.Diagnostics.Stopwatch]::StartNew()
+$lvBefore = @()
+try { $lvBefore = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch { $lvBefore = @() }
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
 $p = [System.Diagnostics.Process]::Start($psi)
 $stdout = $p.StandardOutput.ReadToEnd()
 $stderr = $p.StandardError.ReadToEnd()
@@ -184,8 +186,31 @@ if ($RenderReport.IsPresent) {
 	}
 }
 
-if (-not $Quiet) {
+if (-not $Quiet) {
 	Write-Host ("LVCompare exit code: {0}" -f $exitCode)
 	Write-Host ("Capture JSON: {0}" -f $jsonPath)
 	if ($RenderReport.IsPresent) { Write-Host ("Report: {0} (exists={1})" -f $reportPath, (Test-Path $reportPath)) }
-}
+}
+
+# Cleanup: close only LabVIEW processes that appeared during this run (unless disabled)
+if ($env:DISABLE_LABVIEW_CLEANUP -ne '1') {
+  try {
+    $lvAfter = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
+    if ($lvAfter) {
+      $beforeSet = @{}
+      foreach ($id in $lvBefore) { $beforeSet[[string]$id] = $true }
+      $newOnes = @()
+      foreach ($proc in $lvAfter) { if (-not $beforeSet.ContainsKey([string]$proc.Id)) { $newOnes += $proc } }
+      foreach ($proc in $newOnes) {
+        try {
+          $null = $proc.CloseMainWindow()
+          Start-Sleep -Milliseconds 500
+          if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+        } catch {}
+      }
+      if ($newOnes.Count -gt 0 -and -not $Quiet) {
+        Write-Host ("Closed LabVIEW spawned by LVCompare: {0}" -f ($newOnes | Select-Object -ExpandProperty Id -join ',')) -ForegroundColor DarkGray
+      }
+    }
+  } catch {}
+}

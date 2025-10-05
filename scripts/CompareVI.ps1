@@ -114,6 +114,10 @@ function Invoke-CompareVI {
     Push-Location -LiteralPath $WorkingDirectory
     $pushed = $true
   }
+  # Snapshot LabVIEW processes to identify any newly spawned instances
+  $lvBefore = @()
+  try { $lvBefore = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch { $lvBefore = @() }
+
   try {
     if ([string]::IsNullOrWhiteSpace($Base)) { throw "Input 'base' is required and cannot be empty" }
     if ([string]::IsNullOrWhiteSpace($Head)) { throw "Input 'head' is required and cannot be empty" }
@@ -344,6 +348,29 @@ function Invoke-CompareVI {
     }
   }
   finally {
+    # Cleanup: if Compare spawned LabVIEW, close only those new instances
+    if ($env:DISABLE_LABVIEW_CLEANUP -ne '1') {
+      try {
+        $lvAfter = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
+        if ($lvAfter) {
+          $beforeSet = @{}
+          foreach ($id in $lvBefore) { $beforeSet[[string]$id] = $true }
+          $newOnes = @()
+          foreach ($p in $lvAfter) { if (-not $beforeSet.ContainsKey([string]$p.Id)) { $newOnes += $p } }
+          foreach ($proc in $newOnes) {
+            try {
+              # Attempt graceful close first
+              $null = $proc.CloseMainWindow()
+              Start-Sleep -Milliseconds 500
+              if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+            } catch {}
+          }
+          if ($newOnes.Count -gt 0 -and -not $env:GITHUB_ACTIONS) {
+            Write-Host ("[comparevi] closed LabVIEW instances spawned by compare: {0}" -f ($newOnes | Select-Object -ExpandProperty Id -join ',')) -ForegroundColor DarkGray
+          }
+        }
+      } catch {}
+    }
     if ($pushed) { Pop-Location }
   }
 }
