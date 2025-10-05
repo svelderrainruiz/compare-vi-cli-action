@@ -7,8 +7,8 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
     $script:validator = Join-Path $repoRoot 'tools' 'Validate-Fixtures.ps1'
     $script:diffScript = Join-Path $repoRoot 'tools' 'Diff-FixtureValidationJson.ps1'
     $script:manifestPath = Join-Path $repoRoot 'fixtures.manifest.json'
-    $script:baselineJson = Join-Path $repoRoot 'baseline-fixture-validation.json'
-    $script:currentJson  = Join-Path $repoRoot 'current-fixture-validation.json'
+    $script:baselineJson = Join-Path $TestDrive 'baseline-fixture-validation.json'
+    $script:currentJson  = Join-Path $TestDrive 'current-fixture-validation.json'
     $script:originalManifest = Get-Content -LiteralPath $manifestPath -Raw
 
     function Write-Manifest($jsonRaw) {
@@ -23,9 +23,9 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
       return $raw.Substring($start, ($end - $start + 1))
     }
 
-    # Produce baseline (no structural issues) -> lower minBytes to avoid size problems
+    # Produce baseline (no structural issues) -> record exact bytes to avoid size mismatches
     $m = $originalManifest | ConvertFrom-Json
-    foreach ($it in $m.items) { $it.minBytes = 1 }
+    foreach ($it in $m.items) { $it.bytes = (Get-Item -LiteralPath (Join-Path $repoRoot $it.path)).Length }
     Write-Manifest ($m | ConvertTo-Json -Depth 5)
   $baseRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate | Out-String)
   $baseOut = Convert-JsonOutputSegment $baseRaw
@@ -38,7 +38,7 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
 
     # Produce current with duplicate structural issue
     $m2 = $originalManifest | ConvertFrom-Json
-    foreach ($it in $m2.items) { $it.minBytes = 1 }
+    foreach ($it in $m2.items) { $it.bytes = (Get-Item -LiteralPath (Join-Path $repoRoot $it.path)).Length }
     $dup = $m2.items[0] | Select-Object *
     $m2.items += $dup
     Write-Manifest ($m2 | ConvertTo-Json -Depth 5)
