@@ -2,12 +2,41 @@ name: Fixture Drift Validation
 
 on:
   pull_request:
-  workflow_dispatch:
+    paths:
+      - 'fixtures.manifest.json'
+      - 'VI*.vi'
+      - 'scripts/**'
+      - 'tools/**'
+      - 'docs/schemas/**'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  preflight-windows:
+    name: Preflight (Windows)
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify LVCompare and idle LabVIEW state
+        shell: pwsh
+        run: |
+          $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+          if (-not (Test-Path -LiteralPath $cli)) {
+            Write-Host "::error::LVCompare.exe not found at canonical path: $cli"; exit 1
+          }
+          $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
+          if ($lv) {
+            Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ',')). Refusing to start tests."; exit 1
+          }
+          Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
   validate-ubuntu:
     name: Fixture Drift (Ubuntu)
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     permissions:
       actions: read
       contents: read
@@ -27,6 +56,12 @@ jobs:
   validate-windows:
     name: Fixture Drift (Windows)
     runs-on: [self-hosted, Windows, X64]
+    needs: preflight-windows
+    timeout-minutes: 3
+    env:
+      UNBLOCK_GUARD: '1'
+      LV_SUPPRESS_UI: '1'
+      WATCH_CONSOLE: '1'
     permissions:
       actions: read
       contents: read
@@ -42,3 +77,20 @@ jobs:
           comment-on-fail: 'true'
           upload-artifacts: 'true'
           artifact-name: fixture-drift-windows
+
+      - name: Session index post (best-effort)
+        if: always()
+        uses: ./.github/actions/session-index-post
+        with:
+          results-dir: results/fixture-drift
+          validate-schema: true
+          upload: true
+          artifact-name: fixture-drift-session-index
+
+      - name: Runner Unblock Guard
+        if: always()
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
+          cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'

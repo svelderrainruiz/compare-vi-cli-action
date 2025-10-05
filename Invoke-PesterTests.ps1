@@ -638,7 +638,9 @@ function Write-SessionIndex {
     try {
       $driftRoot = Join-Path (Get-Location) 'results/fixture-drift'
       if (Test-Path -LiteralPath $driftRoot -PathType Container) {
-        $latest = Get-ChildItem -LiteralPath $driftRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+        $dirs = Get-ChildItem -LiteralPath $driftRoot -Directory
+        $tsDirs = @($dirs | Where-Object { $_.Name -match '^[0-9]{8}T[0-9]{6}Z$' })
+        $latest = if ($tsDirs.Count -gt 0) { $tsDirs | Sort-Object Name -Descending | Select-Object -First 1 } else { $dirs | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1 }
         if ($latest) {
           $sumPath = Join-Path $latest.FullName 'drift-summary.json'
           $status = $null
@@ -680,6 +682,42 @@ function Write-SessionIndex {
           }
         } catch {}
         $idx['urls'] = $urls
+      }
+    } catch {}
+
+    # Handshake markers (optional): find latest marker and attach to runContext
+    try {
+      $handshakeFiles = @(Get-ChildItem -Path $ResultsDirectory -Recurse -Filter 'handshake-*.json' -File -ErrorAction SilentlyContinue)
+      if ($handshakeFiles.Count -gt 0) {
+        $hsSorted = @($handshakeFiles | Sort-Object LastWriteTimeUtc)
+        $last = $hsSorted[-1]
+        $lastRel = try { ($last.FullName).Substring(((Get-Location).Path).Length).TrimStart('\\','/') } catch { $last.Name }
+        $lastJson = $null
+        try { $lastJson = Get-Content -LiteralPath $last.FullName -Raw | ConvertFrom-Json -ErrorAction Stop } catch {}
+        $lastPhase = if ($lastJson.name) { [string]$lastJson.name } else { [string]([IO.Path]::GetFileNameWithoutExtension($last.Name) -replace '^handshake-','') }
+        $lastAtUtc = if ($lastJson.atUtc) { [string]$lastJson.atUtc } else { $last.LastWriteTimeUtc.ToString('o') }
+        $lastStatus = if ($lastJson.status) { [string]$lastJson.status } else { $null }
+        $markerRel = @()
+        foreach ($f in $hsSorted) {
+          $rp = try { ($f.FullName).Substring(((Get-Location).Path).Length).TrimStart('\\','/') } catch { $f.Name }
+          $markerRel += $rp
+        }
+        if (-not $idx['runContext']) { $idx['runContext'] = [ordered]@{} }
+        $idx.runContext['handshake'] = [ordered]@{
+          lastPhase   = $lastPhase
+          lastAtUtc   = $lastAtUtc
+          lastStatus  = $lastStatus
+          markerPaths = $markerRel
+        }
+        # Extend step summary with handshake excerpt if present
+        try {
+          $handshakeLines = @()
+          $handshakeLines += ("- Handshake Last Phase: {0}" -f $lastPhase)
+          if ($lastStatus) { $handshakeLines += ("- Handshake Last Status: {0}" -f $lastStatus) }
+          $firstTwo = @($markerRel | Select-Object -First 2)
+          foreach ($m in $firstTwo) { $handshakeLines += ("- Marker: {0}" -f $m) }
+          if ($idx['stepSummary']) { $idx['stepSummary'] = $idx['stepSummary'] + "`n" + ($handshakeLines -join "`n") } else { $idx['stepSummary'] = ($handshakeLines -join "`n") }
+        } catch {}
       }
     } catch {}
 

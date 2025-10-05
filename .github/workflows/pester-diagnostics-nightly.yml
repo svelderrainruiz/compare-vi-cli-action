@@ -5,9 +5,14 @@ on:
     - cron: '0 7 * * *' # 07:00 UTC daily
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   diagnostics:
     runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 3
     env:
       ENABLE_DIAGNOSTIC_FAIL: 1
     steps:

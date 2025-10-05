@@ -8,6 +8,7 @@ $QuietOutput = $false
 $EmitJson = $false
 $TestAllowFixtureUpdate = $false
 $DisableToken = $false
+$ManifestPath = ''
 for ($i=0; $i -lt $args.Length; $i++) {
   switch -Regex ($args[$i]) {
     '^-MinBytes$' { if ($i + 1 -lt $args.Length) { $i++; [int]$MinBytes = $args[$i] }; continue }
@@ -15,6 +16,10 @@ for ($i=0; $i -lt $args.Length; $i++) {
     '^-Json$' { $EmitJson = $true; continue }
   '^-TestAllowFixtureUpdate$' { $TestAllowFixtureUpdate = $true; continue }
   '^-DisableToken$' { $DisableToken = $true; continue }
+  '^-ManifestPath$' {
+      if ($i + 1 -lt $args.Length) { $i++; $ManifestPath = [string]$args[$i] }
+      continue
+    }
   }
 }
 
@@ -48,7 +53,7 @@ $tracked = (& git ls-files) -split "`n" | Where-Object { $_ }
 $missing = @(); $untracked = @(); $tooSmall = @(); $sizeMismatch = @(); $hashMismatch = @(); $manifestError = $false; $duplicateEntries = @(); $schemaIssues = @();
 
 # Phase 2: Load manifest if present
-$manifestPath = Join-Path $repoRoot 'fixtures.manifest.json'
+$manifestPath = if (-not [string]::IsNullOrWhiteSpace($ManifestPath)) { $ManifestPath } else { Join-Path $repoRoot 'fixtures.manifest.json' }
 $manifest = $null
 if (Test-Path -LiteralPath $manifestPath) {
   try {
