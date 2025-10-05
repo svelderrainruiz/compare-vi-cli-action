@@ -40,6 +40,10 @@ inputs:
     description: Additional LVCompare args
     required: false
     default: -nobdcosm -nofppos -noattr
+  report-delay-ms:
+    description: Optional settle delay before report generation (ms)
+    required: false
+    default: '150'
 
 outputs:
   status:
@@ -78,6 +82,8 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Continue'
+        # Optional settle delay for report rendering
+        if ('${{ inputs.report-delay-ms }}') { $env:REPORT_DELAY_MS = '${{ inputs.report-delay-ms }}' }
         # Let the orchestrator choose its timestamped subdirectory by default.
         # Only pass -OutputDir when the caller provided a custom directory.
         $outDir = '${{ inputs.output-dir }}'
@@ -147,13 +153,14 @@ runs:
             Write-Host "[drift-debug] drift-summary.json not found"
           }
           # Append to step summary (short block)
-          $lines = @('### Fixture Drift (debug)','')
-          $lines += ("- Orchestrator exit: {0}" -f $exit)
-          $lines += ("- Status: {0}" -f $status)
-          $lines += ("- Results root: {0}" -f $root)
-          $lines += ("- Latest dir: {0}" -f (if ($latest) { $latest.Name } else { '<none>' }))
-          $lines += ("- Summary path: {0}" -f (if ($sumPath) { $sumPath } else { '<none>' }))
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        $lines = @('### Fixture Drift (debug)','')
+        $lines += ("- Orchestrator exit: {0}" -f $exit)
+        $lines += ("- Status: {0}" -f $status)
+        $lines += ("- Results root: {0}" -f $root)
+        $lines += ("- Latest dir: {0}" -f (if ($latest) { $latest.Name } else { '<none>' }))
+        $lines += ("- Summary path: {0}" -f (if ($sumPath) { $sumPath } else { '<none>' }))
+        if ($env:REPORT_DELAY_MS) { $lines += ("- Report delay (ms): {0}" -f $env:REPORT_DELAY_MS) }
+        $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         } catch { Write-Host "[drift-debug] failed to emit debug breadcrumbs: $_" }
 
     - name: Upload drift artifacts (with retention)
