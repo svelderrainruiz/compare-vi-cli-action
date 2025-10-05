@@ -37,9 +37,21 @@ on:
         options: ['false','true']
 
 jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    outputs:
+      include_integration: ${{ steps.b.outputs.normalized }}
+    steps:
+      - name: Normalize include_integration
+        id: b
+        uses: ./.github/actions/bool-normalize
+        with:
+          value: ${{ inputs.include_integration || 'false' }}
+
   pester:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
+    needs: normalize
     steps:
       - uses: actions/checkout@v5
 
@@ -51,7 +63,7 @@ jobs:
       - name: Run unit tests (Pester v5, repo-local)
         shell: pwsh
         run: |
-          if ('${{ inputs.include_integration }}' -ieq 'true') {
+          if ('${{ needs.normalize.outputs.include_integration }}' -ieq 'true') {
             ./tools/Run-Pester.ps1 -IncludeIntegration
           } else {
             ./tools/Run-Pester.ps1
