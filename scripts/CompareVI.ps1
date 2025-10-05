@@ -104,7 +104,8 @@ function Invoke-CompareVI {
     [string] $GitHubOutputPath,
     [string] $GitHubStepSummaryPath,
     [ScriptBlock] $Executor,
-    [switch] $PreviewArgs
+    [switch] $PreviewArgs,
+    [string] $CompareExecJsonPath
   )
 
   $pushed = $false
@@ -283,6 +284,28 @@ function Invoke-CompareVI {
   "shortCircuitedIdentical=false" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
   "compareDurationSeconds=$compareDurationSeconds" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
   "compareDurationNanoseconds=$compareDurationNanoseconds" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+    }
+
+    # Persist single-source-of-truth execution record if requested
+    if ($CompareExecJsonPath) {
+      try {
+        $exec = [pscustomobject]@{
+          schema       = 'compare-exec/v1'
+          generatedAt  = (Get-Date).ToString('o')
+          cliPath      = $cli
+          command      = $cmdline
+          exitCode     = $code
+          diff         = $diff
+          cwd          = $cwd
+          duration_s   = $compareDurationSeconds
+          duration_ns  = $compareDurationNanoseconds
+          base         = $baseAbs
+          head         = $headAbs
+        }
+        $dir = Split-Path -Parent $CompareExecJsonPath
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        $exec | ConvertTo-Json -Depth 6 | Out-File -FilePath $CompareExecJsonPath -Encoding utf8 -ErrorAction Stop
+      } catch { Write-Host "[comparevi] warn: failed to write exec json: $_" -ForegroundColor DarkYellow }
     }
 
     if ($GitHubStepSummaryPath) {

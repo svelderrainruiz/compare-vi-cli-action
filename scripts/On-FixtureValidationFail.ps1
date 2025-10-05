@@ -534,15 +534,41 @@ if ($RenderReport -and $cliExists) {
       # Use robust dispatcher to avoid LVCompare UI popups and apply preflight guards
       $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..') | Select-Object -ExpandProperty Path
       . (Join-Path $repoRoot 'scripts' 'CompareVI.ps1')
-      $res = Invoke-CompareVI -Base $BasePath -Head $HeadPath -LvComparePath $cli -LvCompareArgs $LvCompareArgs -FailOnDiff:$false
+      $execJsonPath = Join-Path $OutputDir 'compare-exec.json'
+      $res = Invoke-CompareVI -Base $BasePath -Head $HeadPath -LvComparePath $cli -LvCompareArgs $LvCompareArgs -FailOnDiff:$false -CompareExecJsonPath $execJsonPath
       $exitCode = $res.ExitCode
       $duration = $res.CompareDurationSeconds
       $command = $res.Command
       # CompareVI does not capture raw streams; emit placeholders for completeness
-      $stdout = ''
-      $stderr = ''
+      $stdout = ''
+      $stderr = ''
     }
-    # Generate HTML fragment via reporter script
+    # Persist exec JSON for simulated path as well, and add a brief optional settle delay
+    try {
+      $ej = Join-Path $OutputDir 'compare-exec.json'
+      if (-not (Test-Path -LiteralPath $ej)) {
+        $exec = [pscustomobject]@{
+          schema       = 'compare-exec/v1'
+          generatedAt  = (Get-Date).ToString('o')
+          cliPath      = $cli
+          command      = if ($command) { $command } else { '"{0}" "{1}" {2}' -f $cli,(Resolve-Path $BasePath).Path,(Resolve-Path $HeadPath).Path }
+          exitCode     = $exitCode
+          diff         = ($exitCode -eq 1)
+          cwd          = (Get-Location).Path
+          duration_s   = if ($duration) { $duration } else { 0 }
+          duration_ns  = $null
+          base         = (Resolve-Path $BasePath).Path
+          head         = (Resolve-Path $HeadPath).Path
+        }
+        $exec | ConvertTo-Json -Depth 6 | Out-File -FilePath $ej -Encoding utf8 -ErrorAction SilentlyContinue
+      }
+      Add-Artifact 'compare-exec.json'
+      Add-Note ("compare exit={0} diff={1} dur={2}s" -f $exitCode, (($exitCode -eq 1) ? 'true' : 'false'), $duration)
+      $delayMs = 0; if ($env:REPORT_DELAY_MS) { [void][int]::TryParse($env:REPORT_DELAY_MS, [ref]$delayMs) }
+      if ($delayMs -gt 0) { Start-Sleep -Milliseconds $delayMs }
+    } catch { Add-Note ("failed to persist exec json or delay: {0}" -f $_.Exception.Message) }
+
+    # Generate HTML fragment via reporter script
     $reporter = Join-Path (Join-Path $PSScriptRoot '') 'Render-CompareReport.ps1'
     if (Test-Path -LiteralPath $reporter) {
       $diff = if ($exitCode -eq 1) { 'true' } elseif ($exitCode -eq 0) { 'false' } else { 'false' }

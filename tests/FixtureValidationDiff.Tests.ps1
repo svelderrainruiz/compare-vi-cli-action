@@ -6,7 +6,9 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..') | Select-Object -ExpandProperty Path
     $script:validator = Join-Path $repoRoot 'tools' 'Validate-Fixtures.ps1'
     $script:diffScript = Join-Path $repoRoot 'tools' 'Diff-FixtureValidationJson.ps1'
-    $script:manifestPath = Join-Path $repoRoot 'fixtures.manifest.json'
+    # Use a temp manifest to avoid mutating repository files
+    $script:manifestPath = Join-Path $TestDrive 'fixtures.manifest.json'
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'fixtures.manifest.json') -Destination $script:manifestPath -Force
     $script:baselineJson = Join-Path $TestDrive 'baseline-fixture-validation.json'
     $script:currentJson  = Join-Path $TestDrive 'current-fixture-validation.json'
     $script:originalManifest = Get-Content -LiteralPath $manifestPath -Raw
@@ -27,7 +29,7 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
     $m = $originalManifest | ConvertFrom-Json
     foreach ($it in $m.items) { $it.bytes = (Get-Item -LiteralPath (Join-Path $repoRoot $it.path)).Length }
     Write-Manifest ($m | ConvertTo-Json -Depth 5)
-  $baseRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate | Out-String)
+  $baseRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate -ManifestPath $script:manifestPath | Out-String)
   $baseOut = Convert-JsonOutputSegment $baseRaw
   Set-Content -LiteralPath $baselineJson -Value $baseOut -Encoding utf8
     $parsedBase = $null
@@ -42,7 +44,7 @@ Describe 'Fixture validation delta script' -Tag 'Unit' {
     $dup = $m2.items[0] | Select-Object *
     $m2.items += $dup
     Write-Manifest ($m2 | ConvertTo-Json -Depth 5)
-  $currRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate | Out-String)
+  $currRaw = (pwsh -NoLogo -NoProfile -File $script:validator -Json -DisableToken -TestAllowFixtureUpdate -ManifestPath $script:manifestPath | Out-String)
   $currOut = Convert-JsonOutputSegment $currRaw
   Set-Content -LiteralPath $currentJson -Value $currOut -Encoding utf8
     $parsedCurr = $null
