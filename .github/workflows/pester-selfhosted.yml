@@ -52,7 +52,12 @@ jobs:
             ) -join [Environment]::NewLine
             $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
             if (Test-Path $idx) {
-              "\nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              $ix = Get-Content $idx -Raw | ConvertFrom-Json
+              if ($ix.stepSummary) {
+                "\n$($ix.stepSummary)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              } else {
+                "\nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              }
             }
           } else {
             Write-Host '::warning::pester-summary.json not found.'

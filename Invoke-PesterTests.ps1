@@ -599,6 +599,33 @@ function Write-SessionIndex {
             maxTest_ms  = $s.maxTest_ms
             schemaVersion = $s.schemaVersion
           }
+          # Derive simple session status and pre-render a concise step-summary block
+          $status = if (($s.failed -gt 0) -or ($s.errors -gt 0)) { 'fail' } else { 'ok' }
+          $idx['status'] = $status
+          # Compute repo-relative results path when possible
+          $resRel = $ResultsDirectory
+          try {
+            $cwd = (Get-Location).Path
+            if ($resRel.StartsWith($cwd,[System.StringComparison]::OrdinalIgnoreCase)) {
+              $rel = $resRel.Substring($cwd.Length).TrimStart('\\','/')
+              if (-not [string]::IsNullOrWhiteSpace($rel)) { $resRel = $rel }
+            }
+          } catch {}
+          $lines = @()
+          $lines += '### Session Overview'
+          $lines += ''
+          $lines += ("- Status: {0}" -f $status)
+          $lines += ("- Total: {0} | Passed: {1} | Failed: {2} | Errors: {3} | Skipped: {4}" -f $s.total,$s.passed,$s.failed,$s.errors,$s.skipped)
+          $lines += ("- Duration (s): {0}" -f $s.duration_s)
+          $lines += ("- Include Integration: {0}" -f [bool]$includeIntegrationBool)
+          $lines += ''
+          $lines += 'Artifacts (paths):'
+          $present = @()
+          foreach ($k in @('pesterSummaryJson','pesterResultsXml','pesterSummaryTxt','artifactManifestJson','artifactTrailJson','leakReportJson','compareReportHtml','resultsIndexHtml')) {
+            if ($idx.files[$k]) { $present += (Join-Path $resRel $idx.files[$k]) }
+          }
+          foreach ($p in $present) { $lines += ("- {0}" -f $p) }
+          $idx['stepSummary'] = ($lines -join "`n")
         }
       } catch {}
     }
@@ -638,6 +665,21 @@ function Write-SessionIndex {
         job         = $env:GITHUB_JOB
         runner      = $env:RUNNER_NAME
         runnerOS    = $env:RUNNER_OS
+      }
+      # Optional well-known URLs for convenience (UI pages)
+      if ($env:GITHUB_REPOSITORY) {
+        $repoUrl = "https://github.com/$($env:GITHUB_REPOSITORY)"
+        $urls = [ordered]@{ repository = $repoUrl }
+        if ($env:GITHUB_RUN_ID) { $urls.run = "$repoUrl/actions/runs/$($env:GITHUB_RUN_ID)" }
+        if ($env:GITHUB_SHA)     { $urls.commit = "$repoUrl/commit/$($env:GITHUB_SHA)" }
+        # If PR number can be parsed from ref (refs/pull/{n}/...), include a PR URL
+        try {
+          $ref = $env:GITHUB_REF
+          if ($ref -and $ref -match 'refs/pull/(?<num>\d+)/') {
+            $urls.pullRequest = "$repoUrl/pull/$($Matches.num)"
+          }
+        } catch {}
+        $idx['urls'] = $urls
       }
     } catch {}
 
