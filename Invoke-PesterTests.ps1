@@ -1241,7 +1241,7 @@ try {
     $_timingDurations = @($result.Tests | Where-Object { $_.Duration } | ForEach-Object { $_.Duration.TotalMilliseconds })
     if ($_timingDurations.Count -gt 0) {
       $meanMs = [math]::Round(($_timingDurations | Measure-Object -Average).Average,2)
-      $sorted = $_timingDurations | Sort-Object
+      $sorted = @($_timingDurations | Sort-Object)
       $maxMs = [math]::Round(($sorted[-1]),2)
       $pIndex = [int][math]::Floor(0.95 * ($sorted.Count - 1))
       if ($pIndex -ge 0) { $p95Ms = [math]::Round($sorted[$pIndex],2) }
@@ -1426,7 +1426,7 @@ try {
   if ($EmitTimingDetail) {
     try {
       if ($_timingDurations.Count -gt 0) {
-        $sortedAll = $_timingDurations | Sort-Object
+        $sortedAll = @($_timingDurations | Sort-Object)
         function _pct { param($p,[double[]]$arr) if ($arr.Count -eq 0) { return $null } $idx = [math]::Floor(($p/100) * ($arr.Count - 1)); return [math]::Round($arr[[int]$idx],2) }
         $minMs = [math]::Round($sortedAll[0],2)
         $medianMs = _pct 50 $sortedAll
