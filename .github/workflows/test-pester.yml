@@ -17,6 +17,7 @@ on:
 jobs:
   pester:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
@@ -78,3 +79,6 @@ jobs:
           } else {
             Write-Host '::notice::session-index.json not present.'
           }
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
