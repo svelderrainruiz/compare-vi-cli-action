@@ -1,5 +1,7 @@
 # CompareVi.Shared Library
 
+![Build](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/dotnet-shared.yml/badge.svg)
+
 A small .NET 8 class library providing shared helpers for LVCompare orchestration across repositories.
 
 Contents
@@ -10,6 +12,17 @@ Contents
 Build
 - Local: `pwsh -File tools/Build-Shared.ps1 -Pack`
 - CI: `.github/workflows/dotnet-shared.yml` builds and uploads the `.nupkg` artifact when `src/**` changes.
+
+GitHub Packages (after first publish)
+- Add GitHub Packages source (requires a PAT with read:packages):
+  ```bash
+  dotnet nuget add source "https://nuget.pkg.github.com/LabVIEW-Community-CI-CD/index.json" \
+    --name github --username YOUR_GH_USER --password YOUR_GH_PAT --store-password-in-clear-text
+  ```
+- Install:
+  ```bash
+  dotnet add package CompareVi.Shared --version 0.1.0
+  ```
 
 Usage (PowerShell)
 - Load the compiled assembly for experiments:
@@ -23,4 +36,3 @@ Roadmap
 - Publish to GitHub Packages; add a PowerShell binary module wrapper for easy import.
 - Gradual adoption in scripts (tokenization, path quoting, process cleanup) via thin adapters.
 - Stabilize API, then consider NuGet release for broader reuse.
-
