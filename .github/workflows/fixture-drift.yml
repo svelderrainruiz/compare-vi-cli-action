@@ -42,3 +42,26 @@ jobs:
           comment-on-fail: 'true'
           upload-artifacts: 'true'
           artifact-name: fixture-drift-windows
+
+      - name: Runner Unblock Guard (process/jobs snapshot)
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $snap = [ordered]@{}
+          try {
+            $procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -in @('conhost','pwsh','LabVIEW','LVCompare') } | Select-Object ProcessName,Id,StartTime)
+            $jobs  = @(Get-Job -ErrorAction SilentlyContinue | Select-Object Id,Name,State,HasMoreData)
+            $snap.processes = $procs
+            $snap.jobs = $jobs
+            $outDir = Join-Path (Get-Location) 'results/fixture-drift'
+            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+            $path = Join-Path $outDir 'runner-unblock-snapshot.json'
+            $snap | ConvertTo-Json -Depth 5 | Out-File -FilePath $path -Encoding utf8
+            $lines = @('### Runner Unblock Guard','')
+            $lines += ('- Process count: {0}' -f $procs.Count)
+            $lines += ('- Pester job count: {0}' -f $jobs.Count)
+            $lines += ''
+            $lines += ('Snapshot: {0}' -f $path)
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } catch { Write-Host "::warning::Unblock guard failed: $_" }
