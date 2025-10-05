@@ -173,6 +173,29 @@ jobs:
           name: smoke-html-report
           path: ${{ runner.temp }}/smoke-report/compare-report.html
 
+      - name: Append session index (if present)
+        if: always()
+        shell: pwsh
+        run: |
+          $idx = Join-Path 'tests/results' 'session-index.json'
+          if (Test-Path $idx) {
+            try {
+              $ix = Get-Content $idx -Raw | ConvertFrom-Json
+              if ($ix.stepSummary) {
+                "`n$($ix.stepSummary)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              } else {
+                "`nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              }
+            } catch { Write-Host '::warning::failed to append session index step summary' }
+          }
+
+      - name: Upload session index (if present)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-session-index
+          path: tests/results/session-index.json
+
       - name: Summarize fixture JSON (step summary)
         if: always()
         shell: pwsh

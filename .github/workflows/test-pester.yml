@@ -39,6 +39,17 @@ jobs:
         shell: pwsh
         run: |
           pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 -ResultsDir 'tests/results'
+          $idx = Join-Path 'tests/results' 'session-index.json'
+          if (Test-Path $idx) {
+            try {
+              $ix = Get-Content $idx -Raw | ConvertFrom-Json
+              if ($ix.stepSummary) {
+                "`n$($ix.stepSummary)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              } else {
+                "`nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              }
+            } catch { Write-Host '::warning::failed to append session index step summary' }
+          }
 
       - name: Upload Pester artifacts
         if: always()
@@ -48,3 +59,8 @@ jobs:
           path: |
             tests/results/pester-results.xml
             tests/results/pester-summary.txt
+            tests/results/pester-summary.json
+            tests/results/pester-artifacts.json
+            tests/results/pester-artifacts-trail.json
+            tests/results/pester-leak-report.json
+            tests/results/session-index.json
