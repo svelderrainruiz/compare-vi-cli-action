@@ -182,7 +182,9 @@ jobs:
             try {
               $ix = Get-Content $idx -Raw | ConvertFrom-Json
               if ($ix.stepSummary) {
-                "`n$($ix.stepSummary)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+                $intro = @('','### Smoke Session Overview','') -join "`n"
+                $intro | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+                $ix.stepSummary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
               } else {
                 "`nSession index: tests/results/session-index.json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
               }
