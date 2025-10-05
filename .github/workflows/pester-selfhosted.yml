@@ -16,6 +16,9 @@ jobs:
     env:
       LV_BASE_VI: ${{ vars.LV_BASE_VI }}
       LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
+      DETECT_LEAKS: '1'
+      CLEAN_AFTER: '1'
+      SCAN_ARTIFACTS: '1'
     steps:
       - uses: actions/checkout@v5
 
