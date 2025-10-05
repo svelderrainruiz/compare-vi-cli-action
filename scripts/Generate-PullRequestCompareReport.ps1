@@ -17,15 +17,27 @@
   [double]$LoopIntervalSeconds = 0,
   [ValidateSet('Exact','StreamingReservoir','Hybrid')] [string]$QuantileStrategy = 'StreamingReservoir',
   [int]$StreamCapacity = 300,
-  [int]$HistogramBins = 0
+  [int]$HistogramBins = 0,
+  [string]$BasePath,
+  [string]$HeadPath
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
 if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) { throw "LVCompare not found at canonical path: $canonical" }
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-$baseVi = (Resolve-Path (Join-Path $repoRoot 'VI1.vi')).Path
-$headVi = (Resolve-Path (Join-Path $repoRoot 'VI2.vi')).Path
+
+# Resolve base/head input paths if provided, else default to repo-root VI1/VI2
+if ($BasePath) {
+  $baseVi = (Resolve-Path -LiteralPath $BasePath -ErrorAction Stop).Path
+} else {
+  $baseVi = (Resolve-Path (Join-Path $repoRoot 'VI1.vi')).Path
+}
+if ($HeadPath) {
+  $headVi = (Resolve-Path -LiteralPath $HeadPath -ErrorAction Stop).Path
+} else {
+  $headVi = (Resolve-Path (Join-Path $repoRoot 'VI2.vi')).Path
+}
 foreach ($p in @($baseVi,$headVi)) {
   if (-not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "Required VI file missing: $p" }
   $len = (Get-Item -LiteralPath $p).Length

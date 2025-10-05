@@ -111,6 +111,29 @@ foreach ($f in $fixtures) {
   }
 }
 
+# Optional: auto-generate/refresh manifest when both fixtures changed (deterministic drift flag)
+$autoManifestWritten = $false
+$autoManifestReason  = $null
+$autoManifestTarget  = $manifestPath
+try {
+  $defaultManifest = Join-Path $repoRoot 'fixtures.manifest.json'
+  $isDefaultTarget = ([string]::IsNullOrWhiteSpace($ManifestPath) -or ((Resolve-Path -LiteralPath $defaultManifest -ErrorAction SilentlyContinue)?.Path -ieq (Resolve-Path -LiteralPath $manifestPath -ErrorAction SilentlyContinue)?.Path))
+  if ($hashMismatch.Count -ge 2 -and -not $manifestError -and $isDefaultTarget) {
+    # Create/refresh manifest to capture new bytes/hashes; keep non-zero exit to signal drift to CI.
+    $updateScript = Join-Path $PSScriptRoot 'Update-FixtureManifest.ps1'
+    if (Test-Path -LiteralPath $updateScript -PathType Leaf) {
+      try {
+        pwsh -NoLogo -NoProfile -File $updateScript -Force | Out-Null
+        $autoManifestWritten = $true
+        $autoManifestReason  = 'hashMismatch>=2'
+        $autoManifestTarget  = $defaultManifest
+      } catch {
+        # Non-fatal: proceed without auto-write
+      }
+    }
+  }
+} catch { }
+
 # Commit message token override
 $allowOverride = $false
 try {
@@ -175,6 +198,11 @@ if ($EmitJson) {
       manifestError = [int]($manifestError)
       duplicate = ($duplicateEntries).Count
       schema = ($schemaIssues).Count
+    }
+    autoManifest = [ordered]@{
+      written = [bool]$autoManifestWritten
+      reason  = $autoManifestReason
+      path    = $autoManifestTarget
     }
   }
   $obj | ConvertTo-Json -Depth 8

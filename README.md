@@ -689,6 +689,7 @@ For common issues including path resolution problems, exit code interpretation, 
 ## Documentation
 
 - **[Usage Guide](./docs/USAGE_GUIDE.md)** - Advanced configuration, lvCompareArgs recipes, path resolution
+- **[Fixture Drift](./docs/FIXTURE_DRIFT.md)** - Validator, auto‑manifest refresh, CI gating and artifacts
 - **[Loop Mode Guide](./docs/COMPARE_LOOP_MODULE.md)** - Experimental loop mode for performance testing
 - **[Developer Guide](./docs/DEVELOPER_GUIDE.md)** - Testing, building, and release process
 - **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md)** - Common issues and solutions

@@ -2,7 +2,7 @@ name: Validate
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
   push:
     branches: [ main ]
   workflow_dispatch:
@@ -72,6 +72,16 @@ jobs:
             exit 2
           } else {
             Write-Host 'Intra-repo markdown links OK.'
+          }
+
+      - name: Append docs pointers
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $lines = @('### Docs Pointers','')
+            $lines += '- Fixture Drift: ./docs/FIXTURE_DRIFT.md'
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
   fixtures:
