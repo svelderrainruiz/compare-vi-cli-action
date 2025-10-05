@@ -15,6 +15,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    outputs:
+      include_integration: ${{ steps.b.outputs.normalized }}
+    steps:
+      - name: Normalize include_integration
+        id: b
+        uses: ./.github/actions/bool-normalize
+        with:
+          value: ${{ inputs.include_integration || 'true' }}
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -57,7 +67,7 @@ jobs:
   pester:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
-    needs: [preflight]
+    needs: [normalize, preflight]
     env:
       LV_BASE_VI: ${{ vars.LV_BASE_VI }}
       LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
@@ -72,7 +82,7 @@ jobs:
       - name: Run Pester tests via local dispatcher
         shell: pwsh
         run: |
-          ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ inputs.include_integration }}' -ResultsPath tests/results
+          ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath tests/results
 
       - name: Ensure session index (fallback)
         if: always()
