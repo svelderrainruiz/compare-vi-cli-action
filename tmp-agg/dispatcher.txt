@@ -553,60 +553,6 @@ if ($labviewOpen.Count -gt 0) {
   }
 }
 
-function Write-SessionIndex {
-  param(
-    [Parameter(Mandatory)] [string]$ResultsDirectory,
-    [Parameter(Mandatory)] [string]$SummaryJsonPath
-  )
-  try {
-    if (-not (Test-Path -LiteralPath $ResultsDirectory -PathType Container)) { return }
-    $idx = [ordered]@{
-      schema           = 'session-index/v1'
-      schemaVersion    = '1.0.0'
-      generatedAtUtc   = (Get-Date).ToUniversalTime().ToString('o')
-      resultsDir       = $ResultsDirectory
-      includeIntegration = [bool]$includeIntegrationBool
-      files            = [ordered]@{}
-    }
-    $addIf = {
-      param($name,$file)
-      $p = Join-Path $ResultsDirectory $file
-      if (Test-Path -LiteralPath $p -PathType Leaf) { $idx.files[$name] = $file }
-    }
-    & $addIf 'pesterResultsXml' 'pester-results.xml'
-    & $addIf 'pesterSummaryTxt' 'pester-summary.txt'
-    $jsonLeaf = Split-Path -Leaf $SummaryJsonPath
-    if ($jsonLeaf) { & $addIf 'pesterSummaryJson' $jsonLeaf }
-    & $addIf 'pesterFailuresJson' 'pester-failures.json'
-    & $addIf 'artifactManifestJson' 'pester-artifacts.json'
-    & $addIf 'artifactTrailJson' 'pester-artifacts-trail.json'
-    & $addIf 'leakReportJson' 'pester-leak-report.json'
-    & $addIf 'compareReportHtml' 'compare-report.html'
-    & $addIf 'resultsIndexHtml' 'results-index.html'
-    try {
-      $driftRoot = Join-Path (Get-Location) 'results/fixture-drift'
-      if (Test-Path -LiteralPath $driftRoot -PathType Container) {
-        $latest = Get-ChildItem -LiteralPath $driftRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
-        if ($latest) {
-          $sumPath = Join-Path $latest.FullName 'drift-summary.json'
-          $status = $null
-          if (Test-Path -LiteralPath $sumPath) {
-            try { $j = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop; $status = $j.status } catch {}
-          }
-          $idx['drift'] = [ordered]@{
-            latestRunDir  = $latest.FullName
-            latestSummary = (Test-Path -LiteralPath $sumPath) ? $sumPath : $null
-            status        = $status
-          }
-        }
-      }
-    } catch {}
-    $dest = Join-Path $ResultsDirectory 'session-index.json'
-    $idx | ConvertTo-Json -Depth 6 | Out-File -FilePath $dest -Encoding utf8 -ErrorAction Stop
-    Write-Host "Session index written to: $dest" -ForegroundColor Gray
-  } catch { Write-Warning "Failed to write session index: $_" }
-}
-
 # Optional pre-clean of LabVIEW if explicitly requested
 if ($CleanLabVIEW) {
   Write-Host "Pre-run cleanup: stopping LabVIEW.exe" -ForegroundColor DarkGray
@@ -720,7 +666,6 @@ if ($testFiles.Count -eq 0) {
     } catch { Write-Warning "Leak detection (early-exit) failed: $_" }
   }
   Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryEarly -ManifestVersion $SchemaManifestVersion
-  Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryEarly
   Write-Host 'No test files found. Placeholder artifacts emitted.' -ForegroundColor Yellow
   exit 0
 }
@@ -1751,8 +1696,6 @@ if ($discoveryFailureCount -gt 0) {
 }
 if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Normalize -Quiet }
 Write-ArtifactManifest -Directory $resultsDir -SummaryJsonPath $jsonSummaryPath -ManifestVersion $SchemaManifestVersion
-Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPath
-Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPath
 } finally {
   # Ensure any background Pester job is stopped/removed to avoid lingering runs across sessions
   try {
@@ -1807,3 +1750,4 @@ Write-SessionIndex -ResultsDirectory $resultsDir -SummaryJsonPath $jsonSummaryPa
   } catch { Write-Warning "Failed to emit final sweep leak report: $_" }
 }
 exit 0
+
