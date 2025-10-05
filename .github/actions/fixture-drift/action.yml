@@ -420,3 +420,13 @@ runs:
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
         if ($s -ne 'ok') { Write-Host "Soft-fail enabled: not failing job despite status='$s'." }
+
+    - name: Append docs pointers
+      if: always()
+      shell: pwsh
+      run: |
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Docs Pointers','')
+          $lines += '- Fixture Drift: ./docs/FIXTURE_DRIFT.md'
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }

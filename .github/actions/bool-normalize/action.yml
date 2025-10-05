@@ -1,0 +1,25 @@
+name: Bool Normalize
+description: Normalize a boolean-like string to 'true' or 'false'
+inputs:
+  value:
+    description: Input value to normalize
+    required: true
+outputs:
+  normalized:
+    description: Normalized 'true' or 'false'
+    value: ${{ steps.norm.outputs.normalized }}
+runs:
+  using: composite
+  steps:
+    - id: norm
+      shell: pwsh
+      run: |
+        $v = '${{ inputs.value }}'
+        $out = 'false'
+        try {
+          if ($null -ne $v -and $v -ne '') {
+            $b = [System.Convert]::ToBoolean($v)
+            $out = if ($b) { 'true' } else { 'false' }
+          }
+        } catch { $out = 'false' }
+        "normalized=$out" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
