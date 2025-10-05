@@ -3,6 +3,10 @@ name: Smoke test Compare VI action
 on:
   workflow_dispatch:
     inputs:
+      sample_id:
+        description: "Sampling correlation id (prevents cancels)"
+        required: false
+        type: string
       base:
         description: "Absolute or workspace-relative path to base .vi"
         required: false
@@ -229,5 +233,5 @@ jobs:
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
