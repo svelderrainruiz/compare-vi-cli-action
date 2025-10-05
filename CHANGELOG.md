@@ -7,41 +7,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-## [v0.5.0] - TBD
+## [v0.5.0] - 2025-10-05
 
 ### Breaking Changes
 
-- **Removed legacy artifact naming fallback**: `Base.vi` / `Head.vi` references eliminated from scripts, tests, and documentation. All code now uses `VI1.vi` / `VI2.vi` exclusively. Migration: Rename your artifact files and update any workflows referencing the old names. Environment variable names (`LV_BASE_VI`, `LV_HEAD_VI`) and action input names (`base`, `head`) remain unchanged.
+- Fixture manifest size field renamed: `minBytes` → `bytes` (exact). Update any custom validators or scripts that consume `fixtures.manifest.json`.
 
 ### Added
 
-- Deterministic HTML diff fragment test (`tests/CompareLoop.HtmlDiffDeterminism.Tests.ps1`): Ensures byte-for-byte stability, deterministic list ordering, and proper HTML entity encoding across multiple invocations.
-- Quantile accuracy and tuning documentation (`docs/QUANTILE_ACCURACY.md`): Comprehensive guide covering strategy selection (Exact/StreamingReservoir/Hybrid), error bounds for different distributions, capacity tuning, reconciliation frequency, and example configurations.
-- Documentation improvements: Cross-links added from README and COMPARE_LOOP_MODULE.md to new quantile accuracy guide.
+- Dispatcher session index (`session-index.json`) with run `status`, summary counts, artifact pointers, run context URLs, and a pre-rendered `stepSummary` block.
+- Session index schema: `docs/schemas/session-index-v1.schema.json` and schema-lite validation in CI (validate, self-hosted, hosted, smoke, and integration-on-label).
+- Developer guide: `AGENTS.md` and a link-check utility `tools/Check-DocsLinks.ps1` (used locally and can be wired in CI).
 
 ### Changed
 
-- Updated all script and test references from `Base.vi`/`Head.vi` to `VI1.vi`/`VI2.vi` (includes: `set-env-vars.ps1`, integration tests, unit tests, module examples, runbook scripts).
-- README migration note updated from v0.4.0 compatibility message to v0.5.0 breaking change notice.
-- `.gitignore` expanded to exclude `tmp-*.json` artifacts.
+- Dispatcher now hard-gates on a running `LabVIEW.exe` (will not start tests with LabVIEW open); post-run cleanup focuses on LabVIEW, with opt-in to close LVCompare via `CLEAN_LVCOMPARE=1`.
+- Composite drift action improved: reliable discovery of `drift-summary.json` (timestamped and direct paths) and richer debug breadcrumbs in job summary.
+- Artifact manifest now includes `session-index.json`.
+- Workflows append the session index `stepSummary` for quick scanability and upload the session index as an artifact.
 
 ### Fixed
 
-- (None specific to v0.5.0 scope; unreleased fixes above)
+- Drift job reporting “unknown” status due to summary path resolution; action now resolves direct and timestamped locations.
 
-### Migration Guide (v0.4.x → v0.5.0)
+### Migration Notes
 
-1. **Artifact Naming**: Rename `Base.vi` → `VI1.vi` and `Head.vi` → `VI2.vi` in your repository root or wherever you store reference VIs.
-2. **Workflow Updates**: Search workflows for hardcoded `Base.vi`/`Head.vi` references and update to new names.
-3. **Environment Variables**: No change required—`LV_BASE_VI` and `LV_HEAD_VI` variable names remain the same (only the file they point to changes).
-4. **Validation**: Run existing integration tests with updated file names to confirm no regressions.
-
-GitHub search snippet for downstream auditing:
-
-```bash
-# In your repository
-grep -r "Base\.vi\|Head\.vi" --include="*.yml" --include="*.ps1" .github/
-```
+- If you ingest `fixtures.manifest.json`, migrate to `bytes` (exact size). Repo scripts/validators are updated. No changes to action inputs/outputs.
 
 ## [Unreleased] (Post v0.5.0)
 
