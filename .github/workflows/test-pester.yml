@@ -35,6 +35,10 @@ on:
         default: 'false'
         type: choice
         options: ['false','true']
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
 
 jobs:
   normalize:
@@ -112,5 +116,5 @@ jobs:
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true

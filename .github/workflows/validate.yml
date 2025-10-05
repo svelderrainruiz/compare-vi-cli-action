@@ -11,6 +11,14 @@ on:
         description: 'Emit verbose fixture summary (sets SUMMARY_VERBOSE=true)'
         required: false
         default: 'false'
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:

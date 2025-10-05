@@ -3,10 +3,15 @@ name: Pester diagnostics nightly
 on:
   schedule:
     - cron: '0 7 * * *' # 07:00 UTC daily
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
 
 jobs:

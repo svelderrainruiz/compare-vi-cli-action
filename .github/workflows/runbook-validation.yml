@@ -2,10 +2,19 @@ name: Integration Runbook Validation
 
 on:
   workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
   push:
     branches:
       - develop
       - release/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   runbook-check:
