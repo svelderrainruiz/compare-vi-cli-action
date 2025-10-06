@@ -20,8 +20,7 @@ Describe 'Tracked Build Artifacts Guard' -Tag 'Unit' {
   }
 
   It 'exits with code 3 when tracked offenders exist' {
-    $cmd = "pwsh -NoLogo -NoProfile -File `"$script:guard`""
-    $pr = Start-Process pwsh -ArgumentList @('-NoLogo','-NoProfile','-Command', $cmd) -Wait -PassThru -WorkingDirectory $script:repo
+    $pr = Start-Process pwsh -ArgumentList @('-NoLogo','-NoProfile','-File', $script:guard) -Wait -PassThru -WorkingDirectory $script:repo
     $pr.ExitCode | Should -Be 3
   }
 
@@ -33,8 +32,7 @@ Describe 'Tracked Build Artifacts Guard' -Tag 'Unit' {
       '# allow bin paths',
       'src/Legacy/**/bin/**'
     ) | Set-Content -LiteralPath $allow -Encoding UTF8
-    $cmd = "pwsh -NoLogo -NoProfile -File `"$script:guard`" -AllowListPath `"$allow`""
-    $pr = Start-Process pwsh -ArgumentList @('-NoLogo','-NoProfile','-Command', $cmd) -Wait -PassThru -WorkingDirectory $script:repo
+    $pr = Start-Process pwsh -ArgumentList @('-NoLogo','-NoProfile','-File', $script:guard, '-AllowListPath', $allow) -Wait -PassThru -WorkingDirectory $script:repo
     $pr.ExitCode | Should -Be 3
   }
 
@@ -44,9 +42,7 @@ Describe 'Tracked Build Artifacts Guard' -Tag 'Unit' {
       'src/**/obj/**',
       'src/**/bin/**'
     ) | Set-Content -LiteralPath $allow -Encoding UTF8
-    $cmd = "pwsh -NoLogo -NoProfile -File `"$script:guard`" -AllowListPath `"$allow`""
-    $pr = Start-Process pwsh -ArgumentList @('-NoLogo','-NoProfile','-Command', $cmd) -Wait -PassThru -WorkingDirectory $script:repo
+    $pr = Start-Process pwsh -ArgumentList @('-NoLogo','-NoProfile','-File', $script:guard, '-AllowListPath', $allow) -Wait -PassThru -WorkingDirectory $script:repo
     $pr.ExitCode | Should -Be 0
   }
 }
-
