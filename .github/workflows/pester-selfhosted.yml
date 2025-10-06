@@ -24,9 +24,7 @@ jobs:
   pester-selfhosted:
     if: ${{ inputs.enable_run == 'true' }}
     uses: ./.github/workflows/pester-reusable.yml
-    secrets: inherit
     with:
       include_integration: ${{ inputs.include_integration || 'true' }}
       install_pester: ${{ 'false' }}
       sample_id: ${{ inputs.sample_id }}
-

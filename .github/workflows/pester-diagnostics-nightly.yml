@@ -17,7 +17,6 @@ concurrency:
 jobs:
   diagnostics:
     uses: ./.github/workflows/pester-reusable.yml
-    secrets: inherit
     with:
       include_integration: ${{ 'false' }}
       install_pester: ${{ 'false' }}
@@ -58,4 +57,3 @@ jobs:
               "- Duration (s): $($data.duration_s)")
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
-

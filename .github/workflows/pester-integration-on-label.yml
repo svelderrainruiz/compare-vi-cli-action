@@ -58,7 +58,6 @@ jobs:
   pester-integration:
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/pester-reusable.yml
-    secrets: inherit
     with:
       include_integration: ${{ 'true' }}
       install_pester: ${{ 'false' }}
@@ -77,4 +76,3 @@ jobs:
             $lines += '- Reason: docs-only change detected'
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
-

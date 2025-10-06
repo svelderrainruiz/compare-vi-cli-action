@@ -15,10 +15,8 @@ on:
 jobs:
   vi-binary-check:
     uses: ./.github/workflows/pester-reusable.yml
-    secrets: inherit
     with:
       include_integration: ${{ 'false' }}
       install_pester: ${{ 'false' }}
       include_patterns: ${{ 'tests/ViBinaryHandling.Tests.ps1' }}
       sample_id: ${{ github.event.inputs.sample_id || '' }}
-
