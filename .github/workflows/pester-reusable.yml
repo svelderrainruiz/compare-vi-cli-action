@@ -290,3 +290,11 @@ jobs:
           snapshot-path: tests/results/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+
+      - name: Agent wait summary
+        if: always()
+        uses: ./.github/actions/agent-wait-post
+        with:
+          results-dir: tests/results
+          fail-on-outside: 'false'
+          upload-artifact: 'false'

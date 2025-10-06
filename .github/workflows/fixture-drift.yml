@@ -242,3 +242,11 @@ jobs:
       if: always()
       shell: pwsh
       run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'fixture-drift.yml' -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
+    - name: Agent wait summary (windows)
+      if: always()
+      uses: ./.github/actions/agent-wait-post
+      with:
+        results-dir: results/fixture-drift
+        fail-on-outside: 'false'
+        upload-artifact: 'false'
