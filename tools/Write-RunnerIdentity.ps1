@@ -12,7 +12,10 @@ $ErrorActionPreference = 'Stop'
 try {
   if (-not $env:GITHUB_STEP_SUMMARY) { exit 0 }
 
-  function Get-Env($n){ if ($env:$n -ne $null) { return "$($env:$n)" } else { return '' } }
+  function Get-Env($n){
+    try { $v = [System.Environment]::GetEnvironmentVariable($n) } catch { $v = $null }
+    if ($null -ne $v) { return "$v" } else { return '' }
+  }
 
   $name = Get-Env 'RUNNER_NAME'
   $os   = Get-Env 'RUNNER_OS'

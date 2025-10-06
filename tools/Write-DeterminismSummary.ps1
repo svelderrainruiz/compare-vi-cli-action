@@ -11,7 +11,10 @@ try {
   if (-not $env:GITHUB_STEP_SUMMARY) { exit 0 }
 
   function Get-EnvOr($name,[string]$fallback) {
-    if ($env:$name -ne $null -and "$($env:$name)" -ne '') { return "$($env:$name)" } else { return $fallback }
+    try {
+      $val = [System.Environment]::GetEnvironmentVariable($name)
+    } catch { $val = $null }
+    if ($null -ne $val -and "$val" -ne '') { return "$val" } else { return $fallback }
   }
 
   $lines = @('### Determinism','')
