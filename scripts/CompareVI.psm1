@@ -120,6 +120,12 @@ function Invoke-CompareVI {
       if ($raw -is [System.Array]) { $tokens = @($raw | ForEach-Object { [string]$_ }) } else { $tokens = [string]$raw }
       $cliArgs = Convert-ArgTokenList -tokens (Get-LVCompareArgTokens -Spec $tokens)
     }
+    # Hint: if LABVIEW_EXE is provided and -lvpath is not present, inject it to prefer the existing LabVIEW instance
+    try {
+      if ($env:LABVIEW_EXE -and -not ($cliArgs | Where-Object { $_ -ieq '-lvpath' })) {
+        $cliArgs = @('-lvpath', [string]$env:LABVIEW_EXE) + $cliArgs
+      }
+    } catch {}
 
     $cmdline = (Quote $cli) + ' ' + (Quote $baseAbs) + ' ' + (Quote $headAbs)
     if ($cliArgs -and $cliArgs.Count -gt 0) { $cmdline += ' ' + (($cliArgs | ForEach-Object { Quote $_ }) -join ' ') }
@@ -133,7 +139,7 @@ function Invoke-CompareVI {
     } else {
       $sw = [System.Diagnostics.Stopwatch]::StartNew()
       $code = $null
-      if ($env:LV_SUPPRESS_UI -eq '1') {
+    if ($env:LV_SUPPRESS_UI -eq '1') {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $cli
         $null = $psi.ArgumentList.Clear()
@@ -222,9 +228,10 @@ function Invoke-CompareVI {
     }
   }
   finally {
-    if ($env:DISABLE_LABVIEW_CLEANUP -ne '1') {
+    # Policy: do not close LabVIEW by default. Allow opt-in via ENABLE_LABVIEW_CLEANUP=1.
+    $allowCleanup = ($env:ENABLE_LABVIEW_CLEANUP -match '^(?i:1|true|yes|on)$')
+    if ($allowCleanup) {
       try {
-        # Try multiple times to catch delayed LabVIEW spawns post-exit
         $deadline = (Get-Date).AddSeconds(10)
         do {
           $closedAny = $false
@@ -239,9 +246,6 @@ function Invoke-CompareVI {
                 if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
                 $closedAny = $true
               } catch {}
-            }
-            if ($newOnes.Count -gt 0 -and -not $env:GITHUB_ACTIONS) {
-              Write-Host ("[comparevi] closed LabVIEW instances spawned by compare: {0}" -f ($newOnes | Select-Object -ExpandProperty Id -join ',')) -ForegroundColor DarkGray
             }
           }
           if (-not $closedAny) { break }

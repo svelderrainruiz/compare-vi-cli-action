@@ -85,13 +85,27 @@ jobs:
       max-parallel: 1
     env:
       DETECT_LEAKS: '1'
-      CLEAN_AFTER: '1'
+      CLEAN_AFTER: '0'
       SCAN_ARTIFACTS: '1'
-      UNBLOCK_GUARD: '1'
-      LV_SUPPRESS_UI: '1'
+      UNBLOCK_GUARD: '0'
+      LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
+      LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
     steps:
       - uses: actions/checkout@v5
+      - name: LabVIEW warmup (best-effort)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File tools/Warmup-LabVIEW.ps1
+      - name: Append interactivity probe
+        shell: pwsh
+        run: pwsh -File tools/Write-InteractivityProbe.ps1
+      - name: Ensure Invoker (start)
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: start
+          results-dir: tests/results
+          category: ${{ matrix.category }}
       - name: Prepare fixture copies (base/head)
         id: fixtures
         uses: ./.github/actions/prepare-fixtures
@@ -116,7 +130,7 @@ jobs:
           kill-leaks: 'false'
           leak-grace-seconds: '3'
           clean-labview-before: 'false'
-          clean-after: 'true'
+          clean-after: 'false'
           track-artifacts: 'true'
       - name: Define category patterns
         id: cats
@@ -179,7 +193,7 @@ jobs:
         with:
           snapshot-path: tests/results/${{ matrix.category }}/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-          process-names: 'conhost,pwsh,node,LabVIEW,LVCompare'
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 
       - name: Ensure Invoker (stop)
         if: always()
@@ -219,11 +233,20 @@ jobs:
     timeout-minutes: 3
     needs: [pester-category]
     env:
-      UNBLOCK_GUARD: '1'
-      LV_SUPPRESS_UI: '1'
+      INVOKER_REQUIRED: '1'
+      UNBLOCK_GUARD: '0'
+      LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
+      LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
     steps:
       - uses: actions/checkout@v5
+      - name: LabVIEW warmup (best-effort)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -File tools/Warmup-LabVIEW.ps1
+      - name: Append interactivity probe
+        shell: pwsh
+        run: pwsh -File tools/Write-InteractivityProbe.ps1
       - name: Ensure Invoker (start)
         uses: ./.github/actions/ensure-invoker
         with:
@@ -251,7 +274,7 @@ jobs:
         with:
           snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-          process-names: 'conhost,pwsh,node,LabVIEW,LVCompare'
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 
       - name: Ensure Invoker (stop)
         if: always()
