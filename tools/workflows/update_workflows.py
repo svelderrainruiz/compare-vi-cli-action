@@ -130,10 +130,23 @@ def _mk_hosted_preflight_step() -> dict:
 
 def ensure_hosted_preflight(doc, job_key: str) -> bool:
     changed = False
-    jobs = doc.get('jobs') or {}
+    # Ensure jobs map exists
+    jobs = doc.get('jobs')
+    if not isinstance(jobs, dict):
+        doc['jobs'] = jobs = {}
+        changed = True
     job = jobs.get(job_key)
     if not isinstance(job, dict):
-        return changed
+        # Create a minimal hosted preflight job
+        job = {
+            'runs-on': 'windows-latest',
+            'timeout-minutes': 3,
+            'steps': [
+                {'uses': 'actions/checkout@v5'},
+            ],
+        }
+        jobs[job_key] = job
+        changed = True
     # Ensure runs-on windows-latest
     if job.get('runs-on') != 'windows-latest':
         job['runs-on'] = 'windows-latest'
