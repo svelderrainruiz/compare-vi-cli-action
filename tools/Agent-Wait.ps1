@@ -8,21 +8,31 @@ function Start-AgentWait {
         [Parameter(Position=0)][string]$Reason = 'unspecified',
         [Parameter(Position=1)][int]$ExpectedSeconds = 90,
         [Parameter()][string]$ResultsDir = 'tests/results',
-        [Parameter()][int]$ToleranceSeconds = 5
+        [Parameter()][int]$ToleranceSeconds = 5,
+        [Parameter()][string]$Id = 'default'
     )
     $root = Resolve-Path . | Select-Object -ExpandProperty Path
     $outDir = Join-Path $ResultsDir '_agent'
+    $sessionDir = Join-Path $outDir (Join-Path 'sessions' $Id)
+    New-Item -ItemType Directory -Force -Path $sessionDir | Out-Null
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-    $markerPath = Join-Path $outDir 'wait-marker.json'
+    $markerPath = Join-Path $sessionDir 'wait-marker.json'
     $now = [DateTimeOffset]::UtcNow
+    $wf = $env:GITHUB_WORKFLOW; $job=$env:GITHUB_JOB; $sha=$env:GITHUB_SHA; $ref=$env:GITHUB_REF; $actor=$env:GITHUB_ACTOR
+    $sketch = 'brief-' + [string]$ExpectedSeconds
     $o = [ordered]@{
         schema = 'agent-wait/v1'
+        id = $Id
         reason = $Reason
         expectedSeconds = $ExpectedSeconds
         toleranceSeconds = $ToleranceSeconds
         startedUtc = $now.ToString('o')
         startedUnixSeconds = [int][Math]::Floor($now.ToUnixTimeSeconds())
         workspace = $root
+        sketch = $sketch
+        runContext = [ordered]@{
+            sha = $sha; ref = $ref; workflow = $wf; job = $job; actor = $actor
+        }
     }
     $o | ConvertTo-Json -Depth 5 | Out-File -FilePath $markerPath -Encoding utf8
     $msg = "Agent wait started: reason='$Reason', expected=${ExpectedSeconds}s"
@@ -42,10 +52,12 @@ function Start-AgentWait {
 function End-AgentWait {
     [CmdletBinding()] param(
         [Parameter(Position=0)][string]$ResultsDir = 'tests/results',
-        [Parameter()][int]$ToleranceSeconds = 5
+        [Parameter()][int]$ToleranceSeconds = 5,
+        [Parameter()][string]$Id = 'default'
     )
     $outDir = Join-Path $ResultsDir '_agent'
-    $markerPath = Join-Path $outDir 'wait-marker.json'
+    $sessionDir = Join-Path $outDir (Join-Path 'sessions' $Id)
+    $markerPath = Join-Path $sessionDir 'wait-marker.json'
     if (-not (Test-Path $markerPath)) {
         Write-Host '::notice::No wait marker found.'
         return $null
@@ -58,9 +70,11 @@ function End-AgentWait {
     $tol = if ($PSBoundParameters.ContainsKey('ToleranceSeconds')) { $ToleranceSeconds } elseif ($start.PSObject.Properties['toleranceSeconds']) { [int]$start.toleranceSeconds } else { 5 }
     $diff = [int][Math]::Abs($elapsedSec - [int]$start.expectedSeconds)
     $withinMargin = ($diff -le $tol)
-
+    $wf = $env:GITHUB_WORKFLOW; $job=$env:GITHUB_JOB; $sha=$env:GITHUB_SHA; $ref=$env:GITHUB_REF; $actor=$env:GITHUB_ACTOR
+    $sketch = 'brief-' + [string]$start.expectedSeconds
     $result = [ordered]@{
         schema = 'agent-wait-result/v1'
+        id = $start.id
         reason = $start.reason
         expectedSeconds = $start.expectedSeconds
         startedUtc = $start.startedUtc
@@ -70,9 +84,13 @@ function End-AgentWait {
         differenceSeconds = $diff
         withinMargin = $withinMargin
         markerPath = $markerPath
+        sketch = $sketch
+        runContext = [ordered]@{
+            sha = $sha; ref = $ref; workflow = $wf; job = $job; actor = $actor
+        }
     }
-    $lastPath = Join-Path $outDir 'wait-last.json'
-    $logPath = Join-Path $outDir 'wait-log.ndjson'
+    $lastPath = Join-Path $sessionDir 'wait-last.json'
+    $logPath = Join-Path $sessionDir 'wait-log.ndjson'
     $result | ConvertTo-Json -Depth 5 | Out-File -FilePath $lastPath -Encoding utf8
     ($result | ConvertTo-Json -Depth 5) | Out-File -FilePath $logPath -Append -Encoding utf8
     # Keep marker for chainable waits; caller may remove if desired

@@ -9,16 +9,17 @@ Describe 'Agent-Wait utility' -Tag 'Unit' {
     $resultsDir = Join-Path $TestDrive 'agent-wait'
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
 
-    $markerPath = Start-AgentWait -Reason 'unit-test' -ExpectedSeconds 1 -ToleranceSeconds 5 -ResultsDir $resultsDir
+    $markerPath = Start-AgentWait -Reason 'unit-test' -ExpectedSeconds 1 -ToleranceSeconds 5 -ResultsDir $resultsDir -Id 'ut1'
     $markerPath | Should -Not -BeNullOrEmpty
 
     Start-Sleep -Milliseconds 120
-    $result = End-AgentWait -ResultsDir $resultsDir -ToleranceSeconds 5
+    $result = End-AgentWait -ResultsDir $resultsDir -ToleranceSeconds 5 -Id 'ut1'
     $result | Should -Not -BeNullOrEmpty
 
-    $markerFile = Join-Path $resultsDir '_agent' 'wait-marker.json'
-    $lastFile   = Join-Path $resultsDir '_agent' 'wait-last.json'
-    $logFile    = Join-Path $resultsDir '_agent' 'wait-log.ndjson'
+    $sessionDir = Join-Path (Join-Path $resultsDir '_agent') (Join-Path 'sessions' 'ut1')
+    $markerFile = Join-Path $sessionDir 'wait-marker.json'
+    $lastFile   = Join-Path $sessionDir 'wait-last.json'
+    $logFile    = Join-Path $sessionDir 'wait-log.ndjson'
 
     (Test-Path $markerFile) | Should -BeTrue
     (Test-Path $lastFile)   | Should -BeTrue
@@ -27,6 +28,7 @@ Describe 'Agent-Wait utility' -Tag 'Unit' {
     $marker = Get-Content $markerFile -Raw | ConvertFrom-Json
     $marker.schema | Should -Be 'agent-wait/v1'
     $marker.reason | Should -Be 'unit-test'
+    $marker.id | Should -Be 'ut1'
     [int]$marker.expectedSeconds | Should -Be 1
     [int]$marker.toleranceSeconds | Should -Be 5
 
@@ -34,6 +36,7 @@ Describe 'Agent-Wait utility' -Tag 'Unit' {
     $last.schema | Should -Be 'agent-wait-result/v1'
     [int]$last.elapsedSeconds | Should -BeGreaterOrEqual 0
     [int]$last.toleranceSeconds | Should -Be 5
+    $last.id | Should -Be 'ut1'
     [int]$last.differenceSeconds | Should -BeGreaterOrEqual 0
     $last.withinMargin | Should -BeTrue
   }

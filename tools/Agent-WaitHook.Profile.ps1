@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Agent-Wait.ps1')
 
 if (-not (Get-Variable -Name __AgentWaitHook -Scope Global -ErrorAction SilentlyContinue)) {
-  Set-Variable -Name __AgentWaitHook -Scope Global -Value ([pscustomobject]@{ Enabled=$false; ResultsDir='tests/results'; SavedPrompt=$null }) -Force
+  Set-Variable -Name __AgentWaitHook -Scope Global -Value ([pscustomobject]@{ Enabled=$false; ResultsDir='tests/results'; SavedPrompt=$null; Id='default' }) -Force
 }
 
 function Enable-AgentWaitHook {
@@ -12,23 +12,26 @@ function Enable-AgentWaitHook {
     [string]$Reason = 'unspecified',
     [int]$ExpectedSeconds = 90,
     [int]$ToleranceSeconds = 5,
-    [string]$ResultsDir = 'tests/results'
+    [string]$ResultsDir = 'tests/results',
+    [string]$Id = 'default'
   )
   $state = $global:__AgentWaitHook
   if (-not $state.SavedPrompt) {
     try { $state.SavedPrompt = (Get-Command Prompt -ErrorAction SilentlyContinue).ScriptBlock } catch { $state.SavedPrompt = $null }
   }
-  Start-AgentWait -Reason $Reason -ExpectedSeconds $ExpectedSeconds -ResultsDir $ResultsDir -ToleranceSeconds $ToleranceSeconds | Out-Null
+  Start-AgentWait -Reason $Reason -ExpectedSeconds $ExpectedSeconds -ResultsDir $ResultsDir -ToleranceSeconds $ToleranceSeconds -Id $Id | Out-Null
   $state.Enabled = $true
   $state.ResultsDir = $ResultsDir
+  $state.Id = $Id
 
   function global:Prompt {
     # Auto-end wait if marker exists and not yet ended for current startedUtc
     try {
       $root = $global:__AgentWaitHook.ResultsDir
       $dir = Join-Path $root '_agent'
-      $markerPath = Join-Path $dir 'wait-marker.json'
-      $lastPath = Join-Path $dir 'wait-last.json'
+      $sessionDir = Join-Path $dir (Join-Path 'sessions' $global:__AgentWaitHook.Id)
+      $markerPath = Join-Path $sessionDir 'wait-marker.json'
+      $lastPath = Join-Path $sessionDir 'wait-last.json'
       if ($global:__AgentWaitHook.Enabled -and (Test-Path $markerPath)) {
         $m = Get-Content $markerPath -Raw | ConvertFrom-Json
         $needEnd = $true
@@ -38,7 +41,7 @@ function Enable-AgentWaitHook {
             if ($l.startedUtc -eq $m.startedUtc) { $needEnd = $false }
           }
         }
-        if ($needEnd) { End-AgentWait -ResultsDir $root | Out-Null }
+        if ($needEnd) { End-AgentWait -ResultsDir $root -Id $global:__AgentWaitHook.Id | Out-Null }
       }
     } catch { }
     # Call saved/original prompt if present

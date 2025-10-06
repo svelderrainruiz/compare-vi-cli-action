@@ -4,6 +4,7 @@ param(
   [int]$ExpectedSeconds = 90,
   [string]$ResultsDir = 'tests/results',
   [int]$ToleranceSeconds = 5,
+  [string]$Id = 'default',
   [switch]$FailOnOutsideMargin
 )
 
@@ -14,12 +15,12 @@ $ErrorActionPreference = 'Stop'
 
 switch ($Action) {
   'Start' {
-    $marker = Start-AgentWait -Reason $Reason -ExpectedSeconds $ExpectedSeconds -ResultsDir $ResultsDir -ToleranceSeconds $ToleranceSeconds
+    $marker = Start-AgentWait -Reason $Reason -ExpectedSeconds $ExpectedSeconds -ResultsDir $ResultsDir -ToleranceSeconds $ToleranceSeconds -Id $Id
     Write-Host ("Started wait marker: {0}" -f $marker)
     break
   }
   'End' {
-    $res = End-AgentWait -ResultsDir $ResultsDir -ToleranceSeconds $ToleranceSeconds
+    $res = End-AgentWait -ResultsDir $ResultsDir -ToleranceSeconds $ToleranceSeconds -Id $Id
     if ($null -eq $res) { exit 0 }
     $ok = $true
     if ($FailOnOutsideMargin.IsPresent -and -not [bool]$res.withinMargin) { $ok = $false }
@@ -29,8 +30,9 @@ switch ($Action) {
   }
   'Status' {
     $outDir = Join-Path $ResultsDir '_agent'
-    $markerPath = Join-Path $outDir 'wait-marker.json'
-    $lastPath = Join-Path $outDir 'wait-last.json'
+    $sessionDir = Join-Path $outDir (Join-Path 'sessions' $Id)
+    $markerPath = Join-Path $sessionDir 'wait-marker.json'
+    $lastPath = Join-Path $sessionDir 'wait-last.json'
     if (Test-Path $lastPath) {
       $last = Get-Content $lastPath -Raw | ConvertFrom-Json
       Write-Output ("LAST reason={0} elapsed={1}s expected={2}s tol={3}s diff={4}s within={5}" -f $last.reason,$last.elapsedSeconds,$last.expectedSeconds,$last.toleranceSeconds,$last.differenceSeconds,$last.withinMargin)
@@ -43,4 +45,3 @@ switch ($Action) {
     break
   }
 }
-
