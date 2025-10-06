@@ -56,9 +56,8 @@ jobs:
           value: ${{ steps.detect.outputs.docs_only || 'false' }}
 
   pester-integration:
-    if: (contains(github.event.pull_request.labels.*.name, 'test-integration') || github.event_name == 'workflow_dispatch') && needs.pre-init.outputs.docs_only != 'true'
-    needs: pre-init
-    uses: ./.github/workflows/pester-reusable.yml
+    if: github.event_name == 'workflow_dispatch'
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@chore/pester-reusable-rollup
     with:
       include_integration: ${{ 'true' }}
       install_pester: ${{ 'false' }}
@@ -66,7 +65,7 @@ jobs:
 
   integration-docs-only:
     needs: pre-init
-    if: contains(github.event.pull_request.labels.*.name, 'test-integration') && needs.pre-init.outputs.docs_only == 'true'
+    if: needs.pre-init.outputs.docs_only == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Append summary (docs-only)
@@ -77,3 +76,4 @@ jobs:
             $lines += '- Reason: docs-only change detected'
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
+

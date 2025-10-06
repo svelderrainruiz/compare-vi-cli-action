@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   diagnostics:
-    uses: ./.github/workflows/pester-reusable.yml
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@chore/pester-reusable-rollup
     with:
       include_integration: ${{ 'false' }}
       install_pester: ${{ 'false' }}
@@ -57,3 +57,4 @@ jobs:
               "- Duration (s): $($data.duration_s)")
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
+

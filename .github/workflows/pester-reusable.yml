@@ -23,6 +23,10 @@ on:
         required: false
         type: string
         default: 'false'
+      skip_run:
+        required: false
+        type: string
+        default: 'false'
       sample_id:
         required: false
         type: string
@@ -44,7 +48,7 @@ on:
         value: ${{ jobs.pester.outputs.duration_s }}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.inputs.sample_id || github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.sample_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -66,6 +70,7 @@ jobs:
 
   preflight:
     name: Preflight (self-hosted)
+    if: ${{ inputs.skip_run != 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     steps:
@@ -83,6 +88,7 @@ jobs:
 
   pester:
     name: Pester (self-hosted)
+    if: ${{ inputs.skip_run != 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     needs: [normalize, preflight]

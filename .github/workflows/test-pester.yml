@@ -42,7 +42,7 @@ on:
 
 jobs:
   pester:
-    uses: ./.github/workflows/pester-reusable.yml
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@chore/pester-reusable-rollup
     with:
       include_integration: ${{ inputs.include_integration || 'false' }}
       install_pester: ${{ 'true' }}
@@ -50,3 +50,4 @@ jobs:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
+
