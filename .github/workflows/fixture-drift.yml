@@ -178,3 +178,23 @@ jobs:
           snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+
+      - name: Append determinism summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-DeterminismSummary.ps1
+
+      - name: Append runner identity
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
+      - name: Append fixture drift summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-FixtureDriftSummary.ps1 -Dir 'results/fixture-drift'
+
+      - name: Re-run hint
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'fixture-drift.yml' -SampleId '${{ github.event.inputs.sample_id || '' }}'

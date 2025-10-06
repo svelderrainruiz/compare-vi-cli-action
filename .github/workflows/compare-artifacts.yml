@@ -93,6 +93,28 @@ jobs:
           $line = "### Compare VI Timing`n- Seconds: $sec`n- Nanoseconds: $ns`n- Combined: $combined" 
           $line | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+      - name: Append determinism summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-DeterminismSummary.ps1
+
+      - name: Append runner identity
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
+      - name: Append artifact list
+        if: always()
+        shell: pwsh
+        run: |
+          $paths = @('${{ steps.compare.outputs.compareSummaryPath }}','${{ steps.report.outputs.reportPath }}')
+          pwsh -File tools/Write-ArtifactList.ps1 -Paths $paths
+
+      - name: Re-run hint
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'compare-artifacts.yml' -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
       - name: Echo outputs
         if: steps.compare.outcome == 'success'
         shell: pwsh

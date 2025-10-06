@@ -133,6 +133,28 @@ jobs:
         run: |
           pwsh -File tools/Write-FailureInventory.ps1 -ResultsDir 'tests/results' -AppendToStepSummary
 
+      - name: Append determinism summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-DeterminismSummary.ps1
+
+      - name: Append runner identity
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
+      - name: Append artifact list
+        if: always()
+        shell: pwsh
+        run: |
+          $paths = @('tests/results/pester-summary.json','tests/results/pester-results.xml','tests/results/session-index.json')
+          pwsh -File tools/Write-ArtifactList.ps1 -Paths $paths
+
+      - name: Re-run hint
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'pester-selfhosted.yml' -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
       - name: Upload Pester artifacts
         if: always()
         uses: actions/upload-artifact@v4
