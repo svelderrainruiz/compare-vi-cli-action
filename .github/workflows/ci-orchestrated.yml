@@ -69,10 +69,14 @@ jobs:
           if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
           Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
 
-  pester:
+  pester-category:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     needs: [normalize, preflight]
+    strategy:
+      matrix:
+        category: [dispatcher, fixtures, schema, comparevi, loop, psummary, workflow]
+      max-parallel: 1
     env:
       DETECT_LEAKS: '1'
       CLEAN_AFTER: '1'
@@ -109,42 +113,67 @@ jobs:
           clean-labview-before: 'false'
           clean-after: 'true'
           track-artifacts: 'true'
-      - name: Run Pester tests via local dispatcher
+      - name: Define category patterns
+        id: cats
         shell: pwsh
         run: |
-          ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath tests/results -TimeoutSeconds ${{ steps.dprofile.outputs.timeout_seconds }} -EmitFailuresJsonAlways
+          $cat='${{ matrix.category }}'
+          switch ($cat) {
+            'dispatcher' { $inc = @('Invoke-PesterTests*.ps1','PesterAvailability.Tests.ps1','NestedDispatcher*.Tests.ps1') }
+            'fixtures'   { $inc = @('Fixtures.*.ps1','FixtureValidation*.ps1','FixtureSummary*.ps1','ViBinaryHandling.Tests.ps1','FixtureValidationDiff.Tests.ps1') }
+            'schema'     { $inc = @('Schema.*.ps1','SchemaLite*.ps1') }
+            'comparevi'  { $inc = @('CompareVI*.ps1','CanonicalCli.Tests.ps1','Args.Tokenization.Tests.ps1') }
+            'loop'       { $inc = @('CompareLoop*.ps1','Run-AutonomousIntegrationLoop*.ps1','LoopMetrics.Tests.ps1','Integration-ControlLoop*.ps1','IntegrationControlLoop*.ps1') }
+            'psummary'   { $inc = @('PesterSummary*.ps1','Write-PesterSummaryToStepSummary*.ps1','AggregationHints*.ps1') }
+            'workflow'   { $inc = @('Workflow*.ps1','On-FixtureValidationFail.Tests.ps1','Watch.FlakyRecovery.Tests.ps1','FunctionShadowing*.ps1','FunctionProxy.Tests.ps1','RunSummary.Tool*.ps1','Action.CompositeOutputs.Tests.ps1','Binding.MinRepro.Tests.ps1','ArtifactTracking*.ps1','Guard.*.Tests.ps1') }
+            default      { $inc = @('*.ps1') }
+          }
+          "include=$($inc -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Run Pester tests via local dispatcher (category)
+        shell: pwsh
+        run: |
+          $inc = @()
+          if ('${{ steps.cats.outputs.include }}') { $inc = '${{ steps.cats.outputs.include }}'.Split(',') | Where-Object { $_ } }
+          $resDir = Join-Path 'tests/results' '${{ matrix.category }}'
+          ./Invoke-PesterTests.ps1 `
+            -TestsPath tests `
+            -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
+            -ResultsPath $resDir `
+            -TimeoutSeconds ${{ steps.dprofile.outputs.timeout_seconds }} `
+            -EmitFailuresJsonAlways `
+            -IncludePatterns $inc
 
       - name: Ensure session index (fallback)
         if: always()
         shell: pwsh
-        run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir 'tests/results' -SummaryJson 'pester-summary.json'
+        run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -SummaryJson 'pester-summary.json'
 
       - name: Session index post
         if: always()
         uses: ./.github/actions/session-index-post
         with:
-          results-dir: tests/results
+          results-dir: tests/results/${{ matrix.category }}
           validate-schema: true
           upload: true
-          artifact-name: session-index
+          artifact-name: session-index-${{ matrix.category }}
 
       - name: Upload Pester artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: orchestrated-pester-results
+          name: orchestrated-pester-results-${{ matrix.category }}
           path: |
-            tests/results/**/*.xml
-            tests/results/**/*.txt
-            tests/results/pester-summary.json
-            tests/results/pester-failures.json
-            tests/results/session-index.json
+            tests/results/${{ matrix.category }}/**/*.xml
+            tests/results/${{ matrix.category }}/**/*.txt
+            tests/results/${{ matrix.category }}/pester-summary.json
+            tests/results/${{ matrix.category }}/pester-failures.json
+            tests/results/${{ matrix.category }}/session-index.json
 
       - name: Runner Unblock Guard
         if: always()
         uses: ./.github/actions/runner-unblock-guard
         with:
-          snapshot-path: tests/results/runner-unblock-snapshot.json
+          snapshot-path: tests/results/${{ matrix.category }}/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 
@@ -162,13 +191,13 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $paths = @('tests/results/pester-summary.json','tests/results/pester-results.xml','tests/results/pester-failures.json','tests/results/session-index.json')
+          $paths = @('tests/results/${{ matrix.category }}/pester-summary.json','tests/results/${{ matrix.category }}/pester-results.xml','tests/results/${{ matrix.category }}/pester-failures.json','tests/results/${{ matrix.category }}/session-index.json')
           pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
 
       - name: Append top failures
         if: always()
         shell: pwsh
-        run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir 'tests/results' -Top 5
+        run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -Top 5
 
       - name: Re-run hint
         if: always()
@@ -226,3 +255,10 @@ jobs:
             '- Drift: ${{ needs.drift.result }}'
           ) -join "`n"
           $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+
+
+
+
+
+
