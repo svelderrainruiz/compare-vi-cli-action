@@ -134,9 +134,18 @@ function Invoke-CompareVI {
       $sw = [System.Diagnostics.Stopwatch]::StartNew()
       $code = $null
       if ($env:LV_SUPPRESS_UI -eq '1') {
-        $args = @($baseAbs, $headAbs) + @($cliArgs)
-        $p = Start-Process -FilePath $cli -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
-        $code = [int]$p.ExitCode
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $cli
+        $null = $psi.ArgumentList.Clear()
+        $null = $psi.ArgumentList.Add($baseAbs)
+        $null = $psi.ArgumentList.Add($headAbs)
+        foreach ($a in $cliArgs) { if ($a) { $null = $psi.ArgumentList.Add([string]$a) } }
+        $psi.UseShellExecute = $false
+        try { $psi.CreateNoWindow = $true } catch {}
+        try { $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden } catch {}
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $proc.WaitForExit()
+        $code = [int]$proc.ExitCode
       } else {
         & $cli $baseAbs $headAbs @cliArgs
         $code = if (Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue) { $LASTEXITCODE } else { 0 }
@@ -215,16 +224,29 @@ function Invoke-CompareVI {
   finally {
     if ($env:DISABLE_LABVIEW_CLEANUP -ne '1') {
       try {
-        $lvAfter = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
-        if ($lvAfter) {
-          $beforeSet = @{}
-          foreach ($id in $lvBefore) { $beforeSet[[string]$id] = $true }
-          $newOnes = @(); foreach ($p in $lvAfter) { if (-not $beforeSet.ContainsKey([string]$p.Id)) { $newOnes += $p } }
-          foreach ($proc in $newOnes) { try { $null = $proc.CloseMainWindow(); Start-Sleep -Milliseconds 500; if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } } catch {} }
-          if ($newOnes.Count -gt 0 -and -not $env:GITHUB_ACTIONS) {
-            Write-Host ("[comparevi] closed LabVIEW instances spawned by compare: {0}" -f ($newOnes | Select-Object -ExpandProperty Id -join ',')) -ForegroundColor DarkGray
+        # Try multiple times to catch delayed LabVIEW spawns post-exit
+        $deadline = (Get-Date).AddSeconds(10)
+        do {
+          $closedAny = $false
+          $lvAfter = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
+          if ($lvAfter) {
+            $beforeSet = @{}
+            foreach ($id in $lvBefore) { $beforeSet[[string]$id] = $true }
+            $newOnes = @(); foreach ($p in $lvAfter) { if (-not $beforeSet.ContainsKey([string]$p.Id)) { $newOnes += $p } }
+            foreach ($proc in $newOnes) {
+              try {
+                $null = $proc.CloseMainWindow(); Start-Sleep -Milliseconds 500
+                if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+                $closedAny = $true
+              } catch {}
+            }
+            if ($newOnes.Count -gt 0 -and -not $env:GITHUB_ACTIONS) {
+              Write-Host ("[comparevi] closed LabVIEW instances spawned by compare: {0}" -f ($newOnes | Select-Object -ExpandProperty Id -join ',')) -ForegroundColor DarkGray
+            }
           }
-        }
+          if (-not $closedAny) { break }
+          Start-Sleep -Milliseconds 250
+        } while ((Get-Date) -lt $deadline)
       } catch {}
     }
     if ($pushed) { Pop-Location }

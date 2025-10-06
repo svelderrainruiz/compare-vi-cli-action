@@ -182,7 +182,7 @@ jobs:
         with:
           snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+          process-names: 'conhost,pwsh,node,LabVIEW,LVCompare'
 
       - name: Append determinism summary
         if: always()
