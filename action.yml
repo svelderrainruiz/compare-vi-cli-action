@@ -19,7 +19,7 @@ inputs:
   loop-max-iterations:
     description: "Max iterations for loop mode (0 = until diff when fail-on-diff=false, or single pass)."
     required: false
-    default: '25'
+    default: '1'
   loop-interval-seconds:
     description: "Interval between iterations in loop mode (fractional seconds supported)."
     required: false

@@ -13,7 +13,7 @@
 [CmdletBinding()] param(
   [string]$OutputDirectory = 'compare-artifacts',
   [switch]$LoopMode,
-  [int]$LoopIterations = 15,
+[int]$LoopIterations = 3,
   [double]$LoopIntervalSeconds = 0,
   [ValidateSet('Exact','StreamingReservoir','Hybrid')] [string]$QuantileStrategy = 'StreamingReservoir',
   [int]$StreamCapacity = 300,

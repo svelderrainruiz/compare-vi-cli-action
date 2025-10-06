@@ -51,6 +51,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Ensure Invoker (start)
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: start
 
       - name: Detect docs-only change
         id: docs
@@ -182,7 +186,12 @@ jobs:
         with:
           snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+          process-names: 'conhost,pwsh,node,LabVIEW,LVCompare'
+      - name: Ensure Invoker (stop)
+        if: always()
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: stop
 
       - name: Append determinism summary
         if: always()

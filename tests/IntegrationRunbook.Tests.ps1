@@ -21,7 +21,8 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
     try {
       $env:LV_BASE_VI = (Join-Path $runRoot 'VI1.vi')
       $env:LV_HEAD_VI = (Join-Path $runRoot 'VI2.vi')
-      $proc = Start-Process pwsh -ArgumentList '-NoLogo','-NoProfile','-File',$runScript,'-Phases','Prereqs,ViInputs','-JsonReport',$tmp -PassThru -Wait
+      & $runScript -Phases 'Prereqs,ViInputs' -JsonReport $tmp | Out-Null
+      $proc = [pscustomobject]@{ ExitCode = $LASTEXITCODE }
     } finally {
       if ($null -ne $oldBase) { $env:LV_BASE_VI = $oldBase } else { Remove-Item Env:LV_BASE_VI -ErrorAction SilentlyContinue }
       if ($null -ne $oldHead) { $env:LV_HEAD_VI = $oldHead } else { Remove-Item Env:LV_HEAD_VI -ErrorAction SilentlyContinue }
@@ -36,14 +37,16 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
   }
 
   It 'fails with unknown phase name' {
-    $proc = Start-Process pwsh -ArgumentList '-NoLogo','-NoProfile','-File',$runScript,'-Phases','BogusPhase' -PassThru -Wait -ErrorAction SilentlyContinue
+    & $runScript -Phases 'BogusPhase' *>$null
+    $proc = [pscustomobject]@{ ExitCode = $LASTEXITCODE }
     $proc.ExitCode | Should -Not -Be 0
   }
 
   It 'marks CanonicalCli as Failed when CLI missing but overall passes if others pass' {
     $tmp = Join-Path $runRoot 'tmp-runbook2.json'
     if (Test-Path $tmp) { Remove-Item $tmp -Force }
-  $proc = Start-Process pwsh -ArgumentList '-NoLogo','-NoProfile','-File',$runScript,'-Phases','Prereqs,CanonicalCli','-JsonReport',$tmp -PassThru -Wait
+  & $runScript -Phases 'Prereqs,CanonicalCli' -JsonReport $tmp | Out-Null
+  $proc = [pscustomobject]@{ ExitCode = $LASTEXITCODE }
   $null = $proc.ExitCode
     # Exit code should be 0 even if CanonicalCli fails unless only failure sets overallFailed
     # Current script considers any failed phase -> overall failed -> exit 1, so assert accordingly
@@ -72,7 +75,8 @@ Describe 'IntegrationRunbook - Phase Selection & JSON' -Tag 'Unit' {
       $env:LV_HEAD_VI = $headFile
       $tmp = Join-Path $runRoot 'tmp-runbook-loop.json'
       if (Test-Path $tmp) { Remove-Item $tmp -Force }
-  $proc = Start-Process pwsh -ArgumentList '-NoLogo','-NoProfile','-File',$runScript,'-Phases','Prereqs,ViInputs,Loop','-JsonReport',$tmp -PassThru -Wait
+  & $runScript -Phases 'Prereqs,ViInputs,Loop' -JsonReport $tmp | Out-Null
+  $proc = [pscustomobject]@{ ExitCode = $LASTEXITCODE }
   $null = $proc.ExitCode
       Test-Path $tmp | Should -BeTrue
       $json = Get-Content $tmp -Raw | ConvertFrom-Json
