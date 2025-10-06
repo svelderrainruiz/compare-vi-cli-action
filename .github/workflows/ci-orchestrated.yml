@@ -464,7 +464,53 @@ jobs:
     - name: Summarize Pester categories
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Summarize-PesterCategories.ps1 -BaseDir 'cats' -Categories @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+      run: |
+        $cats = @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+        & (Join-Path $PWD 'tools/Summarize-PesterCategories.ps1') -BaseDir 'cats' -Categories $cats
+
+    - name: Download run provenance artifact
+      if: always()
+      uses: actions/download-artifact@v4
+      with:
+        name: orchestrated-provenance
+        path: prov
+
+    - name: Validate run provenance (schema-lite)
+      if: always()
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $json = Join-Path 'prov' 'provenance.json'
+        if (Test-Path $json) {
+          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/run-provenance-v1.schema.json
+          $status = if ($LASTEXITCODE -eq 0) { 'ok' } else { 'fail' }
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $lines = @('### Run Provenance Schema','',"- Status: $status","- File: $json")
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+        } else {
+          if ($env:GITHUB_STEP_SUMMARY) { "### Run Provenance Schema`n- File: (missing) $json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        }
+
+    - name: Validate session-index (categories) schema-lite
+      if: always()
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $cats = @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+        $ok=0; $fail=0; $miss=0
+        foreach ($c in $cats) {
+          $p1 = Join-Path (Join-Path 'cats' $c) 'tests/results/session-index.json'
+          $p2 = Join-Path (Join-Path 'cats' $c) 'session-index.json'
+          $json = if (Test-Path $p1) { $p1 } elseif (Test-Path $p2) { $p2 } else { $null }
+          if (-not $json) { $miss++; continue }
+          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/session-index-v1.schema.json
+          if ($LASTEXITCODE -eq 0) { $ok++ } else { $fail++ }
+        }
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Session Index Schema (categories)','',"- ok: $ok","- fail: $fail","- missing: $miss")
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
   # Single Windows job path (v2 folded in)
   windows-single:
