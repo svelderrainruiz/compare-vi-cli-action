@@ -64,5 +64,39 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
     $p.headRef  | Should -Be 'feature/from-pr'
     $p.baseRef  | Should -Be 'develop'
   }
-}
 
+  It 'push event sets branch/refName and headRef via fallback; no prNumber' {
+    $env:GITHUB_EVENT_NAME = 'push'
+    $env:GITHUB_REF        = 'refs/heads/feature/push-case'
+    $env:GITHUB_REF_NAME   = 'feature/push-case'
+    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
+    Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
+    Remove-Item Env:GITHUB_EVENT_PATH -ErrorAction SilentlyContinue
+
+    $outDir = Join-Path $TestDrive 'results3'
+    $root = (Get-Location).Path
+    & (Join-Path $root 'tools/Write-RunProvenance.ps1') -ResultsDir $outDir
+    $p = Get-Content -LiteralPath (Join-Path $outDir 'provenance.json') -Raw | ConvertFrom-Json
+    $p.branch  | Should -Be 'feature/push-case'
+    $p.refName | Should -Be 'feature/push-case'
+    $p.headRef | Should -Be 'feature/push-case'
+    ($p.PSObject.Properties.Name -contains 'prNumber') | Should -BeFalse
+  }
+
+  It 'captures strategy and include_integration via EV_* on workflow_dispatch' {
+    $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
+    $env:GITHUB_REF        = 'refs/heads/feature/strategy-case'
+    $env:GITHUB_REF_NAME   = 'feature/strategy-case'
+    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
+    Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
+    $env:EV_STRATEGY = 'single'
+    $env:EV_INCLUDE_INTEGRATION = 'false'
+
+    $outDir = Join-Path $TestDrive 'results4'
+    $root = (Get-Location).Path
+    & (Join-Path $root 'tools/Write-RunProvenance.ps1') -ResultsDir $outDir
+    $p = Get-Content -LiteralPath (Join-Path $outDir 'provenance.json') -Raw | ConvertFrom-Json
+    $p.strategy | Should -Be 'single'
+    $p.include_integration | Should -Be 'false'
+  }
+}
