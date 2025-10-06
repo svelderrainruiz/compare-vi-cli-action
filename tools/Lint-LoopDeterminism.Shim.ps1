@@ -69,6 +69,9 @@ $is = Coerce-Double $IntervalSeconds 0
 $allow = if ($AllowedStrategies -and $AllowedStrategies.Count -gt 0) { $AllowedStrategies } else { @('Exact') }
 
 $inner = Join-Path $PSScriptRoot 'Lint-LoopDeterminism.ps1'
-& $inner -Paths $resolved -MaxIterations $mi -IntervalSeconds $is -AllowedStrategies $allow @([string]$FailOnViolation.IsPresent ? '-FailOnViolation' : $null) | Out-Host
+if ($FailOnViolation.IsPresent) {
+  & $inner -Paths $resolved -MaxIterations $mi -IntervalSeconds $is -AllowedStrategies $allow -FailOnViolation | Out-Host
+} else {
+  & $inner -Paths $resolved -MaxIterations $mi -IntervalSeconds $is -AllowedStrategies $allow | Out-Host
+}
 exit $LASTEXITCODE
-
