@@ -14,11 +14,12 @@ on:
 
 jobs:
   vi-binary-check:
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@develop
-    with:
+    
+      secrets: inherit\n      with:
       include_integration: ${{ 'false' }}
       install_pester: ${{ 'false' }}
       include_patterns: ${{ 'tests/ViBinaryHandling.Tests.ps1' }}
       sample_id: ${{ github.event.inputs.sample_id || '' }}
+
 
 

@@ -16,8 +16,8 @@ concurrency:
 
 jobs:
   diagnostics:
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@develop
-    with:
+    
+      secrets: inherit\n      with:
       include_integration: ${{ 'false' }}
       install_pester: ${{ 'false' }}
       diagnostic_fail: ${{ 'true' }}
@@ -57,5 +57,6 @@ jobs:
               "- Duration (s): $($data.duration_s)")
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
+
 
 

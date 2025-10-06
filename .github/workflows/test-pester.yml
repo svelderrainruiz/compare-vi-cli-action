@@ -42,13 +42,14 @@ on:
 
 jobs:
   pester:
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@develop
-    with:
+    
+      secrets: inherit\n      with:
       include_integration: ${{ inputs.include_integration || 'false' }}
       install_pester: ${{ 'true' }}
       sample_id: ${{ inputs.sample_id || '' }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
+
 
 
