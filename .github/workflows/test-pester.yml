@@ -99,6 +99,39 @@ jobs:
         run: |
           pwsh -File scripts/Write-PesterSummaryToStepSummary.ps1 -ResultsDir 'tests/results'
 
+      - name: Validate Pester summary schema-lite (non-blocking)
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $json = Join-Path 'tests/results' 'pester-summary.json'
+          if (Test-Path $json) {
+            $schemas = @(
+              'docs/schemas/pester-summary-v1_7_1.schema.json',
+              'docs/schemas/pester-summary-v1_7.schema.json',
+              'docs/schemas/pester-summary-v1_6.schema.json',
+              'docs/schemas/pester-summary-v1_5.schema.json',
+              'docs/schemas/pester-summary-v1_4.schema.json',
+              'docs/schemas/pester-summary-v1_3.schema.json',
+              'docs/schemas/pester-summary-v1_2.schema.json',
+              'docs/schemas/pester-summary-v1_1.schema.json'
+            )
+            $ok = $false
+            foreach($s in $schemas){
+              if (Test-Path $s) {
+                pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath $s
+                if ($LASTEXITCODE -eq 0) { $ok=$true; break }
+              }
+            }
+            $status = if ($ok) { 'ok' } else { 'fail' }
+            if ($env:GITHUB_STEP_SUMMARY) {
+              $lines = @('### Pester Summary Schema','',"- Status: $status","- File: $json")
+              $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+          } else {
+            if ($env:GITHUB_STEP_SUMMARY) { "### Pester Summary Schema`n- File: (missing) $json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+          }
+
       - name: Ensure session index (fallback)
         if: always()
         shell: pwsh
