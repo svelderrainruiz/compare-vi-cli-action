@@ -270,11 +270,14 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         g2 = ensure_runner_unblock_guard(doc, 'pester', 'tests/results/${{ matrix.category }}/runner-unblock-snapshot.json')
         g3 = ensure_runner_unblock_guard(doc, 'pester-category', 'tests/results/${{ matrix.category }}/runner-unblock-snapshot.json')
         changed = changed or c5 or c6 or c7 or g1 or g2 or g3
-    # ci-orchestrated-v2.yml: hosted preflight + pester matrix (or single job) session index post
+    # ci-orchestrated-v2.yml: single Windows job (windows-single). Add guard and ensure session-index-post exists.
     if path.name == 'ci-orchestrated-v2.yml':
+        # Best-effort: if a hosted preflight job named 'preflight' exists, normalize it
         c8 = ensure_hosted_preflight(doc, 'preflight')
-        c9 = ensure_session_index_post_in_pester_matrix(doc, 'pester-category') or ensure_session_index_post_in_pester_matrix(doc, 'pester')
-        g4 = ensure_runner_unblock_guard(doc, 'orchestrated', 'tests/results/runner-unblock-snapshot.json')
+        # Ensure session-index-post on the single job
+        c9 = ensure_session_index_post_in_job(doc, 'windows-single', 'tests/results', 'orchestrated-v2-session-index')
+        # Normalize guard placement
+        g4 = ensure_runner_unblock_guard(doc, 'windows-single', 'tests/results/runner-unblock-snapshot.json')
         changed = changed or c8 or c9 or g4
     # pester-integration-on-label.yml: ensure session index post in integration job
     if path.name == 'pester-integration-on-label.yml':
