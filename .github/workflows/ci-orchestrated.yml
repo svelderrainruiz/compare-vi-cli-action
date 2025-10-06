@@ -102,6 +102,12 @@ jobs:
           foreach ($k in $prov.Keys) { $lines += ('- {0}: {1}' -f $k,$prov[$k]) }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
+    - name: Upload run provenance
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: orchestrated-provenance
+        path: tests/results/provenance.json
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -178,10 +184,6 @@ jobs:
       LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
     steps:
     - uses: actions/checkout@v5
-    - name: LabVIEW warmup (best-effort)
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: pwsh -File tools/Warmup-LabVIEW.ps1
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
@@ -204,6 +206,13 @@ jobs:
         timeout-seconds: '60'
         retries: '3'
         retry-delay-seconds: '7'
+
+    - name: LabVIEW warmup (preflight; leave LVCompare running)
+      if: runner.os == 'Windows'
+      env:
+        WARMUP_SKIP_ARGS: '1'
+      shell: pwsh
+      run: pwsh -File tools/Warmup-LabVIEW.ps1
 
     - name: Snapshot processes (post-invoker)
       shell: pwsh
