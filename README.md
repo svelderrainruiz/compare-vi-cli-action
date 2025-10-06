@@ -707,3 +707,18 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 For bug reports and feature requests, please use [GitHub Issues](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues).
 
 For contributions, please read [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines and development workflow.
+
+
+## Deterministic Pester Runs
+
+- Timeboxing is owned by workflows (job `timeout-minutes`), not the dispatcher.
+- The dispatcher has no implicit timeout or auto-kill logic; it only honors explicit `-Timeout*` params.
+- Use the determinism profile to keep loops bounded: `uses: ./.github/actions/determinism-profile` (iterations=3, interval=0, QuantileStrategy=Exact).
+
+### Optional Guard (Manual Debug)
+
+Set `STUCK_GUARD=1` when invoking `Invoke-PesterTests.ps1` to record:
+- `tests/results/pester-heartbeat.ndjson` — start/beat/stop JSON lines
+- `tests/results/pester-partial.log` — best-effort console capture
+
+The guard is notice-only and never fails the job; rely on job-level timeouts for termination.

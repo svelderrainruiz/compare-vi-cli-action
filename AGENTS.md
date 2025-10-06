@@ -64,9 +64,15 @@
 
 - Safe toggles: `LV_SUPPRESS_UI=1`, `WATCH_CONSOLE=1`, and non‑interactive flags in nested calls.
 
-- Determinism helpers (opt-in):
-  - Apply profile: `uses: ./.github/actions/determinism-profile` (caps iterations=3, interval=0, Exact quantiles).
-  - Lint loop usage: `pwsh -File tools/Lint-LoopDeterminism.ps1 -Paths .github/workflows/*.yml` (add `-FailOnViolation` to enforce).
+- Determinism helpers:
+  - Workflows own timeboxing (job `timeout-minutes`); dispatcher has no implicit timeouts.
+  - Apply profile: `uses: ./.github/actions/determinism-profile` (iterations=3, interval=0, QuantileStrategy=Exact).
+  - Optional guard (manual debug): set `STUCK_GUARD=1` to record heartbeat (`tests/results/pester-heartbeat.ndjson`) and a partial console log (`tests/results/pester-partial.log`). Notice-only; never fails jobs.
+  - Lint loop usage: `pwsh -File tools/Lint-LoopDeterminism.Shim.ps1 -Paths .github/workflows/*.yml` (or `-PathsList (Get-ChildItem .github/workflows/*.yml | % FullName -join ';')`; add `-FailOnViolation` to enforce).
+
+- Pester entrypoint choice:
+  - Prefer `CI Orchestrated (deterministic chain)` which will host the Pester run (category-ready) and downstream jobs.
+  - `Pester (self-hosted)` workflow is deprecated; it is gated by `enable_run=false` and should be used only for ad‑hoc debugging.
 
 - If blocked: check recent job step summary, confirm no `LabVIEW.exe` is left running, inspect `tests/results/*/pester-summary.json`, and review any compare/report artifacts.
 
