@@ -1,0 +1,6 @@
+# One wildcard pattern per line to allow tracked build artifacts without failing Validate
+# Examples:
+# src/Legacy/**/bin/**
+# src/Legacy/**/obj/**
+# tools/**/TestResults/**
+
