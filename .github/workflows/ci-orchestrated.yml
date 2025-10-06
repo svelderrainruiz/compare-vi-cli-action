@@ -126,12 +126,18 @@ jobs:
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
     - name: Ensure Invoker (start)
+      id: inv_start_matrix
+      continue-on-error: true
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
         results-dir: tests/results
         category: ${{ matrix.category }}
+        timeout-seconds: '60'
+        retries: '2'
+        retry-delay-seconds: '5'
     - name: Prepare fixture copies (base/head)
+      if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       id: fixtures
       uses: ./.github/actions/prepare-fixtures
     - name: Export fixture env for tests
@@ -174,6 +180,7 @@ jobs:
         }
         "include=$($inc -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
     - name: Run Pester tests via local dispatcher (category)
+      if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $inc = @()
@@ -418,12 +425,18 @@ jobs:
         run: pwsh -File tools/Warmup-LabVIEW.ps1
 
       - name: Ensure Invoker (start)
+        id: inv_start_single
+        continue-on-error: true
         uses: ./.github/actions/ensure-invoker
         with:
           mode: start
           results-dir: tests/results
+          timeout-seconds: '60'
+          retries: '2'
+          retry-delay-seconds: '5'
 
       - name: Pester categories (serial, deterministic)
+        if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -443,6 +456,7 @@ jobs:
           }
 
       - name: Drift (invoker; reuse LabVIEW via -lvpath)
+        if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
         uses: ./.github/actions/fixture-drift
         with:
           render-report: 'true'

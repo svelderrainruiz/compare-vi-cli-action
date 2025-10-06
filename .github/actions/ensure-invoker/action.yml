@@ -15,6 +15,14 @@ inputs:
     description: Wait time for ready/stop markers
     required: false
     default: '20'
+  retries:
+    description: Attempts to (re)start if not ready
+    required: false
+    default: '1'
+  retry-delay-seconds:
+    description: Delay between retries
+    required: false
+    default: '5'
 outputs:
   pipe-name:
     description: Computed pipe name for this job
@@ -22,6 +30,12 @@ outputs:
   sentinel-path:
     description: Sentinel path for this job
     value: ${{ steps.compute.outputs.sentinel }}
+  ready:
+    description: "'true' if invoker reached READY"
+    value: ${{ steps.start.outputs.ready }}
+  reason:
+    description: "Reason when not ready (timeout|error|ready)"
+    value: ${{ steps.start.outputs.reason }}
 runs:
   using: composite
   steps:
@@ -39,27 +53,57 @@ runs:
         "results=$base"    | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
     - name: Start invoker (Windows only)
+      id: start
       if: ${{ inputs.mode == 'start' && runner.os == 'Windows' }}
       shell: pwsh
       run: |
         $results = '${{ steps.compute.outputs.results }}'
+        if (-not (Test-Path -LiteralPath $results)) { New-Item -ItemType Directory -Path $results -Force | Out-Null }
+        $invdir  = Join-Path $results '_invoker'
+        if (-not (Test-Path -LiteralPath $invdir)) { New-Item -ItemType Directory -Path $invdir -Force | Out-Null }
         $pipe    = '${{ steps.compute.outputs.pipe_name }}'
         $sent    = '${{ steps.compute.outputs.sentinel }}'
         $ready   = Join-Path $results '_invoker/ready.json'
         $stopped = Join-Path $results '_invoker/stopped.json'
+        $boot    = Join-Path $results '_invoker/boot.log'
         if (Test-Path -LiteralPath $ready) { Remove-Item -LiteralPath $ready -Force -ErrorAction SilentlyContinue }
         if (Test-Path -LiteralPath $stopped) { Remove-Item -LiteralPath $stopped -Force -ErrorAction SilentlyContinue }
-        # Create sentinel to keep process alive
         if (-not (Test-Path -LiteralPath $sent)) { New-Item -ItemType File -Path $sent -Force | Out-Null }
-        # Launch hidden pwsh child
-        $args = @('-NoLogo','-NoProfile','-File','tools/RunnerInvoker/Start-RunnerInvoker.ps1','-PipeName',"$pipe",'-SentinelPath',"$sent",'-ResultsDir',"$results")
-        $p = Start-Process -FilePath pwsh -ArgumentList $args -WindowStyle Hidden -PassThru
-        Write-Host "Started invoker pid=$($p.Id) pipe=$pipe"
-        # Wait for ready marker
-        $to = [int]'${{ inputs.timeout-seconds }}'
-        $sw = [Diagnostics.Stopwatch]::StartNew()
-        while ($sw.Elapsed.TotalSeconds -lt $to) { if (Test-Path -LiteralPath $ready) { break }; Start-Sleep -Milliseconds 300 }
-        if (-not (Test-Path -LiteralPath $ready)) { Write-Host "::error::Invoker not ready after $to s"; exit 1 }
+        $attempts = [int]'${{ inputs.retries }}'
+        $delay    = [int]'${{ inputs.retry-delay-seconds }}'
+        $to       = [int]'${{ inputs.timeout-seconds }}'
+        $ok = $false; $err=''
+        for ($i=1; $i -le $attempts; $i++) {
+          $ts = (Get-Date -Format o)
+          try {
+            $args = @('-ExecutionPolicy','Bypass','-NoLogo','-NoProfile','-File','tools/RunnerInvoker/Start-RunnerInvoker.ps1','-PipeName',"$pipe",'-SentinelPath',"$sent",'-ResultsDir',"$results")
+            $p = Start-Process -FilePath pwsh -ArgumentList $args -WindowStyle Hidden -PassThru
+            Write-Host "Started invoker attempt #$i pid=$($p.Id) pipe=$pipe"
+            "[$ts] attempt#$i spawn pid=$($p.Id) pipe=$pipe" | Out-File -FilePath $boot -Append -Encoding utf8
+          } catch {
+            $err = $_.Exception.Message
+            Write-Host "::warning::Failed to spawn invoker on attempt #$i: $err"
+            "[$ts] attempt#$i spawn error: $err" | Out-File -FilePath $boot -Append -Encoding utf8
+          }
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          while ($sw.Elapsed.TotalSeconds -lt $to) { if (Test-Path -LiteralPath $ready) { $ok = $true; break }; Start-Sleep -Milliseconds 300 }
+          if ($ok) { "[$(Get-Date -Format o)] attempt#$i ready observed" | Out-File -FilePath $boot -Append -Encoding utf8; break }
+          if ($i -lt $attempts) {
+            try { if ($p -and -not $p.HasExited) { $p | Stop-Process -Force -ErrorAction SilentlyContinue } } catch {}
+            "[$(Get-Date -Format o)] attempt#$i timed out after $to s; retrying in $delay s" | Out-File -FilePath $boot -Append -Encoding utf8
+            Start-Sleep -Seconds $delay
+          }
+        }
+        if ($ok) {
+          "ready=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "reason=ready"| Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        } else {
+          "[$(Get-Date -Format o)] all attempts exhausted; lastError=$err" | Out-File -FilePath $boot -Append -Encoding utf8
+          Write-Host "::error::Invoker not ready after $to s (attempts=$attempts). LastError=$err"
+          "ready=false"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "reason=timeout"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          exit 1
+        }
 
     - name: Stop invoker (Windows only)
       if: ${{ inputs.mode == 'stop' && runner.os == 'Windows' }}
