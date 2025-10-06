@@ -27,6 +27,10 @@ jobs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
       - uses: actions/checkout@v5
+      - name: Ensure Invoker (start)
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: start
       - name: Normalize include_integration
         id: b
         uses: ./.github/actions/bool-normalize
@@ -177,6 +181,12 @@ jobs:
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,node,LabVIEW,LVCompare'
 
+      - name: Ensure Invoker (stop)
+        if: always()
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: stop
+
       - name: Append determinism summary
         if: always()
         shell: pwsh
@@ -214,6 +224,10 @@ jobs:
       WATCH_CONSOLE: '1'
     steps:
       - uses: actions/checkout@v5
+      - name: Ensure Invoker (start)
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: start
       - name: Fixture Drift Orchestrator
         uses: ./.github/actions/fixture-drift
         with:
@@ -238,6 +252,12 @@ jobs:
           snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,node,LabVIEW,LVCompare'
+
+      - name: Ensure Invoker (stop)
+        if: always()
+        uses: ./.github/actions/ensure-invoker
+        with:
+          mode: stop
 
   publish:
     runs-on: ubuntu-latest

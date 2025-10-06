@@ -1,0 +1,27 @@
+name: Ensure Invoker (one-shot)
+description: No-op start/stop markers for per-job invoker lifecycle
+inputs:
+  mode:
+    description: 'start | stop'
+    required: false
+    default: 'start'
+runs:
+  using: composite
+  steps:
+    - name: Ensure invoker marker
+      shell: pwsh
+      run: |
+        $mode = '${{ inputs.mode }}'
+        $root = (Get-Location).Path
+        $dir  = Join-Path $root 'tests/results/_invoker'
+        if ($mode -eq 'start') {
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $state = [ordered]@{ schema='invoker-marker/v1'; mode='start'; atUtc=(Get-Date).ToUniversalTime().ToString('o') }
+          $state | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $dir 'state.json') -Encoding utf8
+          Write-Host 'Invoker (one-shot) start marker written.'
+        } elseif ($mode -eq 'stop') {
+          try { Remove-Item -LiteralPath (Join-Path $dir 'state.json') -Force -ErrorAction SilentlyContinue } catch {}
+          Write-Host 'Invoker (one-shot) stop marker removed.'
+        } else {
+          Write-Host "::notice::Unknown mode: $mode (noop)"
+        }
