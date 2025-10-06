@@ -86,7 +86,8 @@ This issue tracks developer-experience (DX) improvements that an agent can imple
 - Dispatch retries once on transient HTTP failures (5xx/network) with backoff; failures report final status.
 - Invoker backoff escalates retries/delay after two consecutive READY timeouts on the same branch; the summary states the escalated settings used.
 
-## Non‑Goals
+## Non-Goals
+
 - Changing compare/report business logic beyond surfacing outcomes and provenance.
 
 ## Links
