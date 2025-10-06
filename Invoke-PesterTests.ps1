@@ -892,6 +892,41 @@ try {
   exit 1
 }
 
+# Optional notice-only guard (off by default)
+$script:stuckGuardEnabled = ($env:STUCK_GUARD -eq '1')
+$script:hbSec = 15
+try { if ($env:LVCI_HEARTBEAT_SEC) { $script:hbSec = [int]$env:LVCI_HEARTBEAT_SEC } } catch { $script:hbSec = 15 }
+$script:hbPath = Join-Path $resultsDir 'pester-heartbeat.ndjson'
+$script:hbJob = $null
+function _Append-HbLine { param([string]$type)
+  try {
+    if (-not (Test-Path -LiteralPath (Split-Path -Parent $script:hbPath))) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $script:hbPath) | Out-Null }
+    $line = @{ tsUtc = (Get-Date).ToUniversalTime().ToString('o'); type = $type } | ConvertTo-Json -Compress
+    Add-Content -Path $script:hbPath -Value $line -Encoding UTF8
+  } catch {}
+}
+function _Start-HeartbeatJob {
+  param([int]$Sec)
+  try {
+    _Append-HbLine 'start'
+    return (Start-Job -ScriptBlock {
+      param($path,$sec)
+      $ErrorActionPreference='SilentlyContinue'
+      while ($true) {
+        try {
+          $line = @{ tsUtc = (Get-Date).ToUniversalTime().ToString('o'); type = 'beat' } | ConvertTo-Json -Compress
+          Add-Content -Path $path -Value $line -Encoding UTF8
+        } catch {}
+        Start-Sleep -Seconds $sec
+      }
+    } -ArgumentList @($script:hbPath,$Sec))
+  } catch { return $null }
+}
+function _Stop-HeartbeatJob {
+  try { if ($script:hbJob) { Stop-Job -Job $script:hbJob -ErrorAction SilentlyContinue; Remove-Job -Job $script:hbJob -Force -ErrorAction SilentlyContinue } } catch {}
+  _Append-HbLine 'stop'
+}
+
 # Early (idempotent) failures JSON emission when always requested. This guarantees existence
 # regardless of later Pester execution branches or discovery failures. Overwritten later if real failures occur.
 if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Force -Quiet }
@@ -1017,6 +1052,7 @@ $capturedOutputLines = @()  # Will hold textual console lines for discovery fail
 $partialLogPath = $null     # Set when timeout job path uses partial logging
 $result = $null              # Initialize result object holder to satisfy StrictMode before first conditional access
 try {
+if ($script:stuckGuardEnabled) { $script:hbJob = _Start-HeartbeatJob -Sec $script:hbSec }
 if ($effectiveTimeoutSeconds -gt 0) {
   Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
   $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
@@ -1279,6 +1315,9 @@ try {
   }
 } catch { Write-Warning "Failed to compute timing metrics: $_" }
 
+# Stop heartbeat (if enabled) before rendering summaries
+try { if ($script:stuckGuardEnabled) { _Stop-HeartbeatJob } } catch {}
+
 # Generate summary
 $summary = @(
   "=== Pester Test Summary ===",
@@ -1293,6 +1332,24 @@ $summary = @(
 Write-Host ""
 Write-Host $summary -ForegroundColor $(if ($failed -eq 0 -and $errors -eq 0) { 'Green' } else { 'Red' })
 Write-Host ""
+
+# Append optional Guard block to step summary (notice-only)
+if ($script:stuckGuardEnabled -and $env:GITHUB_STEP_SUMMARY) {
+  try {
+    $hbCount = 0; $last = ''
+    if (Test-Path -LiteralPath $script:hbPath) {
+      $lines = Get-Content -LiteralPath $script:hbPath -ErrorAction SilentlyContinue
+      $hbCount = @($lines | Where-Object { $_ -like '*"type":"beat"*' }).Count
+      $last = $lines | Select-Object -Last 1
+    }
+    $g = @('### Guard','')
+    $g += ('- Enabled: {0}' -f $script:stuckGuardEnabled)
+    $g += ('- Heartbeats: {0}' -f $hbCount)
+    if ($script:hbPath) { $g += ('- Heartbeat file: {0}' -f $script:hbPath) }
+    if ($partialLogPath) { $g += ('- Partial log: {0}' -f $partialLogPath) }
+    $g -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 -ErrorAction SilentlyContinue
+  } catch { Write-Host "::notice::Guard summary append failed: $_" }
+}
 
 # Optional: emit result shape diagnostics for $result.Tests (types and property presence)
 if ($EmitResultShapeDiagnostics) {
