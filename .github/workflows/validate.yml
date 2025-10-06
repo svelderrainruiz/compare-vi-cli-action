@@ -136,6 +136,29 @@ jobs:
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
+      - name: Labels sync enforcement (main)
+        if: github.ref_name == 'main'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $labelsFile = '.github/labels.yml'
+          if (-not (Test-Path -LiteralPath $labelsFile)) { Write-Error '.github/labels.yml not found'; exit 2 }
+          $yaml = Get-Content -LiteralPath $labelsFile -Raw
+          $names = @([regex]::Matches($yaml,'(?m)^\s*-\s*name:\s*(.+?)\s*$') | ForEach-Object { $_.Groups[1].Value.Trim() })
+          $api = "https://api.github.com/repos/${{ github.repository }}/labels?per_page=100"
+          $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28' }
+          $resp = Invoke-RestMethod -Method Get -Uri $api -Headers $hdr
+          $existing = @($resp | ForEach-Object { $_.name })
+          $missing = @($names | Where-Object { $_ -and ($existing -notcontains $_) })
+          if ($missing.Count -gt 0) {
+            Write-Host 'Missing labels:'
+            $missing | ForEach-Object { Write-Host (' - ' + $_) }
+            Write-Error ('Labels sync check failed on main: {0} missing' -f $missing.Count)
+            exit 2
+          } else {
+            Write-Host 'Labels OK on main.'
+          }
+
   fixtures:
     runs-on: [self-hosted, Windows, X64]
     env:
