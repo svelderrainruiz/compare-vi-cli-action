@@ -149,10 +149,6 @@ if (-not $DisableStepSummary) { $DisableStepSummary = (_IsTruthyEnv $env:DISABLE
 $effectiveTimeoutSeconds = 0
 if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds }
 elseif ($TimeoutMinutes -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutMinutes * 60 }
-# Safety default in CI: prevent indefinite runs when no timeout provided
-if ($effectiveTimeoutSeconds -le 0 -and $env:GITHUB_ACTIONS -eq 'true') {
-  $effectiveTimeoutSeconds = 150
-}
 
 # Schema version identifiers for emitted JSON artifacts (increment on breaking schema changes)
 $SchemaSummaryVersion  = '1.7.1'
@@ -1026,13 +1022,6 @@ if ($effectiveTimeoutSeconds -gt 0) {
   $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
   $partialLogPath = Join-Path $resultsDir 'pester-partial.log'
   $lastWriteLen = 0
-  $lastDeltaAt = Get-Date
-  $noOutputThreshold = 60
-  try {
-    if ($effectiveTimeoutSeconds -gt 10) {
-      $noOutputThreshold = [math]::Max(60, [math]::Floor($effectiveTimeoutSeconds * 0.5))
-    }
-  } catch { $noOutputThreshold = 60 }
   while ($true) {
     if ($job.State -eq 'Completed') { break }
     if ($job.State -eq 'Failed') { break }
@@ -1047,7 +1036,6 @@ if ($effectiveTimeoutSeconds -gt 0) {
           $delta = $text.Substring([Math]::Min($lastWriteLen, $text.Length))
           if ($delta.Trim()) { Add-Content -Path $partialLogPath -Value $delta -Encoding UTF8 }
           $lastWriteLen = $text.Length
-          $lastDeltaAt = Get-Date
         }
       }
     } catch { }
@@ -1057,16 +1045,6 @@ if ($effectiveTimeoutSeconds -gt 0) {
       $script:timedOut = $true
       break
     }
-    # Liveness watchdog: stop if there's been no new output for an extended period
-    try {
-      $silence = (Get-Date) - $lastDeltaAt
-      if ($silence.TotalSeconds -ge $noOutputThreshold) {
-        Write-Warning ("No Pester output for {0} second(s); stopping job as stuck." -f [int]$silence.TotalSeconds)
-        try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch {}
-        $script:timedOut = $true
-        break
-      }
-    } catch {}
     Start-Sleep -Seconds 5
   }
   if (-not $timedOut) {
