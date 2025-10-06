@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Guard tracked build artifacts (enforced)
+        shell: pwsh
+        run: |
+          # Optional allowlist via env ALLOWLIST_TRACKED_ARTIFACTS (semicolon-separated globs)
+          # and/or file-based allowlist at .ci/build-artifacts-allow.txt
+          pwsh -File tools/Check-TrackedBuildArtifacts.ps1 -AllowListPath '.ci/build-artifacts-allow.txt'
+
       - name: Install actionlint
         run: |
           mkdir -p ./bin
