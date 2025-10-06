@@ -96,6 +96,20 @@ jobs:
         with:
           strict: 'true'
 
+      - name: Apply dispatcher profile
+        id: dprofile
+        uses: ./.github/actions/dispatcher-profile
+        with:
+          timeout-seconds: '150'
+          emit-failures-json-always: 'true'
+          detect-leaks: 'true'
+          fail-on-leaks: 'false'
+          kill-leaks: 'false'
+          leak-grace-seconds: '3'
+          clean-labview-before: 'false'
+          clean-after: 'true'
+          track-artifacts: 'true'
+
       - name: Validate environment
         shell: pwsh
         run: |
@@ -163,6 +177,11 @@ jobs:
           validate-schema: true
           upload: true
           artifact-name: pester-integration-session-index
+
+      - name: Append session summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-SessionIndexSummary.ps1 -ResultsDir 'tests/results'
 
       - name: Validate session index schema (schema-lite, if present)
         if: always()

@@ -23,6 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Apply dispatcher profile
+        id: dprofile
+        uses: ./.github/actions/dispatcher-profile
+        with:
+          timeout-seconds: '150'
+          emit-failures-json-always: 'true'
+          detect-leaks: 'true'
+          fail-on-leaks: 'false'
+          kill-leaks: 'false'
+          leak-grace-seconds: '3'
+          clean-labview-before: 'false'
+          clean-after: 'true'
+          track-artifacts: 'true'
+
       - name: Run dispatcher with synthetic failure enabled (continue-on-error)
         id: run
         shell: pwsh
@@ -75,6 +89,11 @@ jobs:
           } else {
             Write-Host '::notice::session-index.json not present in nightly diagnostics run.'
           }
+
+      - name: Append session summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-SessionIndexSummary.ps1 -ResultsDir 'tests/results'
 
       - name: Mark workflow success regardless of test exit
         if: always()
