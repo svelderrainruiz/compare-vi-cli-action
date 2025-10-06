@@ -313,7 +313,7 @@ jobs:
   drift:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
-    needs: [pester]
+    needs: [pester-category]
     env:
       UNBLOCK_GUARD: '1'
       LV_SUPPRESS_UI: '1'
@@ -415,6 +415,7 @@ jobs:
         if: always()
         shell: pwsh
         run: pwsh -File tools/Summarize-PesterCategories.ps1 -BaseDir 'cats' -Categories @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+
 
 
 
