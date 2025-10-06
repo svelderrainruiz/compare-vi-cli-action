@@ -1,0 +1,65 @@
+name: Agent Wait Post
+description: Append agent wait timing summary from tests/results/_agent/wait-last.json
+inputs:
+  results-dir:
+    description: Results directory root
+    required: false
+    default: tests/results
+  fail-on-outside:
+    description: Fail when outside tolerance margin
+    required: false
+    default: 'false'
+  upload-artifact:
+    description: Upload agent-wait telemetry as artifact
+    required: false
+    default: 'false'
+  artifact-name:
+    description: Artifact name
+    required: false
+    default: agent-wait
+runs:
+  using: composite
+  steps:
+    - name: Append agent wait summary
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $root = '${{ inputs.results-dir }}'
+        $last = Join-Path $root '_agent' 'wait-last.json'
+        if (-not (Test-Path $last)) { Write-Host "::notice::No agent wait last result at $last"; exit 0 }
+        $j = Get-Content $last -Raw | ConvertFrom-Json
+        $lines = @('### Agent Wait Summary','')
+        $lines += ('- Reason: {0}' -f $j.reason)
+        $lines += ('- Elapsed: {0}s' -f $j.elapsedSeconds)
+        $lines += ('- Expected: {0}s' -f $j.expectedSeconds)
+        if ($j.PSObject.Properties['toleranceSeconds']) { $lines += ('- Tolerance: {0}s' -f $j.toleranceSeconds) }
+        if ($j.PSObject.Properties['differenceSeconds']) { $lines += ('- Difference: {0}s' -f $j.differenceSeconds) }
+        if ($j.PSObject.Properties['withinMargin']) { $lines += ('- Within Margin: ' + $j.withinMargin) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        if ('${{ inputs.fail-on-outside }}' -eq 'true' -and $j.PSObject.Properties['withinMargin'] -and -not [bool]$j.withinMargin) {
+          Write-Error 'Agent wait outside tolerance margin (fail-on-outside=true)'
+          exit 2
+        }
+
+    - name: Validate agent-wait schema (schema-lite, non-blocking)
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $last = Join-Path '${{ inputs.results-dir }}' '_agent' 'wait-last.json'
+        if (Test-Path $last) {
+          if (Test-Path 'docs/schemas/agent-wait-result-v1.schema.json') {
+            pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $last -SchemaPath docs/schemas/agent-wait-result-v1.schema.json
+            if ($LASTEXITCODE -ne 0) { Write-Host "::notice::Agent wait schema-lite returned $LASTEXITCODE (non-blocking)" }
+          } else { Write-Host '::notice::Agent wait schema not found (skipping)' }
+        }
+
+    - name: Upload agent-wait telemetry
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ inputs.results-dir }}/_agent/wait-last.json
+          ${{ inputs.results-dir }}/_agent/wait-log.ndjson
+        if-no-files-found: warn
+

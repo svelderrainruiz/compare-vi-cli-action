@@ -334,6 +334,14 @@ jobs:
         shell: pwsh
         run: Copy-Item -LiteralPath fixture-validation.json -Destination fixture-validation-prev.json -Force
 
+      - name: Agent wait summary (notice-only)
+        if: always()
+        uses: ./.github/actions/agent-wait-post
+        with:
+          results-dir: tests/results
+          fail-on-outside: 'false'
+          upload-artifact: 'false'
+
   session-index:
     runs-on: ubuntu-latest
     steps:

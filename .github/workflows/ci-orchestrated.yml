@@ -648,6 +648,14 @@ jobs:
           $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+      - name: Agent wait summary (single)
+        if: always()
+        uses: ./.github/actions/agent-wait-post
+        with:
+          results-dir: tests/results
+          fail-on-outside: 'false'
+          upload-artifact: 'false'
+
       - name: Send Ctrl+C to lingering consoles (optional)
         if: always() && env.SEND_CTRL_C == '1'
         shell: pwsh

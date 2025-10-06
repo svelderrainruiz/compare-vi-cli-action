@@ -51,6 +51,31 @@
 - Workflows own timeboxing via job `timeout-minutes`; dispatcher has no implicit timeout. Optional `STUCK_GUARD=1` writes heartbeat/partial logs (notice-only).
 - Self-hosted Windows is the only Windows variant for LVCompare; use hosted runners only for preflight/lint.
 
+### Delay Language & Wait Etiquette
+
+- "Brief delay" means ~90 seconds (up to 2 minutes). Use this when waiting for GitHub to propagate new workflow files or publish artifacts after job completion.
+- Always embed the explicit wait hint in responses when asking a human to wait, e.g., "brief delay (~90 seconds)".
+
+### Measuring Human Response Time
+
+- Use `tools/Agent-Wait.ps1` to record wait windows around human responses.
+- Start a wait when you inform the human you will pause (dot-source in the current pwsh session):
+  - `. ./tools/Agent-Wait.ps1; Start-AgentWait -Reason 'workflow propagation' -ExpectedSeconds 90`
+- When the human replies, end the wait and report the elapsed time:
+  - `. ./tools/Agent-Wait.ps1; End-AgentWait`
+- Artifacts are written to `tests/results/_agent/`:
+  - `wait-marker.json` (start marker), `wait-last.json` (last result), `wait-log.ndjson` (append-only log)
+- If running in GitHub Actions, both start and end steps append to the job summary automatically.
+
+### Local Unit Test & Telemetry
+
+- Run just the Agent-Wait unit test locally:
+  - `pwsh -NoLogo -NoProfile -Command ". ./tools/Agent-Wait.ps1; Import-Module Pester; $c=New-PesterConfiguration; $c.Run.Path='tests/Agent-Wait.Tests.ps1'; $c.Output.Verbosity='Normal'; $c.Run.PassThru=$true; $r=Invoke-Pester -Configuration $c; \"Tests: total=$($r.TotalCount) passed=$($r.PassedCount) failed=$($r.FailedCount)\""`
+- Expected telemetry (local):
+  - The test uses `$TestDrive` for isolation; it does not write into the working tree.
+  - If you use Start-AgentWait/End-AgentWait manually, artifacts are written under `tests/results/_agent/` (marker, last, log).
+  - Standard Pester results (when running broader suites) are under `tests/results/` (`pester-summary.json`, `pester-results.xml`, `session-index.json`).
+
 ### Fast Path for #88
 
 - Comment dispatch (on an open PR): `/run orchestrated single include_integration=true sample_id=<id>`
