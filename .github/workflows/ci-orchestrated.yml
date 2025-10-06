@@ -599,6 +599,11 @@ jobs:
           $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+      - name: Send Ctrl+C to lingering consoles (optional)
+        if: always() && env.SEND_CTRL_C == '1'
+        shell: pwsh
+        run: pwsh -File tools/Send-CtrlC.ps1 -Names 'pwsh','conhost' -Max 5
+
 
 
 
