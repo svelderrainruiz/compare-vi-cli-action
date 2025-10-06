@@ -1,8 +1,6 @@
 name: CI Orchestrated (deterministic chain)
 
 on:
-  push:
-    branches: [ develop ]
   workflow_dispatch:
     inputs:
       include_integration:
@@ -106,6 +104,7 @@ jobs:
         id: dprofile
         uses: ./.github/actions/dispatcher-profile
         with:
+          timeout-seconds: '150'
           emit-failures-json-always: 'true'
           detect-leaks: 'true'
           fail-on-leaks: 'false'
@@ -140,6 +139,7 @@ jobs:
             -TestsPath tests `
             -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
             -ResultsPath $resDir `
+            -TimeoutSeconds ${{ steps.dprofile.outputs.timeout_seconds }} `
             -EmitFailuresJsonAlways `
             -IncludePatterns $inc
 
@@ -313,6 +313,7 @@ jobs:
   
 
   
+
 
 
 

@@ -59,7 +59,7 @@ Interval between iterations in loop mode (fractional seconds supported).
 Max iterations for loop mode (0 = until diff when fail-on-diff=false, or single pass).
 
 - Required: false
-- Default: `25`
+- Default: `1`
 
 ### loop-simulate
 
