@@ -14,7 +14,8 @@ function Get-EnvOr($name,[string]$fallback) {
 }
 
 $lines = @('### Determinism','')
-$lines += ('- Profile: {0}' -f (if ($env:LVCI_DETERMINISTIC) { 'deterministic' } else { 'default' }))
+$profile = if ($env:LVCI_DETERMINISTIC) { 'deterministic' } else { 'default' }
+$lines += ('- Profile: {0}' -f $profile)
 $lines += ('- Iterations: {0}' -f (Get-EnvOr 'LOOP_MAX_ITERATIONS' 'n/a'))
 $lines += ('- IntervalSeconds: {0}' -f (Get-EnvOr 'LOOP_INTERVAL_SECONDS' '0'))
 $lines += ('- QuantileStrategy: {0}' -f (Get-EnvOr 'LOOP_QUANTILE_STRATEGY' 'Exact'))
@@ -23,4 +24,3 @@ $lines += ('- ReconcileEvery: {0}' -f (Get-EnvOr 'LOOP_RECONCILE_EVERY' '0'))
 $lines += ('- AdaptiveInterval: {0}' -f (Get-EnvOr 'LOOP_ADAPTIVE' '0'))
 
 $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
