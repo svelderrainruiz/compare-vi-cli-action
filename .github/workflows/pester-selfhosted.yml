@@ -73,6 +73,20 @@ jobs:
         with:
           strict: 'true'
 
+      - name: Apply dispatcher profile
+        id: dprofile
+        uses: ./.github/actions/dispatcher-profile
+        with:
+          timeout-seconds: '150'
+          emit-failures-json-always: 'true'
+          detect-leaks: 'true'
+          fail-on-leaks: 'false'
+          kill-leaks: 'false'
+          leak-grace-seconds: '3'
+          clean-labview-before: 'false'
+          clean-after: 'true'
+          track-artifacts: 'true'
+
       # Call the dispatcher directly (no external action dependency)
       # This dispatcher assumes Pester v5+ is pre-installed on the self-hosted runner
       - name: Run Pester tests via local dispatcher
@@ -81,7 +95,9 @@ jobs:
           ./Invoke-PesterTests.ps1 `
             -TestsPath tests `
             -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
-            -ResultsPath tests/results
+            -ResultsPath tests/results `
+            -TimeoutSeconds ${{ steps.dprofile.outputs.timeout_seconds }} `
+            -EmitFailuresJsonAlways
 
       - name: Append test metrics to job summary
         if: always()
