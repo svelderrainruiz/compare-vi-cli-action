@@ -47,3 +47,11 @@ tests/tmp-*/
 tests/results-*/
 home/
 delta.json
+
+# Local IDE/Build artifacts (C#/.NET)
+src/**/obj/
+src/**/bin/
+.vs/
+*.suo
+*.user
+/compare-vi-cli-action.sln
