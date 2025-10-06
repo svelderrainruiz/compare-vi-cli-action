@@ -4,18 +4,25 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory=$true)][string[]]$Paths,
+  [string[]]$Paths,
+  [string]$PathsList,
   [string]$Title = 'Artifacts Map'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $env:GITHUB_STEP_SUMMARY) { return }
 
+# Normalize inputs: support either -Paths (array) or -PathsList (semicolon/whitespace-separated)
+$pathsNorm = @()
+if ($Paths -and $Paths.Count -gt 0) { $pathsNorm = $Paths }
+elseif ($PathsList) { $pathsNorm = @($PathsList -split '[;\s]+' | Where-Object { $_ }) }
+else { $pathsNorm = @() }
+
 function Fmt-Size([long]$bytes){ if ($bytes -lt 1024) { return "$bytes B" } if ($bytes -lt 1024*1024) { return ('{0:N1} KB' -f ($bytes/1kb)) } return ('{0:N1} MB' -f ($bytes/1mb)) }
 
 $lines = @("### $Title",'')
 $any = $false
-foreach ($p in $Paths) {
+foreach ($p in $pathsNorm) {
   if ([string]::IsNullOrWhiteSpace($p)) { continue }
   if (Test-Path -LiteralPath $p) {
     $item = Get-Item -LiteralPath $p -ErrorAction SilentlyContinue
@@ -37,4 +44,3 @@ foreach ($p in $Paths) {
 }
 if (-not $any) { $lines += '- (none found)' }
 $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
