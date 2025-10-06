@@ -345,6 +345,39 @@ Write-HandshakeMarker -Name 'start' -Data @{
   renderReport = [bool]$RenderReport
   simulate     = [bool]$SimulateCompare
 }
+
+# Invoker-style coordination: exclusive LVCompare mutex + READY invariants
+$mutex = $null
+$readyStatus = 'READY'
+$readyReason = ''
+try {
+  $mutexName = 'Global\\LVCI.LVCompare.Mutex'
+  $created = $false
+  $mutex = [System.Threading.Mutex]::new($true, $mutexName, [ref]$created)
+  if (-not $created) { $readyStatus = 'not_ready'; $readyReason = 'busy:invoker_mutex_held' }
+} catch { $readyStatus = 'not_ready'; $readyReason = 'busy:mutex_error' }
+
+if ($readyStatus -eq 'READY') {
+  $deadline = (Get-Date).AddSeconds(10)
+  do {
+    $ok = $true
+    try {
+      $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
+      if ($lv) { $ok = $false; $readyReason = 'labview_running' }
+      if (-not (Test-Path -LiteralPath $OutputDir)) { $ok = $false; $readyReason = 'output_dir_missing' }
+    } catch { $ok = $false; $readyReason = 'ready_check_error' }
+    if ($ok) { break }
+    Start-Sleep -Milliseconds 250
+  } while ((Get-Date) -lt $deadline)
+  if (-not $ok) { $readyStatus = 'not_ready' }
+}
+
+Write-HandshakeMarker -Name 'ready' -Data @{ status = $readyStatus; reason = $readyReason }
+if ($readyStatus -ne 'READY') {
+  # Record reason and avoid running LVCompare/report (summary will still reflect validator outcome)
+  Add-Note ("not_ready: {0}" -f $readyReason)
+  $RenderReport = $false
+}
 
 
 
@@ -523,6 +556,8 @@ if ($strictExit -eq 0 -and $strict.ok) {
 
 
 
+  try { if ($mutex) { $mutex.ReleaseMutex() } } catch {}
+  try { if ($mutex) { $mutex.Dispose() } } catch {}
   exit 0
 
 
@@ -699,6 +734,8 @@ if ($RenderReport) {
 
 
 
+  try { if ($mutex) { $mutex.ReleaseMutex() } } catch {}
+  try { if ($mutex) { $mutex.Dispose() } } catch {}
   exit 1
 
 
@@ -770,6 +807,8 @@ else {
 
 
 
+  try { if ($mutex) { $mutex.ReleaseMutex() } } catch {}
+  try { if ($mutex) { $mutex.Dispose() } } catch {}
   exit 1
 
 
