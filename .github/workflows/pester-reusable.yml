@@ -101,6 +101,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: LV Guard (pre)
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/lv-guard-pre.json
+          cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+          process-names: 'LVCompare,LabVIEW'
+
       # When running integration tests, prepare temp base/head VIs and export env vars
       - name: Prepare fixture copies (base/head)
         if: ${{ needs.normalize.outputs.include_integration == 'true' }}
@@ -298,3 +305,11 @@ jobs:
           results-dir: tests/results
           fail-on-outside: 'false'
           upload-artifact: 'false'
+
+      - name: LV Guard (post)
+        if: always()
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/lv-guard-post.json
+          cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+          process-names: 'LVCompare,LabVIEW'

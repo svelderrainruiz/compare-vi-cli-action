@@ -68,6 +68,13 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: LV Guard (pre)
+      uses: ./.github/actions/runner-unblock-guard
+      with:
+        snapshot-path: results/fixture-drift/lv-guard-pre.json
+        cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+        process-names: 'LVCompare,LabVIEW'
     - name: LabVIEW warmup (best-effort)
       shell: pwsh
       run: pwsh -File tools/Warmup-LabVIEW.ps1
@@ -250,3 +257,11 @@ jobs:
         results-dir: results/fixture-drift
         fail-on-outside: 'false'
         upload-artifact: 'false'
+
+    - name: LV Guard (post)
+      if: always()
+      uses: ./.github/actions/runner-unblock-guard
+      with:
+        snapshot-path: results/fixture-drift/lv-guard-post.json
+        cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+        process-names: 'LVCompare,LabVIEW'
