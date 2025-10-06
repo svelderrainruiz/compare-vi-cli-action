@@ -1,0 +1,4 @@
+# One pattern per line. Paths or globs to ignore during docs link checks.
+# Examples:
+# docs/legacy/**
+

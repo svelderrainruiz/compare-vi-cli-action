@@ -26,6 +26,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: CLI lints (notice on develop)
+        if: github.ref_name == 'develop' || github.base_ref == 'develop'
+        uses: ./.github/actions/cli-lints
+        with:
+          enforce: 'false'
+          linkcheck: 'true'
+          actionlint-version: '1.7.7'
+          relaxed-path: 'docs/releases/**/*.md'
+
+      - name: CLI lints (enforced on main)
+        if: github.ref_name == 'main' || github.base_ref == 'main'
+        uses: ./.github/actions/cli-lints
+        with:
+          enforce: 'true'
+          linkcheck: 'true'
+          actionlint-version: '1.7.7'
+          relaxed-path: 'docs/releases/**/*.md'
+
       - name: Guard tracked build artifacts (enforced)
         shell: pwsh
         run: |
