@@ -3,6 +3,12 @@ name: Pester (self-hosted, real CLI)
 on:
   workflow_dispatch:
     inputs:
+      enable_run:
+        description: 'Enable this workflow (deprecated; prefer orchestrated categories)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false','true']
       include_integration:
         description: 'Include Integration-tagged tests (real CLI)'
         required: false
@@ -20,6 +26,7 @@ concurrency:
 
 jobs:
   normalize:
+    if: ${{ inputs.enable_run == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       include_integration: ${{ steps.b.outputs.normalized }}
@@ -31,6 +38,7 @@ jobs:
         with:
           value: ${{ inputs.include_integration || 'true' }}
   preflight:
+    if: ${{ inputs.enable_run == 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     steps:
@@ -47,6 +55,7 @@ jobs:
           Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
 
   pester:
+    if: ${{ inputs.enable_run == 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     needs: [normalize, preflight]
@@ -77,7 +86,6 @@ jobs:
         id: dprofile
         uses: ./.github/actions/dispatcher-profile
         with:
-          timeout-seconds: '150'
           emit-failures-json-always: 'true'
           detect-leaks: 'true'
           fail-on-leaks: 'false'
@@ -96,7 +104,6 @@ jobs:
             -TestsPath tests `
             -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
             -ResultsPath tests/results `
-            -TimeoutSeconds ${{ steps.dprofile.outputs.timeout_seconds }} `
             -EmitFailuresJsonAlways
 
       - name: Append test metrics to job summary
