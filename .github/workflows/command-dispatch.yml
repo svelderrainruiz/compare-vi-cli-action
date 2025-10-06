@@ -101,9 +101,14 @@ jobs:
           INCLUDE: ${{ steps.orch.outputs.include_integration }}
           SAMPLE: ${{ steps.orch.outputs.sample_id }}
           AUTH: ${{ steps.auth.outputs.token }}
+          ORIGIN_KIND: issue_comment
+          ORIGIN_PR: ${{ github.event.issue.number }}
+          ORIGIN_COMMENT_ID: ${{ github.event.comment.id }}
+          ORIGIN_COMMENT_URL: ${{ github.event.comment.html_url }}
+          ORIGIN_AUTHOR: ${{ github.event.comment.user.login }}
         run: |
-          printf '{"ref":"%s","inputs":{"include_integration":"%s","strategy":"%s","sample_id":"%s"}}' \
-            "$TARGET_REF" "$INCLUDE" "$STRATEGY" "$SAMPLE" > payload.json
+          printf '{"ref":"%s","inputs":{"include_integration":"%s","strategy":"%s","sample_id":"%s","origin_kind":"%s","origin_pr":"%s","origin_comment_id":"%s","origin_comment_url":"%s","origin_author":"%s"}}' \
+            "$TARGET_REF" "$INCLUDE" "$STRATEGY" "$SAMPLE" "$ORIGIN_KIND" "$ORIGIN_PR" "$ORIGIN_COMMENT_ID" "$ORIGIN_COMMENT_URL" "$ORIGIN_AUTHOR" > payload.json
           cat payload.json
           curl -s -X POST \
            -H "Authorization: Bearer $AUTH" \

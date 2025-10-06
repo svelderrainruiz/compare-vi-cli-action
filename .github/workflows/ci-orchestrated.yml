@@ -5,6 +5,26 @@ on:
     branches: [develop]
   workflow_dispatch:
     inputs:
+      origin_kind:
+        description: 'Trigger origin (e.g., issue_comment)'
+        required: false
+        type: string
+      origin_pr:
+        description: 'PR number when triggered from a comment'
+        required: false
+        type: string
+      origin_comment_id:
+        description: 'Comment id when triggered from a comment'
+        required: false
+        type: string
+      origin_comment_url:
+        description: 'Comment URL when triggered from a comment'
+        required: false
+        type: string
+      origin_author:
+        description: 'Comment author login'
+        required: false
+        type: string
       strategy:
         description: 'Execution strategy (matrix or single)'
         required: false
@@ -42,6 +62,46 @@ jobs:
       uses: ./.github/actions/bool-normalize
       with:
         value: ${{ inputs.include_integration || 'true' }}
+    - name: Write run provenance
+      shell: pwsh
+      env:
+        EV_REF: ${{ github.ref }}
+        EV_HEAD_REF: ${{ github.head_ref }}
+        EV_BASE_REF: ${{ github.base_ref }}
+        EV_ORIGIN_KIND: ${{ inputs.origin_kind || '' }}
+        EV_ORIGIN_PR: ${{ inputs.origin_pr || '' }}
+        EV_ORIGIN_COMMENT_ID: ${{ inputs.origin_comment_id || '' }}
+        EV_ORIGIN_COMMENT_URL: ${{ inputs.origin_comment_url || '' }}
+        EV_ORIGIN_AUTHOR: ${{ inputs.origin_author || '' }}
+        EV_SAMPLE_ID: ${{ inputs.sample_id || '' }}
+        EV_INCLUDE_INTEGRATION: ${{ inputs.include_integration || 'true' }}
+        EV_STRATEGY: ${{ inputs.strategy || 'matrix' }}
+      run: |
+        $prov = [ordered]@{
+          runId            = $env:GITHUB_RUN_ID
+          runAttempt       = $env:GITHUB_RUN_ATTEMPT
+          workflow         = $env:GITHUB_WORKFLOW
+          ref              = $env:EV_REF
+          headRef          = $env:EV_HEAD_REF
+          baseRef          = $env:EV_BASE_REF
+          origin_kind      = $env:EV_ORIGIN_KIND
+          origin_pr        = $env:EV_ORIGIN_PR
+          origin_comment_id= $env:EV_ORIGIN_COMMENT_ID
+          origin_comment_url= $env:EV_ORIGIN_COMMENT_URL
+          origin_author    = $env:EV_ORIGIN_AUTHOR
+          sample_id        = $env:EV_SAMPLE_ID
+          include_integration = $env:EV_INCLUDE_INTEGRATION
+          strategy         = $env:EV_STRATEGY
+        }
+        $dir = 'tests/results'
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $path = Join-Path $dir 'provenance.json'
+        ($prov | ConvertTo-Json -Depth 5) | Out-File -FilePath $path -Encoding utf8
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Run Provenance','')
+          foreach ($k in $prov.Keys) { $lines += ('- {0}: {1}' -f $k,$prov[$k]) }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -125,6 +185,14 @@ jobs:
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
+    - name: Snapshot processes (pre-invoker)
+      shell: pwsh
+      run: |
+        $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+        $lines = @('### Pre-Invoker Process Snapshot','')
+        foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
     - name: Ensure Invoker (start)
       id: inv_start_matrix
       continue-on-error: true
@@ -134,8 +202,16 @@ jobs:
         results-dir: tests/results
         category: ${{ matrix.category }}
         timeout-seconds: '60'
-        retries: '2'
-        retry-delay-seconds: '5'
+        retries: '3'
+        retry-delay-seconds: '7'
+
+    - name: Snapshot processes (post-invoker)
+      shell: pwsh
+      run: |
+        $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+        $lines = @('### Post-Invoker Process Snapshot','')
+        foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
     - name: Prepare fixture copies (base/head)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       id: fixtures
@@ -308,6 +384,19 @@ jobs:
         upload: true
         artifact-name: fixture-drift-session-index
 
+    - name: Parse Compare Exec JSON (drift)
+      if: always()
+      shell: pwsh
+      run: |
+        pwsh -File tools/Parse-CompareExec.ps1 -SearchDir 'results/fixture-drift' -OutJson 'results/fixture-drift/compare-outcome.json'
+
+    - name: Upload compare outcome (drift)
+      if: always() && hashFiles('results/fixture-drift/compare-outcome.json') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: compare-outcome-drift
+        path: results/fixture-drift/compare-outcome.json
+
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
@@ -427,6 +516,14 @@ jobs:
             exit 1
           }
 
+      - name: Snapshot processes (pre-invoker)
+        shell: pwsh
+        run: |
+          $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+          $lines = @('### Pre-Invoker Process Snapshot','')
+          foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+          if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
       - name: Ensure Invoker (start)
         id: inv_start_single
         continue-on-error: true
@@ -435,14 +532,22 @@ jobs:
           mode: start
           results-dir: tests/results
           timeout-seconds: '60'
-          retries: '2'
-          retry-delay-seconds: '5'
+          retries: '3'
+          retry-delay-seconds: '7'
 
       - name: Warmup LabVIEW (preflight; leave LVCompare running)
         env:
           WARMUP_SKIP_ARGS: '1'
         shell: pwsh
         run: pwsh -File tools/Warmup-LabVIEW.ps1
+
+      - name: Snapshot processes (post-invoker/warmup)
+        shell: pwsh
+        run: |
+          $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+          $lines = @('### Post-Invoker/Warmup Process Snapshot','')
+          foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+          if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
       - name: Pester categories (serial, deterministic)
         if: ${{ steps.inv_start_single.outputs.ready == 'true' }}

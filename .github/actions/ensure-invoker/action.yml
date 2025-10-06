@@ -14,15 +14,15 @@ inputs:
   timeout-seconds:
     description: Wait time for ready/stop markers
     required: false
-    default: '20'
+    default: '60'
   retries:
     description: Attempts to (re)start if not ready
     required: false
-    default: '1'
+    default: '3'
   retry-delay-seconds:
     description: Delay between retries
     required: false
-    default: '5'
+    default: '7'
 outputs:
   pipe-name:
     description: Computed pipe name for this job
