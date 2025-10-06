@@ -1,4 +1,4 @@
-## Summary
+# Summary
 Track first-class developer-experience (DX) enhancements that a Codex agent can implement while I remain in the driver's seat. The agent may operate autonomously for routine tasks but must remain transparent and interruptible.
 
 ## Goals
@@ -16,7 +16,7 @@ Track first-class developer-experience (DX) enhancements that a Codex agent can 
 - Auto sample_id if omitted; echo back exact filters used.
 - Busy-runner notice + suggested next action (e.g., single-only).
 
-### 2) Provenance & Observability
+### 2) Provenance & Observability (Enhancements)
 
 - Provenance in all orchestrated paths (done), extend to other workflows (validate, smoke, integration).
 - Add "Run Links" block mapping job names -> direct log URLs.
@@ -54,7 +54,7 @@ Track first-class developer-experience (DX) enhancements that a Codex agent can 
 - A follow-up comment includes a monitor link (workflow runs filtered by branch).
 - 100% of /run orchestrated comments either (a) dispatch and reply with links, or (b) reply with a clear reason (e.g., unauthorized, disabled) — zero silent no-ops.
 
-### 2) Provenance & Observability
+### 2) Provenance & Observability (Acceptance)
 
 - Orchestrated job summary contains a "Run Provenance" block with: runId, runAttempt, workflow, ref, head/base (when applicable), origin_kind, origin_pr, origin_comment_id/url, origin_author, sample_id, include_integration, strategy.
 - Artifact orchestrated-provenance exists and contains tests/results/provenance.json matching the summary values.
