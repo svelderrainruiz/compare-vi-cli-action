@@ -1,4 +1,4 @@
-## Summary
+# Summary
 This issue tracks developer‑experience (DX) improvements that an agent can implement while I remain in control. The agent may operate autonomously for routine tasks, but must remain transparent, interruptible, and self‑describing.
 
 ## Goals
@@ -8,6 +8,7 @@ This issue tracks developer‑experience (DX) improvements that an agent can imp
 - Safe autonomy: routine steps run without prompts, but I can stop at any time.
 
 ## Enhancements (Agent Tasks)
+
 - Comment DX
   - Pre/post dispatch PR replies with inputs and monitor link.
   - Auto sample_id when omitted; echo exact filters used.
@@ -29,12 +30,14 @@ This issue tracks developer‑experience (DX) improvements that an agent can imp
   - "Open most recent run" helper command.
 
 ## Guardrails (Autonomy)
+
 - Always acknowledge intent in PR comment with inputs and a monitor link.
 - Print provenance in the run and upload provenance.json.
 - Never claim a trigger without a link or an explicit reason.
 - No destructive actions (cancels/cleanup) without explicit policy flags.
 
 ## Acceptance Criteria (Hardened)
+
 1) Comment Dispatch (PR)
 - Ack within 10s: PR reply includes ref, strategy, include_integration, sample_id, origin (author, PR, comment link).
 - Monitor link: follow‑up PR reply contains a workflow URL filtered by branch; if not visible yet, show the generic workflow page and say "initializing".
