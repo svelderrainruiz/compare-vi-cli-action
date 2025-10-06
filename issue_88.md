@@ -1,4 +1,5 @@
 # Summary
+
 Track first-class developer-experience (DX) enhancements that a Codex agent can implement while I remain in the driver's seat. The agent may operate autonomously for routine tasks but must remain transparent and interruptible.
 
 ## Goals
