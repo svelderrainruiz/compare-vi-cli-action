@@ -722,3 +722,5 @@ Set `STUCK_GUARD=1` when invoking `Invoke-PesterTests.ps1` to record:
 - `tests/results/pester-partial.log` — best-effort console capture
 
 The guard is notice-only and never fails the job; rely on job-level timeouts for termination.
+
+
