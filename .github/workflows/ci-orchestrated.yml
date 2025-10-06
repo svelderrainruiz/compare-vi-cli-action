@@ -57,6 +57,9 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
+        timeout-seconds: '60'
+        retries: '1'
+        retry-delay-seconds: '0'
     - name: Normalize include_integration
       id: b
       uses: ./.github/actions/bool-normalize
@@ -513,8 +516,8 @@ jobs:
           mode: start
           results-dir: tests/results
           timeout-seconds: '60'
-          retries: '3'
-          retry-delay-seconds: '7'
+          retries: '1'
+          retry-delay-seconds: '0'
 
       - name: Warmup LabVIEW (preflight; leave LVCompare running)
         env:
