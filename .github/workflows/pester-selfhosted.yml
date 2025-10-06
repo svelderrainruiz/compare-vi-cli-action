@@ -23,9 +23,10 @@ on:
 jobs:
   pester-selfhosted:
     if: ${{ inputs.enable_run == 'true' }}
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@chore/pester-reusable-rollup
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@develop
     with:
       include_integration: ${{ inputs.include_integration || 'true' }}
       install_pester: ${{ 'false' }}
       sample_id: ${{ inputs.sample_id }}
+
 

@@ -57,7 +57,7 @@ jobs:
 
   pester-integration:
     if: github.event_name == 'workflow_dispatch'
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@chore/pester-reusable-rollup
+    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@develop
     with:
       include_integration: ${{ 'true' }}
       install_pester: ${{ 'false' }}
@@ -76,4 +76,5 @@ jobs:
             $lines += '- Reason: docs-only change detected'
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
+
 
