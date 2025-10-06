@@ -4,7 +4,7 @@ inputs:
   timeout-seconds:
     description: 'Dispatcher timeout in seconds (0 disables)'
     required: false
-    default: '150'
+    default: '0'
   emit-failures-json-always:
     description: 'Always emit pester-failures.json (true/false)'
     required: false
