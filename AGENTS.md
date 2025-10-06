@@ -1,5 +1,15 @@
 # Repository Guidelines
 
+## Primary Directive
+
+- Proactively work on issue #88 until closed. Treat it as the top priority for all edits, CI runs, and PRs.
+- Auth context: the human driving this session is logged into GitHub with an admin token. You may assume privileged operations are allowed (labels, dispatch, merge/tag) when appropriate and safe.
+- Default behavior: operate autonomously (within this repo) to advance #88, while keeping runs deterministic and CI green. Always link commits/PRs to `#88`.
+- Immediate actions when starting a session:
+  - Pull issue details and confirm open tasks, acceptance criteria, and related PRs.
+  - Create/update a working branch (e.g., `issue/88-<brief-slug>`), push minimal changes, and dispatch CI.
+  - Open or update a PR referencing `#88`, apply required labels, and monitor until green. Merge when acceptance is met.
+
 ## Project Structure
 
 - `scripts/` PowerShell modules/shims for compare/report/orchestrators (prefer `Import-Module`; avoid dot-sourcing).
@@ -40,6 +50,12 @@
 - One-shot invoker per job (ensure-invoker composite); guard snapshots include `node.exe` to diagnose terminal spikes.
 - Workflows own timeboxing via job `timeout-minutes`; dispatcher has no implicit timeout. Optional `STUCK_GUARD=1` writes heartbeat/partial logs (notice-only).
 - Self-hosted Windows is the only Windows variant for LVCompare; use hosted runners only for preflight/lint.
+
+### Fast Path for #88
+
+- Comment dispatch (on an open PR): `/run orchestrated single include_integration=true sample_id=<id>`
+- Manual dispatch (CLI): `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -IncludeIntegration true`
+- Merge policy: when all required checks are green and #88 acceptance is satisfied, proceed to merge (admin token available).
 
 ## Workflow Maintenance (ruamel.yaml updater)
 
