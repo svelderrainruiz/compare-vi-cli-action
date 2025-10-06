@@ -133,6 +133,11 @@ jobs:
         run: |
           pwsh -File tools/Write-FailureInventory.ps1 -ResultsDir 'tests/results' -AppendToStepSummary
 
+      - name: Append top failures
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir 'tests/results' -Top 5
+
       - name: Append determinism summary
         if: always()
         shell: pwsh
@@ -143,12 +148,12 @@ jobs:
         shell: pwsh
         run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
 
-      - name: Append artifact list
+      - name: Append artifact map
         if: always()
         shell: pwsh
         run: |
-          $paths = @('tests/results/pester-summary.json','tests/results/pester-results.xml','tests/results/session-index.json')
-          pwsh -File tools/Write-ArtifactList.ps1 -Paths $paths
+          $paths = @('tests/results/pester-summary.json','tests/results/pester-results.xml','tests/results/pester-failures.json','tests/results/session-index.json')
+          pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
 
       - name: Re-run hint
         if: always()

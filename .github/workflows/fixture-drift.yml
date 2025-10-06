@@ -194,6 +194,13 @@ jobs:
         shell: pwsh
         run: pwsh -File tools/Write-FixtureDriftSummary.ps1 -Dir 'results/fixture-drift'
 
+      - name: Append artifact map
+        if: always()
+        shell: pwsh
+        run: |
+          $paths = @('results/fixture-drift/drift-summary.json','results/fixture-drift/compare-report.html','results/fixture-drift/session-index.json')
+          pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
+
       - name: Re-run hint
         if: always()
         shell: pwsh

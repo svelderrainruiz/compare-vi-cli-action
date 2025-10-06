@@ -103,12 +103,12 @@ jobs:
         shell: pwsh
         run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
 
-      - name: Append artifact list
+      - name: Append artifact map
         if: always()
         shell: pwsh
         run: |
           $paths = @('${{ steps.compare.outputs.compareSummaryPath }}','${{ steps.report.outputs.reportPath }}')
-          pwsh -File tools/Write-ArtifactList.ps1 -Paths $paths
+          pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
 
       - name: Re-run hint
         if: always()
