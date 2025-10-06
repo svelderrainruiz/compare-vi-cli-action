@@ -23,11 +23,10 @@ on:
 jobs:
   pester-selfhosted:
     if: ${{ inputs.enable_run == 'true' }}
-    
-      secrets: inherit\n      with:
+    uses: ./.github/workflows/pester-reusable.yml
+    secrets: inherit
+    with:
       include_integration: ${{ inputs.include_integration || 'true' }}
       install_pester: ${{ 'false' }}
       sample_id: ${{ inputs.sample_id }}
-
-
 

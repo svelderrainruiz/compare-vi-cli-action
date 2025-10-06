@@ -42,14 +42,14 @@ on:
 
 jobs:
   pester:
-    
-      secrets: inherit\n      with:
+    uses: ./.github/workflows/pester-reusable.yml
+    secrets: inherit
+    with:
       include_integration: ${{ inputs.include_integration || 'false' }}
       install_pester: ${{ 'true' }}
       sample_id: ${{ inputs.sample_id || '' }}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
-
-
 
