@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import List
 
 from ruamel.yaml import YAML
-from ruamel.yaml.scalarstring import SingleQuotedScalarString as SQS, LiteralScalarString as LIT
+from ruamel.yaml.scalarstring import SingleQuotedScalarString as SQS, LiteralScalarString as LIT, DoubleQuotedScalarString as DQS
 
 
 yaml = YAML(typ='rt')
@@ -233,7 +233,7 @@ def ensure_runner_unblock_guard(doc, job_key: str, snapshot_path: str) -> bool:
             'uses': './.github/actions/runner-unblock-guard',
             'with': {
                 'snapshot-path': snapshot_path,
-                'cleanup': SQS('${{ env.UNBLOCK_GUARD == '"' + '1' + '"' + ' }}'),
+                'cleanup': DQS("${{ env.UNBLOCK_GUARD == '1' }}"),
                 'process-names': 'conhost,pwsh,LabVIEW,LVCompare',
             },
         }
