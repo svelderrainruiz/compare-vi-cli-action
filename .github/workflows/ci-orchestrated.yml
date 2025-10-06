@@ -219,6 +219,13 @@ jobs:
           tests/results/${{ matrix.category }}/pester-failures.json
           tests/results/${{ matrix.category }}/session-index.json
 
+    - name: Upload invoker boot log (category)
+      if: always() && hashFiles(format('tests/results/{0}/_invoker/boot.log', matrix.category)) != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: invoker-boot-${{ matrix.category }}
+        path: tests/results/${{ matrix.category }}/_invoker/boot.log
+
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
@@ -420,10 +427,6 @@ jobs:
             exit 1
           }
 
-      - name: Warmup LabVIEW (best-effort; leave LVCompare running)
-        shell: pwsh
-        run: pwsh -File tools/Warmup-LabVIEW.ps1
-
       - name: Ensure Invoker (start)
         id: inv_start_single
         continue-on-error: true
@@ -434,6 +437,12 @@ jobs:
           timeout-seconds: '60'
           retries: '2'
           retry-delay-seconds: '5'
+
+      - name: Warmup LabVIEW (preflight; leave LVCompare running)
+        env:
+          WARMUP_SKIP_ARGS: '1'
+        shell: pwsh
+        run: pwsh -File tools/Warmup-LabVIEW.ps1
 
       - name: Pester categories (serial, deterministic)
         if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
@@ -487,6 +496,13 @@ jobs:
           snapshot-path: tests/results/runner-unblock-snapshot.json
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+
+      - name: Upload invoker boot log (single)
+        if: always() && hashFiles('tests/results/_invoker/boot.log') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoker-boot-single
+          path: tests/results/_invoker/boot.log
 
       - name: Append final summary (single)
         if: always()
