@@ -46,6 +46,20 @@ jobs:
             }
           }
 
+      - name: Build artifacts guard — ad-hoc allowlist usage
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $msg = @(
+              '### Build Artifacts Guard — Ad-hoc Allowlist',
+              '',
+              '- To permit specific tracked paths temporarily, set ALLOWLIST_TRACKED_ARTIFACTS to a semicolon-separated list of globs.',
+              "- Example: ``ALLOWLIST_TRACKED_ARTIFACTS='src/Legacy/**/bin/**;src/Legacy/**/obj/**'``",
+              '- Prefer using .ci/build-artifacts-allow.txt for committed, reviewable exceptions.'
+            ) -join "`n"
+            $msg | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
       - name: Install actionlint
         run: |
           mkdir -p ./bin
