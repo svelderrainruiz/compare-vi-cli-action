@@ -5,7 +5,16 @@ name: Test (mock LVCompare) - DEPRECATED
 # This workflow is kept for manual dispatch only for backward compatibility.
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   mock-cli:

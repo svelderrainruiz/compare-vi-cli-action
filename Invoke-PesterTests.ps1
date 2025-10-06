@@ -52,6 +52,13 @@ param(
   [Parameter(Mandatory = $false)]
   [int]$MaxTestFiles = 0
 ,
+  # Optional include/exclude patterns for test file selection (wildcards). If a pattern contains '/' or '\\',
+  # it is matched against the full path; otherwise it is matched against the filename.
+  [Parameter(Mandatory = $false)]
+  [string[]]$IncludePatterns,
+  [Parameter(Mandatory = $false)]
+  [string[]]$ExcludePatterns,
+
   [Parameter(Mandatory = $false)]
   [switch]$EmitContext,
   [Parameter(Mandatory = $false)]
@@ -760,6 +767,29 @@ if ($limitToSingle) {
     $testFiles = @($testFiles | Where-Object { $_.Name -notmatch '\.Integration\.Tests\.ps1$' })
     $removed = $before - $testFiles.Count
     if ($removed -gt 0) { Write-Host "Prefiltered $removed integration test file(s) (file-level exclusion)" -ForegroundColor DarkGray }
+  }
+  # Apply IncludePatterns/ExcludePatterns if provided
+  function _Match-AnyPattern([IO.FileInfo]$file,[string[]]$patterns){
+    if (-not $patterns -or $patterns.Count -eq 0) { return $false }
+    foreach ($pat in $patterns) {
+      if (-not $pat) { continue }
+      $target = if ($pat -match '[\\/]') { $file.FullName } else { $file.Name }
+      if ($target -like $pat) { return $true }
+    }
+    return $false
+  }
+  if ($IncludePatterns -and $IncludePatterns.Count -gt 0) {
+    $before = $testFiles.Count
+    $testFiles = @($testFiles | Where-Object { _Match-AnyPattern $_ $IncludePatterns })
+    $kept = $testFiles.Count
+    Write-Host ("Applied IncludePatterns ({0}) -> kept {1}/{2} file(s)" -f ($IncludePatterns -join ', '), $kept, $before) -ForegroundColor DarkGray
+  }
+  if ($ExcludePatterns -and $ExcludePatterns.Count -gt 0) {
+    $before = $testFiles.Count
+    $testFiles = @($testFiles | Where-Object { -not (_Match-AnyPattern $_ $ExcludePatterns) })
+    $kept = $testFiles.Count
+    $removed = $before - $kept
+    if ($removed -gt 0) { Write-Host ("Applied ExcludePatterns ({0}) -> removed {1} file(s)" -f ($ExcludePatterns -join ', '), $removed) -ForegroundColor DarkGray }
   }
   Write-Host "Found $originalTestFileCount test file(s) in tests directory" -ForegroundColor Green
   if ($MaxTestFiles -gt 0 -and $testFiles.Count -gt $MaxTestFiles) {

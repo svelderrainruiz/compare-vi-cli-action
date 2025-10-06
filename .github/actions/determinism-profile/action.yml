@@ -1,0 +1,46 @@
+name: Determinism Profile (CI-safe loop tuning)
+description: Apply deterministic defaults for loop-related settings (non-invasive). Sets env and emits a brief summary.
+inputs:
+  strict:
+    description: 'Use stricter caps (iterations=3)'
+    required: false
+    default: 'true'
+  iterations:
+    description: 'Override iteration cap (ignored when empty)'
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - id: apply
+      shell: pwsh
+      run: |
+        $strict = [System.Convert]::ToBoolean('${{ inputs.strict }}')
+        $iters  = '${{ inputs.iterations }}'
+        if (-not $iters) { $iters = if ($strict) { '3' } else { '5' } }
+
+        $envs = @{
+          'LVCI_DETERMINISTIC'   = '1';
+          'LOOP_MAX_ITERATIONS'  = $iters;
+          'LOOP_INTERVAL_SECONDS'= '0';
+          'LOOP_ADAPTIVE'        = '0';
+          'LOOP_HISTOGRAM_BINS'  = '0';
+          'LOOP_RECONCILE_EVERY' = '0';
+          'LOOP_QUANTILE_STRATEGY' = 'Exact'
+        }
+        foreach ($k in $envs.Keys) { "${k}=$($envs[$k])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+
+        "iterations=$iters" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        "strategy=Exact" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Determinism Profile','')
+          $lines += ('- Strict: {0}' -f $strict)
+          $lines += ('- Iterations: {0}' -f $iters)
+          $lines += '- IntervalSeconds: 0'
+          $lines += '- QuantileStrategy: Exact'
+          $lines += '- HistogramBins: 0'
+          $lines += '- ReconcileEvery: 0'
+          $lines += '- AdaptiveInterval: 0'
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }

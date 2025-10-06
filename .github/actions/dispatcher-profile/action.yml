@@ -1,0 +1,89 @@
+name: Dispatcher Profile (Pester defaults)
+description: Set safe, deterministic defaults for Invoke-PesterTests.ps1 and emit a summary block.
+inputs:
+  timeout-seconds:
+    description: 'Dispatcher timeout in seconds (0 disables)'
+    required: false
+    default: '150'
+  emit-failures-json-always:
+    description: 'Always emit pester-failures.json (true/false)'
+    required: false
+    default: 'true'
+  detect-leaks:
+    description: 'Detect lingering LabVIEW/LVCompare/job leaks (true/false)'
+    required: false
+    default: 'true'
+  fail-on-leaks:
+    description: 'Fail the run on leaks (true/false)'
+    required: false
+    default: 'false'
+  kill-leaks:
+    description: 'Attempt to kill leaks mid-run (true/false)'
+    required: false
+    default: 'false'
+  leak-grace-seconds:
+    description: 'Grace period before final leak check'
+    required: false
+    default: '3'
+  clean-labview-before:
+    description: 'Stop LabVIEW before tests (true/false)'
+    required: false
+    default: 'false'
+  clean-after:
+    description: 'Stop LabVIEW after tests (true/false)'
+    required: false
+    default: 'true'
+  track-artifacts:
+    description: 'Track test-created artifacts (true/false)'
+    required: false
+    default: 'true'
+outputs:
+  timeout_seconds:
+    description: 'Timeout to pass to dispatcher'
+    value: ${{ steps.set.outputs.timeout_seconds }}
+  emit_failures_json_always:
+    description: 'Emit failures json always (true/false)'
+    value: ${{ steps.set.outputs.emit_failures_json_always }}
+runs:
+  using: composite
+  steps:
+    - id: set
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $to = '${{ inputs.timeout-seconds }}'
+        $emit = '${{ inputs.emit-failures-json-always }}'
+        $detect = '${{ inputs.detect-leaks }}'
+        $fail = '${{ inputs.fail-on-leaks }}'
+        $kill = '${{ inputs.kill-leaks }}'
+        $grace = '${{ inputs.leak-grace-seconds }}'
+        $cleanBefore = '${{ inputs.clean-labview-before }}'
+        $cleanAfter  = '${{ inputs.clean-after }}'
+        $track = '${{ inputs.track-artifacts }}'
+
+        # Env bindings consumed by Invoke-PesterTests.ps1
+        if ($cleanBefore -match '^(1|true)$') { "CLEAN_LABVIEW=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+        if ($cleanAfter  -match '^(1|true)$') { "CLEAN_AFTER=1"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+        if ($track      -match '^(1|true)$') { "SCAN_ARTIFACTS=1"| Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+        if ($detect     -match '^(1|true)$') { "DETECT_LEAKS=1"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+        if ($fail       -match '^(1|true)$') { "FAIL_ON_LEAKS=1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+        if ($kill       -match '^(1|true)$') { "KILL_LEAKS=1"    | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+        if ($grace) { "LEAK_GRACE_SECONDS=$grace" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+
+        # Outputs for dispatcher parameters
+        "timeout_seconds=$to" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        "emit_failures_json_always=$emit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Dispatcher Profile','')
+          $lines += ('- TimeoutSeconds: {0}' -f $to)
+          $lines += ('- EmitFailuresJsonAlways: {0}' -f $emit)
+          $lines += ('- DetectLeaks: {0}' -f $detect)
+          $lines += ('- FailOnLeaks: {0}' -f $fail)
+          $lines += ('- KillLeaks: {0}' -f $kill)
+          $lines += ('- LeakGraceSeconds: {0}' -f $grace)
+          $lines += ('- CleanLabVIEWBefore: {0}' -f $cleanBefore)
+          $lines += ('- CleanAfter: {0}' -f $cleanAfter)
+          $lines += ('- TrackArtifacts: {0}' -f $track)
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }

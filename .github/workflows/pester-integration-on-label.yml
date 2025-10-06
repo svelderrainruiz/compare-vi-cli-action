@@ -5,10 +5,15 @@ on:
     types: [labeled, reopened, synchronize]
     paths-ignore:
       - '**/*.md'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -73,12 +78,37 @@ jobs:
     needs: [pre-init, preflight]
     timeout-minutes: 3
     env:
-      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
-      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
       UNBLOCK_GUARD: '1'
       WATCH_CONSOLE: '1'
     steps:
       - uses: actions/checkout@v5
+      - name: Prepare fixture copies (base/head)
+        id: fixtures
+        uses: ./.github/actions/prepare-fixtures
+      - name: Export fixture env for tests
+        shell: pwsh
+        run: |
+          "LV_BASE_VI=${{ steps.fixtures.outputs.base }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LV_HEAD_VI=${{ steps.fixtures.outputs.head }}" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Apply determinism profile
+        uses: ./.github/actions/determinism-profile
+        with:
+          strict: 'true'
+
+      - name: Apply dispatcher profile
+        id: dprofile
+        uses: ./.github/actions/dispatcher-profile
+        with:
+          timeout-seconds: '150'
+          emit-failures-json-always: 'true'
+          detect-leaks: 'true'
+          fail-on-leaks: 'false'
+          kill-leaks: 'false'
+          leak-grace-seconds: '3'
+          clean-labview-before: 'false'
+          clean-after: 'true'
+          track-artifacts: 'true'
 
       - name: Validate environment
         shell: pwsh
@@ -147,6 +177,11 @@ jobs:
           validate-schema: true
           upload: true
           artifact-name: pester-integration-session-index
+
+      - name: Append session summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-SessionIndexSummary.ps1 -ResultsDir 'tests/results'
 
       - name: Validate session index schema (schema-lite, if present)
         if: always()

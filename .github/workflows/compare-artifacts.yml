@@ -2,6 +2,11 @@ name: Compare VI artifact publish
 
 on:
   workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
   push:
     branches: [ main ]
     paths-ignore:
@@ -9,7 +14,7 @@ on:
       - 'docs/**'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,10 +22,8 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 45
     env:
-      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
-      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
-      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH }}
       UNBLOCK_GUARD: '1'
+      LV_SUPPRESS_UI: '1'
     steps:
       - uses: actions/checkout@v5
 
@@ -35,44 +38,16 @@ jobs:
           if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
           Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
 
-      - name: Resolve VI inputs (fallback to repo root files)
-        id: res
-        shell: pwsh
-        run: |
-          $base = $env:LV_BASE_VI
-          $head = $env:LV_HEAD_VI
-          
-          # Fallback to repo root VI1.vi and VI2.vi for publish validation
-          if ([string]::IsNullOrWhiteSpace($base) -or -not (Test-Path -LiteralPath $base)) {
-            $base = Join-Path $env:GITHUB_WORKSPACE 'VI1.vi'
-            Write-Host "Using fallback VI1.vi from repo root: $base"
-          }
-          if ([string]::IsNullOrWhiteSpace($head) -or -not (Test-Path -LiteralPath $head)) {
-            $head = Join-Path $env:GITHUB_WORKSPACE 'VI2.vi'
-            Write-Host "Using fallback VI2.vi from repo root: $head"
-          }
-          
-          # Validate files exist
-          if (-not (Test-Path -LiteralPath $base)) {
-            Write-Host "::error::Base VI file not found: $base"
-            exit 1
-          }
-          if (-not (Test-Path -LiteralPath $head)) {
-            Write-Host "::error::Head VI file not found: $head"
-            exit 1
-          }
-          
-          Write-Host "Base VI: $base"
-          Write-Host "Head VI: $head"
-          "base=$base" >> $env:GITHUB_OUTPUT
-          "head=$head" >> $env:GITHUB_OUTPUT
+      - name: Prepare fixture copies (base/head)
+        id: prep
+        uses: ./.github/actions/prepare-fixtures
 
       - name: Run compare
         id: compare
         uses: ./
         with:
-          base: ${{ steps.res.outputs.base }}
-          head: ${{ steps.res.outputs.head }}
+          base: ${{ steps.prep.outputs.base }}
+          head: ${{ steps.prep.outputs.head }}
           fail-on-diff: 'false'
 
       - name: Generate HTML report
@@ -117,6 +92,28 @@ jobs:
           $combined = if ($sec) { "${sec}s (${ms} ms)" } else { 'n/a' }
           $line = "### Compare VI Timing`n- Seconds: $sec`n- Nanoseconds: $ns`n- Combined: $combined" 
           $line | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Append determinism summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-DeterminismSummary.ps1
+
+      - name: Append runner identity
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
+      - name: Append artifact map
+        if: always()
+        shell: pwsh
+        run: |
+          $paths = @('${{ steps.compare.outputs.compareSummaryPath }}','${{ steps.report.outputs.reportPath }}')
+          pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
+
+      - name: Re-run hint
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'compare-artifacts.yml' -SampleId '${{ github.event.inputs.sample_id || '' }}'
 
       - name: Echo outputs
         if: steps.compare.outcome == 'success'

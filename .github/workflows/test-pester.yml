@@ -35,6 +35,10 @@ on:
         default: 'false'
         type: choice
         options: ['false','true']
+      sample_id:
+        description: 'Sampling correlation id (prevents cancels)'
+        required: false
+        type: string
 
 jobs:
   normalize:
@@ -42,6 +46,12 @@ jobs:
     outputs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
+      - uses: actions/checkout@v5
+
+      - name: Apply determinism profile
+        uses: ./.github/actions/determinism-profile
+        with:
+          strict: 'true'
       - name: Normalize include_integration
         id: b
         uses: ./.github/actions/bool-normalize
@@ -54,6 +64,20 @@ jobs:
     needs: normalize
     steps:
       - uses: actions/checkout@v5
+
+      - name: Apply dispatcher profile
+        id: dprofile
+        uses: ./.github/actions/dispatcher-profile
+        with:
+          timeout-seconds: '150'
+          emit-failures-json-always: 'true'
+          detect-leaks: 'true'
+          fail-on-leaks: 'false'
+          kill-leaks: 'false'
+          leak-grace-seconds: '3'
+          clean-labview-before: 'false'
+          clean-after: 'true'
+          track-artifacts: 'true'
 
       - name: Install Pester v5
         shell: pwsh
@@ -90,6 +114,11 @@ jobs:
           upload: true
           artifact-name: session-index
 
+      - name: Append session summary
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Write-SessionIndexSummary.ps1 -ResultsDir 'tests/results'
+
       - name: Upload Pester artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -112,5 +141,5 @@ jobs:
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true

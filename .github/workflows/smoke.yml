@@ -3,6 +3,10 @@ name: Smoke test Compare VI action
 on:
   workflow_dispatch:
     inputs:
+      sample_id:
+        description: "Sampling correlation id (prevents cancels)"
+        required: false
+        type: string
       base:
         description: "Absolute or workspace-relative path to base .vi"
         required: false
@@ -62,11 +66,9 @@ jobs:
     needs: preflight
     timeout-minutes: 3
     env:
-      LV_BASE_VI: ${{ vars.LV_BASE_VI }}
-      LV_HEAD_VI: ${{ vars.LV_HEAD_VI }}
-      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH }}
       UNBLOCK_GUARD: '1'
       WATCH_CONSOLE: '1'
+      LV_SUPPRESS_UI: '1'
     steps:
       - uses: actions/checkout@v5
 
@@ -120,34 +122,26 @@ jobs:
             Write-Host 'Fixture validation clean.'
           }
 
-      - name: Resolve inputs from repo variables when empty
-        id: res
+      - name: Prepare fixture copies (base/head)
+        id: prep
+        uses: ./.github/actions/prepare-fixtures
+      - name: Pass through inputs
+        id: passthrough
         shell: pwsh
         run: |
-          $base = '${{ github.event.inputs.base }}'
-          if ([string]::IsNullOrWhiteSpace($base)) { $base = $env:LV_BASE_VI }
-          $head = '${{ github.event.inputs.head }}'
-          if ([string]::IsNullOrWhiteSpace($head)) { $head = $env:LV_HEAD_VI }
-          $cli  = '${{ github.event.inputs.lvComparePath }}'
-          if ([string]::IsNullOrWhiteSpace($cli))  { $cli  = $env:LVCOMPARE_PATH }
-          $wd   = '${{ github.event.inputs.working_directory }}'
-          "base=$base"                 >> $env:GITHUB_OUTPUT
-          "head=$head"                 >> $env:GITHUB_OUTPUT
-          "lvComparePath=$cli"         >> $env:GITHUB_OUTPUT
           "lvCompareArgs=${{ github.event.inputs.lvCompareArgs }}" >> $env:GITHUB_OUTPUT
           "fail_on_diff=${{ github.event.inputs.fail_on_diff }}"   >> $env:GITHUB_OUTPUT
-          "working_directory=$wd"      >> $env:GITHUB_OUTPUT
+          "working_directory=${{ github.event.inputs.working_directory }}" >> $env:GITHUB_OUTPUT
 
       - name: Run local action
         id: compare
         uses: ./
         with:
-          base: ${{ steps.res.outputs.base }}
-          head: ${{ steps.res.outputs.head }}
-          lvComparePath: ${{ steps.res.outputs.lvComparePath }}
-          lvCompareArgs: ${{ steps.res.outputs.lvCompareArgs }}
-          fail-on-diff: ${{ steps.res.outputs.fail_on_diff }}
-          working-directory: ${{ steps.res.outputs.working_directory }}
+          base: ${{ steps.prep.outputs.base }}
+          head: ${{ steps.prep.outputs.head }}
+          lvCompareArgs: ${{ steps.passthrough.outputs.lvCompareArgs }}
+          fail-on-diff: ${{ steps.passthrough.outputs.fail_on_diff }}
+          working-directory: ${{ steps.passthrough.outputs.working_directory }}
 
       - name: Echo outputs
         if: always()
@@ -181,7 +175,7 @@ jobs:
           Invoke-RestMethod -Method POST -Uri $uri -Headers $headers -ContentType 'application/json' -Body $payload
 
       - name: Generate HTML report
-        if: always()
+        if: steps.compare.outcome == 'success'
         shell: pwsh
         run: |
           $outDir = Join-Path $env:RUNNER_TEMP 'smoke-report'
@@ -212,22 +206,29 @@ jobs:
 
       - name: Summarize fixture JSON (step summary)
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: |
-          if (Test-Path fixture-validation.json) {
-            $data = Get-Content fixture-validation.json -Raw | ConvertFrom-Json
-            $lines = @()
-            $lines += '### Fixture Validation (JSON)'
-            $lines += ''
-            $lines += "Exit Code: $($data.exitCode)  OK: $($data.ok)"
-            $lines += ''
-            $lines += 'Counts:'
-            foreach ($k in $data.summaryCounts.PSObject.Properties.Name) { $lines += "- $k: $($data.summaryCounts.$k)" }
-            $lines += ''
-            $lines += 'Issues:'
-            if ($data.issues.Count -eq 0) { $lines += '- (none)' } else { foreach ($i in $data.issues) { $lines += "- $($i.type)" } }
-            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          try {
+            if (Test-Path fixture-validation.json) {
+              $data = Get-Content fixture-validation.json -Raw | ConvertFrom-Json
+              $lines = @()
+              $lines += '### Fixture Validation (JSON)'
+              $lines += ''
+              $lines += "Exit Code: $($data.exitCode)  OK: $($data.ok)"
+              $lines += ''
+              $lines += 'Counts:'
+              foreach ($k in $data.summaryCounts.PSObject.Properties.Name) { $lines += "- $k: $($data.summaryCounts.$k)" }
+              $lines += ''
+              $lines += 'Issues:'
+              if ($data.issues.Count -eq 0) { $lines += '- (none)' } else { foreach ($i in $data.issues) { $lines += "- $($i.type)" } }
+              $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            } else {
+              Write-Host '::notice::fixture-validation.json not found; skipping summary.'
+            }
+          } catch {
+            Write-Host "::warning::Failed to summarize fixture-validation.json: $_"
           }
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
