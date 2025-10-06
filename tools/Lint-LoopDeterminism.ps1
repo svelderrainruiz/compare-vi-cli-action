@@ -20,8 +20,8 @@
 param(
   [Parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromRemainingArguments=$true)]
   [string[]]$Paths,
-  [int]$MaxIterations = 5,
-  [double]$IntervalSeconds = 0,
+  [object]$MaxIterations = 5,
+  [object]$IntervalSeconds = 0,
   [string[]]$AllowedStrategies = @('Exact'),
   [switch]$FailOnViolation
 )
@@ -29,6 +29,25 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $violations = @()
+
+# Tolerant coercion for MaxIterations/IntervalSeconds to avoid binding errors when callers pass strings or omit values.
+$MaxI = 5
+try {
+  if ($MaxIterations -is [int]) { $MaxI = [int]$MaxIterations }
+  else {
+    [int]$tmp = 0
+    if ([int]::TryParse("$MaxIterations", [ref]$tmp)) { $MaxI = $tmp }
+  }
+} catch { $MaxI = 5 }
+
+$IntS = 0.0
+try {
+  if ($IntervalSeconds -is [double]) { $IntS = [double]$IntervalSeconds }
+  else {
+    [double]$dtmp = 0
+    if ([double]::TryParse("$IntervalSeconds", [ref]$dtmp)) { $IntS = $dtmp }
+  }
+} catch { $IntS = 0.0 }
 $patterns = @{
   IterYaml    = [regex]'(?im)\bloop-max-iterations\s*:\s*(?<n>\d+)' ;
   IterCli     = [regex]'(?im)-LoopIterations\s+(?<n>\d+)' ;
@@ -49,17 +68,17 @@ foreach ($p in $Paths) {
   $text = Get-Content -LiteralPath $p -Raw
   # Iterations
   foreach ($m in $patterns.IterYaml.Matches($text)) {
-    $n = [int]$m.Groups['n'].Value; if ($n -gt $MaxIterations) { Add-Violation $p 'Iterations' ("loop-max-iterations=$n > $MaxIterations") $m.Value }
+    $n = [int]$m.Groups['n'].Value; if ($n -gt $MaxI) { Add-Violation $p 'Iterations' ("loop-max-iterations=$n > $MaxI") $m.Value }
   }
   foreach ($m in $patterns.IterCli.Matches($text)) {
-    $n = [int]$m.Groups['n'].Value; if ($n -gt $MaxIterations) { Add-Violation $p 'Iterations' ("-LoopIterations $n > $MaxIterations") $m.Value }
+    $n = [int]$m.Groups['n'].Value; if ($n -gt $MaxI) { Add-Violation $p 'Iterations' ("-LoopIterations $n > $MaxI") $m.Value }
   }
   # Interval
   foreach ($m in $patterns.IntYaml.Matches($text)) {
-    $s = [double]$m.Groups['s'].Value; if ($s -ne $IntervalSeconds) { Add-Violation $p 'Interval' ("loop-interval-seconds=$s != $IntervalSeconds") $m.Value }
+    $s = [double]$m.Groups['s'].Value; if ($s -ne $IntS) { Add-Violation $p 'Interval' ("loop-interval-seconds=$s != $IntS") $m.Value }
   }
   foreach ($m in $patterns.IntCli.Matches($text)) {
-    $s = [double]$m.Groups['s'].Value; if ($s -ne $IntervalSeconds) { Add-Violation $p 'Interval' ("-LoopIntervalSeconds $s != $IntervalSeconds") $m.Value }
+    $s = [double]$m.Groups['s'].Value; if ($s -ne $IntS) { Add-Violation $p 'Interval' ("-LoopIntervalSeconds $s != $IntS") $m.Value }
   }
   # Strategy
   foreach ($m in $patterns.StratYaml.Matches($text)) {

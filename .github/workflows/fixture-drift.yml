@@ -162,6 +162,11 @@ jobs:
           base-path: ${{ steps.prep.outputs.base }}
           head-path: ${{ steps.prep.outputs.head }}
 
+      - name: Ensure session index (fallback)
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir 'results/fixture-drift' -SummaryJson 'drift-summary.json'
+
       - name: Session index post (best-effort)
         if: always()
         uses: ./.github/actions/session-index-post
@@ -198,8 +203,8 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $paths = @('results/fixture-drift/drift-summary.json','results/fixture-drift/compare-report.html','results/fixture-drift/session-index.json')
-          pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
+          $list = 'results/fixture-drift/drift-summary.json;results/fixture-drift/compare-report.html;results/fixture-drift/session-index.json'
+          pwsh -File tools/Write-ArtifactMap.ps1 -PathsList $list -Title 'Artifacts'
 
       - name: Re-run hint
         if: always()
