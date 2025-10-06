@@ -65,9 +65,6 @@ jobs:
     - name: Write run provenance
       shell: pwsh
       env:
-        EV_REF: ${{ github.ref }}
-        EV_HEAD_REF: ${{ github.head_ref }}
-        EV_BASE_REF: ${{ github.base_ref }}
         EV_ORIGIN_KIND: ${{ inputs.origin_kind || '' }}
         EV_ORIGIN_PR: ${{ inputs.origin_pr || '' }}
         EV_ORIGIN_COMMENT_ID: ${{ inputs.origin_comment_id || '' }}
@@ -77,31 +74,7 @@ jobs:
         EV_INCLUDE_INTEGRATION: ${{ inputs.include_integration || 'true' }}
         EV_STRATEGY: ${{ inputs.strategy || 'matrix' }}
       run: |
-        $prov = [ordered]@{
-          runId            = $env:GITHUB_RUN_ID
-          runAttempt       = $env:GITHUB_RUN_ATTEMPT
-          workflow         = $env:GITHUB_WORKFLOW
-          ref              = $env:EV_REF
-          headRef          = $env:EV_HEAD_REF
-          baseRef          = $env:EV_BASE_REF
-          origin_kind      = $env:EV_ORIGIN_KIND
-          origin_pr        = $env:EV_ORIGIN_PR
-          origin_comment_id= $env:EV_ORIGIN_COMMENT_ID
-          origin_comment_url= $env:EV_ORIGIN_COMMENT_URL
-          origin_author    = $env:EV_ORIGIN_AUTHOR
-          sample_id        = $env:EV_SAMPLE_ID
-          include_integration = $env:EV_INCLUDE_INTEGRATION
-          strategy         = $env:EV_STRATEGY
-        }
-        $dir = 'tests/results'
-        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-        $path = Join-Path $dir 'provenance.json'
-        ($prov | ConvertTo-Json -Depth 5) | Out-File -FilePath $path -Encoding utf8
-        if ($env:GITHUB_STEP_SUMMARY) {
-          $lines = @('### Run Provenance','')
-          foreach ($k in $prov.Keys) { $lines += ('- {0}: {1}' -f $k,$prov[$k]) }
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-        }
+        pwsh -NoLogo -NoProfile -File tools/Write-RunProvenance.ps1 -ResultsDir 'tests/results' -AppendStepSummary
     - name: Upload run provenance
       if: always()
       uses: actions/upload-artifact@v4
