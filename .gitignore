@@ -48,6 +48,28 @@ tests/results-*/
 home/
 delta.json
 
+# ------------------------------
+# Hardened ignore rules (scoped)
+# ------------------------------
+
+# C#/.NET build outputs (any project under src/)
+src/**/obj/
+src/**/bin/
+
+# IDE cruft
+.vs/
+*.user
+*.suo
+
+# Test frameworks / runners
+TestResults/
+
+# Packages
+*.nupkg
+
+# Root solution (temporary guard; remove when intentionally tracking a solution)
+/compare-vi-cli-action.sln
+
 # Local IDE/Build artifacts (C#/.NET)
 src/**/obj/
 src/**/bin/
