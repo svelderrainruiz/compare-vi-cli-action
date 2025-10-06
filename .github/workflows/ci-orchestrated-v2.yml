@@ -37,7 +37,6 @@ jobs:
         uses: ./.github/actions/bool-normalize
         with:
           value: ${{ inputs.include_integration }}
-          default: 'true'
 
       - name: Append interactivity probe
         shell: pwsh
@@ -57,7 +56,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: dispatcher
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/dispatcher
           tests-path: tests
           default-timeout-seconds: '0'
@@ -66,7 +65,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: fixtures
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/fixtures
           tests-path: tests
           default-timeout-seconds: '0'
@@ -75,7 +74,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: schema
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/schema
           tests-path: tests
           default-timeout-seconds: '0'
@@ -84,7 +83,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: comparevi
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/comparevi
           tests-path: tests
           default-timeout-seconds: '0'
@@ -93,7 +92,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: loop
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/loop
           tests-path: tests
           default-timeout-seconds: '0'
@@ -102,7 +101,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: psummary
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/psummary
           tests-path: tests
           default-timeout-seconds: '0'
@@ -111,7 +110,7 @@ jobs:
         uses: ./.github/actions/pester-category-run
         with:
           category: workflow
-          include_integration: ${{ steps.norm.outputs.bool }}
+          include_integration: ${{ steps.norm.outputs.normalized }}
           results-dir: tests/results/workflow
           tests-path: tests
           default-timeout-seconds: '0'
