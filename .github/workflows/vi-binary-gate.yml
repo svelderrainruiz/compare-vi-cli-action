@@ -14,29 +14,9 @@ on:
 
 jobs:
   vi-binary-check:
-    runs-on: [self-hosted, Windows, X64]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Install Pester (if needed)
-        shell: pwsh
-        run: |
-          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -ge '5.0.0')) {
-            Install-Module Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
-          }
-
-      - name: Run VI binary handling test
-        shell: pwsh
-        run: |
-          $config = New-PesterConfiguration
-          $config.Run.Path = 'tests/ViBinaryHandling.Tests.ps1'
-          $config.Output.Verbosity = 'Normal'
-          Invoke-Pester -Configuration $config
-
-      - name: Upload test artifacts (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vi-binary-gate-logs
-          path: .
+    uses: ./.github/workflows/pester-reusable.yml
+    with:
+      include_integration: ${{ 'false' }}
+      install_pester: ${{ 'false' }}
+      include_patterns: ${{ 'tests/ViBinaryHandling.Tests.ps1' }}
+      sample_id: ${{ github.event.inputs.sample_id || '' }}

@@ -42,10 +42,10 @@ on:
 
 jobs:
   pester:
-    uses: LabVIEW-Community-CI-CD/compare-vi-cli-action/.github/workflows/pester-reusable.yml@chore/dispatch-orchestrated-on-develop
+    uses: ./.github/workflows/pester-reusable.yml
     with:
       include_integration: ${{ inputs.include_integration || 'false' }}
-      install_pester: 'true'
+      install_pester: ${{ 'true' }}
       sample_id: ${{ inputs.sample_id || '' }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
