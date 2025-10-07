@@ -67,6 +67,11 @@ pwsh ./tools/Track-WorkflowRun.ps1 -RunId 18327092270 -PollSeconds 20 -Json
 ```
 
 - Automatically resolves the repository from `GITHUB_REPOSITORY` or git remote; override with `-Repo owner/name` if needed.
+Automate dispatch + monitoring in one step:
+ ```powershell 
+pwsh ./tools/Watch-RunAndTrack.ps1 -Workflow validate.yml -Ref issue/88-dev-dashboard-phase2 -OutputPath logs/validate-run.json
+ ``` 
+This helper wraps  `gh workflow run` and the tracker to write the final snapshot automatically. 
 - Prints a table of job status/conclusion/duration on each poll; add `-OutputPath` to persist the final snapshot JSON for hand-offs.
 - Helpful when self-hosted runners are saturated and you need visibility into which job is waiting or failing.
 

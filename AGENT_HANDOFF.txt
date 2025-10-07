@@ -49,6 +49,8 @@ Next Steps (suggested)
 
 Workflow Tracking
 - pwsh -File tools/Track-WorkflowRun.ps1 -RunId 18327092270 [-Repo owner/repo] [-PollSeconds 30] [-OutputPath logs/run-18327092270.json]
+- Optional helper: pwsh -File tools/Watch-RunAndTrack.ps1 -Workflow validate.yml -Ref issue/88-dev-dashboard-phase2 -OutputPath logs/validate-run.json
+  Dispatches the workflow, monitors per-job status, and stores the final snapshot.
   Use to watch per-job status for queued/active runs and capture snapshots for future agents.
 
 Contact & References
