@@ -5,7 +5,7 @@
 .DESCRIPTION
   Ensures a LabVIEW.exe instance is started before tests/compare work begins by
   briefly launching LVCompare.exe (canonical path) against two VIs, then
-  terminating only LVCompare.exe while leaving LabVIEW.exe running.
+terminating LVCompare.exe once LabVIEW has been initialized.
 
   No-op when LabVIEW is already running or when LVCompare is not present.
 
@@ -18,14 +18,15 @@
 .PARAMETER TimeoutSeconds
   Time to wait for LabVIEW to appear after spawning LVCompare. Default 15.
 
-.PARAMETER KillDelaySeconds
-  Delay before stopping LVCompare (to allow LabVIEW to load). Default 3.
+.PARAMETER KeepLVCompare
+  When supplied (or when WARMUP_KEEP_LVCOMPARE=1), leaves LVCompare.exe running after warm-up.
 #>
 [CmdletBinding()]
 param(
   [string]$BaseVi,
   [string]$HeadVi,
-  [int]$TimeoutSeconds = 15
+  [int]$TimeoutSeconds = 15,
+  [switch]$KeepLVCompare
 )
 
 Set-StrictMode -Version Latest
@@ -62,13 +63,13 @@ if (-not (Test-Path -LiteralPath $BaseVi)) { Write-Host "Warmup: Base VI not fou
 if (-not (Test-Path -LiteralPath $HeadVi)) { Write-Host "Warmup: Head VI not found: $HeadVi" -ForegroundColor Yellow; return }
 
 if ($env:WARMUP_MODE -eq 'preflight' -or $env:WARMUP_SKIP_ARGS -eq '1') {
-  Write-Host "Warmup: starting LVCompare without VI args (preflight); leaving it running"
-  Write-StepSummaryLine "- Warmup: LVCompare preflight (no args); leaving it running"
+  Write-Host "Warmup: starting LVCompare without VI args (preflight)."
+  Write-StepSummaryLine "- Warmup: LVCompare preflight (no args)"
   $p = Start-Process -FilePath $cli -PassThru
 }
 else {
-  Write-Host "Warmup: starting LVCompare to spawn LabVIEW (will NOT close LVCompare)"
-  Write-StepSummaryLine "- Warmup: starting LVCompare to spawn LabVIEW (LVCompare left running)"
+  Write-Host "Warmup: starting LVCompare to spawn LabVIEW."
+  Write-StepSummaryLine "- Warmup: starting LVCompare to spawn LabVIEW"
   # Start LVCompare normally (UI allowed). Do not suppress UI; do not redirect.
   $p = Start-Process -FilePath $cli -ArgumentList @($BaseVi,$HeadVi) -PassThru
 }
@@ -89,6 +90,35 @@ if ($lv.Count -gt 0) {
   Write-StepSummaryLine "- Warmup: LabVIEW did not start within timeout ($TimeoutSeconds s)"
 }
 
-# Per request: Do not close LVCompare. Leave it running alongside LabVIEW.
-Write-Host "Warmup: leaving LVCompare running by design."
-Write-StepSummaryLine "- Warmup: LVCompare left running (by design)"
+$shouldKeep = $KeepLVCompare.IsPresent -or ($env:WARMUP_KEEP_LVCOMPARE -eq '1')
+if ($shouldKeep) {
+  Write-Host "Warmup: leaving LVCompare running (KeepLVCompare requested)."
+  Write-StepSummaryLine "- Warmup: LVCompare left running (Keep flag)"
+  return
+}
+
+if ($p -and -not $p.HasExited) {
+  Write-Host "Warmup: stopping LVCompare (PID=$($p.Id))."
+  try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch {
+    Write-Host "Warmup: failed to stop LVCompare by PID ($($p.Id)): $($_.Exception.Message)" -ForegroundColor Yellow
+  }
+}
+
+try {
+  $remainingLvCompare = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue)
+  if ($remainingLvCompare.Count -gt 0) {
+    foreach ($proc in $remainingLvCompare) {
+      try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop } catch {}
+    }
+    $remainingLvCompare = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue)
+  }
+  if ($remainingLvCompare.Count -eq 0) {
+    Write-Host "Warmup: LVCompare stopped; only LabVIEW remains."
+    Write-StepSummaryLine "- Warmup: LVCompare stopped after warm-up"
+  } else {
+    Write-Host "Warmup: LVCompare still running after stop attempt (PID(s): $($remainingLvCompare.Id -join ','))" -ForegroundColor Yellow
+    Write-StepSummaryLine "- Warmup: LVCompare still running after stop attempt (PID(s): $($remainingLvCompare.Id -join ','))"
+  }
+} catch {
+  Write-Host "Warmup: error while checking LVCompare state: $($_.Exception.Message)" -ForegroundColor Yellow
+}
