@@ -6,39 +6,39 @@ on:
   workflow_dispatch:
     inputs:
       origin_kind:
-        description: 'Trigger origin (e.g., issue_comment)'
+        description: Trigger origin (e.g., issue_comment)
         required: false
         type: string
       origin_pr:
-        description: 'PR number when triggered from a comment'
+        description: PR number when triggered from a comment
         required: false
         type: string
       origin_comment_id:
-        description: 'Comment id when triggered from a comment'
+        description: Comment id when triggered from a comment
         required: false
         type: string
       origin_comment_url:
-        description: 'Comment URL when triggered from a comment'
+        description: Comment URL when triggered from a comment
         required: false
         type: string
       origin_author:
-        description: 'Comment author login'
+        description: Comment author login
         required: false
         type: string
       strategy:
-        description: 'Execution strategy (matrix or single)'
+        description: Execution strategy (matrix or single)
         required: false
-        default: 'matrix'
+        default: matrix
         type: choice
-        options: ['matrix','single']
+        options: [matrix, single]
       include_integration:
-        description: 'Include Integration-tagged tests'
+        description: Include Integration-tagged tests
         required: false
         default: 'true'
         type: choice
         options: ['true', 'false']
       sample_id:
-        description: 'Sampling correlation id (prevents cancels)'
+        description: Sampling correlation id (prevents cancels)
         required: false
         type: string
 
@@ -123,22 +123,13 @@ jobs:
           Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
         } else { Write-Host "LVCompare present: $cli" }
         $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
-        if ($lv) { Write-Host ("::error::LabVIEW.exe is running (PID(s): {0})" -f ($lv.Id -join ',')); exit 1 }
+        if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ',') )"; exit 1 }
         Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
         if ($env:GITHUB_STEP_SUMMARY) {
           $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
           $note | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
-    - name: Verify LVCompare and idle LabVIEW state
-      shell: pwsh
-      run: |
-        $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
-        if (-not (Test-Path -LiteralPath $cli)) {
-          Write-Host "::error::LVCompare.exe not found at canonical path: $cli"; exit 1
-        }
-        $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
-        if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
-        Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
+    # Hosted preflight is informational only; enforce LVCompare on self-hosted jobs.
 
   pester-category:
     if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') }}
@@ -156,7 +147,7 @@ jobs:
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
-      LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
+      LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
     - uses: actions/checkout@v5
     - name: Append interactivity probe
@@ -292,7 +283,7 @@ jobs:
       with:
         snapshot-path: tests/results/${{ matrix.category }}/runner-unblock-snapshot.json
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-        process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+        process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Ensure Invoker (stop)
       if: always()
@@ -337,7 +328,7 @@ jobs:
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
-      LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
+      LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
     - uses: actions/checkout@v5
     - name: LabVIEW warmup (best-effort)
@@ -387,7 +378,7 @@ jobs:
       with:
         snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-        process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+        process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Ensure Invoker (stop)
       if: always()
@@ -513,6 +504,20 @@ jobs:
         }
 
   # Single Windows job path (v2 folded in)
+    - name: Re-run with same inputs
+      if: ${{ always() }}
+      shell: pwsh
+      env:
+        GH_STRATEGY: ${{ inputs.strategy }}
+        GH_INCLUDE: ${{ inputs.include_integration }}
+        GH_SAMPLE_ID: ${{ inputs.sample_id }}
+      run: |-
+        $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'matrix' }
+        $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }
+        $sid = if ($env:GH_SAMPLE_ID) { $env:GH_SAMPLE_ID } else { '<id>' }
+        $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
+        $lines = @('### Re-run With Same Inputs','',"$ $cmd")
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
   windows-single:
     if: ${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}
     runs-on: [self-hosted, Windows, X64]
@@ -528,138 +533,142 @@ jobs:
       KILL_LEAKS: '0'
       WATCH_CONSOLE: '1'
       INVOKER_REQUIRED: '1'
-      LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
+      LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
-      - uses: actions/checkout@v5
+    - uses: actions/checkout@v5
 
-      - name: Interactivity Probe (fail-closed)
-        shell: pwsh
-        run: |
-          pwsh -File tools/Write-InteractivityProbe.ps1
-          $ui = [System.Environment]::UserInteractive
-          $in = $false; $out=$false; $err=$false
-          try { $in  = [Console]::IsInputRedirected } catch {}
-          try { $out = [Console]::IsOutputRedirected } catch {}
-          try { $err = [Console]::IsErrorRedirected } catch {}
-          if (-not $ui -or $in) {
-            Write-Host '::error::Non-interactive Windows session detected. Configure the self-hosted runner with an interactive desktop session.'
-            exit 1
-          }
-
-      - name: Snapshot processes (pre-invoker)
-        shell: pwsh
-        run: |
-          $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
-          $lines = @('### Pre-Invoker Process Snapshot','')
-          foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
-          if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-
-      - name: Ensure Invoker (start)
-        id: inv_start_single
-        continue-on-error: true
-        uses: ./.github/actions/ensure-invoker
-        with:
-          mode: start
-          results-dir: tests/results
-          timeout-seconds: '60'
-          retries: '1'
-          retry-delay-seconds: '0'
-
-      - name: Warmup LabVIEW (preflight; leave LVCompare running)
-        env:
-          WARMUP_SKIP_ARGS: '1'
-        shell: pwsh
-        run: pwsh -File tools/Warmup-LabVIEW.ps1
-
-      - name: Snapshot processes (post-invoker/warmup)
-        shell: pwsh
-        run: |
-          $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
-          $lines = @('### Post-Invoker/Warmup Process Snapshot','')
-          foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
-          if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-
-      - name: Pester categories (serial, deterministic)
-        if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $cats = @(
-            @{ name='dispatcher'; inc=@('Invoke-PesterTests*.ps1','PesterAvailability.Tests.ps1','NestedDispatcher*.Tests.ps1') },
-            @{ name='fixtures';   inc=@('Fixtures.*.ps1','FixtureValidation*.ps1','FixtureSummary*.ps1','ViBinaryHandling.Tests.ps1','FixtureValidationDiff.Tests.ps1') },
-            @{ name='schema';     inc=@('Schema.*.ps1','SchemaLite*.ps1') },
-            @{ name='comparevi';  inc=@('CompareVI*.ps1','CanonicalCli.Tests.ps1','Args.Tokenization.Tests.ps1') },
-            @{ name='loop';       inc=@('CompareLoop*.ps1','Run-AutonomousIntegrationLoop*.ps1','LoopMetrics.Tests.ps1','Integration-ControlLoop*.ps1','IntegrationControlLoop*.ps1') },
-            @{ name='psummary';   inc=@('PesterSummary*.ps1','Write-PesterSummaryToStepSummary*.ps1','AggregationHints*.ps1') },
-            @{ name='workflow';   inc=@('Workflow*.ps1','On-FixtureValidationFail.Tests.ps1','Watch.FlakyRecovery.Tests.ps1','FunctionShadowing*.ps1','FunctionProxy.Tests.ps1','RunSummary.Tool*.ps1','Action.CompositeOutputs.Tests.ps1','Binding.MinRepro.Tests.ps1','ArtifactTracking*.ps1','Guard.*.Tests.ps1') }
-          )
-          foreach ($c in $cats) {
-            $resDir = Join-Path 'tests/results' $c.name
-            $inc = @($c.inc)
-            ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
-          }
-
-      - name: Drift (invoker; reuse LabVIEW via -lvpath)
-        if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
-        uses: ./.github/actions/fixture-drift
-        with:
-          render-report: 'true'
-          comment-on-fail: 'true'
-          upload-artifacts: 'true'
-          artifact-name: orchestrated-single-fixture-drift
-          report-delay-ms: '150'
-
-      - name: Ensure Invoker (stop)
-        if: always()
-        uses: ./.github/actions/ensure-invoker
-        with:
-          mode: stop
-
-      - name: Session index post (single)
-        if: always()
-        uses: ./.github/actions/session-index-post
-        with:
-          results-dir: tests/results
-          validate-schema: true
-          upload: true
-          artifact-name: orchestrated-single-session-index
-
-      - name: Runner Unblock Guard (single)
-        if: always()
-        uses: ./.github/actions/runner-unblock-guard
-        with:
-          snapshot-path: tests/results/runner-unblock-snapshot.json
-          cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
-          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
-
-      - name: Upload invoker boot log (single)
-        if: always() && hashFiles('tests/results/_invoker/boot.log') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: invoker-boot-single
-          path: tests/results/_invoker/boot.log
-
-      - name: Append final summary (single)
-        if: always()
-        shell: pwsh
-        run: |
-          $lines = @('### CI Orchestrated (single Windows) summary','')
-          $lines += '- No cleanup; no UI suppression; LVCompare-only'
-          $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
+    - name: Interactivity Probe (gate)
+      id: ip
+      shell: pwsh
+      run: |
+        pwsh -File tools/Write-InteractivityProbe.ps1
+        $ui = [System.Environment]::UserInteractive
+        $in = $false; try { $in  = [Console]::IsInputRedirected } catch {}
+        $ok = ($ui -and -not $in)
+        "ok=$ok" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        if (-not $ok -and $env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Interactivity Probe','', '- Result: non-interactive (skipping single strategy steps)')
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
-      - name: Agent wait summary (single)
-        if: always()
-        uses: ./.github/actions/agent-wait-post
-        with:
-          results-dir: tests/results
-          fail-on-outside: 'false'
-          upload-artifact: 'false'
+    - name: Snapshot processes (pre-invoker)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
+      shell: pwsh
+      run: |
+        $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+        $lines = @('### Pre-Invoker Process Snapshot','')
+        foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
-      - name: Send Ctrl+C to lingering consoles (optional)
-        if: always() && env.SEND_CTRL_C == '1'
-        shell: pwsh
-        run: pwsh -File tools/Send-CtrlC.ps1 -Names 'pwsh','conhost' -Max 5
+    - name: Ensure Invoker (start)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
+      id: inv_start_single
+      continue-on-error: true
+      uses: ./.github/actions/ensure-invoker
+      with:
+        mode: start
+        results-dir: tests/results
+        timeout-seconds: '60'
+        retries: '1'
+        retry-delay-seconds: '0'
+
+    - name: Warmup LabVIEW (preflight; leave LVCompare running)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
+      env:
+        WARMUP_SKIP_ARGS: '1'
+      shell: pwsh
+      run: pwsh -File tools/Warmup-LabVIEW.ps1
+
+    - name: Snapshot processes (post-invoker/warmup)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
+      shell: pwsh
+      run: |
+        $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+        $lines = @('### Post-Invoker/Warmup Process Snapshot','')
+        foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
+    - name: Pester categories (serial, deterministic)
+      if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $cats = @(
+          @{ name='dispatcher'; inc=@('Invoke-PesterTests*.ps1','PesterAvailability.Tests.ps1','NestedDispatcher*.Tests.ps1') },
+          @{ name='fixtures';   inc=@('Fixtures.*.ps1','FixtureValidation*.ps1','FixtureSummary*.ps1','ViBinaryHandling.Tests.ps1','FixtureValidationDiff.Tests.ps1') },
+          @{ name='schema';     inc=@('Schema.*.ps1','SchemaLite*.ps1') },
+          @{ name='comparevi';  inc=@('CompareVI*.ps1','CanonicalCli.Tests.ps1','Args.Tokenization.Tests.ps1') },
+          @{ name='loop';       inc=@('CompareLoop*.ps1','Run-AutonomousIntegrationLoop*.ps1','LoopMetrics.Tests.ps1','Integration-ControlLoop*.ps1','IntegrationControlLoop*.ps1') },
+          @{ name='psummary';   inc=@('PesterSummary*.ps1','Write-PesterSummaryToStepSummary*.ps1','AggregationHints*.ps1') },
+          @{ name='workflow';   inc=@('Workflow*.ps1','On-FixtureValidationFail.Tests.ps1','Watch.FlakyRecovery.Tests.ps1','FunctionShadowing*.ps1','FunctionProxy.Tests.ps1','RunSummary.Tool*.ps1','Action.CompositeOutputs.Tests.ps1','Binding.MinRepro.Tests.ps1','ArtifactTracking*.ps1','Guard.*.Tests.ps1') }
+        )
+        foreach ($c in $cats) {
+          $resDir = Join-Path 'tests/results' $c.name
+          $inc = @($c.inc)
+          ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
+        }
+
+    - name: Drift (invoker; reuse LabVIEW via -lvpath)
+      if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
+      uses: ./.github/actions/fixture-drift
+      with:
+        render-report: 'true'
+        comment-on-fail: 'true'
+        upload-artifacts: 'true'
+        artifact-name: orchestrated-single-fixture-drift
+        report-delay-ms: '150'
+
+    - name: Ensure Invoker (stop)
+      if: always()
+      uses: ./.github/actions/ensure-invoker
+      with:
+        mode: stop
+
+    - name: Session index post (single)
+      if: always()
+      uses: ./.github/actions/session-index-post
+      with:
+        results-dir: tests/results
+        validate-schema: true
+        upload: true
+        artifact-name: orchestrated-single-session-index
+
+    - name: Runner Unblock Guard (single)
+      if: always()
+      uses: ./.github/actions/runner-unblock-guard
+      with:
+        snapshot-path: tests/results/runner-unblock-snapshot.json
+        cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
+        process-names: conhost,pwsh,LabVIEW,LVCompare
+
+    - name: Upload invoker boot log (single)
+      if: always() && hashFiles('tests/results/_invoker/boot.log') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: invoker-boot-single
+        path: tests/results/_invoker/boot.log
+
+    - name: Append final summary (single)
+      if: always()
+      shell: pwsh
+      run: |
+        $lines = @('### CI Orchestrated (single Windows) summary','')
+        $lines += '- No cleanup; no UI suppression; LVCompare-only'
+        $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
+        $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+    - name: Agent wait summary (single)
+      if: always()
+      uses: ./.github/actions/agent-wait-post
+      with:
+        results-dir: tests/results
+        fail-on-outside: 'false'
+        upload-artifact: 'false'
+
+    - name: Send Ctrl+C to lingering consoles (optional)
+      if: always() && env.SEND_CTRL_C == '1'
+      shell: pwsh
+      run: pwsh -File tools/Send-CtrlC.ps1 -Names 'pwsh','conhost' -Max 5
 
 
 
@@ -671,3 +680,17 @@ jobs:
 
 
 
+    - name: Re-run with same inputs (single)
+      if: ${{ always() }}
+      shell: pwsh
+      env:
+        GH_STRATEGY: ${{ inputs.strategy }}
+        GH_INCLUDE: ${{ needs.normalize.outputs.include_integration }}
+        GH_SAMPLE_ID: ${{ inputs.sample_id }}
+      run: |-
+        $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'single' }
+        $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }
+        $sid = if ($env:GH_SAMPLE_ID) { $env:GH_SAMPLE_ID } else { '<id>' }
+        $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
+        $lines = @('### Re-run With Same Inputs','',"$ $cmd")
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }

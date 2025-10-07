@@ -17,6 +17,7 @@ param(
   [Parameter(Mandatory=$true)][string]$Workflow,
   [string]$Ref = 'develop',
   [ValidateSet('true','false')][string]$IncludeIntegration,
+  [ValidateSet('single','matrix')][string]$Strategy = 'single',
   [string[]]$ExtraInput,
   [int]$WaitSeconds = 8
 )
@@ -57,6 +58,7 @@ if (-not $wfId) { $wfId = $Workflow }
 
 $cmd = @('workflow','run', $wfId, '-R', $repo, '-r', $Ref, '-f', "sample_id=$sid")
 if ($IncludeIntegration) { $cmd += @('-f', "include_integration=$IncludeIntegration") }
+if ($Strategy) { $cmd += @('-f', "strategy=$Strategy") }
 if ($ExtraInput) { foreach ($kv in $ExtraInput) { $cmd += @('-f', $kv) } }
 
 Write-Host "Dispatching: gh $($cmd -join ' ')"
@@ -67,6 +69,7 @@ try {
   $apiPath = "repos/$repo/actions/workflows/$wfId/dispatches"
   $form = @('-X','POST','-H','Accept: application/vnd.github+json','-F',("ref={0}" -f $Ref),'-F',("inputs[sample_id]={0}" -f $sid))
   if ($IncludeIntegration) { $form += @('-F', ("inputs[include_integration]={0}" -f $IncludeIntegration)) }
+  if ($Strategy) { $form += @('-F', ("inputs[strategy]={0}" -f $Strategy)) }
   gh api $apiPath @form | Out-Null
 }
 Write-Host "Dispatched with sample_id=$sid"
