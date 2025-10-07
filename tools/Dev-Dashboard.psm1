@@ -172,6 +172,7 @@ function Get-SessionLockStatus {
     Exists              = $lockInfo.Exists
     Status              = $status
     Lock                = $lock
+    SessionName         = if ($lock -and $lock.PSObject.Properties.Name -contains 'sessionName') { $lock.sessionName } else { $null }
     StatusPairs         = $statusPairs
     QueueWaitSeconds    = $queueWait
     AcquiredAt          = $acquiredAt

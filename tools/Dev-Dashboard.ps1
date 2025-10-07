@@ -106,6 +106,7 @@ function Write-TerminalReport {
   $session = $Snapshot.SessionLock
   Write-Host "Session Lock"
   Write-Host "  Status   : $($session.Status)"
+  if ($session.SessionName) { Write-Host "  Session  : $($session.SessionName)" }
   if ($session.QueueWaitSeconds -ne $null) {
     Write-Host "  Queue    : $($session.QueueWaitSeconds) s"
   }
@@ -296,6 +297,7 @@ function ConvertTo-HtmlReport {
     <h2>Session Lock</h2>
     <dl>
       <dt>Status</dt><dd>$(& $encode $session.Status)</dd>
+      @(if ($session.SessionName) { "<dt>Session</dt><dd>$(& $encode $session.SessionName)</dd>" })
       <dt>Queue Wait</dt><dd>$(& $encode ($session.QueueWaitSeconds))</dd>
       <dt>Heartbeat Age</dt><dd>$(& $encode (Format-Seconds -Seconds $session.HeartbeatAgeSeconds))</dd>
       <dt>File</dt><dd>$(& $encode $session.LockPath)</dd>

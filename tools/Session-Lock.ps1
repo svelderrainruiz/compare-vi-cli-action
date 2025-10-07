@@ -18,6 +18,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-SessionName {
+  try {
+    if ($env:PS_SESSION_NAME -and $env:PS_SESSION_NAME -ne '') { return $env:PS_SESSION_NAME }
+    if ($env:AGENT_SESSION_NAME -and $env:AGENT_SESSION_NAME -ne '') { return $env:AGENT_SESSION_NAME }
+  } catch {}
+  return ("session-lock:{0}" -f $PID)
+}
+${script:SessionName} = Get-SessionName
+
 function Convert-ToEnvName {
   param([string]$Name)
   if (-not $Name) { return 'SESSION_' }
@@ -89,6 +98,8 @@ $StaleSeconds = Get-ConfigValue -ParameterName 'StaleSeconds' -Default 180 -Curr
 $HeartbeatSeconds = Get-ConfigValue -ParameterName 'HeartbeatSeconds' -Default 15 -CurrentValue $HeartbeatSeconds -AsInt -IsExplicit ($PSBoundParameters.ContainsKey('HeartbeatSeconds'))
 $ForceTakeover = Get-ConfigValue -ParameterName 'ForceTakeover' -Default $false -CurrentValue $ForceTakeover -AsSwitch -IsExplicit ($PSBoundParameters.ContainsKey('ForceTakeover'))
 $LockRoot = Get-ConfigValue -ParameterName 'LockRoot' -Default $LockRoot -CurrentValue $LockRoot -IsExplicit ($PSBoundParameters.ContainsKey('LockRoot'))
+
+try { Write-Host "::notice::[ps-session:$script:SessionName pid=$PID action=$Action group=$Group]" } catch {}
 
 if (-not $LockRoot) {
   if ($env:SESSION_LOCK_ROOT) {
@@ -195,6 +206,7 @@ function New-LockRecord {
   $record = [ordered]@{
     lockId = $LockId
     group = $Group
+    sessionName = $script:SessionName
     queueWaitSeconds = $QueueWaitSeconds
     workflow = $env:GITHUB_WORKFLOW
     job = $env:GITHUB_JOB
@@ -376,6 +388,7 @@ switch ($Action) {
     }
     $age = Get-HeartbeatAgeSeconds -Record $lock
     Write-Host "Group      : $Group"
+    if ($lock.PSObject.Properties.Name -contains 'sessionName' -and $lock.sessionName) { Write-Host "Session    : $($lock.sessionName)" }
     Write-Host "LockId     : $($lock.lockId)"
     Write-Host "Owner      : $($lock.workflow)/$($lock.job)"
     Write-Host "Run        : $($lock.runId) (attempt $($lock.runAttempt))"
