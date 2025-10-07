@@ -97,8 +97,12 @@ function New-DirectoryIfMissing([string]$path) {
 
 # Resolve inputs
 # capture working directory if needed in future (not used currently)
-$basePath = (Resolve-Path -LiteralPath $Base).Path
-$headPath = (Resolve-Path -LiteralPath $Head).Path
+$baseItem = Get-Item -LiteralPath $Base -ErrorAction Stop
+$headItem = Get-Item -LiteralPath $Head -ErrorAction Stop
+if ($baseItem.PSIsContainer) { throw "Base path refers to a directory, expected a VI file: $($baseItem.FullName)" }
+if ($headItem.PSIsContainer) { throw "Head path refers to a directory, expected a VI file: $($headItem.FullName)" }
+$basePath = (Resolve-Path -LiteralPath $baseItem.FullName).Path
+$headPath = (Resolve-Path -LiteralPath $headItem.FullName).Path
 # Preflight: disallow identical filenames in different directories (prevents LVCompare UI dialog)
 $baseLeaf = Split-Path -Leaf $basePath
 $headLeaf = Split-Path -Leaf $headPath

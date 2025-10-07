@@ -133,6 +133,10 @@ jobs:
       LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
+      LV_NO_ACTIVATE: ${{ vars.LV_NO_ACTIVATE || '1' }}
+      LV_CURSOR_RESTORE: ${{ vars.LV_CURSOR_RESTORE || '1' }}
+      LV_IDLE_WAIT_SECONDS: ${{ vars.LV_IDLE_WAIT_SECONDS || '2' }}
+      LV_IDLE_MAX_WAIT_SECONDS: ${{ vars.LV_IDLE_MAX_WAIT_SECONDS || '5' }}
     permissions:
       actions: read
       contents: read
@@ -195,6 +199,42 @@ jobs:
         soft-fail: ${{ steps.docs.outputs.docs_only }}
         base-path: ${{ steps.prep.outputs.base }}
         head-path: ${{ steps.prep.outputs.head }}
+
+    - name: Verify fixture vs LVCompare (notice-only)
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $rd = 'results/fixture-drift'
+        try {
+          $exec = Join-Path $rd 'compare-exec.json'
+          if (Test-Path -LiteralPath $exec) {
+            pwsh -NoLogo -NoProfile -File tools/Verify-FixtureCompare.ps1 -ResultsDir $rd -ExecJsonPath $exec -VerboseOutput
+          } else {
+            pwsh -NoLogo -NoProfile -File tools/Verify-FixtureCompare.ps1 -ResultsDir $rd -VerboseOutput
+          }
+          $code = $LASTEXITCODE
+        } catch { $code = 7 }
+        $sumPath = Join-Path $rd 'fixture-verify-summary.json'
+        if (Test-Path -LiteralPath $sumPath) {
+          try {
+            $obj = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
+            $lines = @('### Fixture Verify',
+              "- ok=$($obj.ok)",
+              "- reason=$($obj.reason)",
+              "- expectDiff=$($obj.expectDiff)",
+              "- cli diff=$($obj.cli.diff)",
+              "- cli exitCode=$($obj.cli.exitCode)",
+              "- duration_s=$($obj.cli.duration_s)")
+            if ($env:GITHUB_STEP_SUMMARY) { ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+          } catch {
+            if ($env:GITHUB_STEP_SUMMARY) { "### Fixture Verify`n- summary parse error: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+          }
+        } else {
+          if ($env:GITHUB_STEP_SUMMARY) { "### Fixture Verify`n- no summary produced" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        }
+        # Notice-only step, never fail the job here
+        exit 0
 
     - name: Ensure session index (fallback)
       if: always()

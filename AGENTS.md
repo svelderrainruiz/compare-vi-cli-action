@@ -76,13 +76,50 @@
   - If you use Start-AgentWait/End-AgentWait manually, artifacts are written under `tests/results/_agent/` (marker, last, log).
   - Standard Pester results (when running broader suites) are under `tests/results/` (`pester-summary.json`, `pester-results.xml`, `session-index.json`).
 
+## LVCompare Observability & Leak Detection
+
+- Notices (always-on)
+  - CompareVI emits console + JSON notices at `tests/results/_lvcompare_notice/notice-*.json`.
+  - Phases: `pre-launch`, `post-start` (includes `lvcomparePid`), `completed` (exitCode), `post-complete` (includes `labviewPids`).
+  - If you see LVCompare/LabVIEW without a corresponding notice, that is a rogue execution.
+
+- Local focus/mouse safeguards (opt‑in)
+  - `LV_NO_ACTIVATE=1` (minimize/no‑activate), `LV_CURSOR_RESTORE=1` (restore pointer), `LV_IDLE_WAIT_SECONDS=2` (idle gate), `LV_IDLE_MAX_WAIT_SECONDS=5`.
+  - Example: set env, then `Import-Module ./scripts/CompareVI.psm1; Invoke-CompareVI -Base ./VI1.vi -Head ./VI2.vi`.
+
+- Rogue detector (manual)
+  - `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary`
+  - Adds a summary and JSON (live vs noticed PIDs). Use `-FailOnRogue` to break on leaks.
+
+- CI guards (self‑hosted Windows)
+  - Pester (reusable) and Fixture Drift (Windows) include LV Guard pre/post snapshots; set `CLEAN_LVCOMPARE=1` to auto‑clean.
+  - Defaults for CompareVI from repo vars (override as needed): `LV_NO_ACTIVATE=1`, `LV_CURSOR_RESTORE=1`, `LV_IDLE_WAIT_SECONDS=2`, `LV_IDLE_MAX_WAIT_SECONDS=5`.
+
+- Tests
+  - PID tracking (Integration): `tests/CompareVI.PIDTracking.Tests.ps1` — verifies `lvcomparePid`/`labviewPids` and asserts no lingering LVCompare.
+  - Run just this test locally: `pwsh -NoLogo -NoProfile -Command "Import-Module Pester; $c=New-PesterConfiguration; $c.Run.Path='tests/CompareVI.PIDTracking.Tests.ps1'; $c.Output.Verbosity='Normal'; Invoke-Pester -Configuration $c"`
+
+Tip: Local terminals lack the GitHub UI’s visibility—rely on the `[lvcompare-notice]` console lines and the JSON notices to avoid confusion.
+
+## Session Keywords (Agent Handoff & Telemetry)
+
+- Keyword: `handoff`
+  - When a human sends a message containing only `handoff`, the agent must:
+    1) Read `AGENT_HANDOFF.txt` and acknowledge it will follow the roadmap therein.
+    2) Set safe env toggles (local): `LV_SUPPRESS_UI=1`, `LV_NO_ACTIVATE=1`, `LV_CURSOR_RESTORE=1`, `LV_IDLE_WAIT_SECONDS=2`, `LV_IDLE_MAX_WAIT_SECONDS=5`.
+    3) Run a quick rogue scan:
+       - `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary`
+    4) If rogues found and human approves, sweep LVCompare only; do not close LabVIEW unless instructed.
+    5) Confirm timing etiquette: all pauses use “brief delay (~90 seconds)” and are recorded with agent‑wait tools.
+    6) Proceed with the “First Actions for the Next Agent” from `AGENT_HANDOFF.txt`.
+
+- Convenience (optional):
+  - `pwsh -File tools/Print-AgentHandoff.ps1` prints `AGENT_HANDOFF.txt` to the console and suggests the next commands.
+
 ### Fast Path for #88
 
-- Comment dispatch (on an open PR): `/run orchestrated strategy=single include_integration=true sample_id=<id>`
-  - Backward‑compatible: `/run orchestrated single ...` still maps to strategy=single.
-- Manual dispatch (CLI):
-  - `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strategy single -IncludeIntegration true`
-  - Use `-Strategy matrix` for parallel categories when runners are idle.
+- Comment dispatch (on an open PR): `/run orchestrated single include_integration=true sample_id=<id>`
+- Manual dispatch (CLI): `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -IncludeIntegration true`
 - Merge policy: when all required checks are green and #88 acceptance is satisfied, proceed to merge (admin token available).
 
 ## Workflow Maintenance (ruamel.yaml updater)
@@ -108,3 +145,5 @@ Use the Python-based updater only when you need consistent, mechanical edits acr
 - Scope and PR hygiene:
   - Keep updater changes in small, focused PRs; include a summary of files touched and the transforms applied.
   - If the updater warns or skips a file, fall back to a manual edit and re-run `actionlint`.
+
+

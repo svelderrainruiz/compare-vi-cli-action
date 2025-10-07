@@ -4,7 +4,8 @@
 BeforeAll {
   $here = Split-Path -Parent $PSCommandPath
   $root = Resolve-Path (Join-Path $here '..')
-  . (Join-Path $root 'scripts' 'CompareVI.ps1')
+  $script:CompareModule = Import-Module (Join-Path $root 'scripts' 'CompareVI.psm1') -Force -PassThru
+  $script:CompareModuleName = $script:CompareModule.Name
 }
 
 Describe 'Invoke-CompareVI input and output validation (no CLI)' {
@@ -20,7 +21,7 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
     # Always mock Resolve-Cli to avoid any dependency on real installations
     # Return the canonical path
     $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-    Mock -CommandName Resolve-Cli -MockWith { $canonical } -Verifiable
+    Mock -CommandName Resolve-Cli -ModuleName $script:CompareModuleName -MockWith { $canonical } -Verifiable
 
     $script:a = $a; $script:b = $b; $script:vis = $vis; $script:canonical = $canonical
   }
