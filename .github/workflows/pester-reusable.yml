@@ -200,7 +200,7 @@ jobs:
               Write-Host "::warning::Unable to parse timeout_seconds ('$timeoutSeconds') as double."
             }
           }
-          $boundString = $bound.Keys | ForEach-Object { "$_=$($bound[$_])" } -join ', '
+          $boundString = ($bound.Keys | ForEach-Object { "$_=$($bound[$_])" }) -join ', '
           Write-Host "::debug::Dispatcher parameters: $boundString"
           $heartbeatSeconds = 15
           if ($env:SESSION_HEARTBEAT_SECONDS -and [int]::TryParse($env:SESSION_HEARTBEAT_SECONDS, [ref]([int]0))) {
