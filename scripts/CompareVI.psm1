@@ -64,7 +64,7 @@ function Quote($s) {
   if ($s -match '\s|"') { return '"' + ($s -replace '"','\"') + '"' } else { return $s }
 }
 
-function Convert-ArgTokenList([string[]]$tokens) {
+  function Convert-ArgTokenList([string[]]$tokens) {
   $out = @()
   function Normalize-PathToken([string]$s) {
     if ($null -eq $s) { return $s }
@@ -162,8 +162,30 @@ function Invoke-CompareVI {
       }
     } catch {}
 
+    # Validate LVCompare args early to prevent UI popups and provide clear errors
+    $allowedFlags = @('-lvpath','-noattr','-nofp','-nofppos','-nobd','-nobdcosm')
+    $argsArr = @($cliArgs)
+    if ($argsArr -and $argsArr.Count -gt 0) {
+      for ($i = 0; $i -lt $argsArr.Count; $i++) {
+        $tok = [string]$argsArr[$i]
+        if (-not $tok) { continue }
+        if ($tok.StartsWith('-')) {
+          if ($tok -ieq '-lvpath') {
+            if ($i -ge $argsArr.Count - 1) { throw "Invalid LVCompare args: -lvpath requires a following path value" }
+            $next = [string]$argsArr[$i+1]
+            if (-not $next -or $next.StartsWith('-')) { throw "Invalid LVCompare args: -lvpath must be followed by a path value" }
+            $i++
+            continue
+          }
+          if (-not ($allowedFlags -icontains $tok)) {
+            throw "Invalid LVCompare flag: '$tok'. Allowed: $($allowedFlags -join ', ')"
+          }
+        }
+      }
+    }
+
     $cmdline = (Quote $cli) + ' ' + (Quote $baseAbs) + ' ' + (Quote $headAbs)
-    if ($cliArgs -and $cliArgs.Count -gt 0) { $cmdline += ' ' + (($cliArgs | ForEach-Object { Quote $_ }) -join ' ') }
+    if ($argsArr -and $argsArr.Count -gt 0) { $cmdline += ' ' + (($argsArr | ForEach-Object { Quote $_ }) -join ' ') }
     if ($PreviewArgs) { return $cmdline }
 
     $cwd = (Get-Location).Path
@@ -365,5 +387,3 @@ function Invoke-CompareVI {
 }
 
 Export-ModuleMember -Function Invoke-CompareVI
-
-
