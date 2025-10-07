@@ -47,6 +47,10 @@ Next Steps (suggested)
 - HTML polish: add last 3 watch entries table; widen queue-history signals if needed.
 - Extend schema-lite coverage to drift compare outcomes if required.
 
+Workflow Tracking
+- pwsh -File tools/Track-WorkflowRun.ps1 -RunId 18327092270 [-Repo owner/repo] [-PollSeconds 30] [-OutputPath logs/run-18327092270.json]
+  Use to watch per-job status for queued/active runs and capture snapshots for future agents.
+
 Contact & References
 - Stakeholders: tools/dashboard/stakeholders.json (DX links appear in dashboard).
 - Requirements & Test Plan: docs/DEV_DASHBOARD_PLAN.md

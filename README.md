@@ -58,6 +58,18 @@ pwsh ./tools/Dev-Dashboard.ps1 `
 - Workflow runs call `tools/Invoke-DevDashboard.ps1`, which writes both HTML and JSON under `tests/results/dev-dashboard/` for artifact upload.
 - The dashboard inspects session-lock heartbeat age, queue wait trends (including `_agent/wait-log.ndjson` history), and highlights DX issue links when stakeholders configure them.
 
+### Workflow Run Tracker
+
+Keep an eye on queued or long-running workflows without leaving the terminal:
+
+```powershell
+pwsh ./tools/Track-WorkflowRun.ps1 -RunId 18327092270 -PollSeconds 20 -Json
+```
+
+- Automatically resolves the repository from `GITHUB_REPOSITORY` or git remote; override with `-Repo owner/name` if needed.
+- Prints a table of job status/conclusion/duration on each poll; add `-OutputPath` to persist the final snapshot JSON for hand-offs.
+- Helpful when self-hosted runners are saturated and you need visibility into which job is waiting or failing.
+
 ## Fixture Artifacts (VI1.vi / VI2.vi)
 
 Two canonical LabVIEW VI files live at the repository root:
