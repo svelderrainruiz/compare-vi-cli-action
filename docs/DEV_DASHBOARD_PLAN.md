@@ -14,6 +14,10 @@ A local developer dashboard will summarize telemetry from recent runs (session l
    - Gather session-lock telemetry (`lock.json`, `status.md`) from `tests/results/_session_lock/<group>/`.
    - Read Pester results (`pester-summary.json`, `pester-results.xml`, `pester-dispatcher.log`) and report totals, failures, include patterns, and dispatcher exit code.
    - Parse Agent-Wait artefacts (e.g., `tests/results/_agent/wait-last.json`) to display queue durations and heartbeat information.
+   - Parse queue-trend history from `_agent/wait-log.ndjson` (when present) to surface longest and tolerance-exceeded waits.
+   - Parse Watch-Mode artefacts from `WATCH_RESULTS_DIR` (default `tests/results/_watch`):
+     - `watch-last.json` with `timestamp`, `status`, `classification`, `stats.{tests,failed,skipped}`, `runSequence`, optional `flaky.recoveredAfter`.
+     - `watch-log.ndjson` append-only history (blank-line separated JSON blocks).
    - Support additional workflows (fixture drift, orchestrated) when lock artefacts exist, showing status if available.
    - Load stakeholder metadata from a configuration file (`tools/dashboard/stakeholders.json` or `.psd1`) mapping groups to primary/backup owners, communication channels, and DX issue numbers.
    - Provide per-section recommendations (e.g., how to inspect a lock or rerun tests) based on detected conditions (stale lock, TimeoutMinutes, etc.).
@@ -44,6 +48,7 @@ A local developer dashboard will summarize telemetry from recent runs (session l
 - Run under StrictMode and fail fast on unexpected errors.
 - Keep terminal output concise (< ~60 lines) with detailed information available via HTML.
 - Execute quickly (< 2 seconds typical) by reading cached telemetry.
+- Keep CI additions minimal (watch smoke is a single-run PASS test; typical < 3 seconds).
 - Support both Windows and non-Windows environments (use `Join-Path`, no hard-coded separators).
 
 ### Stakeholder Configuration
@@ -78,6 +83,33 @@ A local developer dashboard will summarize telemetry from recent runs (session l
 
 ### Test Environment
 - PowerShell 7.x with access to repository workspace.
+- Optional repo vars: `WATCH_SMOKE_ENABLE` gates orchestrated publish watch smoke; default off.
+
+### Unit Tests (Pester)
+- Session Lock Loader: status parse (queue wait, heartbeat age), takeover signals, missing files resilience.
+- Stakeholder Mapping: renders DX issue links and channels; not configured path.
+- Pester Summary Loader: totals, failures, dispatcher errors.
+- Agent-Wait Loader: derives latest/longest waits and tolerance flags from `_agent/wait-log.ndjson`.
+- Watch Loader: ingests `watch-last.json` and `watch-log.ndjson`; detects stalled loop (> 600s) and `worsened` trend.
+- Action Items: assert presence of hints for stale/takeover, queue exceed/longest, watch stalled/worsened, DX link.
+
+### CLI/Render Tests
+- CLI JSON: snapshot includes `SessionLock`, `PesterTelemetry`, `AgentWait.History/Longest`, `WatchTelemetry.Last/History`.
+- HTML: contains sections for Session Lock, Pester, Agent Wait, Watch Mode; renders watch summary and optional last-3 history rows.
+
+### Workflow (CI) Tests
+- Pester Reusable (self-hosted):
+  - Executes watch single-run smoke with `WATCH_RESULTS_DIR=tests/results/_watch`.
+  - Generates dev-dashboard HTML/JSON and uploads artifacts; step summary lists paths.
+- Orchestrated (matrix/single) and Fixture Drift (Windows):
+  - Generate and upload dev-dashboard artifacts per path; link from summaries.
+- Optional: Orchestrated publish watch smoke guarded by `WATCH_SMOKE_ENABLE==1`.
+
+### Acceptance Criteria
+- Watch-mode outputs exist locally/CI when `WATCH_RESULTS_DIR` is set.
+- Dashboard terminal/HTML/JSON display Watch Mode; action items appear for stalled/worsened/trend violations.
+- Queue history parsed: tolerance-exceeded and longest>600s yield action items.
+- All unit/CLI tests pass; actionlint remains green; additional CI time remains within bounds.
 - Sample telemetry files under `tests/results/` (real or mocked).
 - Stakeholder configuration populated with sample entries.
 
