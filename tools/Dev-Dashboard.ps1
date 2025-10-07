@@ -333,8 +333,13 @@ function ConvertTo-HtmlReport {
   $session = $Snapshot.SessionLock
   $pester = $Snapshot.PesterTelemetry
   $wait = $Snapshot.AgentWait
-  $stake = $Snapshot.Stakeholders
   $watch = $Snapshot.WatchTelemetry
+  $stake = $Snapshot.Stakeholders
+  $stakeChannels = @()
+  if ($stake -and ($stake.PSObject.Properties.Name -contains 'Channels') -and $stake.Channels) {
+    $stakeChannels = @($stake.Channels) | Where-Object { $_ -and $_ -ne '' }
+  }
+  $stakeChannelsDisplay = [string]::Join(', ', $stakeChannels)
   $labview = $Snapshot.LabVIEWSnapshot
   $items = $Snapshot.ActionItems
   $shortCommit = ''
@@ -502,7 +507,7 @@ function ConvertTo-HtmlReport {
     <dl>
       <dt>Primary</dt><dd>$(& $encode $stake.PrimaryOwner)</dd>
       <dt>Backup</dt><dd>$(& $encode $stake.Backup)</dd>
-      <dt>Channels</dt><dd>$(& $encode ([string]::Join(', ', (@($stake.Channels) | Where-Object { $_ -and $_ -ne '' }))))</dd>
+      <dt>Channels</dt><dd>$(& $encode $stakeChannelsDisplay)</dd>
       <dt>DX Issue</dt><dd>$(& $encode $stake.DxIssue)</dd>
     </dl>
   </section>
