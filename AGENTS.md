@@ -122,6 +122,22 @@ Tip: Local terminals lack the GitHub UI’s visibility—rely on the `[lvcompare
 - Manual dispatch (CLI): `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -IncludeIntegration true`
 - Merge policy: when all required checks are green and #88 acceptance is satisfied, proceed to merge (admin token available).
 
+### Single Strategy Fallback (Reliability)
+
+- Interactivity probe: orchestrated runs include a tiny `probe` job on self‑hosted Windows that detects if the session is interactive.
+- Gating:
+  - `windows-single` runs only when `probe.ok == true`.
+  - If `strategy=single` but `probe.ok == false`, the workflow automatically falls back to the matrix path (`pester-category`).
+- Hosted preflight stays notice‑only for LVCompare presence; enforcement happens only on self‑hosted jobs.
+
+### Re‑run With Same Inputs
+
+- Orchestrated summaries include a one‑click “Re‑run With Same Inputs” snippet populated from provenance (strategy/include_integration/sample_id).
+- You can also use PR comment snippets (see `.github/PR_COMMENT_SNIPPETS.md`). The dispatcher accepts flexible forms:
+  - `/run orchestrated strategy=single include_integration=true sample_id=<id>`
+  - `/run orchestrated single include=true sample=<id>`
+  - `/run orchestrated strategy single include true sample <id>`
+
 ## Workflow Maintenance (ruamel.yaml updater)
 
 Use the Python-based updater only when you need consistent, mechanical edits across multiple workflows (preserving comments/formatting):
@@ -145,5 +161,4 @@ Use the Python-based updater only when you need consistent, mechanical edits acr
 - Scope and PR hygiene:
   - Keep updater changes in small, focused PRs; include a summary of files touched and the transforms applied.
   - If the updater warns or skips a file, fall back to a manual edit and re-run `actionlint`.
-
 

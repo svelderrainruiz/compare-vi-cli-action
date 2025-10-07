@@ -76,6 +76,22 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
   (Convert-TokensForAssert @($cap)) | Should -Be (Convert-TokensForAssert $expected)
   }
 
+  It 'supports UNC and Unix-style paths in mixed forms' {
+    $argSpec = "--log=\\\\server\\share\\a b\\out.log -lvpath /opt/lv/LabVIEW.exe '-lvpath \\server2\\share2\\LV.exe'"
+    $list = Invoke-GetLVCompareArgTokens -Spec $argSpec
+    $norm = Invoke-ConvertArgTokenList -Tokens $list
+    $expected = @('--log','\\\\server\\share\\a b\\out.log','-lvpath','/opt/lv/LabVIEW.exe','-lvpath','\\\\server2\\share2\\LV.exe')
+    (Convert-TokensForAssert $norm) | Should -Be (Convert-TokensForAssert $expected)
+  }
+
+  It 'accepts array inputs with quoted tokens preserved' {
+    $arr = @('-nofppos', '"--log C:\\p q\\r.txt"', "-lvpath=C:\\Tools\\LabVIEW.exe", "'-lvpath C:\\Other\\LV.exe'")
+    $list = Invoke-GetLVCompareArgTokens -Spec $arr
+    $norm = Invoke-ConvertArgTokenList -Tokens $list
+    $expected = @('-nofppos','--log','C:\\p q\\r.txt','-lvpath','C:\\Tools\\LabVIEW.exe','-lvpath','C:\\Other\\LV.exe')
+    (Convert-TokensForAssert $norm) | Should -Be (Convert-TokensForAssert $expected)
+  }
+
   It 'tokenizes mixed delimiters and preserves order' {
   $argSpec = @'
 '--log C:\a b\x.txt',-nofppos,-lvpath=C:\Y\LabVIEW.exe -noattr "-lvpath C:\Z\LabVIEW.exe"
