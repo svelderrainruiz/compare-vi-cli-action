@@ -1,0 +1,46 @@
+Local Agent Handoff — Dev Dashboard & Watch Telemetry
+
+Context
+- Focus: Developer dashboard, session-lock guard, watch-mode and queue telemetry (#88).
+- PR: #100 — Dev Dashboard loaders, CLI/HTML/JSON, workflow artifacts, watch telemetry.
+
+Safe Environment Toggles (local)
+- Set these in the current PowerShell session to avoid UI popups and preserve focus:
+  - $env:LV_SUPPRESS_UI = '1'
+  - $env:LV_NO_ACTIVATE = '1'
+  - $env:LV_CURSOR_RESTORE = '1'
+  - $env:LV_IDLE_WAIT_SECONDS = '2'
+  - $env:LV_IDLE_MAX_WAIT_SECONDS = '5'
+  - $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
+
+Quick Rogue Scan
+- pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary
+
+Session Lock (local)
+- Single test file: ./Invoke-PesterTests.ps1 -TestsPath tests/SessionLock.Tests.ps1
+- Full unit pass (includes loaders/CLI): ./Invoke-PesterTests.ps1
+
+Watch Mode (single-run smoke)
+- $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
+- pwsh -File tools/Watch-Pester.ps1 -SingleRun -RunAllOnStart -TestPath tests/WatchSmoke.Tests.ps1 -Tag WatchSmoke -Quiet
+- Produces: tests/results/_watch/watch-last.json, tests/results/_watch/watch-log.ndjson
+
+Dashboard
+- Terminal + JSON: ./tools/Dev-Dashboard.ps1 -Group pester-selfhosted -ResultsRoot tests/results -Json
+- HTML: ./tools/Dev-Dashboard.ps1 -Group pester-selfhosted -ResultsRoot tests/results -Html
+- CI artifacts are linked in job summaries under “Dev Dashboard”.
+
+Schema-Lite (notice-only validation)
+- Watch last: tools/Invoke-JsonSchemaLite.ps1 -JsonPath tests/results/_watch/watch-last.json -SchemaPath docs/schemas/watch-last-v1.schema.json
+- Agent wait last: tools/Invoke-JsonSchemaLite.ps1 -JsonPath tests/results/_agent/wait-last.json -SchemaPath docs/schemas/agent-wait-last-v1.schema.json
+- Agent wait log (ndjson): validate each record against docs/schemas/agent-wait-log-item-v1.schema.json
+
+Next Steps (suggested)
+- Optional: enable orchestrated publish watch smoke by setting repo var WATCH_SMOKE_ENABLE=1.
+- HTML polish: add last 3 watch entries table; widen queue-history signals if needed.
+- Extend schema-lite coverage to drift compare outcomes if required.
+
+Contact & References
+- Stakeholders: tools/dashboard/stakeholders.json (DX links appear in dashboard).
+- Requirements & Test Plan: docs/DEV_DASHBOARD_PLAN.md
+- Watch/Queue requirements: docs/requirements/WATCH_AND_QUEUE.md
