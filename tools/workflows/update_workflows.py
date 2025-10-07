@@ -314,9 +314,13 @@ def ensure_lint_resiliency(doc, job_name: str, include_node: bool = True, markdo
     install_body = (
         "set -euo pipefail\n"
         "mkdir -p ./bin\n"
-        "for i in 1 2 3; do \\\n"
-        "  curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \\\n"
-        "    | bash -s -- latest ./bin && break || { echo \"retry $i\"; sleep 2; }; \\\n"
+        "ver=\"${ACTIONLINT_VERSION:-1.7.7}\"\n"
+        "for i in 1 2 3; do\n"
+        "  if curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- \"$ver\" ./bin; then\n"
+        "    break\n"
+        "  else\n"
+        "    echo \"retry $i\"; sleep 2\n"
+        "  fi\n"
         "done\n"
     )
     idx_install = _find_step_index(steps, 'Install actionlint (retry)')

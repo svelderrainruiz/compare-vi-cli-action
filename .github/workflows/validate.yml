@@ -2,9 +2,9 @@ name: Validate
 
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
     inputs:
       summary-verbose:
@@ -24,256 +24,248 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - name: Setup Node with cache
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
+    - uses: actions/checkout@v5
+    - name: Setup Node with cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
 
-      - name: CLI lints (notice on develop)
-        if: github.ref_name == 'develop' || github.base_ref == 'develop'
-        uses: ./.github/actions/cli-lints
-        with:
-          enforce: 'false'
-          linkcheck: 'true'
-          actionlint-version: '1.7.7'
-          relaxed-path: 'docs/releases/**/*.md'
+    - name: CLI lints (notice on develop)
+      if: github.ref_name == 'develop' || github.base_ref == 'develop'
+      uses: ./.github/actions/cli-lints
+      with:
+        enforce: 'false'
+        linkcheck: 'true'
+        actionlint-version: '1.7.7'
+        relaxed-path: 'docs/releases/**/*.md'
 
-      - name: CLI lints (enforced on main)
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        uses: ./.github/actions/cli-lints
-        with:
-          enforce: 'true'
-          linkcheck: 'true'
-          actionlint-version: '1.7.7'
-          relaxed-path: 'docs/releases/**/*.md'
+    - name: CLI lints (enforced on main)
+      if: github.ref_name == 'main' || github.base_ref == 'main'
+      uses: ./.github/actions/cli-lints
+      with:
+        enforce: 'true'
+        linkcheck: 'true'
+        actionlint-version: '1.7.7'
+        relaxed-path: 'docs/releases/**/*.md'
 
-      - name: Guard tracked build artifacts (enforced)
-        shell: pwsh
-        run: |
-          # Optional allowlist via env ALLOWLIST_TRACKED_ARTIFACTS (semicolon-separated globs)
-          # and/or file-based allowlist at .ci/build-artifacts-allow.txt
-          pwsh -File tools/Check-TrackedBuildArtifacts.ps1 -AllowListPath '.ci/build-artifacts-allow.txt'
+    - name: Guard tracked build artifacts (enforced)
+      shell: pwsh
+      run: |
+        # Optional allowlist via env ALLOWLIST_TRACKED_ARTIFACTS (semicolon-separated globs)
+        # and/or file-based allowlist at .ci/build-artifacts-allow.txt
+        pwsh -File tools/Check-TrackedBuildArtifacts.ps1 -AllowListPath '.ci/build-artifacts-allow.txt'
 
-      - name: Surface build artifacts allowlist (if any)
-        shell: pwsh
-        run: |
-          $path = '.ci/build-artifacts-allow.txt'
-          if (Test-Path -LiteralPath $path -PathType Leaf) {
-            $lines = Get-Content -LiteralPath $path | Where-Object { $_ -and -not ($_.Trim().StartsWith('#')) } | ForEach-Object { $_.Trim() }
-            if ($lines.Count -gt 0 -and $env:GITHUB_STEP_SUMMARY) {
-              $out = @('### Build Artifacts Allowlist','')
-              foreach($l in $lines){ $out += ('- ' + $l) }
-              $out -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    - name: Surface build artifacts allowlist (if any)
+      shell: pwsh
+      run: |
+        $path = '.ci/build-artifacts-allow.txt'
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+          $lines = Get-Content -LiteralPath $path | Where-Object { $_ -and -not ($_.Trim().StartsWith('#')) } | ForEach-Object { $_.Trim() }
+          if ($lines.Count -gt 0 -and $env:GITHUB_STEP_SUMMARY) {
+            $out = @('### Build Artifacts Allowlist','')
+            foreach($l in $lines){ $out += ('- ' + $l) }
+            $out -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+        }
+
+    - name: Build artifacts guard — ad-hoc allowlist usage
+      shell: pwsh
+      run: |
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $msg = @(
+            '### Build Artifacts Guard — Ad-hoc Allowlist',
+            '',
+            '- To permit specific tracked paths temporarily, set ALLOWLIST_TRACKED_ARTIFACTS to a semicolon-separated list of globs.',
+            "- Example: ``ALLOWLIST_TRACKED_ARTIFACTS='src/Legacy/**/bin/**;src/Legacy/**/obj/**'``",
+            '- Prefer using .ci/build-artifacts-allow.txt for committed, reviewable exceptions.'
+          ) -join "`n"
+          $msg | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+
+    - name: Install actionlint (retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./bin
+        ver="${ACTIONLINT_VERSION:-1.7.7}"
+        for i in 1 2 3; do
+          if curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- "$ver" ./bin; then
+            break
+          else
+            echo "retry $i"; sleep 2
+          fi
+        done
+    - name: Run actionlint
+      run: |
+        ./bin/actionlint -color
+
+    - name: Lint unanchored dot-sourcing (non-blocking)
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        pwsh -File tools/Lint-DotSourcing.ps1 -WarnOnly
+
+    - name: Lint inline-if in format (-f)
+      shell: pwsh
+      run: pwsh -File tools/Lint-InlineIfInFormat.ps1
+
+    - name: Install markdownlint-cli (retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo "retry $i"; sleep 2; }; done
+    - name: Run markdownlint
+      run: |
+        markdownlint "**/*.md" --ignore node_modules
+
+    - name: Emit tool versions
+      if: always()
+      shell: bash
+      run: |
+        {
+          echo '### Tool Versions'
+          echo "- actionlint: $(./bin/actionlint -version || echo 'n/a')"
+          echo "- node: $(node -v || echo 'n/a')"
+          echo "- npm: $(npm -v || echo 'n/a')"
+          echo "- markdownlint: $(markdownlint --version || echo 'n/a')"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Workflow drift check (ruamel updater — notice on develop)
+      if: github.ref_name == 'develop' || github.base_ref == 'develop'
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        python -m pip install --user ruamel.yaml
+        python tools/workflows/update_workflows.py --check \
+          .github/workflows/pester-selfhosted.yml \
+          .github/workflows/fixture-drift.yml \
+          .github/workflows/ci-orchestrated.yml \
+          .github/workflows/ci-orchestrated-v2.yml \
+          .github/workflows/pester-integration-on-label.yml \
+          .github/workflows/smoke.yml \
+          .github/workflows/compare-artifacts.yml
+        if ($LASTEXITCODE -eq 3) { Write-Host '::notice::Workflow drift detected (develop). See ruamel updater output.' }
+
+    - name: Workflow drift check (ruamel updater — enforced on main)
+      if: github.ref_name == 'main' || github.base_ref == 'main'
+      shell: pwsh
+      run: |
+        python -m pip install --user ruamel.yaml
+        python tools/workflows/update_workflows.py --check \
+          .github/workflows/pester-selfhosted.yml \
+          .github/workflows/fixture-drift.yml \
+          .github/workflows/ci-orchestrated.yml \
+          .github/workflows/ci-orchestrated-v2.yml \
+          .github/workflows/pester-integration-on-label.yml \
+          .github/workflows/smoke.yml \
+          .github/workflows/compare-artifacts.yml
+
+    - name: Lint loop determinism (notice only on non-main)
+      if: github.ref_name != 'main'
+      shell: pwsh
+      run: |
+        $paths = Get-ChildItem -Path .github/workflows -Filter *.yml | ForEach-Object { $_.FullName }
+        if ($paths) { pwsh -File tools/Lint-LoopDeterminism.Shim.ps1 -PathsList ($paths -join ';') } else { Write-Host '::notice::No workflow files to lint.' }
+
+    - name: Lint loop determinism (enforced on main)
+      if: github.ref_name == 'main'
+      shell: pwsh
+      run: |
+        $paths = Get-ChildItem -Path .github/workflows -Filter *.yml | ForEach-Object { $_.FullName }
+        if ($paths) { pwsh -File tools/Lint-LoopDeterminism.Shim.ps1 -PathsList ($paths -join ';') -FailOnViolation } else { Write-Host '::notice::No workflow files to lint.' }
+
+    - name: Local markdown link check (intra-repo)
+      shell: pwsh
+      run: |
+        # Simple intra-repo link checker: scans markdown for (./...) links and verifies files exist.
+        $ErrorActionPreference = 'Stop'
+        $mdFiles = Get-ChildItem -Path . -Recurse -Include *.md
+        $errors = @()
+        foreach ($file in $mdFiles) {
+          $text = Get-Content -LiteralPath $file.FullName -Raw
+          $matches = [regex]::Matches($text, '\]\((\.\/?[^)#\s]+)\)')
+          foreach ($m in $matches) {
+            $rel = $m.Groups[1].Value
+            if ($rel -like 'http*' -or $rel -like '#*') { continue }
+            # Strip anchors like file.md#section
+            $pathOnly = $rel.Split('#')[0]
+            $target = Join-Path $file.DirectoryName $pathOnly
+            if (-not (Test-Path -LiteralPath $target)) {
+              $errors += "[$($file.FullName)] broken link -> $rel (resolved: $target)"
             }
           }
+        }
+        if ($errors.Count -gt 0) {
+          Write-Host 'Broken intra-repo links detected:'
+          $errors | ForEach-Object { Write-Host " - $_" }
+          exit 2
+        } else {
+          Write-Host 'Intra-repo markdown links OK.'
+        }
 
-      - name: Build artifacts guard — ad-hoc allowlist usage
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_STEP_SUMMARY) {
-            $msg = @(
-              '### Build Artifacts Guard — Ad-hoc Allowlist',
-              '',
-              '- To permit specific tracked paths temporarily, set ALLOWLIST_TRACKED_ARTIFACTS to a semicolon-separated list of globs.',
-              "- Example: ``ALLOWLIST_TRACKED_ARTIFACTS='src/Legacy/**/bin/**;src/Legacy/**/obj/**'``",
-              '- Prefer using .ci/build-artifacts-allow.txt for committed, reviewable exceptions.'
-            ) -join "`n"
-            $msg | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
+    - name: Append docs pointers
+      if: always()
+      shell: pwsh
+      run: |
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Docs Pointers','')
+          $lines += '- Fixture Drift: ./docs/FIXTURE_DRIFT.md'
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
-      - name: Install actionlint (retry)
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ./bin
-          for i in 1 2 3; do
-            if curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest ./bin; then
-              break
-            else
-              echo "retry $i"; sleep 2
-            fi
-          done
-
-      - name: Run actionlint
-        run: |
-          ./bin/actionlint -color
-
-      - name: Lint unanchored dot-sourcing (non-blocking)
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          pwsh -File tools/Lint-DotSourcing.ps1 -WarnOnly
-
-      - name: Lint inline-if in format (-f)
-        shell: pwsh
-        run: pwsh -File tools/Lint-InlineIfInFormat.ps1
-
-      - name: Install markdownlint-cli (retry)
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in 1 2 3; do
-            if npm install -g markdownlint-cli; then
-              break
-            else
-              npm cache clean --force || true
-              echo "retry $i"; sleep 2
-            fi
-          done
-
-      - name: Run markdownlint
-        run: |
-          markdownlint "**/*.md" --ignore node_modules
-
-      - name: Emit tool versions
-        if: always()
-        shell: bash
-        run: |
-          {
-            echo '### Tool Versions'
-            echo "- actionlint: $(./bin/actionlint -version || echo 'n/a')"
-            echo "- node: $(node -v || echo 'n/a')"
-            echo "- npm: $(npm -v || echo 'n/a')"
-            echo "- markdownlint: $(markdownlint --version || echo 'n/a')"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Workflow drift check (ruamel updater — notice on develop)
-        if: github.ref_name == 'develop' || github.base_ref == 'develop'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          python -m pip install --user ruamel.yaml
-          python tools/workflows/update_workflows.py --check \
-            .github/workflows/pester-selfhosted.yml \
-            .github/workflows/fixture-drift.yml \
-            .github/workflows/ci-orchestrated.yml \
-            .github/workflows/ci-orchestrated-v2.yml \
-            .github/workflows/pester-integration-on-label.yml \
-            .github/workflows/smoke.yml \
-            .github/workflows/compare-artifacts.yml
-          if ($LASTEXITCODE -eq 3) { Write-Host '::notice::Workflow drift detected (develop). See ruamel updater output.' }
-
-      - name: Workflow drift check (ruamel updater — enforced on main)
-        if: github.ref_name == 'main' || github.base_ref == 'main'
-        shell: pwsh
-        run: |
-          python -m pip install --user ruamel.yaml
-          python tools/workflows/update_workflows.py --check \
-            .github/workflows/pester-selfhosted.yml \
-            .github/workflows/fixture-drift.yml \
-            .github/workflows/ci-orchestrated.yml \
-            .github/workflows/ci-orchestrated-v2.yml \
-            .github/workflows/pester-integration-on-label.yml \
-            .github/workflows/smoke.yml \
-            .github/workflows/compare-artifacts.yml
-
-      - name: Lint loop determinism (notice only on non-main)
-        if: github.ref_name != 'main'
-        shell: pwsh
-        run: |
-          $paths = Get-ChildItem -Path .github/workflows -Filter *.yml | ForEach-Object { $_.FullName }
-          if ($paths) { pwsh -File tools/Lint-LoopDeterminism.Shim.ps1 -PathsList ($paths -join ';') } else { Write-Host '::notice::No workflow files to lint.' }
-
-      - name: Lint loop determinism (enforced on main)
-        if: github.ref_name == 'main'
-        shell: pwsh
-        run: |
-          $paths = Get-ChildItem -Path .github/workflows -Filter *.yml | ForEach-Object { $_.FullName }
-          if ($paths) { pwsh -File tools/Lint-LoopDeterminism.Shim.ps1 -PathsList ($paths -join ';') -FailOnViolation } else { Write-Host '::notice::No workflow files to lint.' }
-
-      - name: Local markdown link check (intra-repo)
-        shell: pwsh
-        run: |
-          # Simple intra-repo link checker: scans markdown for (./...) links and verifies files exist.
-          $ErrorActionPreference = 'Stop'
-          $mdFiles = Get-ChildItem -Path . -Recurse -Include *.md
-          $errors = @()
-          foreach ($file in $mdFiles) {
-            $text = Get-Content -LiteralPath $file.FullName -Raw
-            $matches = [regex]::Matches($text, '\]\((\.\/?[^)#\s]+)\)')
-            foreach ($m in $matches) {
-              $rel = $m.Groups[1].Value
-              if ($rel -like 'http*' -or $rel -like '#*') { continue }
-              # Strip anchors like file.md#section
-              $pathOnly = $rel.Split('#')[0]
-              $target = Join-Path $file.DirectoryName $pathOnly
-              if (-not (Test-Path -LiteralPath $target)) {
-                $errors += "[$($file.FullName)] broken link -> $rel (resolved: $target)"
-              }
-            }
-          }
-          if ($errors.Count -gt 0) {
-            Write-Host 'Broken intra-repo links detected:'
-            $errors | ForEach-Object { Write-Host " - $_" }
-            exit 2
-          } else {
-            Write-Host 'Intra-repo markdown links OK.'
-          }
-
-      - name: Append docs pointers
-        if: always()
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_STEP_SUMMARY) {
-            $lines = @('### Docs Pointers','')
-            $lines += '- Fixture Drift: ./docs/FIXTURE_DRIFT.md'
-            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
-
-      - name: Labels sync summary (develop only)
-        if: github.ref_name == 'develop'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $labelsFile = '.github/labels.yml'
-          if (-not (Test-Path -LiteralPath $labelsFile)) { Write-Host '::notice::.github/labels.yml not found'; exit 0 }
-          try {
-            $yaml = Get-Content -LiteralPath $labelsFile -Raw
-            # crude parse: entries like '- name: xyz' on their own line
-            $names = @([regex]::Matches($yaml,'(?m)^\s*-\s*name:\s*(.+?)\s*$') | ForEach-Object { $_.Groups[1].Value.Trim() })
-          } catch { $names = @() }
-          $api = "https://api.github.com/repos/${{ github.repository }}/labels?per_page=100"
-          $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28' }
-          $existing = @()
-          try { $resp = Invoke-RestMethod -Method Get -Uri $api -Headers $hdr; $existing = @($resp | ForEach-Object { $_.name }) } catch {}
-          $missing = @($names | Where-Object { $_ -and ($existing -notcontains $_) })
-          if ($env:GITHUB_STEP_SUMMARY) {
-            $lines = @('### Labels Sync (notice)','')
-            $lines += ('- Defined in labels.yml: {0}' -f ($names.Count))
-            $lines += ('- Repo labels: {0}' -f ($existing.Count))
-            if ($missing.Count -gt 0) {
-              $lines += '- Missing:'
-              foreach ($m in $missing) { $lines += ('  - ' + $m) }
-            } else {
-              $lines += '- Missing: none'
-            }
-            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
-
-      - name: Labels sync enforcement (main)
-        if: github.ref_name == 'main'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $labelsFile = '.github/labels.yml'
-          if (-not (Test-Path -LiteralPath $labelsFile)) { Write-Error '.github/labels.yml not found'; exit 2 }
+    - name: Labels sync summary (develop only)
+      if: github.ref_name == 'develop'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $labelsFile = '.github/labels.yml'
+        if (-not (Test-Path -LiteralPath $labelsFile)) { Write-Host '::notice::.github/labels.yml not found'; exit 0 }
+        try {
           $yaml = Get-Content -LiteralPath $labelsFile -Raw
+          # crude parse: entries like '- name: xyz' on their own line
           $names = @([regex]::Matches($yaml,'(?m)^\s*-\s*name:\s*(.+?)\s*$') | ForEach-Object { $_.Groups[1].Value.Trim() })
-          $api = "https://api.github.com/repos/${{ github.repository }}/labels?per_page=100"
-          $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28' }
-          $resp = Invoke-RestMethod -Method Get -Uri $api -Headers $hdr
-          $existing = @($resp | ForEach-Object { $_.name })
-          $missing = @($names | Where-Object { $_ -and ($existing -notcontains $_) })
+        } catch { $names = @() }
+        $api = "https://api.github.com/repos/${{ github.repository }}/labels?per_page=100"
+        $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28' }
+        $existing = @()
+        try { $resp = Invoke-RestMethod -Method Get -Uri $api -Headers $hdr; $existing = @($resp | ForEach-Object { $_.name }) } catch {}
+        $missing = @($names | Where-Object { $_ -and ($existing -notcontains $_) })
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Labels Sync (notice)','')
+          $lines += ('- Defined in labels.yml: {0}' -f ($names.Count))
+          $lines += ('- Repo labels: {0}' -f ($existing.Count))
           if ($missing.Count -gt 0) {
-            Write-Host 'Missing labels:'
-            $missing | ForEach-Object { Write-Host (' - ' + $_) }
-            Write-Error ('Labels sync check failed on main: {0} missing' -f $missing.Count)
-            exit 2
+            $lines += '- Missing:'
+            foreach ($m in $missing) { $lines += ('  - ' + $m) }
           } else {
-            Write-Host 'Labels OK on main.'
+            $lines += '- Missing: none'
           }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+
+    - name: Labels sync enforcement (main)
+      if: github.ref_name == 'main'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $labelsFile = '.github/labels.yml'
+        if (-not (Test-Path -LiteralPath $labelsFile)) { Write-Error '.github/labels.yml not found'; exit 2 }
+        $yaml = Get-Content -LiteralPath $labelsFile -Raw
+        $names = @([regex]::Matches($yaml,'(?m)^\s*-\s*name:\s*(.+?)\s*$') | ForEach-Object { $_.Groups[1].Value.Trim() })
+        $api = "https://api.github.com/repos/${{ github.repository }}/labels?per_page=100"
+        $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept='application/vnd.github+json'; 'X-GitHub-Api-Version'='2022-11-28' }
+        $resp = Invoke-RestMethod -Method Get -Uri $api -Headers $hdr
+        $existing = @($resp | ForEach-Object { $_.name })
+        $missing = @($names | Where-Object { $_ -and ($existing -notcontains $_) })
+        if ($missing.Count -gt 0) {
+          Write-Host 'Missing labels:'
+          $missing | ForEach-Object { Write-Host (' - ' + $_) }
+          Write-Error ('Labels sync check failed on main: {0} missing' -f $missing.Count)
+          exit 2
+        } else {
+          Write-Host 'Labels OK on main.'
+        }
 
   fixtures:
     runs-on: [self-hosted, Windows, X64]
@@ -281,129 +273,129 @@ jobs:
       FAIL_ON_NEW_STRUCTURAL: 'false' # toggle to 'true' to fail job on new structural fixture issues
       SUMMARY_VERBOSE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.summary-verbose || 'false' }}
     steps:
-      - uses: actions/checkout@v5
-      - name: Run fixture validator (JSON)
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $ErrorActionPreference = 'Stop'
-          pwsh -File tools/Validate-Fixtures.ps1 -Json -MinBytes 32 > fixture-validation.json
-          $exit = $LASTEXITCODE
-          if ($exit -ne 0) { Write-Host "::warning::Fixture validator exit code: $exit (non-blocking)" }
-          $data = Get-Content fixture-validation.json -Raw | ConvertFrom-Json
-          if (-not $data.ok) { Write-Host 'Fixture validation issues detected. (Non-fatal: continuing for now)' }
-      - name: Restore previous fixture validation snapshot (cache)
-        id: restore_prev_fixture_validation
-        uses: actions/cache/restore@v4
-        with:
-          path: fixture-validation-prev.json
-          key: fixture-validation-${{ github.sha }}
-          restore-keys: |
-            fixture-validation-
-      - name: Compute delta vs previous snapshot
-        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true'
-        shell: pwsh
-        run: |
-          Write-Host 'Previous snapshot restored. Computing delta.'
-          pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline fixture-validation-prev.json -Current fixture-validation.json -FailOnNewStructuralIssue > fixture-validation-delta.json
-          if ($LASTEXITCODE -eq 3) {
-            Write-Host 'New structural fixture issues detected (delta willFail=true).'
-            if ($env:FAIL_ON_NEW_STRUCTURAL -eq 'true') {
-              Write-Error 'Failing job due to FAIL_ON_NEW_STRUCTURAL=true'
-              exit 3
-            } else {
-              Write-Host 'FAIL_ON_NEW_STRUCTURAL=false -> continuing without failing.'
-            }
+    - uses: actions/checkout@v5
+    - name: Run fixture validator (JSON)
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $ErrorActionPreference = 'Stop'
+        pwsh -File tools/Validate-Fixtures.ps1 -Json -MinBytes 32 > fixture-validation.json
+        $exit = $LASTEXITCODE
+        if ($exit -ne 0) { Write-Host "::warning::Fixture validator exit code: $exit (non-blocking)" }
+        $data = Get-Content fixture-validation.json -Raw | ConvertFrom-Json
+        if (-not $data.ok) { Write-Host 'Fixture validation issues detected. (Non-fatal: continuing for now)' }
+    - name: Restore previous fixture validation snapshot (cache)
+      id: restore_prev_fixture_validation
+      uses: actions/cache/restore@v4
+      with:
+        path: fixture-validation-prev.json
+        key: fixture-validation-${{ github.sha }}
+        restore-keys: |
+          fixture-validation-
+    - name: Compute delta vs previous snapshot
+      if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true'
+      shell: pwsh
+      run: |
+        Write-Host 'Previous snapshot restored. Computing delta.'
+        pwsh -File tools/Diff-FixtureValidationJson.ps1 -Baseline fixture-validation-prev.json -Current fixture-validation.json -FailOnNewStructuralIssue > fixture-validation-delta.json
+        if ($LASTEXITCODE -eq 3) {
+          Write-Host 'New structural fixture issues detected (delta willFail=true).'
+          if ($env:FAIL_ON_NEW_STRUCTURAL -eq 'true') {
+            Write-Error 'Failing job due to FAIL_ON_NEW_STRUCTURAL=true'
+            exit 3
+          } else {
+            Write-Host 'FAIL_ON_NEW_STRUCTURAL=false -> continuing without failing.'
           }
-      - name: Validate delta JSON schema (basic)
-        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
-        shell: pwsh
-        run: |
-          pwsh -File tools/Test-FixtureValidationDeltaSchema.ps1 -DeltaJsonPath fixture-validation-delta.json
-      - name: Lite schema validate (delta)
-        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
-        shell: pwsh
-        run: |
-          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation-delta.json -SchemaPath docs/schemas/fixture-validation-delta-v1.schema.json
-      - name: Upload fixture validation delta JSON
-        if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: validate-fixture-validation-delta-json
-          path: fixture-validation-delta.json
-      - name: Upload fixture validation JSON
-        uses: actions/upload-artifact@v4
-        with:
-          name: validate-fixture-validation-json
-          path: fixture-validation.json
-      - name: Lite schema validate (snapshot)
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          if (Test-Path fixture-validation.json) {
-            try {
-              pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation.json -SchemaPath docs/schemas/fixture-manifest-v1.schema.json
-              if ($LASTEXITCODE -ne 0) { Write-Host "::notice::Snapshot schema-lite returned $LASTEXITCODE (non-blocking)" }
-            } catch { Write-Host '::notice::Snapshot schema-lite skipped or failed (non-fatal).' }
-          }
-      - name: Append fixture summary
-        shell: pwsh
-        run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json
-      - name: Write fixture summary file
-        if: always()
-        shell: pwsh
-        run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json -SummaryPath fixture-summary.md
-      - name: Upload fixture summary artifact
-        if: always() && hashFiles('fixture-summary.md') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: fixture-validation-summary
-          path: fixture-summary.md
-      - name: Save current snapshot to cache
-        uses: actions/cache/save@v4
-        with:
-          path: fixture-validation.json
-          key: fixture-validation-${{ github.sha }}
-      - name: Copy snapshot for next run reference
-        shell: pwsh
-        run: Copy-Item -LiteralPath fixture-validation.json -Destination fixture-validation-prev.json -Force
+        }
+    - name: Validate delta JSON schema (basic)
+      if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
+      shell: pwsh
+      run: |
+        pwsh -File tools/Test-FixtureValidationDeltaSchema.ps1 -DeltaJsonPath fixture-validation-delta.json
+    - name: Lite schema validate (delta)
+      if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
+      shell: pwsh
+      run: |
+        pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation-delta.json -SchemaPath docs/schemas/fixture-validation-delta-v1.schema.json
+    - name: Upload fixture validation delta JSON
+      if: steps.restore_prev_fixture_validation.outputs.cache-hit == 'true' && hashFiles('fixture-validation-delta.json') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: validate-fixture-validation-delta-json
+        path: fixture-validation-delta.json
+    - name: Upload fixture validation JSON
+      uses: actions/upload-artifact@v4
+      with:
+        name: validate-fixture-validation-json
+        path: fixture-validation.json
+    - name: Lite schema validate (snapshot)
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        if (Test-Path fixture-validation.json) {
+          try {
+            pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath fixture-validation.json -SchemaPath docs/schemas/fixture-manifest-v1.schema.json
+            if ($LASTEXITCODE -ne 0) { Write-Host "::notice::Snapshot schema-lite returned $LASTEXITCODE (non-blocking)" }
+          } catch { Write-Host '::notice::Snapshot schema-lite skipped or failed (non-fatal).' }
+        }
+    - name: Append fixture summary
+      shell: pwsh
+      run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json
+    - name: Write fixture summary file
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Write-FixtureValidationSummary.ps1 -ValidationJson fixture-validation.json -DeltaJson fixture-validation-delta.json -SummaryPath fixture-summary.md
+    - name: Upload fixture summary artifact
+      if: always() && hashFiles('fixture-summary.md') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: fixture-validation-summary
+        path: fixture-summary.md
+    - name: Save current snapshot to cache
+      uses: actions/cache/save@v4
+      with:
+        path: fixture-validation.json
+        key: fixture-validation-${{ github.sha }}
+    - name: Copy snapshot for next run reference
+      shell: pwsh
+      run: Copy-Item -LiteralPath fixture-validation.json -Destination fixture-validation-prev.json -Force
 
-      - name: Agent wait summary (notice-only)
-        if: always()
-        uses: ./.github/actions/agent-wait-post
-        with:
-          results-dir: tests/results
-          fail-on-outside: 'false'
-          upload-artifact: 'false'
+    - name: Agent wait summary (notice-only)
+      if: always()
+      uses: ./.github/actions/agent-wait-post
+      with:
+        results-dir: tests/results
+        fail-on-outside: 'false'
+        upload-artifact: 'false'
 
   session-index:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+    - uses: actions/checkout@v5
 
-      - name: Install Pester v5
-        shell: pwsh
-        run: |
-          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
+    - name: Install Pester v5
+      shell: pwsh
+      run: |
+        Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
 
-      - name: Run dispatcher smoke to produce session index
-        shell: pwsh
-        run: |
-          $res = Join-Path $env:RUNNER_TEMP 'sessionindex'
-          New-Item -ItemType Directory -Force -Path $res | Out-Null
-          ./tools/Quick-DispatcherSmoke.ps1 -ResultsPath $res -PreferWorkspace
+    - name: Run dispatcher smoke to produce session index
+      shell: pwsh
+      run: |
+        $res = Join-Path $env:RUNNER_TEMP 'sessionindex'
+        New-Item -ItemType Directory -Force -Path $res | Out-Null
+        ./tools/Quick-DispatcherSmoke.ps1 -ResultsPath $res -PreferWorkspace
 
-      - name: Validate session index schema (schema-lite)
-        shell: pwsh
-        run: |
-          $json = Join-Path $env:RUNNER_TEMP 'sessionindex' 'session-index.json'
-          if (-not (Test-Path $json)) { Write-Error "session-index.json not found at $json"; exit 2 }
-          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/session-index-v1.schema.json
+    - name: Validate session index schema (schema-lite)
+      shell: pwsh
+      run: |
+        $json = Join-Path $env:RUNNER_TEMP 'sessionindex' 'session-index.json'
+        if (-not (Test-Path $json)) { Write-Error "session-index.json not found at $json"; exit 2 }
+        pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/session-index-v1.schema.json
 
-      - name: Upload session index artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: validate-session-index
-          path: ${{ runner.temp }}/sessionindex/session-index.json
-          if-no-files-found: warn
+    - name: Upload session index artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: validate-session-index
+        path: ${{ runner.temp }}/sessionindex/session-index.json
+        if-no-files-found: warn
