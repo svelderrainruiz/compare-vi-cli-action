@@ -311,6 +311,197 @@ def ensure_wire_T1_for_tests(doc) -> bool:
     return changed
 
 
+def _mk_wire_step(name: str, phase: str, results_dir: str) -> dict:
+    return {
+        'name': name,
+        'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+        'uses': './.github/actions/wire-probe',
+        'with': { 'phase': phase, 'results-dir': results_dir },
+    }
+
+
+def _insert_before(steps: list, anchor_name: str, step: dict) -> bool:
+    for i, st in enumerate(steps):
+        if isinstance(st, dict) and st.get('name') == anchor_name:
+            steps.insert(i, step)
+            return True
+    return False
+
+
+def _insert_after(steps: list, anchor_name: str, step: dict) -> bool:
+    for i, st in enumerate(steps):
+        if isinstance(st, dict) and st.get('name') == anchor_name:
+            steps.insert(i + 1, step)
+            return True
+    return False
+
+
+def ensure_wire_S1_before_session_index(doc) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    for jn, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps') or []
+        # target anchors
+        target_names = [
+            'Session index post',
+            'Session index post (best-effort)',
+            'Session index post (single)'
+        ]
+        # decide results-dir
+        rd = 'tests/results'
+        if jn == 'pester-category':
+            rd = 'tests/results/${{ matrix.category }}'
+        elif jn == 'drift':
+            rd = 'results/fixture-drift'
+        exists = any(isinstance(s, dict) and str(s.get('uses','')) == './.github/actions/wire-session-index' for s in steps)
+        if exists:
+            continue
+        s1 = {
+            'name': 'Wire Session Index (S1)',
+            'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+            'uses': './.github/actions/wire-session-index',
+            'with': { 'results-dir': rd },
+        }
+        inserted = False
+        for tn in target_names:
+            if _insert_before(steps, tn, s1):
+                inserted = True
+                break
+        if inserted:
+            job['steps'] = steps
+            jobs[jn] = job
+            changed = True
+    if changed:
+        doc['jobs'] = jobs
+    return changed
+
+
+def ensure_wire_C1C2_around_drift(doc) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    drift = jobs.get('drift')
+    if not isinstance(drift, dict):
+        return changed
+    steps = drift.get('steps') or []
+    idx = None
+    for i, st in enumerate(steps):
+        if isinstance(st, dict) and str(st.get('uses','')).endswith('/fixture-drift'):
+            idx = i
+            break
+    if idx is None:
+        return changed
+    has_c1 = any(isinstance(s, dict) and s.get('name') == 'Wire Probe (C1)' for s in steps)
+    has_c2 = any(isinstance(s, dict) and s.get('name') == 'Wire Probe (C2)' for s in steps)
+    if not has_c1:
+        steps.insert(idx, _mk_wire_step('Wire Probe (C1)', 'C1', 'results/fixture-drift'))
+        changed = True
+        idx += 1
+    if not has_c2:
+        steps.insert(idx + 1, _mk_wire_step('Wire Probe (C2)', 'C2', 'results/fixture-drift'))
+        changed = True
+    drift['steps'] = steps
+    jobs['drift'] = drift
+    doc['jobs'] = jobs
+    return changed
+
+
+def ensure_wire_I1I2_invoker(doc) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    for jn, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps') or []
+        if not any(isinstance(s, dict) and s.get('name') == 'Wire Invoker (start)' for s in steps):
+            if _insert_before(steps, 'Ensure Invoker (start)', {
+                'name': 'Wire Invoker (start)',
+                'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+                'uses': './.github/actions/wire-invoker-start',
+                'with': { 'results-dir': 'tests/results' },
+            }):
+                changed = True
+        if not any(isinstance(s, dict) and s.get('name') == 'Wire Invoker (stop)' for s in steps):
+            if _insert_after(steps, 'Ensure Invoker (stop)', {
+                'name': 'Wire Invoker (stop)',
+                'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+                'uses': './.github/actions/wire-invoker-stop',
+                'with': { 'results-dir': 'tests/results' },
+            }):
+                changed = True
+        job['steps'] = steps
+        jobs[jn] = job
+    if changed:
+        doc['jobs'] = jobs
+    return changed
+
+
+def ensure_wire_G0G1_guard(doc) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    for jn, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps') or []
+        if _find_step_index(steps, 'Runner Unblock Guard') is None:
+            continue
+        if not any(isinstance(s, dict) and s.get('name') == 'Wire Guard (pre)' for s in steps):
+            _insert_before(steps, 'Runner Unblock Guard', {
+                'name': 'Wire Guard (pre)',
+                'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+                'uses': './.github/actions/wire-guard-pre',
+                'with': { 'results-dir': 'tests/results' },
+            })
+            changed = True
+        if not any(isinstance(s, dict) and s.get('name') == 'Wire Guard (post)' for s in steps):
+            _insert_after(steps, 'Runner Unblock Guard', {
+                'name': 'Wire Guard (post)',
+                'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+                'uses': './.github/actions/wire-guard-post',
+                'with': { 'results-dir': 'tests/results' },
+            })
+            changed = True
+        job['steps'] = steps
+        jobs[jn] = job
+    if changed:
+        doc['jobs'] = jobs
+    return changed
+
+
+def ensure_wire_P1_after_final(doc) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    anchors = ['Append final summary (single)', 'Summarize orchestrated run']
+    for jn, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps') or []
+        if any(isinstance(s, dict) and s.get('name') == 'Wire Probe (P1)' for s in steps):
+            continue
+        inserted = False
+        for a in anchors:
+            if _insert_after(steps, a, _mk_wire_step('Wire Probe (P1)', 'P1', 'tests/results')):
+                inserted = True
+                break
+        if inserted:
+            job['steps'] = steps
+            jobs[jn] = job
+            changed = True
+    if changed:
+        doc['jobs'] = jobs
+    return changed
+
 def _mk_rerun_hint_step(default_strategy: str) -> dict:
     """Create the 'Re-run With Same Inputs' step body for job summaries.
 
@@ -1010,8 +1201,13 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         pc2 = _ensure_job_needs(doc, 'pester-category', 'probe')
         lr1 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
         wp = ensure_wire_probes_all_jobs(doc, 'tests/results')
+        s1 = ensure_wire_S1_before_session_index(doc)
         t1 = ensure_wire_T1_for_tests(doc)
-        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1 or wp or t1
+        cdrift = ensure_wire_C1C2_around_drift(doc)
+        i12 = ensure_wire_I1I2_invoker(doc)
+        gg = ensure_wire_G0G1_guard(doc)
+        p1f = ensure_wire_P1_after_final(doc)
+        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1 or wp or s1 or t1 or cdrift or i12 or gg or p1f
     # Skip transforms for deprecated ci-orchestrated-v2.yml (kept as a stub/manual only)
     if path.name == 'ci-orchestrated-v2.yml':
         pass
@@ -1065,7 +1261,8 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         # Make markdownlint non-blocking in Validate to avoid PR noise; Workflows Lint is the required check.
         lr2 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
         wp2 = ensure_wire_probes_all_jobs(doc, 'tests/results')
-        changed = changed or lr2 or wp2
+        s12 = ensure_wire_S1_before_session_index(doc)
+        changed = changed or lr2 or wp2 or s12
 
 
     if changed:
