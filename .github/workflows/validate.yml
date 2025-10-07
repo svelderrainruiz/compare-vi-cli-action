@@ -83,10 +83,19 @@ jobs:
             $msg | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
+      - name: Install actionlint (retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ./bin
+          for i in 1 2 3; do \
+            curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+              | bash -s -- latest ./bin && break || { echo "retry $i"; sleep 2; }; \
+          done
+
       - name: Run actionlint
-        uses: rhysd/actionlint@v1
-        with:
-          args: -color
+        run: |
+          ./bin/actionlint -color
 
       - name: Lint unanchored dot-sourcing (non-blocking)
         shell: pwsh
