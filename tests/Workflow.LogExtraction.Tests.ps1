@@ -13,9 +13,10 @@ It 'finds parameter conversion error inside a zipped job log' {
 
   New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
 
+  $esc = [char]27
   $logContent = @"
 2025-10-07T14:25:46Z ##[group]Run ./Invoke-PesterTests.ps1 -TestsPath tests
-2025-10-07T14:25:46Z ##[error]Cannot process argument transformation on parameter 'TimeoutMinutes'. Cannot convert value "-ResultsPath" to type "System.Double". Error: "The input string '-ResultsPath' was not in a correct format."
+2025-10-07T14:25:46Z ##[error]${esc}[31;1mCannot process argument transformation on parameter 'TimeoutMinutes'.${esc}[0m Cannot convert value "-ResultsPath" to type "System.Double". Error: "The input string '-ResultsPath' was not in a correct format."
 2025-10-07T14:25:47Z ##[endgroup]
 "@
 
@@ -29,6 +30,7 @@ It 'finds parameter conversion error inside a zipped job log' {
   $result | Should -Not -BeNullOrEmpty
   $result.Content | Should -Match "Cannot process argument transformation on parameter 'TimeoutMinutes'"
   $result.Content | Should -Match "The input string '-ResultsPath' was not in a correct format"
+  $result.Content | Should -Not -Match "\x1b"
   $result.Matches.Count | Should -BeGreaterThan 0
 }
 

@@ -65,6 +65,9 @@ function Get-LogText {
 $bytes = [System.IO.File]::ReadAllBytes($LogPath)
 $content = Get-LogText -Bytes $bytes
 
+$ansiPattern = [regex]'\x1B\[[0-9;]*[A-Za-z]'
+$content = $ansiPattern.Replace($content, '')
+
 $matches = $null
 if ($Pattern) {
   $regex = [regex]$Pattern
