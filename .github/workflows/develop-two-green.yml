@@ -48,9 +48,11 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "### Develop: Two Consecutive Green Orchestrated Runs" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Workflow: CI Orchestrated (deterministic chain)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: develop" >> "$GITHUB_STEP_SUMMARY"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Develop: Two Consecutive Green Orchestrated Runs
+          - Workflow: CI Orchestrated (deterministic chain)
+          - Branch: develop
+          EOF
 
       - name: Comment on issue #88 (signal)
         if: success()
