@@ -537,21 +537,22 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Interactivity Probe (fail-closed)
+    - name: Interactivity Probe (gate)
+      id: ip
       shell: pwsh
       run: |
         pwsh -File tools/Write-InteractivityProbe.ps1
         $ui = [System.Environment]::UserInteractive
-        $in = $false; $out=$false; $err=$false
-        try { $in  = [Console]::IsInputRedirected } catch {}
-        try { $out = [Console]::IsOutputRedirected } catch {}
-        try { $err = [Console]::IsErrorRedirected } catch {}
-        if (-not $ui -or $in) {
-          Write-Host '::error::Non-interactive Windows session detected. Configure the self-hosted runner with an interactive desktop session.'
-          exit 1
+        $in = $false; try { $in  = [Console]::IsInputRedirected } catch {}
+        $ok = ($ui -and -not $in)
+        "ok=$ok" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        if (-not $ok -and $env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Interactivity Probe','', '- Result: non-interactive (skipping single strategy steps)')
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
 
     - name: Snapshot processes (pre-invoker)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
       shell: pwsh
       run: |
         $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
@@ -560,6 +561,7 @@ jobs:
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
     - name: Ensure Invoker (start)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
       id: inv_start_single
       continue-on-error: true
       uses: ./.github/actions/ensure-invoker
@@ -571,12 +573,14 @@ jobs:
         retry-delay-seconds: '0'
 
     - name: Warmup LabVIEW (preflight; leave LVCompare running)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
       env:
         WARMUP_SKIP_ARGS: '1'
       shell: pwsh
       run: pwsh -File tools/Warmup-LabVIEW.ps1
 
     - name: Snapshot processes (post-invoker/warmup)
+      if: ${{ steps.ip.outputs.ok == 'true' }}
       shell: pwsh
       run: |
         $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
@@ -585,7 +589,7 @@ jobs:
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
     - name: Pester categories (serial, deterministic)
-      if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
+      if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
@@ -605,7 +609,7 @@ jobs:
         }
 
     - name: Drift (invoker; reuse LabVIEW via -lvpath)
-      if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
+      if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
       uses: ./.github/actions/fixture-drift
       with:
         render-report: 'true'
