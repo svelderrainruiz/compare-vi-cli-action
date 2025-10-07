@@ -402,7 +402,7 @@ jobs:
               try {
                 pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath $schema
                 if ($LASTEXITCODE -ne 0) { Write-Host "::notice::Schema validation FAIL for $json (schema=$schema)" } else { Write-Host "::notice::Schema validation OK for $json" }
-              } catch { Write-Host "::notice::Schema validation EXC for $json: $($_.Exception.Message)" }
+              } catch { Write-Host ("::notice::Schema validation EXC for {0}: {1}" -f $json, $_.Exception.Message) }
             } else { Write-Host "::notice::Schema validation skipped (missing): $json" }
           }
           Invoke-Validate 'tests/results/_watch/watch-last.json' 'docs/schemas/watch-last-v1.schema.json'
