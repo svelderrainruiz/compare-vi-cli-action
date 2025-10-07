@@ -337,6 +337,11 @@ jobs:
           default      { $inc = @('*.ps1') }
         }
         "include=$($inc -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    - name: Wire Probe (T1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: T1
+        results-dir: tests/results/${{ matrix.category }}
     - name: Run Pester tests via local dispatcher (category)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
@@ -725,6 +730,11 @@ jobs:
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
+    - name: Wire Probe (T1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: T1
+        results-dir: tests/results
     - name: Pester categories (serial, deterministic)
       if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
       shell: pwsh

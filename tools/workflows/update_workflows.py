@@ -251,7 +251,59 @@ def ensure_wire_probes_all_jobs(doc, default_results_dir: str = 'tests/results')
     for jn, job in jobs.items():
         if not isinstance(job, dict):
             continue
-        if _insert_wire_j1_j2_in_job(job, default_results_dir):
+        # Choose results-dir per job when known
+        rd = default_results_dir
+        if jn == 'pester-category':
+            rd = 'tests/results/${{ matrix.category }}'
+        elif jn == 'drift':
+            rd = 'results/fixture-drift'
+        elif jn == 'publish':
+            rd = 'tests/results'
+        elif jn == 'lint':
+            rd = 'tests/results'
+        elif jn == 'normalize':
+            rd = 'tests/results'
+        if _insert_wire_j1_j2_in_job(job, rd):
+            jobs[jn] = job
+            changed = True
+    if changed:
+        doc['jobs'] = jobs
+    return changed
+
+
+def ensure_wire_T1_for_tests(doc) -> bool:
+    """Insert Wire Probe (T1) before major test execution steps in orchestrated workflows."""
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    for jn, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps') or []
+        def has_t1():
+            return any(isinstance(s, dict) and s.get('name') == 'Wire Probe (T1)' for s in steps)
+        # anchors to check
+        anchors = ['Run Pester tests via local dispatcher (category)', 'Pester categories (serial, deterministic)']
+        insert_idx = None
+        for i, st in enumerate(steps):
+            if not isinstance(st, dict):
+                continue
+            nm = st.get('name', '')
+            if nm in anchors:
+                insert_idx = i
+                break
+        if insert_idx is not None and not has_t1():
+            # results-dir selection
+            rd = 'tests/results'
+            if jn == 'pester-category':
+                rd = 'tests/results/${{ matrix.category }}'
+            steps.insert(insert_idx, {
+                'name': 'Wire Probe (T1)',
+                'uses': './.github/actions/wire-probe',
+                'with': { 'phase': 'T1', 'results-dir': rd },
+            })
+            job['steps'] = steps
             jobs[jn] = job
             changed = True
     if changed:
@@ -958,7 +1010,8 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         pc2 = _ensure_job_needs(doc, 'pester-category', 'probe')
         lr1 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
         wp = ensure_wire_probes_all_jobs(doc, 'tests/results')
-        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1 or wp
+        t1 = ensure_wire_T1_for_tests(doc)
+        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1 or wp or t1
     # Skip transforms for deprecated ci-orchestrated-v2.yml (kept as a stub/manual only)
     if path.name == 'ci-orchestrated-v2.yml':
         pass
