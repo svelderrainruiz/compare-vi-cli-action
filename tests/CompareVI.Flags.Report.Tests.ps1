@@ -70,4 +70,31 @@ Describe 'LVCompare flags (report verifications)' -Tag 'Unit' {
     $exec.command | Should -Match '(^|\s)-lvpath(\s|$)'
     $exec.command | Should -Match 'LabVIEW.exe'
   }
+
+  It 'records absolute base/head paths and arg list in exec json' {
+    $paths = New-TestVis
+    $execPath = Join-Path $TestDrive ('abs-' + [guid]::NewGuid().ToString('N') + '.json')
+            $capturedArgs = $null
+            $executor = { param($cli,$base,$head,$argv) Set-Variable -Name capturedArgs -Value @($argv) -Scope 1; return 0 }
+
+    Push-Location (Split-Path $paths.base -Parent)
+    try {
+      Invoke-CompareVI -Base 'base.vi' -Head 'head.vi' -LvCompareArgs '-noattr -nofp' -CompareExecJsonPath $execPath -FailOnDiff:$false -Executor $executor | Out-Null
+    } finally {
+      Pop-Location
+    }
+
+    Test-Path -LiteralPath $execPath | Should -BeTrue
+    $exec = Get-Content -LiteralPath $execPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $baseAbs = (Resolve-Path -LiteralPath $paths.base).Path
+    $headAbs = (Resolve-Path -LiteralPath $paths.head).Path
+    $exec.base | Should -Be $baseAbs
+    $exec.head | Should -Be $headAbs
+    $patternBase = [regex]::Escape($baseAbs)
+    $patternHead = [regex]::Escape($headAbs)
+    $exec.command | Should -Match $patternBase
+    $exec.command | Should -Match $patternHead
+    $exec.command | Should -Match '(^|\s)-noattr(\s|$)'
+    $exec.command | Should -Match '(^|\s)-nofp(\s|$)'
+      }
 }
