@@ -60,19 +60,19 @@ Purpose: Confirm both strategies produce consistent Run Provenance and summary s
 
 Steps:
 
-1) Dispatch single (deterministic chain):
+1. Dispatch single (deterministic chain):
 
-```
+```powershell
 pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strategy single -IncludeIntegration true
 ```
 
-2) Dispatch matrix (parallel categories):
+1. Dispatch matrix (parallel categories):
 
-```
+```powershell
 pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strategy matrix -IncludeIntegration true
 ```
 
-3) After each run completes, verify:
+1. After each run completes, verify:
 
 - Artifact `orchestrated-provenance` exists and contains `tests/results/provenance.json`.
 - Job summary contains, in order:
@@ -81,7 +81,7 @@ pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strat
   - Compare Outcome (present when drift runs)
   - Re-run with same inputs hint (includes strategy)
 
-4) Compare the two `provenance.json` files: values should differ only by run identifiers and the `strategy` field (`single` vs `matrix`).
+1. Compare the two `provenance.json` files: values should differ only by run identifiers and the `strategy` field (`single` vs `matrix`).
 
 Expected Results:
 - Both single and matrix paths generate the same provenance shape and summary sections.
