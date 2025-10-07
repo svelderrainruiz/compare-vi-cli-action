@@ -509,7 +509,7 @@ jobs:
       shell: pwsh
       env:
         GH_STRATEGY: ${{ inputs.strategy }}
-        GH_INCLUDE: ${{ needs.normalize.outputs.include_integration }}
+        GH_INCLUDE: ${{ inputs.include_integration }}
         GH_SAMPLE_ID: ${{ inputs.sample_id }}
       run: |-
         $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'matrix' }
