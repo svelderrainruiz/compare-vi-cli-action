@@ -180,7 +180,7 @@ jobs:
             Write-Host "::error::Dispatcher not found at $dispatcherPath"
             exit 1
           }
-          $cmd = Get-Command -LiteralPath $dispatcherPath -ErrorAction Stop
+          $cmd = $dispatcherPath
           $lockScript = Join-Path (Get-Location) 'tools/Session-Lock.ps1'
           $bound = [ordered]@{}
           $bound.TestsPath = 'tests'
