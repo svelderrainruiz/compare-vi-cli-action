@@ -40,6 +40,24 @@ Validated with LabVIEW 2025 Q3 on self-hosted Windows runners. See also:
 - `LVCompare.exe` installed at the **canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
 - Only the canonical path is supported; paths via `PATH`, `LVCOMPARE_PATH`, or `lvComparePath` must resolve to this exact location
 
+## Local Telemetry Dashboard
+
+The developer dashboard aggregates recent session-lock, Pester, and Agent-Wait telemetry so you can triage self-hosted runs locally.
+
+```powershell
+pwsh ./tools/Dev-Dashboard.ps1 `
+  -Group pester-selfhosted `
+  -ResultsRoot tests/results `
+  -Html `
+  -Json
+```
+
+- Terminal output is always emitted; add `-Html` (optional `-HtmlPath`) for a prettied report and `-Json` to stream the snapshot object.
+- Use `-Watch <seconds>` to live-refresh the view; `Ctrl+C` stops the loop.
+- Stakeholder metadata lives in `tools/dashboard/stakeholders.json`. Generated HTML is ignored by git (`tools/dashboard/dashboard.html`).
+- Workflow runs call `tools/Invoke-DevDashboard.ps1`, which writes both HTML and JSON under `tests/results/dev-dashboard/` for artifact upload.
+- The dashboard inspects session-lock heartbeat age, queue wait trends (including `_agent/wait-log.ndjson` history), and highlights DX issue links when stakeholders configure them.
+
 ## Fixture Artifacts (VI1.vi / VI2.vi)
 
 Two canonical LabVIEW VI files live at the repository root:

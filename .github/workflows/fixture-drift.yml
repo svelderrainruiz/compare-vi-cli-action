@@ -305,6 +305,21 @@ jobs:
         upload: true
         artifact-name: fixture-drift-session-index
 
+    - name: Generate dev dashboard (fixture drift)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'fixture-drift' -ResultsRoot 'results/fixture-drift' -OutputRoot 'results/fixture-drift/dev-dashboard'
+
+    - name: Upload dev dashboard (fixture drift)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fixture-drift-dev-dashboard
+        path: |
+          results/fixture-drift/dev-dashboard/dashboard.html
+          results/fixture-drift/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
@@ -338,6 +353,22 @@ jobs:
       if: always()
       shell: pwsh
       run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
+
+    - name: Append dev dashboard summary (fixture drift)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.html'
+        $json = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            '### Fixture Drift Dev Dashboard',
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
     - name: Append fixture drift summary
       if: always()

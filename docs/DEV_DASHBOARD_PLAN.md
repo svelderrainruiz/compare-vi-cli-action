@@ -3,6 +3,8 @@
 ## Overview
 A local developer dashboard will summarize telemetry from recent runs (session locks, Pester results, queue telemetry, logs) and surface stakeholder information so the right people can react quickly. The dashboard operates entirely from the workspace and produces terminal, HTML, or JSON output on demand.
 
+> **Status (2025-10-07):** Phase 2 data loaders and the Phase 3 CLI/HTML/JSON outputs now live in `tools/Dev-Dashboard.psm1` and `tools/Dev-Dashboard.ps1`. Phase 5 added `tools/Invoke-DevDashboard.ps1`, workflow artifact uploads, queue-trend warnings (via `_agent/wait-log.ndjson`), and stakeholder DX links. Upcoming work focuses on HTML polish, richer watch-mode telemetry, and deeper action heuristics.
+
 ---
 
 ## Requirements

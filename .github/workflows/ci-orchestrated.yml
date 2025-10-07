@@ -489,6 +489,37 @@ jobs:
       shell: pwsh
       run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -Top 5
 
+    - name: Generate dev dashboard (matrix)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot "tests/results/${{ matrix.category }}" -OutputRoot "tests/results/${{ matrix.category }}/dev-dashboard"
+
+    - name: Upload dev dashboard (matrix)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-dashboard-${{ matrix.category }}
+        path: |
+          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.html
+          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
+    - name: Append dev dashboard summary (matrix)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.html'
+        $json = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            "### Dev Dashboard (${{ matrix.category }})",
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+
     - name: Re-run hint
       if: always()
       shell: pwsh
@@ -568,6 +599,37 @@ jobs:
         validate-schema: true
         upload: true
         artifact-name: fixture-drift-session-index
+
+    - name: Generate dev dashboard (drift)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'fixture-drift' -ResultsRoot 'results/fixture-drift' -OutputRoot 'results/fixture-drift/dev-dashboard'
+
+    - name: Upload dev dashboard (drift)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-dashboard-drift
+        path: |
+          results/fixture-drift/dev-dashboard/dashboard.html
+          results/fixture-drift/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
+    - name: Append dev dashboard summary (drift)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.html'
+        $json = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            '### Dev Dashboard (drift)',
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
     - name: Parse Compare Exec JSON (drift)
       if: always()
@@ -931,6 +993,37 @@ jobs:
         $lines += '- No cleanup; no UI suppression; LVCompare-only'
         $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
         $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+    - name: Generate dev dashboard (single)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot 'tests/results' -OutputRoot 'tests/results/dev-dashboard'
+
+    - name: Upload dev dashboard (single)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-dashboard-single
+        path: |
+          tests/results/dev-dashboard/dashboard.html
+          tests/results/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
+    - name: Append dev dashboard summary (single)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path 'tests/results/dev-dashboard' 'dashboard.html'
+        $json = Join-Path 'tests/results/dev-dashboard' 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            '### Dev Dashboard (single)',
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
     - name: Wire Probe (P1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'

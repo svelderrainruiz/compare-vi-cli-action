@@ -112,6 +112,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Acquire session lock
+        id: session_lock
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File tools/Session-Lock.ps1 -Action Acquire -Group 'pester-selfhosted' -QueueWaitSeconds 15 -QueueMaxAttempts 40 -StaleSeconds 300 -HeartbeatSeconds 15
+
       - name: LV Guard (pre)
         uses: ./.github/actions/runner-unblock-guard
         with:
@@ -172,6 +177,7 @@ jobs:
           if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
           Import-Module ./tools/Invoke-PesterTests.ps1 -Force
           $cmd = Get-Command Invoke-PesterTests.ps1 -ErrorAction Stop
+          $lockScript = Join-Path (Get-Location) 'tools/Session-Lock.ps1'
           $bound = [ordered]@{}
           $bound.TestsPath = 'tests'
           $bound.IncludeIntegration = '${{ needs.normalize.outputs.include_integration }}'
@@ -192,8 +198,31 @@ jobs:
           }
           $boundString = $bound.Keys | ForEach-Object { "$_=$($bound[$_])" } -join ', '
           Write-Host "::debug::Dispatcher parameters: $boundString"
-          & $cmd @bound 2>&1 | Tee-Object -FilePath $logPath
-          $exitCode = $LASTEXITCODE
+          $heartbeatSeconds = 15
+          if ($env:SESSION_HEARTBEAT_SECONDS -and [int]::TryParse($env:SESSION_HEARTBEAT_SECONDS, [ref]([int]0))) {
+            $heartbeatSeconds = [int]$env:SESSION_HEARTBEAT_SECONDS
+          }
+          $heartbeatJob = $null
+          if ($heartbeatSeconds -gt 0) {
+            $heartbeatJob = Start-ThreadJob -ScriptBlock {
+              param($scriptPath,$seconds)
+              while ($true) {
+                pwsh -NoLogo -NoProfile -File $scriptPath -Action Heartbeat | Out-Null
+                Start-Sleep -Seconds $seconds
+              }
+            } -ArgumentList $lockScript, $heartbeatSeconds
+          }
+          $exitCode = 0
+          try {
+            & $cmd @bound 2>&1 | Tee-Object -FilePath $logPath
+            $exitCode = $LASTEXITCODE
+          } finally {
+            if ($heartbeatJob) {
+              Stop-Job -Id $heartbeatJob.Id -Force | Out-Null
+              Remove-Job -Id $heartbeatJob.Id -Force | Out-Null
+            }
+            pwsh -NoLogo -NoProfile -File $lockScript -Action Heartbeat | Out-Null
+          }
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           if ($exitCode -ne 0) {
             Write-Host "::error::Pester dispatcher exited with code $exitCode"
@@ -227,6 +256,11 @@ jobs:
             $lines += '- Log: tests/results/pester-dispatcher.log'
             $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
+
+      - name: Release session lock
+        if: always()
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File tools/Session-Lock.ps1 -Action Release
 
       - name: Publish Pester summary
         if: always()
@@ -345,6 +379,46 @@ jobs:
           }
           $totalsPath = Join-Path $outDir 'pester-totals.json'
           $obj | ConvertTo-Json -Depth 5 | Out-File -FilePath $totalsPath -Encoding utf8
+
+      - name: Watch mode smoke (single run)
+        if: always()
+        shell: pwsh
+        env:
+          WATCH_RESULTS_DIR: tests/results/_watch
+        run: |
+          if (-not (Test-Path $env:WATCH_RESULTS_DIR)) { New-Item -ItemType Directory -Force -Path $env:WATCH_RESULTS_DIR | Out-Null }
+          pwsh -File tools/Watch-Pester.ps1 -SingleRun -RunAllOnStart -TestPath tests/WatchSmoke.Tests.ps1 -Tag WatchSmoke -Quiet
+
+      - name: Generate dev dashboard report
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot 'tests/results'
+
+      - name: Upload dev dashboard artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-dashboard
+          path: |
+            tests/results/dev-dashboard/dashboard.html
+            tests/results/dev-dashboard/dashboard.json
+          if-no-files-found: warn
+
+      - name: Append dashboard summary link
+        if: always()
+        shell: pwsh
+        run: |
+          $html = Join-Path 'tests/results/dev-dashboard' 'dashboard.html'
+          $json = Join-Path 'tests/results/dev-dashboard' 'dashboard.json'
+          if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+            $lines = @(
+              '### Dev Dashboard',
+              '',
+              "- HTML: $(Resolve-Path $html)",
+              "- JSON: $(Resolve-Path $json)"
+            )
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
 
       - name: Upload compact totals artifact
         if: always()

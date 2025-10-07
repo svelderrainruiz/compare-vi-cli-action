@@ -26,6 +26,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Default watch telemetry outputs from environment when not explicitly provided
+if (-not $DeltaJsonPath -or -not $DeltaHistoryPath) {
+  $watchDir = $env:WATCH_RESULTS_DIR
+  if (-not $watchDir -or $watchDir -eq '') {
+    try { $watchDir = Join-Path (Resolve-Path '.').Path 'tests/results/_watch' } catch { $watchDir = $null }
+  }
+  if ($watchDir) {
+    if (-not (Test-Path -LiteralPath $watchDir)) { New-Item -ItemType Directory -Force -Path $watchDir | Out-Null }
+    if (-not $DeltaJsonPath -or $DeltaJsonPath -eq '') { $DeltaJsonPath = Join-Path $watchDir 'watch-last.json' }
+    if (-not $DeltaHistoryPath -or $DeltaHistoryPath -eq '') { $DeltaHistoryPath = Join-Path $watchDir 'watch-log.ndjson' }
+  }
+}
+
 function Write-Log {
   param([string]$Msg,[string]$Level='INFO')
   if ($Quiet -and $Level -eq 'INFO') { return }
@@ -273,6 +286,7 @@ function Invoke-PesterSelective {
           $histDir = Split-Path -Parent $DeltaHistoryPath
           if ($histDir -and -not (Test-Path -LiteralPath $histDir)) { New-Item -ItemType Directory -Path $histDir -Force | Out-Null }
           $json | Add-Content -LiteralPath $DeltaHistoryPath -Encoding UTF8
+          '' | Add-Content -LiteralPath $DeltaHistoryPath -Encoding UTF8
         } catch { Write-Log "Failed appending delta history: $($_.Exception.Message)" 'WARN' }
       }
     } catch {
