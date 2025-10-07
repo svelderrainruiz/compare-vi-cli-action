@@ -4,6 +4,10 @@ $ErrorActionPreference = 'Stop'
 Describe 'LVCompare flags (report verifications)' -Tag 'Unit' {
   BeforeAll {
     $here = Split-Path -Parent $PSCommandPath
+    function Split-CommandTokens([string]$command) {
+      if (-not $command) { return @() }
+      [regex]::Matches($command, '("[^"]*"|[^ ]+)') | ForEach-Object { $_.Value.Trim('"') }
+    }
     $root = Resolve-Path (Join-Path $here '..')
     # Load CompareVI and helpers without invoking the real CLI
     Import-Module (Join-Path $root 'scripts' 'CompareVI.psm1') -Force
@@ -96,6 +100,27 @@ Describe 'LVCompare flags (report verifications)' -Tag 'Unit' {
     $exec.command | Should -Match $patternHead
     $exec.command | Should -Match '(^|\s)-noattr(\s|$)'
     $exec.command | Should -Match '(^|\s)-nofp(\s|$)'
+    $tokens = Split-CommandTokens $exec.command
+    ($tokens[0] | Split-Path -Leaf) | Should -Be 'LVCompare.exe'
+    $tokens[1] | Should -Be $baseAbs
+    $tokens[2] | Should -Be $headAbs
     @($exec.args) | Should -Be @('-noattr','-nofp')
+  }
+
+  It 'injects -lvpath when LABVIEW_EXE is set' {
+    $paths = New-TestVis
+    $execPath = Join-Path $TestDrive ('lvpath-' + [guid]::NewGuid().ToString('N') + '.json')
+    $labview = 'C:\Fake\LabVIEW.exe'
+    $oldLv = $env:LABVIEW_EXE
+    try {
+      $env:LABVIEW_EXE = $labview
+      Invoke-CompareVI -Base $paths.base -Head $paths.head -CompareExecJsonPath $execPath -FailOnDiff:$false -Executor $script:execZero | Out-Null
+    } finally { $env:LABVIEW_EXE = $oldLv }
+
+    $exec = Get-Content -LiteralPath $execPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $tokens = Split-CommandTokens $exec.command
+    $tokens[3] | Should -Be '-lvpath'
+    $tokens[4] | Should -Be $labview
+    @($exec.args) | Should -Be @('-lvpath',$labview)
   }
 }
