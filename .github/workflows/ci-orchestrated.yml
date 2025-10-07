@@ -43,8 +43,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id
-    || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.sample_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -143,8 +142,7 @@ jobs:
         Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
 
   pester-category:
-    if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy
-      == '' && vars.ORCH_STRATEGY == '') }}
+    if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     needs: [normalize, preflight]
@@ -259,8 +257,7 @@ jobs:
     - name: Ensure session index (fallback)
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{
-        matrix.category }}" -SummaryJson 'pester-summary.json'
+      run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -SummaryJson 'pester-summary.json'
 
     - name: Session index post
       if: always()
@@ -284,8 +281,7 @@ jobs:
           tests/results/${{ matrix.category }}/session-index.json
 
     - name: Upload invoker boot log (category)
-      if: always() && hashFiles(format('tests/results/{0}/_invoker/boot.log', matrix.category))
-        != ''
+      if: always() && hashFiles(format('tests/results/{0}/_invoker/boot.log', matrix.category)) != ''
       uses: actions/upload-artifact@v4
       with:
         name: invoker-boot-${{ matrix.category }}
@@ -313,8 +309,7 @@ jobs:
     - name: Append runner identity
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id
-        || '' }}'
+      run: pwsh -File tools/Write-RunnerIdentity.ps1 -SampleId '${{ github.event.inputs.sample_id || '' }}'
 
     - name: Append artifact map
       if: always()
@@ -326,19 +321,15 @@ jobs:
     - name: Append top failures
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "tests/results/${{
-        matrix.category }}" -Top 5
+      run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -Top 5
 
     - name: Re-run hint
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration
-        '${{ needs.normalize.outputs.include_integration }}' -SampleId '${{ github.event.inputs.sample_id
-        || '' }}'
+      run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -SampleId '${{ github.event.inputs.sample_id || '' }}'
 
   drift:
-    if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy
-      == '' && vars.ORCH_STRATEGY == '') }}
+    if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     needs: [pester-category]
@@ -406,8 +397,7 @@ jobs:
         mode: stop
 
   publish:
-    if: ${{ always() && (inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix'
-      || (inputs.strategy == '' && vars.ORCH_STRATEGY == '')) }}
+    if: ${{ always() && (inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '')) }}
     runs-on: ubuntu-latest
     needs: [lint, pester-category, drift]
     steps:
@@ -531,13 +521,13 @@ jobs:
         GH_STRATEGY: ${{ inputs.strategy }}
         GH_INCLUDE: ${{ needs.normalize.outputs.include_integration }}
         GH_SAMPLE_ID: ${{ inputs.sample_id }}
-      run: "|\n  $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'matrix'
-        }\n  $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }\n\
-        \  $sid = if ($env:GH_SAMPLE_ID) { $env:GH_SAMPLE_ID } else { '<id>' }\n \
-        \ $cmd = \"/run orchestrated strategy={0} include_integration={1} sample_id={2}\"\
-        \ -f $strategy,$include,$sid\n  $lines = @('### Re-run With Same Inputs','',\"\
-        `$ $cmd\")\n  if ($env:GITHUB_STEP_SUMMARY) { $lines -join \"`n\" | Out-File
-        -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }\n"
+      run: |-
+        $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'matrix' }
+        $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }
+        $sid = if ($env:GH_SAMPLE_ID) { $env:GH_SAMPLE_ID } else { '<id>' }
+        $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
+        $lines = @('### Re-run With Same Inputs','',"$ $cmd")
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
   windows-single:
     if: ${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}
     runs-on: [self-hosted, Windows, X64]
@@ -703,10 +693,10 @@ jobs:
         GH_STRATEGY: ${{ inputs.strategy }}
         GH_INCLUDE: ${{ needs.normalize.outputs.include_integration }}
         GH_SAMPLE_ID: ${{ inputs.sample_id }}
-      run: "|\n  $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'single'
-        }\n  $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }\n\
-        \  $sid = if ($env:GH_SAMPLE_ID) { $env:GH_SAMPLE_ID } else { '<id>' }\n \
-        \ $cmd = \"/run orchestrated strategy={0} include_integration={1} sample_id={2}\"\
-        \ -f $strategy,$include,$sid\n  $lines = @('### Re-run With Same Inputs','',\"\
-        `$ $cmd\")\n  if ($env:GITHUB_STEP_SUMMARY) { $lines -join \"`n\" | Out-File
-        -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }\n"
+      run: |-
+        $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'single' }
+        $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }
+        $sid = if ($env:GH_SAMPLE_ID) { $env:GH_SAMPLE_ID } else { '<id>' }
+        $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
+        $lines = @('### Re-run With Same Inputs','',"$ $cmd")
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
