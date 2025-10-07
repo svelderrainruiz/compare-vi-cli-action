@@ -1,0 +1,70 @@
+name: Develop Two-Greens (orchestrated)
+
+on:
+  workflow_run:
+    workflows: ["CI Orchestrated (deterministic chain)"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  two-green:
+    if: |
+      ${{ github.event.workflow_run.head_branch == 'develop' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check last two orchestrated runs on develop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner_repo="${GITHUB_REPOSITORY}"
+          owner="${owner_repo%%/*}"
+          repo="${owner_repo##*/}"
+          wf_name="CI Orchestrated (deterministic chain)"
+          wf_list=$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${owner}/${repo}/actions/workflows")
+          wf_id=$(echo "$wf_list" | jq -r --arg n "$wf_name" '.workflows[] | select(.name==$n) | .id' | head -n1)
+          if [ -z "$wf_id" ]; then
+            echo "::error::Workflow id not found for name: $wf_name"; exit 2
+          fi
+          runs=$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${owner}/${repo}/actions/workflows/${wf_id}/runs?branch=develop&per_page=2")
+          cur=$(echo "$runs" | jq -r '.workflow_runs[0].conclusion // ""')
+          prev=$(echo "$runs" | jq -r '.workflow_runs[1].conclusion // ""')
+          echo "current: $cur, previous: $prev"
+          if [ "$cur" = "success" ] && [ "$prev" = "success" ]; then
+            echo "two_green=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "two_green=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+      - name: Post two-green summary
+        if: always()
+        shell: bash
+        run: |
+          echo "### Develop: Two Consecutive Green Orchestrated Runs" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Workflow: CI Orchestrated (deterministic chain)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: develop" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on issue #88 (signal)
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          body=$(cat <<'EOF'
+          Develop has two consecutive green runs for CI Orchestrated (deterministic chain).
+
+          - Branch: `develop`
+          - Workflow: CI Orchestrated (deterministic chain)
+          EOF
+          )
+          gh issue comment 88 -b "$body"
+
