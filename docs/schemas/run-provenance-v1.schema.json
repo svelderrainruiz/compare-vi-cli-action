@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "run-provenance/v1",
+  "type": "object",
+  "required": [
+    "schema", "schemaVersion", "generatedAtUtc",
+    "repository", "workflow", "eventName",
+    "runId", "runAttempt", "ref", "refName", "branch",
+    "headRef", "headSha"
+  ],
+  "properties": {
+    "schema": { "const": "run-provenance/v1" },
+    "schemaVersion": { "type": "string" },
+    "generatedAtUtc": { "type": "string" },
+    "repository": { "type": "string" },
+    "workflow": { "type": "string" },
+    "eventName": { "type": "string" },
+    "runId": { "type": "string" },
+    "runAttempt": { "type": "string" },
+    "ref": { "type": "string" },
+    "refName": { "type": "string" },
+    "branch": { "type": "string" },
+    "headRef": { "type": "string" },
+    "baseRef": { "type": "string" },
+    "headSha": { "type": "string" },
+    "prNumber": { "type": ["integer", "string"] },
+    "origin_kind": { "type": "string" },
+    "origin_pr": { "type": "string" },
+    "origin_comment_id": { "type": "string" },
+    "origin_comment_url": { "type": "string" },
+    "origin_author": { "type": "string" },
+    "sample_id": { "type": "string" },
+    "include_integration": { "type": "string" },
+    "strategy": { "type": "string" }
+  },
+  "additionalProperties": true
+}
+

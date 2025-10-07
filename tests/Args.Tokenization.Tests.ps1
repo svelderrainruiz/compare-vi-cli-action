@@ -3,10 +3,24 @@ $ErrorActionPreference = 'Stop'
 
 Describe 'LVCompare args tokenization' -Tag 'Unit' {
   BeforeAll {
+    $here = Split-Path -Parent $PSCommandPath
+    $root = Resolve-Path (Join-Path $here '..')
+    $script:ArgModule = Import-Module (Join-Path $root 'scripts' 'ArgTokenization.psm1') -Force -PassThru
+    $script:CompareModule = Import-Module (Join-Path $root 'scripts' 'CompareVI.psm1') -Force -PassThru
+
     function Convert-TokensForAssert($arr) {
       $out = @()
-      foreach ($t in @($arr)) { if ($t -is [string]) { $out += ($t -replace '\\\\','\\') } else { $out += $t } }
+      foreach ($t in @($arr)) { if ($t -is [string]) { $out += $t.Replace('\\','\') } else { $out += $t } }
       ,$out
+    }
+
+    function Invoke-GetLVCompareArgTokens([object]$Spec) {
+      & $script:ArgModule { param($value) Get-LVCompareArgTokens -Spec $value } $Spec
+    }
+
+    function Invoke-ConvertArgTokenList([string[]]$Tokens) {
+      if (-not $Tokens) { return @() }
+      & $script:CompareModule { param($innerTokens) Convert-ArgTokenList -tokens $innerTokens } $Tokens
     }
   }
   
@@ -15,11 +29,8 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
   $argSpec = "-nobdcosm,-nofppos,-noattr,'-lvpath C:/Path With Space/LabVIEW.exe','--log C:/t x/l.log'"
 
   # CompareVI (direct tokenization pipeline)
-  . (Join-Path $PSScriptRoot '..' 'scripts' 'CompareVI.ps1')
-  $pattern = Get-LVCompareArgTokenPattern
-  $tokens = [regex]::Matches($argSpec, $pattern) | ForEach-Object { $_.Value }
-  $cliArgs = @(); foreach ($t in $tokens) { $tok = $t.Trim(); if ($tok.StartsWith('"') -and $tok.EndsWith('"')) { $tok = $tok.Substring(1,$tok.Length-2) } elseif ($tok.StartsWith("'") -and $tok.EndsWith("'")) { $tok = $tok.Substring(1,$tok.Length-2) }; if ($tok){ $cliArgs += $tok } }
-  $normalized = Convert-ArgTokenList -tokens $cliArgs
+  $cliArgs = Invoke-GetLVCompareArgTokens -Spec $argSpec
+  $normalized = Invoke-ConvertArgTokenList -Tokens $cliArgs
   $expected = @('-nobdcosm','-nofppos','-noattr','-lvpath','C:\Path With Space\LabVIEW.exe','--log','C:\t x\l.log')
   (Convert-TokensForAssert $normalized) | Should -Be (Convert-TokensForAssert $expected)
 
@@ -39,11 +50,8 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
   It 'tokenizes whitespace-delimited flags with double-quoted values' {
   $argSpec = '-nobdcosm -nofppos -noattr "--log C:\a b\z.txt" -lvpath=C:\X\LabVIEW.exe "-lvpath C:\Y\LabVIEW.exe"'
   # CompareVI (whitespace/equals pipeline only)
-  . (Join-Path $PSScriptRoot '..' 'scripts' 'CompareVI.ps1')
-  $pattern2 = Get-LVCompareArgTokenPattern
-  $tok2 = [regex]::Matches($argSpec, $pattern2) | ForEach-Object { $_.Value }
-  $list2 = @(); foreach ($t in $tok2) { $u=$t.Trim(); if ($u.StartsWith('"') -and $u.EndsWith('"')){$u=$u.Substring(1,$u.Length-2)} elseif ($u.StartsWith("'") -and $u.EndsWith("'")){$u=$u.Substring(1,$u.Length-2)}; if ($u){$list2+=$u}}
-  $norm2 = Convert-ArgTokenList -tokens $list2
+  $list2 = Invoke-GetLVCompareArgTokens -Spec $argSpec
+  $norm2 = Invoke-ConvertArgTokenList -Tokens $list2
   $expected3 = @('-nobdcosm','-nofppos','-noattr','--log','C:\a b\z.txt','-lvpath','C:\X\LabVIEW.exe','-lvpath','C:\Y\LabVIEW.exe')
   (Convert-TokensForAssert $norm2) | Should -Be (Convert-TokensForAssert $expected3)
   }
@@ -51,11 +59,8 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
   It 'tokenizes equals-assignment forms for flags requiring values' {
   $argSpec = "'-lvpath=C:\X Space\LabVIEW.exe', '--log=C:\logs\a b\log.txt'"
     # CompareVI pipeline
-    . (Join-Path $PSScriptRoot '..' 'scripts' 'CompareVI.ps1')
-    $pattern = Get-LVCompareArgTokenPattern
-    $tokens = [regex]::Matches($argSpec, $pattern) | ForEach-Object { $_.Value }
-    $cliArgs = @(); foreach ($t in $tokens) { $tok=$t.Trim(); if ($tok.StartsWith('"') -and $tok.EndsWith('"')){ $tok=$tok.Substring(1,$tok.Length-2)} elseif ($tok.StartsWith("'") -and $tok.EndsWith("'")){ $tok=$tok.Substring(1,$tok.Length-2)}; if ($tok){ $cliArgs += $tok } }
-    $normalized = Convert-ArgTokenList -tokens $cliArgs
+    $cliArgs = Invoke-GetLVCompareArgTokens -Spec $argSpec
+    $normalized = Invoke-ConvertArgTokenList -Tokens $cliArgs
   $expected = @('-lvpath','C:\X Space\LabVIEW.exe','--log','C:\logs\a b\log.txt')
   (Convert-TokensForAssert $normalized) | Should -Be (Convert-TokensForAssert $expected)
 
@@ -76,11 +81,8 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
 '--log C:\a b\x.txt',-nofppos,-lvpath=C:\Y\LabVIEW.exe -noattr "-lvpath C:\Z\LabVIEW.exe"
 '@
     # CompareVI pipeline
-    . (Join-Path $PSScriptRoot '..' 'scripts' 'CompareVI.ps1')
-    $pattern = Get-LVCompareArgTokenPattern
-    $tokens = [regex]::Matches($argSpec, $pattern) | ForEach-Object { $_.Value }
-    $cliArgs = @(); foreach ($t in $tokens) { $tok=$t.Trim(); if ($tok.StartsWith('"') -and $tok.EndsWith('"')){ $tok=$tok.Substring(1,$tok.Length-2)} elseif ($tok.StartsWith("'") -and $tok.EndsWith("'")){ $tok=$tok.Substring(1,$tok.Length-2)}; if ($tok){ $cliArgs += $tok } }
-    $normalized = Convert-ArgTokenList -tokens $cliArgs
+    $cliArgs = Invoke-GetLVCompareArgTokens -Spec $argSpec
+    $normalized = Invoke-ConvertArgTokenList -Tokens $cliArgs
     $expected = @('--log','C:\a b\x.txt','-nofppos','-lvpath','C:\Y\LabVIEW.exe','-noattr','-lvpath','C:\Z\LabVIEW.exe')
   (Convert-TokensForAssert $normalized) | Should -Be (Convert-TokensForAssert $expected)
 
@@ -100,11 +102,8 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
     # We exercise CompareVI's tokenization; while CompareVI itself validates during Invoke, we emulate the normalization and then
     # perform a simple local validation to ensure a missing value would be caught upstream before CLI invocation.
     $argSpec = "-nobdcosm -lvpath -noattr"
-    . (Join-Path $PSScriptRoot '..' 'scripts' 'CompareVI.ps1')
-    $pattern = Get-LVCompareArgTokenPattern
-    $tok = [regex]::Matches($argSpec, $pattern) | ForEach-Object { $_.Value }
-    $list = @(); foreach ($t in $tok) { $u=$t.Trim(); if ($u.StartsWith('"') -and $u.EndsWith('"')){ $u=$u.Substring(1,$u.Length-2)} elseif ($u.StartsWith("'") -and $u.EndsWith("'")){ $u=$u.Substring(1,$u.Length-2)}; if ($u){ $list += $u } }
-    $norm = Convert-ArgTokenList -tokens $list
+    $list = Invoke-GetLVCompareArgTokens -Spec $argSpec
+    $norm = Invoke-ConvertArgTokenList -Tokens $list
     # Local validation mirror: -lvpath must be followed by a non-flag value
     $threw = $false
     try {

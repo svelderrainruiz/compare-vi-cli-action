@@ -26,6 +26,58 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: CLI lints (notice on develop)
+        if: github.ref_name == 'develop' || github.base_ref == 'develop'
+        uses: ./.github/actions/cli-lints
+        with:
+          enforce: 'false'
+          linkcheck: 'true'
+          actionlint-version: '1.7.7'
+          relaxed-path: 'docs/releases/**/*.md'
+
+      - name: CLI lints (enforced on main)
+        if: github.ref_name == 'main' || github.base_ref == 'main'
+        uses: ./.github/actions/cli-lints
+        with:
+          enforce: 'true'
+          linkcheck: 'true'
+          actionlint-version: '1.7.7'
+          relaxed-path: 'docs/releases/**/*.md'
+
+      - name: Guard tracked build artifacts (enforced)
+        shell: pwsh
+        run: |
+          # Optional allowlist via env ALLOWLIST_TRACKED_ARTIFACTS (semicolon-separated globs)
+          # and/or file-based allowlist at .ci/build-artifacts-allow.txt
+          pwsh -File tools/Check-TrackedBuildArtifacts.ps1 -AllowListPath '.ci/build-artifacts-allow.txt'
+
+      - name: Surface build artifacts allowlist (if any)
+        shell: pwsh
+        run: |
+          $path = '.ci/build-artifacts-allow.txt'
+          if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $lines = Get-Content -LiteralPath $path | Where-Object { $_ -and -not ($_.Trim().StartsWith('#')) } | ForEach-Object { $_.Trim() }
+            if ($lines.Count -gt 0 -and $env:GITHUB_STEP_SUMMARY) {
+              $out = @('### Build Artifacts Allowlist','')
+              foreach($l in $lines){ $out += ('- ' + $l) }
+              $out -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+          }
+
+      - name: Build artifacts guard — ad-hoc allowlist usage
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $msg = @(
+              '### Build Artifacts Guard — Ad-hoc Allowlist',
+              '',
+              '- To permit specific tracked paths temporarily, set ALLOWLIST_TRACKED_ARTIFACTS to a semicolon-separated list of globs.',
+              "- Example: ``ALLOWLIST_TRACKED_ARTIFACTS='src/Legacy/**/bin/**;src/Legacy/**/obj/**'``",
+              '- Prefer using .ci/build-artifacts-allow.txt for committed, reviewable exceptions.'
+            ) -join "`n"
+            $msg | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
       - name: Install actionlint
         run: |
           mkdir -p ./bin
@@ -281,6 +333,14 @@ jobs:
       - name: Copy snapshot for next run reference
         shell: pwsh
         run: Copy-Item -LiteralPath fixture-validation.json -Destination fixture-validation-prev.json -Force
+
+      - name: Agent wait summary (notice-only)
+        if: always()
+        uses: ./.github/actions/agent-wait-post
+        with:
+          results-dir: tests/results
+          fail-on-outside: 'false'
+          upload-artifact: 'false'
 
   session-index:
     runs-on: ubuntu-latest

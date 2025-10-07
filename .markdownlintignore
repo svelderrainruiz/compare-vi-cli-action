@@ -3,3 +3,4 @@ bin/
 docs/knowledgebase/
 .copilot-instructions.md
 .github/copilot-instructions.md
+issue_88_hardened.md

@@ -61,11 +61,17 @@ if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $BaseVi)) { Write-Host "Warmup: Base VI not found: $BaseVi" -ForegroundColor Yellow; return }
 if (-not (Test-Path -LiteralPath $HeadVi)) { Write-Host "Warmup: Head VI not found: $HeadVi" -ForegroundColor Yellow; return }
 
-Write-Host "Warmup: starting LVCompare to spawn LabVIEW (will NOT close LVCompare)"
-Write-StepSummaryLine "- Warmup: starting LVCompare to spawn LabVIEW (LVCompare left running)"
-
-# Start LVCompare normally (UI allowed). Do not suppress UI; do not redirect.
-$p = Start-Process -FilePath $cli -ArgumentList @($BaseVi,$HeadVi) -PassThru
+if ($env:WARMUP_MODE -eq 'preflight' -or $env:WARMUP_SKIP_ARGS -eq '1') {
+  Write-Host "Warmup: starting LVCompare without VI args (preflight); leaving it running"
+  Write-StepSummaryLine "- Warmup: LVCompare preflight (no args); leaving it running"
+  $p = Start-Process -FilePath $cli -PassThru
+}
+else {
+  Write-Host "Warmup: starting LVCompare to spawn LabVIEW (will NOT close LVCompare)"
+  Write-StepSummaryLine "- Warmup: starting LVCompare to spawn LabVIEW (LVCompare left running)"
+  # Start LVCompare normally (UI allowed). Do not suppress UI; do not redirect.
+  $p = Start-Process -FilePath $cli -ArgumentList @($BaseVi,$HeadVi) -PassThru
+}
 
 # Poll for LabVIEW to appear
 $deadline = (Get-Date).AddSeconds([Math]::Max(1,$TimeoutSeconds))

@@ -76,12 +76,16 @@ jobs:
           read -r -a arr <<< "$tail"
           for tok in "${arr[@]}"; do
             case "$tok" in
+              # strategy controls
               strategy=*) strategy="${tok#strategy=}" ;;
-              single) strategy="single" ;;
-              matrix) strategy="matrix" ;;
-              include_integration=*) integ="${tok#include_integration=}" ;;
-              integration=true|include_integration=true) integ="true" ;;
+              single)     strategy="single" ;;
+              matrix)     strategy="matrix" ;;
+              # explicit integration toggles first (more specific)
+              integration=true|include_integration=true)   integ="true" ;;
               integration=false|include_integration=false) integ="false" ;;
+              # generic include_integration=... after specifics
+              include_integration=*) integ="${tok#include_integration=}" ;;
+              # sampling
               sample=*|sample_id=*) sample="${tok#*=}" ;;
             esac
           done

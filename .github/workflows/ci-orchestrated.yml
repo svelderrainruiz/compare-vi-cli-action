@@ -5,6 +5,26 @@ on:
     branches: [develop]
   workflow_dispatch:
     inputs:
+      origin_kind:
+        description: 'Trigger origin (e.g., issue_comment)'
+        required: false
+        type: string
+      origin_pr:
+        description: 'PR number when triggered from a comment'
+        required: false
+        type: string
+      origin_comment_id:
+        description: 'Comment id when triggered from a comment'
+        required: false
+        type: string
+      origin_comment_url:
+        description: 'Comment URL when triggered from a comment'
+        required: false
+        type: string
+      origin_author:
+        description: 'Comment author login'
+        required: false
+        type: string
       strategy:
         description: 'Execution strategy (matrix or single)'
         required: false
@@ -37,11 +57,33 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
+        timeout-seconds: '60'
+        retries: '1'
+        retry-delay-seconds: '0'
     - name: Normalize include_integration
       id: b
       uses: ./.github/actions/bool-normalize
       with:
         value: ${{ inputs.include_integration || 'true' }}
+    - name: Write run provenance
+      shell: pwsh
+      env:
+        EV_ORIGIN_KIND: ${{ inputs.origin_kind || '' }}
+        EV_ORIGIN_PR: ${{ inputs.origin_pr || '' }}
+        EV_ORIGIN_COMMENT_ID: ${{ inputs.origin_comment_id || '' }}
+        EV_ORIGIN_COMMENT_URL: ${{ inputs.origin_comment_url || '' }}
+        EV_ORIGIN_AUTHOR: ${{ inputs.origin_author || '' }}
+        EV_SAMPLE_ID: ${{ inputs.sample_id || '' }}
+        EV_INCLUDE_INTEGRATION: ${{ inputs.include_integration || 'true' }}
+        EV_STRATEGY: ${{ inputs.strategy || 'matrix' }}
+      run: |
+        pwsh -NoLogo -NoProfile -File tools/Write-RunProvenance.ps1 -ResultsDir 'tests/results' -AppendStepSummary
+    - name: Upload run provenance
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: orchestrated-provenance
+        path: tests/results/provenance.json
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -81,8 +123,7 @@ jobs:
           Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
         } else { Write-Host "LVCompare present: $cli" }
         $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
-        if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join 
-        ))"; exit 1 }
+        if ($lv) { Write-Host ("::error::LabVIEW.exe is running (PID(s): {0})" -f ($lv.Id -join ',')); exit 1 }
         Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
         if ($env:GITHUB_STEP_SUMMARY) {
           $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
@@ -118,20 +159,45 @@ jobs:
       LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
     steps:
     - uses: actions/checkout@v5
-    - name: LabVIEW warmup (best-effort)
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: pwsh -File tools/Warmup-LabVIEW.ps1
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
+    - name: Snapshot processes (pre-invoker)
+      shell: pwsh
+      run: |
+        $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+        $lines = @('### Pre-Invoker Process Snapshot','')
+        foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
     - name: Ensure Invoker (start)
+      id: inv_start_matrix
+      continue-on-error: true
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
         results-dir: tests/results
         category: ${{ matrix.category }}
+        timeout-seconds: '60'
+        retries: '3'
+        retry-delay-seconds: '7'
+
+    - name: LabVIEW warmup (preflight; leave LVCompare running)
+      if: runner.os == 'Windows'
+      env:
+        WARMUP_SKIP_ARGS: '1'
+      shell: pwsh
+      run: pwsh -File tools/Warmup-LabVIEW.ps1
+
+    - name: Snapshot processes (post-invoker)
+      shell: pwsh
+      run: |
+        $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+        $lines = @('### Post-Invoker Process Snapshot','')
+        foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+        if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
     - name: Prepare fixture copies (base/head)
+      if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       id: fixtures
       uses: ./.github/actions/prepare-fixtures
     - name: Export fixture env for tests
@@ -174,6 +240,7 @@ jobs:
         }
         "include=$($inc -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
     - name: Run Pester tests via local dispatcher (category)
+      if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $inc = @()
@@ -211,6 +278,13 @@ jobs:
           tests/results/${{ matrix.category }}/pester-summary.json
           tests/results/${{ matrix.category }}/pester-failures.json
           tests/results/${{ matrix.category }}/session-index.json
+
+    - name: Upload invoker boot log (category)
+      if: always() && hashFiles(format('tests/results/{0}/_invoker/boot.log', matrix.category)) != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: invoker-boot-${{ matrix.category }}
+        path: tests/results/${{ matrix.category }}/_invoker/boot.log
 
     - name: Runner Unblock Guard
       if: always()
@@ -293,6 +367,19 @@ jobs:
         validate-schema: true
         upload: true
         artifact-name: fixture-drift-session-index
+
+    - name: Parse Compare Exec JSON (drift)
+      if: always()
+      shell: pwsh
+      run: |
+        pwsh -File tools/Parse-CompareExec.ps1 -SearchDir 'results/fixture-drift' -OutJson 'results/fixture-drift/compare-outcome.json'
+
+    - name: Upload compare outcome (drift)
+      if: always() && hashFiles('results/fixture-drift/compare-outcome.json') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: compare-outcome-drift
+        path: results/fixture-drift/compare-outcome.json
 
     - name: Runner Unblock Guard
       if: always()
@@ -377,7 +464,53 @@ jobs:
     - name: Summarize Pester categories
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Summarize-PesterCategories.ps1 -BaseDir 'cats' -Categories @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+      run: |
+        $cats = @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+        & (Join-Path $PWD 'tools/Summarize-PesterCategories.ps1') -BaseDir 'cats' -Categories $cats
+
+    - name: Download run provenance artifact
+      if: always()
+      uses: actions/download-artifact@v4
+      with:
+        name: orchestrated-provenance
+        path: prov
+
+    - name: Validate run provenance (schema-lite)
+      if: always()
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $json = Join-Path 'prov' 'provenance.json'
+        if (Test-Path $json) {
+          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/run-provenance-v1.schema.json
+          $status = if ($LASTEXITCODE -eq 0) { 'ok' } else { 'fail' }
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $lines = @('### Run Provenance Schema','',"- Status: $status","- File: $json")
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+        } else {
+          if ($env:GITHUB_STEP_SUMMARY) { "### Run Provenance Schema`n- File: (missing) $json" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        }
+
+    - name: Validate session-index (categories) schema-lite
+      if: always()
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        $cats = @('dispatcher','fixtures','schema','comparevi','loop','psummary','workflow')
+        $ok=0; $fail=0; $miss=0
+        foreach ($c in $cats) {
+          $p1 = Join-Path (Join-Path 'cats' $c) 'tests/results/session-index.json'
+          $p2 = Join-Path (Join-Path 'cats' $c) 'session-index.json'
+          $json = if (Test-Path $p1) { $p1 } elseif (Test-Path $p2) { $p2 } else { $null }
+          if (-not $json) { $miss++; continue }
+          pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath docs/schemas/session-index-v1.schema.json
+          if ($LASTEXITCODE -eq 0) { $ok++ } else { $fail++ }
+        }
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### Session Index Schema (categories)','',"- ok: $ok","- fail: $fail","- missing: $miss")
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
   # Single Windows job path (v2 folded in)
   windows-single:
@@ -413,17 +546,41 @@ jobs:
             exit 1
           }
 
-      - name: Warmup LabVIEW (best-effort; leave LVCompare running)
+      - name: Snapshot processes (pre-invoker)
         shell: pwsh
-        run: pwsh -File tools/Warmup-LabVIEW.ps1
+        run: |
+          $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+          $lines = @('### Pre-Invoker Process Snapshot','')
+          foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+          if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
       - name: Ensure Invoker (start)
+        id: inv_start_single
+        continue-on-error: true
         uses: ./.github/actions/ensure-invoker
         with:
           mode: start
           results-dir: tests/results
+          timeout-seconds: '60'
+          retries: '1'
+          retry-delay-seconds: '0'
+
+      - name: Warmup LabVIEW (preflight; leave LVCompare running)
+        env:
+          WARMUP_SKIP_ARGS: '1'
+        shell: pwsh
+        run: pwsh -File tools/Warmup-LabVIEW.ps1
+
+      - name: Snapshot processes (post-invoker/warmup)
+        shell: pwsh
+        run: |
+          $procs = Get-Process | Where-Object { $_.Name -in 'pwsh','LVCompare','LabVIEW' } | Select-Object Name,Id,MainWindowTitle
+          $lines = @('### Post-Invoker/Warmup Process Snapshot','')
+          foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
+          if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
       - name: Pester categories (serial, deterministic)
+        if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -443,6 +600,7 @@ jobs:
           }
 
       - name: Drift (invoker; reuse LabVIEW via -lvpath)
+        if: ${{ steps.inv_start_single.outputs.ready == 'true' }}
         uses: ./.github/actions/fixture-drift
         with:
           render-report: 'true'
@@ -474,6 +632,13 @@ jobs:
           cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
           process-names: 'conhost,pwsh,LabVIEW,LVCompare'
 
+      - name: Upload invoker boot log (single)
+        if: always() && hashFiles('tests/results/_invoker/boot.log') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoker-boot-single
+          path: tests/results/_invoker/boot.log
+
       - name: Append final summary (single)
         if: always()
         shell: pwsh
@@ -482,6 +647,19 @@ jobs:
           $lines += '- No cleanup; no UI suppression; LVCompare-only'
           $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Agent wait summary (single)
+        if: always()
+        uses: ./.github/actions/agent-wait-post
+        with:
+          results-dir: tests/results
+          fail-on-outside: 'false'
+          upload-artifact: 'false'
+
+      - name: Send Ctrl+C to lingering consoles (optional)
+        if: always() && env.SEND_CTRL_C == '1'
+        shell: pwsh
+        run: pwsh -File tools/Send-CtrlC.ps1 -Names 'pwsh','conhost' -Max 5
 
 
 

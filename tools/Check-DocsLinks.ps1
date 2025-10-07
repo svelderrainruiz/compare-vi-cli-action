@@ -1,30 +1,60 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 <#!
 .SYNOPSIS
   Quick link check across Markdown files.
 .DESCRIPTION
-  Scans *.md for links and validates local relative targets exist. Optional -External checks http/https with HEAD.
+  Scans *.md for links and validates local relative targets exist. Optional HTTP HEAD checks for external links.
 .PARAMETER Path
   Root directory to scan (default: repo root).
 .PARAMETER External
+  Also check http/https links with a short timeout. (Alias for -Http)
+.PARAMETER Http
   Also check http/https links with a short timeout.
+.PARAMETER HttpTimeoutSec
+  Timeout seconds for HTTP HEAD checks (default: 5).
+.PARAMETER Ignore
+  Glob patterns to ignore (e.g., node_modules/**, bin/**).
+.PARAMETER AllowListPath
+  Optional allowlist file for links to ignore, one per line (default: .ci/link-allowlist.txt).
+.PARAMETER OutputJson
+  Optional path to write a JSON report.
 .PARAMETER Quiet
   Reduce output noise; still returns non-zero exit for failures.
 #>
 param(
   [string]$Path = '.',
   [switch]$External,
+  [switch]$Http,
+  [int]$HttpTimeoutSec = 5,
+  [string[]]$Ignore,
+  [string]$AllowListPath = '.ci/link-allowlist.txt',
+  [string]$OutputJson,
   [switch]$Quiet
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Match-Any($value,[string[]]$patterns){
+  if (-not $patterns -or $patterns.Count -eq 0) { return $false }
+  foreach($pat in $patterns){ if ($value -like $pat) { return $true } }
+  return $false
+}
+function Write-Info($msg){ if (-not $Quiet) { Write-Host $msg -ForegroundColor DarkGray } }
+
+$checkHttp = $External -or $Http
 $root = Resolve-Path -LiteralPath $Path
 $md = Get-ChildItem -LiteralPath $root -Recurse -File -Include *.md -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -notmatch "\\\.git\\|\\node_modules\\|\\.venv\\|\\dist\\|\\build\\|\\coverage\\" }
-$missing = @(); $badHttp = @()
+if ($Ignore) {
+  $md = $md | Where-Object { $p = $_.FullName; -not (Match-Any $p $Ignore) }
+}
 
-function Write-Info($msg){ if (-not $Quiet) { Write-Host $msg -ForegroundColor DarkGray } }
+$allow = @()
+if ($AllowListPath -and (Test-Path -LiteralPath $AllowListPath -PathType Leaf)) {
+  $allow = Get-Content -LiteralPath $AllowListPath -ErrorAction SilentlyContinue | Where-Object { $_ -and -not ($_.Trim().StartsWith('#')) } | ForEach-Object { $_.Trim() }
+}
+
+$missing = @(); $badHttp = @()
 
 foreach ($f in $md) {
   $text = Get-Content -LiteralPath $f.FullName -Raw
@@ -34,10 +64,15 @@ foreach ($f in $md) {
     $target = $m.Groups[1].Value.Trim()
     if ($target -match '^(mailto:|#)') { continue }
     if ($target -match '^(https?://)') {
-      if (-not $External) { continue }
+      if (-not $checkHttp) { continue }
       try {
-        $resp = Invoke-WebRequest -Method Head -Uri $target -TimeoutSec 5 -UseBasicParsing
-        if (-not $resp.StatusCode -or $resp.StatusCode -ge 400) { $badHttp += [pscustomobject]@{ file=$f.FullName; link=$target; code=$resp.StatusCode } }
+        $req = [System.Net.HttpWebRequest]::Create($target)
+        $req.Method = 'HEAD'
+        $req.Timeout = 1000 * [Math]::Max(1,$HttpTimeoutSec)
+        $resp = $req.GetResponse(); $code = 200
+        try { $code = $resp.StatusCode.Value__ } catch {}
+        $resp.Close()
+        if ($code -ge 400) { $badHttp += [pscustomobject]@{ file=$f.FullName; link=$target; code=$code } }
       } catch { $badHttp += [pscustomobject]@{ file=$f.FullName; link=$target; code='ERR' } }
       continue
     }
@@ -48,7 +83,9 @@ foreach ($f in $md) {
     if (-not $p) { continue }
     $candidate = Join-Path (Split-Path -Parent $f.FullName) $p
     if (-not (Test-Path -LiteralPath $candidate)) {
-      $missing += [pscustomobject]@{ file=$f.FullName; link=$target }
+      if (-not (Match-Any $candidate $allow)) {
+        $missing += [pscustomobject]@{ file=$f.FullName; link=$target }
+      }
     }
   }
 }
@@ -62,5 +99,20 @@ if ($badHttp.Count -gt 0) {
   $badHttp | ForEach-Object { Write-Host "- $($_.file): $($_.link) [code=$($_.code)]" }
 }
 
+if ($OutputJson) {
+  $out = [ordered]@{ schema='docs-links/v1'; generatedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); errors=@{ local=$missing; http=$badHttp } }
+  $dir = Split-Path -Parent $OutputJson
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  $out | ConvertTo-Json -Depth 6 | Out-File -FilePath $OutputJson -Encoding utf8
+}
+
+if ($env:GITHUB_STEP_SUMMARY) {
+  $lines = @('### Docs Links','',"Local errors: $($missing.Count)","HTTP errors: $($badHttp.Count)")
+  ($missing | Select-Object -First 5) | ForEach-Object { $lines += ('- ' + $_.file + ' -> ' + $_.link) }
+  ($badHttp | Select-Object -First 5) | ForEach-Object { $lines += ('- ' + $_.file + ' -> ' + $_.link + ' (HTTP)') }
+  $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+}
+
 if ($missing.Count -gt 0 -or $badHttp.Count -gt 0) { exit 2 }
 Write-Info 'All links look good.'
+

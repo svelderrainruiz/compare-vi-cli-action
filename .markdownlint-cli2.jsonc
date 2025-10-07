@@ -7,6 +7,11 @@
     "**/node_modules/**",
     "**/bin/**",
     "**/docs/knowledgebase/**",
-    ".github/copilot-instructions.md"
+    ".github/copilot-instructions.md",
+    "tests/results/**",
+    "results/**",
+    "tmp-agg/**",
+    "issues-drafts/**",
+    "issue_88*.md"
   ]
 }

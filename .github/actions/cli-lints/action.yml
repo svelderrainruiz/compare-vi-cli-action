@@ -1,0 +1,89 @@
+name: CLI Lints
+description: Run actionlint, markdownlint (strict + optional relaxed), and optional docs link checks
+inputs:
+  enforce:
+    description: 'Fail on violations (true) or only report (false)'
+    required: false
+    default: 'true'
+  linkcheck:
+    description: 'Run docs link checker'
+    required: false
+    default: 'true'
+  actionlint-version:
+    description: 'Pinned actionlint version'
+    required: false
+    default: '1.7.7'
+  relaxed-path:
+    description: 'Optional path glob for relaxed markdown lint (e.g., docs/releases/**/*.md)'
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Setup git metadata (for changed files if needed)
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+    - name: Cache actionlint
+      uses: actions/cache@v4
+      with:
+        path: ./bin/actionlint
+        key: actionlint-${{ inputs.actionlint-version }}-${{ runner.os }}
+
+    - name: Install actionlint
+      if: ${{ !hashFiles('./bin/actionlint') }}
+      shell: bash
+      run: |
+        mkdir -p ./bin
+        curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- ${{ inputs.actionlint-version }} ./bin
+
+    - name: Run actionlint
+      shell: bash
+      continue-on-error: ${{ inputs.enforce != 'true' }}
+      run: ./bin/actionlint -color
+
+    - name: Cache npm (markdownlint-cli)
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: npm-markdownlint-cli-${{ runner.os }}-${{ hashFiles('.markdownlint.json*', '.markdownlintignore') }}
+
+    - name: Install markdownlint-cli
+      shell: bash
+      run: npm install -g markdownlint-cli
+
+    - name: Run markdownlint (strict)
+      shell: bash
+      continue-on-error: ${{ inputs.enforce != 'true' }}
+      run: markdownlint "**/*.md" --ignore node_modules
+
+    - name: Run markdownlint (relaxed path)
+      if: ${{ inputs.relaxed-path != '' }}
+      shell: bash
+      continue-on-error: ${{ inputs.enforce != 'true' }}
+      run: |
+        if [ -f "docs/.markdownlint.relaxed.jsonc" ]; then
+          markdownlint "${{ inputs.relaxed-path }}" -c docs/.markdownlint.relaxed.jsonc --ignore node_modules
+        fi
+
+    - name: Docs link check (optional)
+      if: ${{ inputs.linkcheck == 'true' }}
+      shell: pwsh
+      continue-on-error: ${{ inputs.enforce != 'true' }}
+      run: |
+        pwsh -File tools/Check-DocsLinks.ps1 -Ignore @('node_modules/**','bin/**','vendor/**') -AllowListPath '.ci/link-allowlist.txt' -OutputJson 'tests/results/lint/docs-links.json'
+
+    - name: Append lint summary
+      shell: pwsh
+      run: |
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### CLI Lints','')
+          $lines += ('- actionlint: completed')
+          $lines += ('- markdownlint (strict): completed')
+          if ('${{ inputs.relaxed-path }}' -ne '') { $lines += ('- markdownlint (relaxed): ' + '${{ inputs.relaxed-path }}') }
+          if (Test-Path 'tests/results/lint/docs-links.json') {
+            try { $j = Get-Content -LiteralPath 'tests/results/lint/docs-links.json' -Raw | ConvertFrom-Json; $lines += ('- docs links: ' + ($j.errors.Count) + ' errors') } catch { $lines += '- docs links: summary available' }
+          } else { $lines += '- docs links: skipped' }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
