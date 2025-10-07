@@ -305,11 +305,25 @@ runs:
         if ($latest) { $sum = Join-Path $latest.FullName 'drift-summary.json' }
         $status = 'unknown'; $exitCode = ''
         $artifactsList = @()
+        $reportPath = $null
+        if ($latest) {
+          $candidateReport = Join-Path $latest.FullName 'compare-report.html'
+          if (Test-Path $candidateReport) { $reportPath = (Resolve-Path -LiteralPath $candidateReport).Path }
+        }
         if ($sum -and (Test-Path $sum)) {
           $j = Get-Content -LiteralPath $sum -Raw | ConvertFrom-Json
           if ($j.status) { $status = [string]$j.status }
           if ($j.exitCode) { $exitCode = [string]$j.exitCode }
           if ($j.artifactPaths) { $artifactsList = @($j.artifactPaths) }
+        }
+        if (-not $reportPath -and $artifactsList.Count -gt 0) {
+          foreach ($rel in $artifactsList) {
+            if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+            if ($rel -match 'compare-report.html$') {
+              $resolved = if ([System.IO.Path]::IsPathRooted($rel)) { $rel } else { Join-Path (Get-Location) $rel }
+              if (Test-Path -LiteralPath $resolved) { $reportPath = (Resolve-Path -LiteralPath $resolved).Path; break }
+            }
+          }
         }
         # Query run artifacts for listing (names only; link to run page for downloads)
         $repoFull = '${{ github.repository }}'
@@ -364,9 +378,23 @@ runs:
               $lines += 'Files on disk:'
               foreach ($f in $jj.files) {
                 $p = $f.path; $t = $f.lastWriteTimeUtc; $len = $f.length
-                if ($len -ne $null) { $lines += "- $p — $t ($len bytes)" } else { $lines += "- $p — $t" }
+                if ($len -ne $null) { $lines += "- $p - $t ($len bytes)" } else { $lines += "- $p - $t" }
               }
             }
+          } catch {}
+        }
+        if ($reportPath -and (Test-Path $reportPath)) {
+          try {
+            $htmlRaw = Get-Content -LiteralPath $reportPath -Raw
+            $encoded = $htmlRaw.Replace('&','&amp;').Replace('<','&lt;').Replace('>','&gt;')
+            if ($encoded.Length -gt 20000) { $encoded = $encoded.Substring(0,20000) + "`n... (truncated)" }
+            $lines += ''
+            $lines += '<details><summary>Fixture Drift HTML report (inline preview)</summary>'
+            $lines += ''
+            $lines += '<pre>'
+            foreach ($line in $encoded -split "`n") { $lines += $line }
+            $lines += '</pre>'
+            $lines += '</details>'
           } catch {}
         }
         $body = ($lines -join "`n")
