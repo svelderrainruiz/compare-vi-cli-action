@@ -43,6 +43,24 @@ function Invoke-Git {
   return ($stdout -split "`r?`n" | Where-Object { $_ -ne '' } | Select-Object -First 1).Trim()
 }
 
+function Get-ProcessList {
+  param($ProcessContainer)
+  if (-not $ProcessContainer) { return @() }
+  if (-not ($ProcessContainer.PSObject.Properties.Name -contains 'Processes')) { return @() }
+  if (-not $ProcessContainer.Processes) { return @() }
+  return @($ProcessContainer.Processes | Where-Object { $_ })
+}
+
+function Get-PropertyValue {
+  param(
+    $Object,
+    [string]$Property
+  )
+  if ($null -eq $Object) { return $null }
+  if (-not ($Object.PSObject.Properties.Name -contains $Property)) { return $null }
+  return $Object.$Property
+}
+
 function Get-DashboardSnapshot {
   param(
     [string]$GroupName,
@@ -210,7 +228,7 @@ function Write-TerminalReport {
   $lcCount = $labview.LVCompare.Count
   if ($lvCount -gt 0) {
     Write-Host "  LabVIEW count : $lvCount"
-    $displayLv = @($labview.LabVIEW.Processes | Select-Object -First 3)
+    $displayLv = Get-ProcessList -ProcessContainer $labview.LabVIEW | Select-Object -First 3
     foreach ($proc in $displayLv) {
       $startDisplay = $proc.startTimeUtc
       if ($proc.startTimeUtc) {
@@ -234,7 +252,7 @@ function Write-TerminalReport {
   }
   if ($lcCount -gt 0) {
     Write-Host "  LVCompare count : $lcCount"
-    $displayLc = @($labview.LVCompare.Processes | Select-Object -First 3)
+    $displayLc = Get-ProcessList -ProcessContainer $labview.LVCompare | Select-Object -First 3
     foreach ($proc in $displayLc) {
       $startDisplay = $proc.startTimeUtc
       if ($proc.startTimeUtc) {
@@ -302,6 +320,14 @@ function Write-TerminalReport {
 
 function ConvertTo-HtmlReport {
   param($Snapshot)
+
+  [object]$process = $null
+  [object]$workingSetBytes = $null
+  [object]$workingSetKb = $null
+  [object]$totalCpuSeconds = $null
+  [string]$cpuValue = ''
+  [object]$processPid = $null
+  [object]$startTimeUtc = $null
 
   $encode = { param($value) if ($null -eq $value) { return '' } return [System.Net.WebUtility]::HtmlEncode([string]$value) }
   $session = $Snapshot.SessionLock
@@ -446,17 +472,25 @@ function ConvertTo-HtmlReport {
     </dl>
     @(if (($labview.LabVIEW.Count -gt 0) -or ($labview.LVCompare.Count -gt 0)) {
         $rows = @()
-        foreach ($proc in ($labview.LabVIEW.Processes | Select-Object -First 5)) {
-          $workingSet = $proc.workingSetBytes
-          $workingSetKb = if ($workingSet) { [math]::Round($workingSet/1kb) } else { $null }
-          $cpu = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { '' }
-          $rows += "<tr><td>LabVIEW</td><td>$(& $encode $proc.pid)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpu)</td><td>$(& $encode $proc.startTimeUtc)</td></tr>"
+        $process = $null
+        foreach ($process in (Get-ProcessList -ProcessContainer $labview.LabVIEW | Select-Object -First 5)) {
+          $processPid = Get-PropertyValue -Object $process -Property 'pid'
+          $workingSetBytes = Get-PropertyValue -Object $process -Property 'workingSetBytes'
+          $totalCpuSeconds = Get-PropertyValue -Object $process -Property 'totalCpuSeconds'
+          $startTimeUtc = Get-PropertyValue -Object $process -Property 'startTimeUtc'
+          $workingSetKb = if ($workingSetBytes) { [math]::Round($workingSetBytes/1kb) } else { $null }
+          $cpuValue = if ($totalCpuSeconds -ne $null) { $totalCpuSeconds } else { '' }
+          $rows += "<tr><td>LabVIEW</td><td>$(& $encode $processPid)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpuValue)</td><td>$(& $encode $startTimeUtc)</td></tr>"
         }
-        foreach ($proc in ($labview.LVCompare.Processes | Select-Object -First 5)) {
-          $workingSet = $proc.workingSetBytes
-          $workingSetKb = if ($workingSet) { [math]::Round($workingSet/1kb) } else { $null }
-          $cpu = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { '' }
-          $rows += "<tr><td>LVCompare</td><td>$(& $encode $proc.pid)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpu)</td><td>$(& $encode $proc.startTimeUtc)</td></tr>"
+        $process = $null
+        foreach ($process in (Get-ProcessList -ProcessContainer $labview.LVCompare | Select-Object -First 5)) {
+          $processPid = Get-PropertyValue -Object $process -Property 'pid'
+          $workingSetBytes = Get-PropertyValue -Object $process -Property 'workingSetBytes'
+          $totalCpuSeconds = Get-PropertyValue -Object $process -Property 'totalCpuSeconds'
+          $startTimeUtc = Get-PropertyValue -Object $process -Property 'startTimeUtc'
+          $workingSetKb = if ($workingSetBytes) { [math]::Round($workingSetBytes/1kb) } else { $null }
+          $cpuValue = if ($totalCpuSeconds -ne $null) { $totalCpuSeconds } else { '' }
+          $rows += "<tr><td>LVCompare</td><td>$(& $encode $processPid)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpuValue)</td><td>$(& $encode $startTimeUtc)</td></tr>"
         }
         "<table><thead><tr><th>Type</th><th>PID</th><th>Working Set (KB)</th><th>CPU (s)</th><th>Started (UTC)</th></tr></thead><tbody>$([string]::Join('', $rows))</tbody></table>"
       } else { '<p>No LabVIEW/LVCompare processes recorded.</p>' })
