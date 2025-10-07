@@ -20,6 +20,7 @@ Describe 'Dev Dashboard CLI' -Tag 'Unit' {
     $json.WatchTelemetry.Last.status | Should -Be 'FAIL'
     $json.WatchTelemetry.History.Count | Should -Be 2
     $json.LabVIEWSnapshot.ProcessCount | Should -Be 1
+    $json.LabVIEWSnapshot.LVCompare.Count | Should -Be 1
   }
 
   It 'writes HTML report when requested' {

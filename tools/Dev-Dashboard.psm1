@@ -106,15 +106,36 @@ function Get-LabVIEWSnapshot {
   $data = $info.Data
   $processes = @()
   $processCount = 0
+  $labviewObject = $null
+  $lvcompareObject = $null
   if ($data) {
-    if ($data.PSObject.Properties.Name -contains 'processes') {
+    if ($data.PSObject.Properties.Name -contains 'labview' -and $data.labview) {
+      $labviewObject = [pscustomobject]@{
+        Count     = ($data.labview.count ?? $data.labview.processes.Count)
+        Processes = @($data.labview.processes)
+      }
+      $processes = $labviewObject.Processes
+      $processCount = $labviewObject.Count
+    } elseif ($data.PSObject.Properties.Name -contains 'processes') {
       $processes = @($data.processes)
+      $processCount = if ($data.PSObject.Properties.Name -contains 'processCount') {
+        try { [int]$data.processCount } catch { $processes.Count }
+      } else { $processes.Count }
     }
-    if ($data.PSObject.Properties.Name -contains 'processCount') {
-      try { $processCount = [int]$data.processCount } catch { $processCount = 0 }
-    } else {
-      $processCount = $processes.Count
+
+    if ($data.PSObject.Properties.Name -contains 'lvcompare' -and $data.lvcompare) {
+      $lvcompareObject = [pscustomobject]@{
+        Count     = ($data.lvcompare.count ?? $data.lvcompare.processes.Count)
+        Processes = @($data.lvcompare.processes)
+      }
     }
+  }
+
+  if (-not $labviewObject) {
+    $labviewObject = [pscustomobject]@{ Count = $processCount; Processes = $processes }
+  }
+  if (-not $lvcompareObject) {
+    $lvcompareObject = [pscustomobject]@{ Count = 0; Processes = @() }
   }
 
   return [pscustomobject][ordered]@{
@@ -123,6 +144,8 @@ function Get-LabVIEWSnapshot {
     Snapshot     = $data
     ProcessCount = $processCount
     Processes    = $processes
+    LabVIEW      = $labviewObject
+    LVCompare    = $lvcompareObject
     Errors       = $errors
   }
 }
@@ -692,13 +715,17 @@ function Get-ActionItems {
         Message  = "Unable to read LabVIEW snapshot ($error)."
       }
     }
-    if ($LabVIEWSnapshot.ProcessCount -gt 0) {
-      $pids = $LabVIEWSnapshot.Processes | ForEach-Object { $_.pid } | Where-Object { $_ } | Sort-Object
-      $pidList = if ($pids) { $pids -join ',' } else { 'unknown' }
+    $lvCount = $LabVIEWSnapshot.LabVIEW.Count
+    $lcCount = $LabVIEWSnapshot.LVCompare.Count
+    if ($lvCount -gt 0 -or $lcCount -gt 0) {
+      $lvPids = $LabVIEWSnapshot.LabVIEW.Processes | ForEach-Object { $_.pid } | Where-Object { $_ } | Sort-Object
+      $lcPids = $LabVIEWSnapshot.LVCompare.Processes | ForEach-Object { $_.pid } | Where-Object { $_ } | Sort-Object
+      $lvList = if ($lvPids) { $lvPids -join ',' } else { 'none' }
+      $lcList = if ($lcPids) { $lcPids -join ',' } else { 'none' }
       $items += [pscustomobject]@{
         Category = 'LabVIEW'
         Severity = 'info'
-        Message  = "LabVIEW warm-up snapshot reports $($LabVIEWSnapshot.ProcessCount) running instance(s) (PID(s): $pidList). Review tests/results/_warmup for details."
+        Message  = "Warm-up snapshot: LabVIEW=$lvCount (PID(s): $lvList), LVCompare=$lcCount (PID(s): $lcList). Review tests/results/_warmup for details."
       }
     }
   }

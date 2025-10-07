@@ -12,29 +12,29 @@ explicitly reset it.
 
 The gating model rests on three data sources:
 
-1. **Warm-up snapshot** – `tools/Agent-Warmup.ps1` writes
+1. **Warm-up snapshot** - `tools/Agent-Warmup.ps1` writes
    `tests/results/_warmup/labview-processes.json`
-   (`labview-process-snapshot/v1`) capturing PID, start time, working set, and
-   CPU totals.
-2. **Phase guards** – `tools/Guard-LabVIEWPersistence.ps1` records
-   pre/post process counts in `results/**/_wire/labview-persistence.json`
-   and marks `closedEarly=true` if LabVIEW disappears during a guarded window.
-3. **CompareVI cleanup** – when `ENABLE_LABVIEW_CLEANUP=1` CompareVI waits up to
+   (`labview-process-snapshot/v1`) capturing LabVIEW **and** LVCompare processes
+   (PID, start time, working set, CPU totals).
+2. **Phase guards** -  `tools/Guard-LabVIEWPersistence.ps1` records 
+   pre/post process counts in  `results/**/_wire/labview-persistence.json` 
+   and marks  `closedEarly=true` if LabVIEW or LVCompare disappear during a guarded window. 
+3. **CompareVI cleanup** - when  `ENABLE_LABVIEW_CLEANUP=1` CompareVI waits up to 
    90 seconds before force-closing any newly spawned LabVIEW PIDs.
 
 ## Guidelines for Agents
 
 1. **Inspect the snapshot**  
-   Check `tests/results/_warmup/labview-processes.json`. A stable warm-up
-   instance will show the same PID across snapshots with minimal CPU growth.
-   Action items on the Dev Dashboard surface the count and PID list.
-
+   Check  `tests/results/_warmup/labview-processes.json`. A stable warm-up 
+   instance will show the same PID across snapshots with minimal CPU growth for
+   both LabVIEW and LVCompare. Action items on the Dev Dashboard surface the
+   counts and PID lists.
+2. **Compare guards**  
 2. **Compare guards**  
    For fixture drift and long-running compare phases, open
-   `results/fixture-drift/_wire/labview-persistence.json`. If you see
-   `closedEarly=true` or new PIDs appear unexpectedly, pause and decide whether
-   to re-run warm-up or stop LabVIEW before continuing.
-
+    `results/fixture-drift/_wire/labview-persistence.json`. If you see 
+    `closedEarly=true` or new PIDs appear unexpectedly (LabVIEW or LVCompare), pause and decide whether 
+   to re-run warm-up or stop processes before continuing.
 3. **Reset vs reuse**  
    - _Reuse_ when the snapshot matches expectations (same PID, reasonable
      footprint, no guard warnings). Proceed to the next phase without extra
@@ -64,6 +64,7 @@ improves responsiveness, provided we track ownership.
 Yes. Set `ENABLE_LABVIEW_CLEANUP=1` before running CompareVI. We relaxed the wait
 window to 90 seconds to allow gentle shutdown; if the cleanup is disabled the
 instance remains for manual inspection.
+LVCompare processes are captured in the warm-up snapshot so you can confirm they exited as expected.
 
 **How do I spot rogue LabVIEW?**  
 Use `tools/Detect-RogueLV.ps1` or review the guard JSON. Any PID not in the
@@ -75,4 +76,3 @@ warm-up snapshot or flagged as closed early should be treated as suspect.
 - Explore auto-tagging snapshots with CI job IDs for quick correlation.
 - Feed LabVIEW snapshot metadata into Guard-LabVIEWPersistence to highlight
   runaway memory/CPU trends.
-

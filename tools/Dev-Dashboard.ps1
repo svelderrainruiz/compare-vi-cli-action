@@ -206,10 +206,12 @@ function Write-TerminalReport {
 
   $labview = $Snapshot.LabVIEWSnapshot
   Write-Host "LabVIEW Snapshot"
-  if ($labview.ProcessCount -gt 0) {
-    Write-Host "  Count    : $($labview.ProcessCount)"
-    $display = @($labview.Processes | Select-Object -First 3)
-    foreach ($proc in $display) {
+  $lvCount = $labview.LabVIEW.Count
+  $lcCount = $labview.LVCompare.Count
+  if ($lvCount -gt 0) {
+    Write-Host "  LabVIEW count : $lvCount"
+    $displayLv = @($labview.LabVIEW.Processes | Select-Object -First 3)
+    foreach ($proc in $displayLv) {
       $startDisplay = $proc.startTimeUtc
       if ($proc.startTimeUtc) {
         try {
@@ -222,13 +224,37 @@ function Write-TerminalReport {
       $workingSetDisplay = if ($null -eq $workingSetKb) { 'n/a' } else { $workingSetKb }
       $cpuSeconds = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { 'n/a' }
       $startDisplay = if ($startDisplay) { $startDisplay } else { 'n/a' }
-      Write-Host ("  PID {0} : WorkingSet={1} KB CPU={2} Started={3}" -f $proc.pid, $workingSetDisplay, $cpuSeconds, $startDisplay)
+      Write-Host ("    PID {0} : WorkingSet={1} KB CPU={2} Started={3}" -f $proc.pid, $workingSetDisplay, $cpuSeconds, $startDisplay)
     }
-    if ($labview.ProcessCount -gt $display.Count) {
-      Write-Host ("  ... {0} additional process(es) not shown" -f ($labview.ProcessCount - $display.Count))
+    if ($lvCount -gt $displayLv.Count) {
+      Write-Host ("    ... {0} additional process(es) not shown" -f ($lvCount - $displayLv.Count))
     }
   } else {
-    Write-Host "  Status   : no active LabVIEW processes captured"
+    Write-Host "  LabVIEW count : 0"
+  }
+  if ($lcCount -gt 0) {
+    Write-Host "  LVCompare count : $lcCount"
+    $displayLc = @($labview.LVCompare.Processes | Select-Object -First 3)
+    foreach ($proc in $displayLc) {
+      $startDisplay = $proc.startTimeUtc
+      if ($proc.startTimeUtc) {
+        try {
+          $dt = ConvertTo-DateTime -Value $proc.startTimeUtc
+          if ($dt) { $startDisplay = $dt.ToString('u') }
+        } catch {}
+      }
+      $workingSetKb = $null
+      if ($proc.workingSetBytes) { $workingSetKb = [math]::Round($proc.workingSetBytes/1kb) }
+      $workingSetDisplay = if ($null -eq $workingSetKb) { 'n/a' } else { $workingSetKb }
+      $cpuSeconds = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { 'n/a' }
+      $startDisplay = if ($startDisplay) { $startDisplay } else { 'n/a' }
+      Write-Host ("    PID {0} : WorkingSet={1} KB CPU={2} Started={3}" -f $proc.pid, $workingSetDisplay, $cpuSeconds, $startDisplay)
+    }
+    if ($lcCount -gt $displayLc.Count) {
+      Write-Host ("    ... {0} additional LVCompare process(es) not shown" -f ($lcCount - $displayLc.Count))
+    }
+  } else {
+    Write-Host "  LVCompare count : 0"
   }
   if ($labview.SnapshotPath) {
     Write-Host "  Snapshot : $($labview.SnapshotPath)"
@@ -414,18 +440,26 @@ function ConvertTo-HtmlReport {
   <section>
     <h2>LabVIEW Snapshot</h2>
     <dl>
-      <dt>Processes</dt><dd>$(& $encode $labview.ProcessCount)</dd>
+      <dt>LabVIEW Processes</dt><dd>$(& $encode $labview.LabVIEW.Count)</dd>
+      <dt>LVCompare Processes</dt><dd>$(& $encode $labview.LVCompare.Count)</dd>
       <dt>Snapshot</dt><dd>$(& $encode $labview.SnapshotPath)</dd>
     </dl>
-    @(if ($labview.ProcessCount -gt 0) {
-        $rows = foreach ($proc in ($labview.Processes | Select-Object -First 5)) {
+    @(if (($labview.LabVIEW.Count -gt 0) -or ($labview.LVCompare.Count -gt 0)) {
+        $rows = @()
+        foreach ($proc in ($labview.LabVIEW.Processes | Select-Object -First 5)) {
           $workingSet = $proc.workingSetBytes
           $workingSetKb = if ($workingSet) { [math]::Round($workingSet/1kb) } else { $null }
           $cpu = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { '' }
-          "<tr><td>$(& $encode $proc.pid)</td><td>$(& $encode $proc.processName)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpu)</td><td>$(& $encode $proc.startTimeUtc)</td></tr>"
+          $rows += "<tr><td>LabVIEW</td><td>$(& $encode $proc.pid)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpu)</td><td>$(& $encode $proc.startTimeUtc)</td></tr>"
         }
-        "<table><thead><tr><th>PID</th><th>Name</th><th>Working Set (KB)</th><th>CPU (s)</th><th>Started (UTC)</th></tr></thead><tbody>$([string]::Join('', $rows))</tbody></table>"
-      } else { '<p>No LabVIEW processes recorded.</p>' })
+        foreach ($proc in ($labview.LVCompare.Processes | Select-Object -First 5)) {
+          $workingSet = $proc.workingSetBytes
+          $workingSetKb = if ($workingSet) { [math]::Round($workingSet/1kb) } else { $null }
+          $cpu = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { '' }
+          $rows += "<tr><td>LVCompare</td><td>$(& $encode $proc.pid)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpu)</td><td>$(& $encode $proc.startTimeUtc)</td></tr>"
+        }
+        "<table><thead><tr><th>Type</th><th>PID</th><th>Working Set (KB)</th><th>CPU (s)</th><th>Started (UTC)</th></tr></thead><tbody>$([string]::Join('', $rows))</tbody></table>"
+      } else { '<p>No LabVIEW/LVCompare processes recorded.</p>' })
     @(if ($labview.Errors -and $labview.Errors.Count -gt 0) { "<p class='severity-warning'>Errors: $(& $encode ([string]::Join('; ', $labview.Errors)))</p>" })
   </section>
 

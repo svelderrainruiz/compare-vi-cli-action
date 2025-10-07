@@ -39,29 +39,55 @@ if (-not (Test-Path -LiteralPath $directory)) {
 
 Write-Info ("Writing LabVIEW process snapshot to {0}" -f $outputFullPath)
 
-$processes = @()
+$labviewProcesses = @()
 try {
-  $processes = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
+  $labviewProcesses = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
 } catch {
   Write-Info "Unable to enumerate LabVIEW processes: $($_.Exception.Message)"
-  $processes = @()
+  $labviewProcesses = @()
 }
 
-$items = @(
-foreach ($proc in $processes) {
+$labviewItems = @(
+foreach ($proc in $labviewProcesses) {
   $startIso = $null
   try { $startIso = $proc.StartTime.ToUniversalTime().ToString('o') } catch {}
   $totalCpu = $null
   try { $totalCpu = [math]::Round($proc.TotalProcessorTime.TotalSeconds, 3) } catch {}
   [pscustomobject][ordered]@{
-    pid              = $proc.Id
-    processName      = $proc.ProcessName
-    startTimeUtc     = $startIso
-    responding       = $proc.Responding
-    workingSetBytes  = $proc.WorkingSet64
+    pid                = $proc.Id
+    processName        = $proc.ProcessName
+    startTimeUtc       = $startIso
+    responding         = $proc.Responding
+    workingSetBytes    = $proc.WorkingSet64
     privateMemoryBytes = $proc.PrivateMemorySize64
-    totalCpuSeconds  = $totalCpu
-    userName         = $null  # optional future enrichment
+    totalCpuSeconds    = $totalCpu
+    userName           = $null
+  }
+})
+
+$lvcompareProcesses = @()
+try {
+  $lvcompareProcesses = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue)
+} catch {
+  Write-Info "Unable to enumerate LVCompare processes: $($_.Exception.Message)"
+  $lvcompareProcesses = @()
+}
+
+$lvcompareItems = @(
+foreach ($proc in $lvcompareProcesses) {
+  $startIso = $null
+  try { $startIso = $proc.StartTime.ToUniversalTime().ToString('o') } catch {}
+  $totalCpu = $null
+  try { $totalCpu = [math]::Round($proc.TotalProcessorTime.TotalSeconds, 3) } catch {}
+  [pscustomobject][ordered]@{
+    pid                = $proc.Id
+    processName        = $proc.ProcessName
+    startTimeUtc       = $startIso
+    responding         = $proc.Responding
+    workingSetBytes    = $proc.WorkingSet64
+    privateMemoryBytes = $proc.PrivateMemorySize64
+    totalCpuSeconds    = $totalCpu
+    userName           = $null
   }
 })
 
@@ -70,10 +96,18 @@ $snapshot = [pscustomobject][ordered]@{
   generatedAt = (Get-Date).ToUniversalTime().ToString('o')
   machine     = $env:COMPUTERNAME
   user        = $env:USERNAME
-  processCount = $items.Count
-  processes   = $items
+  processCount = $labviewItems.Count
+  processes   = $labviewItems
+  labview     = [pscustomobject][ordered]@{
+    count     = $labviewItems.Count
+    processes = $labviewItems
+  }
+  lvcompare   = [pscustomobject][ordered]@{
+    count     = $lvcompareItems.Count
+    processes = $lvcompareItems
+  }
 }
 
 $snapshot | ConvertTo-Json -Depth 5 | Out-File -FilePath $outputFullPath -Encoding utf8
 
-Write-Info ("Snapshot complete. Found {0} LabVIEW process(es)." -f $items.Count)
+Write-Info ("Snapshot complete. LabVIEW={0} LVCompare={1}." -f $labviewItems.Count, $lvcompareItems.Count)
