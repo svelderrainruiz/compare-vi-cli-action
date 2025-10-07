@@ -24,7 +24,17 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Setup Node with cache
       uses: actions/setup-node@v4
       with:
@@ -287,7 +297,17 @@ jobs:
       FAIL_ON_NEW_STRUCTURAL: 'false' # toggle to 'true' to fail job on new structural fixture issues
       SUMMARY_VERBOSE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.summary-verbose || 'false' }}
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Run fixture validator (JSON)
       shell: pwsh
       continue-on-error: true
@@ -385,8 +405,18 @@ jobs:
   session-index:
     runs-on: ubuntu-latest
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
 
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Install Pester v5
       shell: pwsh
       run: |

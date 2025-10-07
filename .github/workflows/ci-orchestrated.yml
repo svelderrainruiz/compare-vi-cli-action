@@ -52,7 +52,17 @@ jobs:
     outputs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Ensure Invoker (start)
       uses: ./.github/actions/ensure-invoker
       with:
@@ -87,8 +97,18 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
 
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Install actionlint (retry)
       shell: bash
       run: |
@@ -149,7 +169,17 @@ jobs:
     timeout-minutes: 3
     # Run preflight for both strategies
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Verify Windows runner and idle LabVIEW (surface LVCompare notice)
       shell: pwsh
       run: |-
@@ -177,7 +207,17 @@ jobs:
     outputs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Run interactivity probe
       id: out
       shell: pwsh
@@ -206,7 +246,17 @@ jobs:
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
@@ -387,7 +437,17 @@ jobs:
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: LabVIEW warmup (best-effort)
       if: runner.os == 'Windows'
       shell: pwsh
@@ -448,7 +508,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, pester-category, drift]
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Summarize orchestrated run
       shell: pwsh
       run: |
@@ -592,8 +662,18 @@ jobs:
       INVOKER_REQUIRED: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
+    - name: Wire Probe (J1)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
     - uses: actions/checkout@v5
 
+    - name: Wire Probe (J2)
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Interactivity Probe (gate)
       id: ip
       shell: pwsh

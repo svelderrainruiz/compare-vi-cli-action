@@ -205,6 +205,60 @@ def normalize_hosted_preflight_steps(doc) -> bool:
     return changed
 
 
+def _insert_wire_j1_j2_in_job(job: dict, results_dir: str = 'tests/results') -> bool:
+    changed = False
+    if not isinstance(job, dict):
+        return changed
+    steps = job.setdefault('steps', [])
+    # find checkout step
+    checkout_idx = next((i for i, s in enumerate(steps) if isinstance(s, dict) and str(s.get('uses', '')).startswith('actions/checkout@')), None)
+    if checkout_idx is None:
+        return changed
+    def has_named(name: str) -> bool:
+        return any(isinstance(s, dict) and s.get('name') == name for s in steps)
+    # Insert J1 before checkout
+    if not has_named('Wire Probe (J1)'):
+        steps.insert(checkout_idx, {
+            'name': 'Wire Probe (J1)',
+            'uses': './.github/actions/wire-probe',
+            'with': {
+                'phase': 'J1',
+                'results-dir': results_dir,
+            },
+        })
+        changed = True
+        checkout_idx += 1
+    # Insert J2 after checkout
+    if not has_named('Wire Probe (J2)'):
+        steps.insert(checkout_idx + 1, {
+            'name': 'Wire Probe (J2)',
+            'uses': './.github/actions/wire-probe',
+            'with': {
+                'phase': 'J2',
+                'results-dir': results_dir,
+            },
+        })
+        changed = True
+    job['steps'] = steps
+    return changed
+
+
+def ensure_wire_probes_all_jobs(doc, default_results_dir: str = 'tests/results') -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return changed
+    for jn, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        if _insert_wire_j1_j2_in_job(job, default_results_dir):
+            jobs[jn] = job
+            changed = True
+    if changed:
+        doc['jobs'] = jobs
+    return changed
+
+
 def _mk_rerun_hint_step(default_strategy: str) -> dict:
     """Create the 'Re-run With Same Inputs' step body for job summaries.
 
@@ -903,7 +957,8 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         pc1 = _set_job_if(doc, 'pester-category', pc_if)
         pc2 = _ensure_job_needs(doc, 'pester-category', 'probe')
         lr1 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
-        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1
+        wp = ensure_wire_probes_all_jobs(doc, 'tests/results')
+        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1 or wp
     # Skip transforms for deprecated ci-orchestrated-v2.yml (kept as a stub/manual only)
     if path.name == 'ci-orchestrated-v2.yml':
         pass
@@ -956,7 +1011,8 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
     if path.name == 'validate.yml':
         # Make markdownlint non-blocking in Validate to avoid PR noise; Workflows Lint is the required check.
         lr2 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
-        changed = changed or lr2
+        wp2 = ensure_wire_probes_all_jobs(doc, 'tests/results')
+        changed = changed or lr2 or wp2
 
 
     if changed:
