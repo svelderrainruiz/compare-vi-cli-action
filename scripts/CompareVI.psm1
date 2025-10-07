@@ -362,7 +362,7 @@ function Invoke-CompareVI {
     $allowCleanup = ($env:ENABLE_LABVIEW_CLEANUP -match '^(?i:1|true|yes|on)$')
     if ($allowCleanup) {
       try {
-        $deadline = (Get-Date).AddSeconds(10)
+        $deadline = (Get-Date).AddSeconds(90)
         do {
           $closedAny = $false
           $lvAfter = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
