@@ -54,6 +54,39 @@ Expected output: Both should return `True`
 
 ## End-to-End Test Scenarios
 
+### Test 0: Orchestrated (single vs matrix) — Provenance and Summary Consistency
+
+Purpose: Confirm both strategies produce consistent Run Provenance and summary sections.
+
+Steps:
+
+1) Dispatch single (deterministic chain):
+
+```
+pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strategy single -IncludeIntegration true
+```
+
+2) Dispatch matrix (parallel categories):
+
+```
+pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strategy matrix -IncludeIntegration true
+```
+
+3) After each run completes, verify:
+
+- Artifact `orchestrated-provenance` exists and contains `tests/results/provenance.json`.
+- Job summary contains, in order:
+  - Run Provenance (includes: runId, runAttempt, workflow, ref, origin_*, sample_id, include_integration, strategy)
+  - Invoker/Process Snapshot (at least one)
+  - Compare Outcome (present when drift runs)
+  - Re-run with same inputs hint (includes strategy)
+
+4) Compare the two `provenance.json` files: values should differ only by run identifiers and the `strategy` field (`single` vs `matrix`).
+
+Expected Results:
+- Both single and matrix paths generate the same provenance shape and summary sections.
+- No missing summary blocks; session-index and guard steps appear in both paths.
+
 ### Test 1: Manual Integration Test Dispatch
 
 **Purpose:** Verify the pester-selfhosted workflow runs successfully with Integration tests.
