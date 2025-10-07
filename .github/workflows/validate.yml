@@ -24,13 +24,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -297,13 +299,15 @@ jobs:
       FAIL_ON_NEW_STRUCTURAL: 'false' # toggle to 'true' to fail job on new structural fixture issues
       SUMMARY_VERBOSE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.summary-verbose || 'false' }}
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -405,14 +409,16 @@ jobs:
   session-index:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v5
+
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
-
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2

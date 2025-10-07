@@ -210,39 +210,42 @@ def _insert_wire_j1_j2_in_job(job: dict, results_dir: str = 'tests/results') -> 
     if not isinstance(job, dict):
         return changed
     steps = job.setdefault('steps', [])
-    # find checkout step
+    # Remove existing J1/J2 so we can reinsert after checkout
+    kept = []
+    removed = False
+    for st in steps:
+        if isinstance(st, dict) and st.get('name') in ('Wire Probe (J1)', 'Wire Probe (J2)'):
+            removed = True
+            changed = True
+            continue
+        kept.append(st)
+    steps = kept
+    job['steps'] = steps
     checkout_idx = next((i for i, s in enumerate(steps) if isinstance(s, dict) and str(s.get('uses', '')).startswith('actions/checkout@')), None)
     if checkout_idx is None:
         return changed
-    def has_named(name: str) -> bool:
-        return any(isinstance(s, dict) and s.get('name') == name for s in steps)
-    # Insert J1 before checkout
     insert_after = checkout_idx + 1
-    if not has_named('Wire Probe (J1)'):
-        steps.insert(insert_after, {
-            'name': 'Wire Probe (J1)',
-            'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
-            'uses': './.github/actions/wire-probe',
-            'with': {
-                'phase': 'J1',
-                'results-dir': results_dir,
-            },
-        })
-        changed = True
-        insert_after += 1
-    if not has_named('Wire Probe (J2)'):
-        steps.insert(insert_after, {
-            'name': 'Wire Probe (J2)',
-            'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
-            'uses': './.github/actions/wire-probe',
-            'with': {
-                'phase': 'J2',
-                'results-dir': results_dir,
-            },
-        })
-        changed = True
+    steps.insert(insert_after, {
+        'name': 'Wire Probe (J1)',
+        'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+        'uses': './.github/actions/wire-probe',
+        'with': {
+            'phase': 'J1',
+            'results-dir': results_dir,
+        },
+    })
+    insert_after += 1
+    steps.insert(insert_after, {
+        'name': 'Wire Probe (J2)',
+        'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
+        'uses': './.github/actions/wire-probe',
+        'with': {
+            'phase': 'J2',
+            'results-dir': results_dir,
+        },
+    })
     job['steps'] = steps
-    return changed
+    return True
 
 
 def ensure_wire_probes_all_jobs(doc, default_results_dir: str = 'tests/results') -> bool:

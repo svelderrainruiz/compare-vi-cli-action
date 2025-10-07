@@ -52,13 +52,15 @@ jobs:
     outputs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -102,14 +104,16 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v5
+
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
-
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -198,13 +202,15 @@ jobs:
     timeout-minutes: 3
     # Run preflight for both strategies
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -236,13 +242,15 @@ jobs:
     outputs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -275,17 +283,19 @@ jobs:
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: tests/results
-    - uses: actions/checkout@v5
+        results-dir: tests/results/${{ matrix.category }}
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: tests/results
+        results-dir: tests/results/${{ matrix.category }}
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
@@ -496,17 +506,19 @@ jobs:
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: tests/results
-    - uses: actions/checkout@v5
+        results-dir: results/fixture-drift
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: tests/results
+        results-dir: results/fixture-drift
     - name: LabVIEW warmup (best-effort)
       if: runner.os == 'Windows'
       shell: pwsh
@@ -604,13 +616,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, pester-category, drift]
     steps:
+    - uses: actions/checkout@v5
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -764,14 +778,16 @@ jobs:
       INVOKER_REQUIRED: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
+    - uses: actions/checkout@v5
+
     - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
-    - uses: actions/checkout@v5
-
     - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
