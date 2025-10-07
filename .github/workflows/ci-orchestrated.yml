@@ -115,6 +115,18 @@ jobs:
         set -euo pipefail
         for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo "retry $i"; sleep 2; }; done
 
+    - name: Emit tool versions
+      if: always()
+      shell: bash
+      run: |
+        {
+          echo '### Tool Versions'
+          echo "- actionlint: $(./bin/actionlint -version || echo 'n/a')"
+          echo "- node: $(node -v || echo 'n/a')"
+          echo "- npm: $(npm -v || echo 'n/a')"
+          echo "- markdownlint: $(markdownlint --version || echo 'n/a')"
+        } >> "$GITHUB_STEP_SUMMARY"
+
     - name: Run markdownlint (non-blocking)
       continue-on-error: true
       run: |

@@ -54,7 +54,7 @@ Expected output: Both should return `True`
 
 ## End-to-End Test Scenarios
 
-### Test 0: Orchestrated (single vs matrix) — Provenance and Summary Consistency
+### Test 0: Orchestrated (single vs matrix) - Provenance and Summary Consistency
 
 Purpose: Confirm both strategies produce consistent Run Provenance and summary sections.
 
@@ -87,6 +87,10 @@ Expected Results:
 
 - Both single and matrix paths generate the same provenance shape and summary sections.
 - No missing summary blocks; session-index and guard steps appear in both paths.
+
+Note on reliability fallback:
+
+- When `strategy=single` runs on a non-interactive self-hosted Windows runner, the workflow auto-falls back to the matrix path. In that case, provenance will show `strategy=single`, a probe summary will appear, and the Pester category artifacts will be produced.
 
 ### Test 1: Manual Integration Test Dispatch
 

@@ -117,6 +117,18 @@ jobs:
         run: |
           markdownlint "**/*.md" --ignore node_modules
 
+      - name: Emit tool versions
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Tool Versions'
+            echo "- actionlint: $(./bin/actionlint -version || echo 'n/a')"
+            echo "- node: $(node -v || echo 'n/a')"
+            echo "- npm: $(npm -v || echo 'n/a')"
+            echo "- markdownlint: $(markdownlint --version || echo 'n/a')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Workflow drift check (ruamel updater — notice on develop)
         if: github.ref_name == 'develop' || github.base_ref == 'develop'
         shell: pwsh
