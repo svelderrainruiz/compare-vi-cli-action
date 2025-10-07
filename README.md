@@ -66,14 +66,24 @@ Keep an eye on queued or long-running workflows without leaving the terminal:
 pwsh ./tools/Track-WorkflowRun.ps1 -RunId 18327092270 -PollSeconds 20 -Json
 ```
 
-- Automatically resolves the repository from `GITHUB_REPOSITORY` or git remote; override with `-Repo owner/name` if needed.
-Automate dispatch + monitoring in one step:
- ```powershell 
-pwsh ./tools/Watch-RunAndTrack.ps1 -Workflow validate.yml -Ref issue/88-dev-dashboard-phase2 -OutputPath logs/validate-run.json
- ``` 
-This helper wraps  `gh workflow run` and the tracker to write the final snapshot automatically. 
-- Prints a table of job status/conclusion/duration on each poll; add `-OutputPath` to persist the final snapshot JSON for hand-offs.
-- Helpful when self-hosted runners are saturated and you need visibility into which job is waiting or failing.
+- Automatically resolves the repository from `GITHUB_REPOSITORY` or git remote;
+  override with `-Repo owner/name` if needed.
+- Prints a table of job status/conclusion/duration on each poll; add
+  `-OutputPath` to persist the final snapshot JSON for hand-offs.
+- Helpful when self-hosted runners are saturated and you need visibility into
+  which job is waiting or failing.
+
+To dispatch and monitor in one step:
+
+```powershell
+pwsh ./tools/Watch-RunAndTrack.ps1 `
+  -Workflow validate.yml `
+  -Ref issue/88-dev-dashboard-phase2 `
+  -OutputPath logs/validate-run.json
+```
+
+The helper wraps `gh workflow run` and the tracker so the final snapshot is
+stored automatically for hand-offs.
 
 ## Fixture Artifacts (VI1.vi / VI2.vi)
 
