@@ -1,191 +1,378 @@
-<#
-
-
-
-.SYNOPSIS
-
-
-
-  Orchestrates fixture validation outcomes into deterministic artifacts and exit semantics.
-
-
-
-.DESCRIPTION
-
-
-
-  Consumes JSON from tools/Validate-Fixtures.ps1 and, on drift (exit 6), optionally runs LVCompare
-
-
-
-  and renders an HTML report. Always emits a drift-summary.json with ordered keys for CI consumption.
-
-
-
-
-
-
-
-  Windows/PowerShell-only; respects canonical LVCompare.exe path policy.
-
-
-
-
-
-
-
-.PARAMETER StrictJson
-
-
-
-  Path to validator JSON output (strict mode).
-
-
-
-.PARAMETER OverrideJson
-
-
-
-  Optional path to validator JSON output with -TestAllowFixtureUpdate (size-only snapshot).
-
-
-
-.PARAMETER ManifestPath
-
-
-
-  Path to fixtures.manifest.json (defaults to repo root file).
-
-
-
-.PARAMETER BasePath
-
-
-
-  Path to base VI (defaults to ./VI1.vi).
-
-
-
-.PARAMETER HeadPath
-
-
-
-  Path to head VI (defaults to ./VI2.vi).
-
-
-
-.PARAMETER OutputDir
-
-
-
-  Output directory for artifacts (created if missing). Defaults to results/fixture-drift/<yyyyMMddTHHmmssZ>.
-
-
-
-.PARAMETER LvCompareArgs
-
-
-
-  Additional args for LVCompare (default: -nobdcosm -nofppos -noattr).
-
-
-
-.PARAMETER RenderReport
-
-
-
-  If set and LVCompare is available, generate compare-report.html via scripts/Render-CompareReport.ps1.
-
-
-
-
-
-
-
-.OUTPUTS
-
-
-
-  Writes drift-summary.json to OutputDir. Exits 0 only when strict ok=true; non-zero otherwise.
-
-
-
-#>
-
-
-
-[CmdletBinding()]
-
-
-
-param(
-
-
-
-  [Parameter(Mandatory=$true)][string]$StrictJson,
-
-
-
-  [string]$OverrideJson,
-
-
-
-  [string]$ManifestPath = (Join-Path $PSScriptRoot '..' | Join-Path -ChildPath 'fixtures.manifest.json'),
-
-
-
-  [string]$BasePath = (Join-Path (Get-Location) 'VI1.vi'),
-
-
-
-  [string]$HeadPath = (Join-Path (Get-Location) 'VI2.vi'),
-
-
-
-  [string]$OutputDir,
-
-
-
-  [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
-
-
-
-  [switch]$RenderReport,
-
-
-
-  [switch]$SimulateCompare  # TEST-ONLY: simulate compare outputs and exit code 1
-
-
-
-)
-
-
-
-
-
-
-
-Set-StrictMode -Version Latest
-
-
-
-$ErrorActionPreference = 'Stop'
-
-
-
-
-
-
-
+<#
+
+
+
+
+
+
+
+.SYNOPSIS
+
+
+
+
+
+
+
+  Orchestrates fixture validation outcomes into deterministic artifacts and exit semantics.
+
+
+
+
+
+
+
+.DESCRIPTION
+
+
+
+
+
+
+
+  Consumes JSON from tools/Validate-Fixtures.ps1 and, on drift (exit 6), optionally runs LVCompare
+
+
+
+
+
+
+
+  and renders an HTML report. Always emits a drift-summary.json with ordered keys for CI consumption.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Windows/PowerShell-only; respects canonical LVCompare.exe path policy.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.PARAMETER StrictJson
+
+
+
+
+
+
+
+  Path to validator JSON output (strict mode).
+
+
+
+
+
+
+
+.PARAMETER OverrideJson
+
+
+
+
+
+
+
+  Optional path to validator JSON output with -TestAllowFixtureUpdate (size-only snapshot).
+
+
+
+
+
+
+
+.PARAMETER ManifestPath
+
+
+
+
+
+
+
+  Path to fixtures.manifest.json (defaults to repo root file).
+
+
+
+
+
+
+
+.PARAMETER BasePath
+
+
+
+
+
+
+
+  Path to base VI (defaults to ./VI1.vi).
+
+
+
+
+
+
+
+.PARAMETER HeadPath
+
+
+
+
+
+
+
+  Path to head VI (defaults to ./VI2.vi).
+
+
+
+
+
+
+
+.PARAMETER OutputDir
+
+
+
+
+
+
+
+  Output directory for artifacts (created if missing). Defaults to results/fixture-drift/<yyyyMMddTHHmmssZ>.
+
+
+
+
+
+
+
+.PARAMETER LvCompareArgs
+
+
+
+
+
+
+
+  Additional args for LVCompare (default: -nobdcosm -nofppos -noattr).
+
+
+
+
+
+
+
+.PARAMETER RenderReport
+
+
+
+
+
+
+
+  If set and LVCompare is available, generate compare-report.html via scripts/Render-CompareReport.ps1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.OUTPUTS
+
+
+
+
+
+
+
+  Writes drift-summary.json to OutputDir. Exits 0 only when strict ok=true; non-zero otherwise.
+
+
+
+
+
+
+
+#>
+
+
+
+
+
+
+
+[CmdletBinding()]
+
+
+
+
+
+
+
+param(
+
+
+
+
+
+
+
+  [Parameter(Mandatory=$true)][string]$StrictJson,
+
+
+
+
+
+
+
+  [string]$OverrideJson,
+
+
+
+
+
+
+
+  [string]$ManifestPath = (Join-Path $PSScriptRoot '..' | Join-Path -ChildPath 'fixtures.manifest.json'),
+
+
+
+
+
+
+
+  [string]$BasePath = (Join-Path (Get-Location) 'VI1.vi'),
+
+
+
+
+
+
+
+  [string]$HeadPath = (Join-Path (Get-Location) 'VI2.vi'),
+
+
+
+
+
+
+
+  [string]$OutputDir,
+
+
+
+
+
+
+
+  [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
+
+
+
+
+
+
+
+  [switch]$RenderReport,
+
+
+
+
+
+
+
+  [switch]$SimulateCompare  # TEST-ONLY: simulate compare outputs and exit code 1
+
+
+
+
+
+
+
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Set-StrictMode -Version Latest
+
+
+
+
+
+
+
+$ErrorActionPreference = 'Stop'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function Initialize-Directory([string]$dir) {
-
-
-
-  if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
-
-
-
+
+
+
+
+
+
+  if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+
+
+
+
+
+
+
 }
 
 # Handshake markers -----------------------------------------------------------
@@ -217,121 +404,240 @@ function Reset-HandshakeMarkers {
   } catch { }
   Write-HandshakeMarker -Name 'reset' -Data @{ outputDir = $OutputDir }
 }
-
-
-
-
-
-
-
-function Get-NowStampUtc { (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') }
-
-
-
-
-
-
-
-function Read-JsonFile([string]$path) {
-
-
-
-  $raw = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
-
-
-
-  return ($raw | ConvertFrom-Json -ErrorAction Stop)
-
-
-
-}
-
-
-
-
-
-
-
-function Copy-FileIf([string]$src,[string]$dst) { if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $dst -Force } }
-
-
-
-
-
-
-
-function Get-FileStamp([string]$path) {
-
-
-
-  try {
-
-
-
-    if (-not (Test-Path -LiteralPath $path)) { return $null }
-
-
-
-    $fi = Get-Item -LiteralPath $path -ErrorAction Stop
-
-
-
-    $ts = $fi.LastWriteTimeUtc.ToString('o')
-
-
-
-    # Prefer leaf name for stable display; avoid leaking absolute paths
-
-
-
-    $name = $fi.Name
-
-
-
-    return [pscustomobject]@{ path=$name; lastWriteTimeUtc=$ts; length=$fi.Length }
-
-
-
-  } catch { return $null }
-
-
-
-}
-
-
-
-
-
-
-
-# Resolve default OutputDir
-
-
-
-if (-not $OutputDir) {
-
-
-
-  $root = Resolve-Path (Join-Path $PSScriptRoot '..') | Select-Object -ExpandProperty Path
-
-
-
-  $outRoot = Join-Path $root 'results' | Join-Path -ChildPath 'fixture-drift'
-
-
-
-  Initialize-Directory $outRoot
-
-
-
-  $OutputDir = Join-Path $outRoot (Get-NowStampUtc)
-
-
-
-}
-
-
-
+
+$script:HandshakeNoteBuffer = @()
+function Add-HandshakeNote([string]$Note) {
+  if ($null -ne $Note -and $Note -ne '') { $script:HandshakeNoteBuffer += $Note }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+function Get-NowStampUtc { (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function Read-JsonFile([string]$path) {
+
+
+
+
+
+
+
+  $raw = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+
+
+
+
+
+
+
+  return ($raw | ConvertFrom-Json -ErrorAction Stop)
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function Copy-FileIf([string]$src,[string]$dst) { if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination $dst -Force } }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function Get-FileStamp([string]$path) {
+
+
+
+
+
+
+
+  try {
+
+
+
+
+
+
+
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+
+
+
+
+
+
+
+    $fi = Get-Item -LiteralPath $path -ErrorAction Stop
+
+
+
+
+
+
+
+    $ts = $fi.LastWriteTimeUtc.ToString('o')
+
+
+
+
+
+
+
+    # Prefer leaf name for stable display; avoid leaking absolute paths
+
+
+
+
+
+
+
+    $name = $fi.Name
+
+
+
+
+
+
+
+    return [pscustomobject]@{ path=$name; lastWriteTimeUtc=$ts; length=$fi.Length }
+
+
+
+
+
+
+
+  } catch { return $null }
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Resolve default OutputDir
+
+
+
+
+
+
+
+if (-not $OutputDir) {
+
+
+
+
+
+
+
+  $root = Resolve-Path (Join-Path $PSScriptRoot '..') | Select-Object -ExpandProperty Path
+
+
+
+
+
+
+
+  $outRoot = Join-Path $root 'results' | Join-Path -ChildPath 'fixture-drift'
+
+
+
+
+
+
+
+  Initialize-Directory $outRoot
+
+
+
+
+
+
+
+  $OutputDir = Join-Path $outRoot (Get-NowStampUtc)
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
 Initialize-Directory $OutputDir
 
 # Reset and start handshake markers early for deterministic troubleshooting
@@ -375,156 +681,307 @@ if ($readyStatus -eq 'READY') {
 Write-HandshakeMarker -Name 'ready' -Data @{ status = $readyStatus; reason = $readyReason }
 if ($readyStatus -ne 'READY') {
   # Record reason and avoid running LVCompare/report (summary will still reflect validator outcome)
-  Add-Note ("not_ready: {0}" -f $readyReason)
+  Add-HandshakeNote ("not_ready: {0}" -f $readyReason)
   $RenderReport = $false
 }
-
-
-
-
-
-
-
-# Read strict/override JSONs
-
-
-
-$strict = Read-JsonFile $StrictJson
-
-
-
-
-
-
-
-# Copy inputs for artifact stability
-
-
-
-Copy-FileIf $StrictJson (Join-Path $OutputDir 'validator-strict.json')
-
-
-
-if ($OverrideJson) { Copy-FileIf $OverrideJson (Join-Path $OutputDir 'validator-override.json') }
-
-
-
-Copy-FileIf $ManifestPath (Join-Path $OutputDir 'fixtures.manifest.json')
-
-
-
-
-
-
-
-# Build file timestamp list (deterministic order)
-
-
-
-$fileInfos = New-Object System.Collections.Generic.List[object]
-
-
-
-foreach ($p in @($BasePath, $HeadPath, $ManifestPath, $StrictJson, $OverrideJson)) {
-
-
-
-  if ($p) { $fs = Get-FileStamp $p; if ($fs) { $fileInfos.Add($fs) | Out-Null } }
-
-
-
-}
-
-
-
-
-
-
-
-# Determine outcome from strict JSON
-
-
-
-$strictExit = $strict.exitCode
-
-
-
-$categories = @()
-
-
-
-if ($strict.summaryCounts) {
-
-
-
-  foreach ($k in 'missing','untracked','tooSmall','hashMismatch','manifestError','duplicate','schema') {
-
-
-
-    $v = 0; if ($strict.summaryCounts.PSObject.Properties[$k]) { $v = [int]$strict.summaryCounts.$k }
-
-
-
-    if ($v -gt 0) { $categories += "$k=$v" }
-
-
-
-  }
-
-
-
-}
-
-
-
-
-
-
-
-$summary = [ordered]@{ schema='fixture-drift-summary-v1'; generatedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); status=''; exitCode=$strictExit; categories=$categories; artifactPaths=@(); notes=@(); files=@() }
-
-
-
-foreach ($fi in $fileInfos) { $summary.files += $fi }
-
-
-
-
-
-
-
-function Add-Artifact([string]$rel) { $summary.artifactPaths += $rel }
-
-
-
-function Add-Note([string]$n) { $summary.notes += $n }
-
-
-
-
-
-
-
-if ($strictExit -eq 0 -and $strict.ok) {
-
-
-
-  $summary.status = 'ok'
-
-
-
-  Add-Artifact 'validator-strict.json'
-
-
-
-  if ($OverrideJson) { Add-Artifact 'validator-override.json' }
-
-
-
-  $outPath = Join-Path $OutputDir 'drift-summary.json'
-
-
-
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Read strict/override JSONs
+
+
+
+
+
+
+
+$strict = Read-JsonFile $StrictJson
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Copy inputs for artifact stability
+
+
+
+
+
+
+
+Copy-FileIf $StrictJson (Join-Path $OutputDir 'validator-strict.json')
+
+
+
+
+
+
+
+if ($OverrideJson) { Copy-FileIf $OverrideJson (Join-Path $OutputDir 'validator-override.json') }
+
+
+
+
+
+
+
+Copy-FileIf $ManifestPath (Join-Path $OutputDir 'fixtures.manifest.json')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Build file timestamp list (deterministic order)
+
+
+
+
+
+
+
+$fileInfos = New-Object System.Collections.Generic.List[object]
+
+
+
+
+
+
+
+foreach ($p in @($BasePath, $HeadPath, $ManifestPath, $StrictJson, $OverrideJson)) {
+
+
+
+
+
+
+
+  if ($p) { $fs = Get-FileStamp $p; if ($fs) { $fileInfos.Add($fs) | Out-Null } }
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Determine outcome from strict JSON
+
+
+
+
+
+
+
+$strictExit = $strict.exitCode
+
+
+
+
+
+
+
+$categories = @()
+
+
+
+
+
+
+
+if ($strict.summaryCounts) {
+
+
+
+
+
+
+
+  foreach ($k in 'missing','untracked','tooSmall','hashMismatch','manifestError','duplicate','schema') {
+
+
+
+
+
+
+
+    $v = 0; if ($strict.summaryCounts.PSObject.Properties[$k]) { $v = [int]$strict.summaryCounts.$k }
+
+
+
+
+
+
+
+    if ($v -gt 0) { $categories += "$k=$v" }
+
+
+
+
+
+
+
+  }
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$summary = [ordered]@{ schema='fixture-drift-summary-v1'; generatedAtUtc=(Get-Date).ToUniversalTime().ToString('o'); status=''; exitCode=$strictExit; categories=$categories; artifactPaths=@(); notes=@(); files=@() }
+
+if ( $script:HandshakeNoteBuffer) { 
+  foreach ( $note in $script:HandshakeNoteBuffer) { $summary.notes += $note } 
+   $script:HandshakeNoteBuffer = @() 
+}
+
+
+
+
+
+
+foreach ($fi in $fileInfos) { $summary.files += $fi }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function Add-Artifact([string]$rel) { $summary.artifactPaths += $rel }
+
+
+
+
+
+
+
+function Add-Note([string]$n) { $summary.notes += $n }
+foreach ($note in $script:HandshakeNoteBuffer) { Add-Note $note }
+$script:HandshakeNoteBuffer = @()
+
+
+
+
+
+
+
+
+
+
+
+
+
+if ($strictExit -eq 0 -and $strict.ok) {
+
+
+
+
+
+
+
+  $summary.status = 'ok'
+
+
+
+
+
+
+
+  Add-Artifact 'validator-strict.json'
+
+
+
+
+
+
+
+  if ($OverrideJson) { Add-Artifact 'validator-override.json' }
+
+
+
+
+
+
+
+  $outPath = Join-Path $OutputDir 'drift-summary.json'
+
+
+
+
+
+
+
   ($summary | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $outPath -Encoding utf8
 
   # End-of-flow marker for OK path
@@ -554,62 +1011,115 @@ if ($strictExit -eq 0 -and $strict.ok) {
     } catch { Add-Note ("simulate compare placeholder exec json failed: {0}" -f $_.Exception.Message) }
   }
 
-
-
+
+
+
+
   try { if ($mutex) { $mutex.ReleaseMutex() } } catch {}
   try { if ($mutex) { $mutex.Dispose() } } catch {}
   exit 0
-
-
-
-}
-
-
-
-
-
-
-
-# Non-zero: produce diagnostics and optionally run LVCompare
-
-
-
-Add-Artifact 'validator-strict.json'
-
-
-
-if ($OverrideJson) { Add-Artifact 'validator-override.json' }
-
-
-
-Add-Artifact 'fixtures.manifest.json'
-
-
-
-
-
-
-
-if ($strictExit -eq 6) {
-
-
-
-  $summary.status = 'drift'
-
-
-
-  $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
-
-
-
-  $cliExists = if ($SimulateCompare) { $true } else { Test-Path -LiteralPath $cli }
-
-
-
-  if (-not $RenderReport) { Add-Note 'RenderReport disabled; skipping LVCompare'; }
-
-
-
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Non-zero: produce diagnostics and optionally run LVCompare
+
+
+
+
+
+
+
+Add-Artifact 'validator-strict.json'
+
+
+
+
+
+
+
+if ($OverrideJson) { Add-Artifact 'validator-override.json' }
+
+
+
+
+
+
+
+Add-Artifact 'fixtures.manifest.json'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if ($strictExit -eq 6) {
+
+
+
+
+
+
+
+  $summary.status = 'drift'
+
+
+
+
+
+
+
+  $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+
+
+
+
+
+
+
+  $cliExists = if ($SimulateCompare) { $true } else { Test-Path -LiteralPath $cli }
+
+
+
+
+
+
+
+  if (-not $RenderReport) { Add-Note 'RenderReport disabled; skipping LVCompare'; }
+
+
+
+
+
+
+
   if (-not $cliExists) { Add-Note 'LVCompare.exe missing at canonical path'; }
 
   # Phase marker prior to compare/report execution
@@ -618,21 +1128,36 @@ if ($strictExit -eq 6) {
     lvCompareCli = $cli
     renderReport = [bool]$RenderReport
   }
-
-
-
-
-
-
-
-  $exitCode = $null
-
-
-
-  $duration = $null
-
-
-
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  $exitCode = $null
+
+
+
+
+
+
+
+  $duration = $null
+
+
+
+
+
+
+
 if ($RenderReport) {
   try {
     if ($SimulateCompare -or -not $cliExists) {
@@ -712,11 +1237,13 @@ if ($RenderReport) {
     } catch { Add-Note ("failed to persist exec json or delay: {0}" -f $_.Exception.Message) }
 
     # Generate HTML fragment via reporter script
-    $reporter = Join-Path (Join-Path $PSScriptRoot '') 'Render-CompareReport.ps1'
+    $reporter = Join-Path (Join-Path $PSScriptRoot '') 'Render-CompareReport.ps1'
+
     if (Test-Path -LiteralPath $reporter) {
       Write-HandshakeMarker -Name 'report' -Data @{ reporter = $reporter }
       $diff = if ($exitCode -eq 1) { 'true' } elseif ($exitCode -eq 0) { 'false' } else { 'false' }
-      $cmd = if ($command) { $command } else { '"{0}" "{1}" {2}' -f $cli,(Resolve-Path $BasePath).Path,(Resolve-Path $HeadPath).Path }
+      $cmd = if ($command) { $command } else { '"{0}" "{1}" {2}' -f $cli,(Resolve-Path $BasePath).Path,(Resolve-Path $HeadPath).Path }
+
       # Optional console watch during report generation
       $cwId = $null
       if ($env:WATCH_CONSOLE -match '^(?i:1|true|yes|on)$') {
@@ -754,104 +1281,191 @@ if ($RenderReport) {
           } else { Add-Note 'console-spawns: none' }
         } catch { Add-Note 'console-watch stop failed' }
       }
-    } else { Add-Note 'Reporter script not found; skipped HTML report' }
-  } catch {
-    Add-Note ("LVCompare or report generation failed: {0}" -f $_.Exception.Message)
-  }
-}
-  $outPath = Join-Path $OutputDir 'drift-summary.json'
-
-
-
+    } else { Add-Note 'Reporter script not found; skipped HTML report' }
+
+  } catch {
+
+    Add-Note ("LVCompare or report generation failed: {0}" -f $_.Exception.Message)
+
+  }
+
+}
+
+  $outPath = Join-Path $OutputDir 'drift-summary.json'
+
+
+
+
+
+
+
   ($summary | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $outPath -Encoding utf8
 
   # End-of-flow marker for drift path
   Write-HandshakeMarker -Name 'end' -Data @{ status = 'drift'; exitCode = 1 }
-
-
-
+
+
+
+
+
+
   try { if ($mutex) { $mutex.ReleaseMutex() } } catch {}
   try { if ($mutex) { $mutex.Dispose() } } catch {}
   exit 1
-
-
-
-}
-
-
-
-else {
-
-
-
-  $summary.status = 'fail-structural'
-
-
-
-  $hint = @()
-
-
-
-  if ($strict.summaryCounts) {
-
-
-
-    $sc = $strict.summaryCounts
-
-
-
-    if ($sc.missing -gt 0) { $hint += 'missing fixtures' }
-
-
-
-    if ($sc.untracked -gt 0) { $hint += 'untracked fixtures' }
-
-
-
-    if ($sc.tooSmall -gt 0) { $hint += 'too small' }
-
-
-
-    if ($sc.duplicate -gt 0) { $hint += 'duplicate entries' }
-
-
-
-    if ($sc.schema -gt 0) { $hint += 'schema issues' }
-
-
-
-    if ($sc.manifestError -gt 0) { $hint += 'manifest errors' }
-
-
-
-  }
-
-
-
-  if ($hint) { ('Hints: ' + ($hint -join ', ')) | Set-Content -LiteralPath (Join-Path $OutputDir 'hints.txt') -Encoding utf8; Add-Artifact 'hints.txt' }
-
-
-
-  $outPath = Join-Path $OutputDir 'drift-summary.json'
-
-
-
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+else {
+
+
+
+
+
+
+
+  $summary.status = 'fail-structural'
+
+
+
+
+
+
+
+  $hint = @()
+
+
+
+
+
+
+
+  if ($strict.summaryCounts) {
+
+
+
+
+
+
+
+    $sc = $strict.summaryCounts
+
+
+
+
+
+
+
+    if ($sc.missing -gt 0) { $hint += 'missing fixtures' }
+
+
+
+
+
+
+
+    if ($sc.untracked -gt 0) { $hint += 'untracked fixtures' }
+
+
+
+
+
+
+
+    if ($sc.tooSmall -gt 0) { $hint += 'too small' }
+
+
+
+
+
+
+
+    if ($sc.duplicate -gt 0) { $hint += 'duplicate entries' }
+
+
+
+
+
+
+
+    if ($sc.schema -gt 0) { $hint += 'schema issues' }
+
+
+
+
+
+
+
+    if ($sc.manifestError -gt 0) { $hint += 'manifest errors' }
+
+
+
+
+
+
+
+  }
+
+
+
+
+
+
+
+  if ($hint) { ('Hints: ' + ($hint -join ', ')) | Set-Content -LiteralPath (Join-Path $OutputDir 'hints.txt') -Encoding utf8; Add-Artifact 'hints.txt' }
+
+
+
+
+
+
+
+  $outPath = Join-Path $OutputDir 'drift-summary.json'
+
+
+
+
+
+
+
   ($summary | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $outPath -Encoding utf8
 
   # End-of-flow marker for structural failure
   Write-HandshakeMarker -Name 'end' -Data @{ status = 'fail-structural'; exitCode = 1 }
-
-
-
+
+
+
+
+
+
   try { if ($mutex) { $mutex.ReleaseMutex() } } catch {}
   try { if ($mutex) { $mutex.Dispose() } } catch {}
   exit 1
-
-
-
-}
-
-
-
-
-
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
