@@ -13,8 +13,7 @@ permissions:
 
 jobs:
   two-green:
-    if: |
-      ${{ github.event.workflow_run.head_branch == 'develop' && github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.head_branch == 'develop' && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check last two orchestrated runs on develop
@@ -67,4 +66,3 @@ jobs:
           EOF
           )
           gh issue comment 88 -b "$body"
-

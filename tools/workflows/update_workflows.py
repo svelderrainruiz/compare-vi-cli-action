@@ -375,20 +375,22 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         r1 = ensure_rerun_hint_after_summary(doc, 'matrix')
         r2 = ensure_rerun_hint_in_job(doc, 'windows-single', 'single')
         changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2
-    # ci-orchestrated-v2.yml: single Windows job (windows-single). Add guard and ensure session-index-post exists.
+    # Skip transforms for deprecated ci-orchestrated-v2.yml (kept as a stub/manual only)
     if path.name == 'ci-orchestrated-v2.yml':
-        # Best-effort: if a hosted preflight job named 'preflight' exists, normalize it
-        c8 = ensure_hosted_preflight(doc, 'preflight')
-        # Ensure session-index-post on the single job
-        c9 = ensure_session_index_post_in_job(doc, 'windows-single', 'tests/results', 'orchestrated-v2-session-index')
-        # Normalize guard placement
-        g4 = ensure_runner_unblock_guard(doc, 'windows-single', 'tests/results/runner-unblock-snapshot.json')
-        changed = changed or c8 or c9 or g4
+        pass
     # pester-integration-on-label.yml: ensure session index post in integration job
     if path.name == 'pester-integration-on-label.yml':
-        c10 = ensure_session_index_post_in_job(doc, 'pester-integration', 'tests/results', 'pester-integration-session-index')
-        g5 = ensure_runner_unblock_guard(doc, 'pester-integration', 'tests/results/runner-unblock-snapshot.json')
-        changed = changed or c10 or g5
+        # Do not inject steps into a reusable workflow job (uses: ...)
+        try:
+            jobs = doc.get('jobs') or {}
+            j = jobs.get('pester-integration')
+            is_reusable = isinstance(j, dict) and 'uses' in j and isinstance(j.get('uses'), str)
+        except Exception:
+            is_reusable = False
+        if not is_reusable:
+            c10 = ensure_session_index_post_in_job(doc, 'pester-integration', 'tests/results', 'pester-integration-session-index')
+            g5 = ensure_runner_unblock_guard(doc, 'pester-integration', 'tests/results/runner-unblock-snapshot.json')
+            changed = changed or c10 or g5
     # smoke.yml: ensure session index post
     if path.name == 'smoke.yml':
         c11 = ensure_session_index_post_in_job(doc, 'compare', 'tests/results', 'smoke-session-index')

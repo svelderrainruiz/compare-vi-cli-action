@@ -26,7 +26,9 @@ jobs:
     - name: Deprecation notice
       shell: bash
       run: |
-        echo '### Deprecated Workflow' >> "$GITHUB_STEP_SUMMARY"
-        echo '' >> "$GITHUB_STEP_SUMMARY"
-        echo '- Use `CI Orchestrated (deterministic chain)` with `strategy=single`.' >> "$GITHUB_STEP_SUMMARY"
-        echo '- This file remains only for manual fallback and will be removed after probation.' >> "$GITHUB_STEP_SUMMARY"
+        cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+        ### Deprecated Workflow
+
+        - Use `CI Orchestrated (deterministic chain)` with `strategy=single`.
+        - This file remains only for manual fallback and will be removed after probation.
+        EOF

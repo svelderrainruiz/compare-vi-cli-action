@@ -62,23 +62,6 @@ jobs:
       include_integration: ${{ 'true' }}
       install_pester: ${{ 'false' }}
       sample_id: ${{ github.event.inputs.sample_id || '' }}
-
-    steps:
-    - name: Session index post (best-effort)
-      if: '${{ always() }}'
-      uses: ./.github/actions/session-index-post
-      with:
-        results-dir: tests/results
-        validate-schema: true
-        upload: true
-        artifact-name: pester-integration-session-index
-    - name: Runner Unblock Guard
-      if: '${{ always() }}'
-      uses: ./.github/actions/runner-unblock-guard
-      with:
-        snapshot-path: tests/results/runner-unblock-snapshot.json
-        cleanup: "${{ env.UNBLOCK_GUARD == '1' }}"
-        process-names: conhost,pwsh,LabVIEW,LVCompare
   integration-docs-only:
     needs: pre-init
     if: needs.pre-init.outputs.docs_only == 'true'
