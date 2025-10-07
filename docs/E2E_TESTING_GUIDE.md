@@ -84,6 +84,7 @@ pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strat
 1. Compare the two `provenance.json` files: values should differ only by run identifiers and the `strategy` field (`single` vs `matrix`).
 
 Expected Results:
+
 - Both single and matrix paths generate the same provenance shape and summary sections.
 - No missing summary blocks; session-index and guard steps appear in both paths.
 
