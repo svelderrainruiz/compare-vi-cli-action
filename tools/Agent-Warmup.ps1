@@ -41,6 +41,13 @@ param(
   [switch]$SkipSchemaValidation,
   [switch]$SkipWatch,
   [switch]$SkipSessionLock,
+  [switch]$SkipRogueScan,
+  [switch]$SkipAgentWaitValidation,
+  [switch]$GenerateDashboard,
+  [switch]$GenerateDashboardHtml,
+  [string]$DashboardGroup = 'pester-selfhosted',
+  [string]$DashboardResultsRoot = 'tests/results',
+  [string]$DashboardHtmlPath,
   [switch]$Quiet
 )
 
@@ -83,7 +90,8 @@ function Invoke-WatchSmoke {
   param(
     [string]$TestPath,
     [string]$ResultsDir,
-    [switch]$SkipSchema
+    [switch]$SkipSchema,
+    [switch]$ValidateAgentWait
   )
 
   $watchScript = Resolve-RepoPath -Relative 'tools/Watch-Pester.ps1'
@@ -128,6 +136,43 @@ function Invoke-WatchSmoke {
     }
   } else {
     Write-Info "watch-log.ndjson not found — skipping log validation."
+  }
+
+  if (-not $ValidateAgentWait) {
+    Write-Info "Skipping agent-wait validation (per flag)."
+    return
+  }
+
+  $agentDir = Resolve-RepoPath -Relative 'tests/results/_agent'
+  $waitLast = Join-Path $agentDir 'wait-last.json'
+  if (-not (Test-Path -LiteralPath $waitLast)) {
+    Write-Info "Agent wait telemetry not present (skip validation)."
+    return
+  }
+
+  Write-Info "Validating agent wait telemetry (agent-wait-result/v1)."
+  $waitJson = Get-Content -Raw -LiteralPath $waitLast | ConvertFrom-Json
+  if (-not $waitJson.schema -or $waitJson.schema -ne 'agent-wait-result/v1') {
+    throw "Unexpected agent wait schema in wait-last.json (found '$($waitJson.schema)')."
+  }
+  foreach ($required in @('reason','expectedSeconds','startedUtc','endedUtc','elapsedSeconds','withinMargin')) {
+    if (-not ($waitJson.PSObject.Properties.Name -contains $required)) {
+      throw "Agent wait last.json missing required field '$required'."
+    }
+  }
+
+  $waitLog = Join-Path $agentDir 'wait-log.ndjson'
+  if (Test-Path -LiteralPath $waitLog) {
+    $rawWait = (Get-Content -Raw -LiteralPath $waitLog).Trim()
+    if ($rawWait) {
+      $jsonArray = '[{0}]' -f ($rawWait -replace "}\s*\r?\n\s*{", "},{")
+      $objects = $jsonArray | ConvertFrom-Json
+      foreach ($obj in $objects) {
+        if ($obj.schema -ne 'agent-wait-result/v1') {
+          throw "Agent wait log entry has unexpected schema '$($obj.schema)'."
+        }
+      }
+    }
   }
 }
 
@@ -201,6 +246,41 @@ function Invoke-SessionLockUnitSuite {
   Write-Info ("Session-Lock suite completed: {0} tests in {1}s." -f $summary.total, $summary.durationSeconds)
 }
 
+function Invoke-RogueScan {
+  param(
+    [string]$ResultsRoot
+  )
+  $rogueScript = Resolve-RepoPath -Relative 'tools/Detect-RogueLV.ps1'
+  $resultsPath = Resolve-RepoPath -Relative $ResultsRoot
+  Write-Info "Running rogue LV scan (lookback 900s)."
+  & $rogueScript -ResultsDir $resultsPath -LookBackSeconds 900 -AppendToStepSummary | Out-Null
+}
+
+function Invoke-DashboardSnapshot {
+  param(
+    [string]$Group,
+    [string]$ResultsRoot,
+    [switch]$EmitHtml,
+    [string]$HtmlPath
+  )
+
+  $dashboardScript = Resolve-RepoPath -Relative 'tools/Dev-Dashboard.ps1'
+  $resultsPath = Resolve-RepoPath -Relative $ResultsRoot
+  Write-Info ("Generating dashboard snapshot (group={0}, results={1})." -f $Group, $resultsPath)
+  $json = & $dashboardScript -Group $Group -ResultsRoot $resultsPath -Quiet -Json
+  $jsonText = $json | Out-String
+  $snapshot = $jsonText | ConvertFrom-Json
+  $summaryPath = Resolve-RepoPath -Relative 'tests/results/_warmup/dashboard-last.json'
+  Ensure-Directory -Path (Split-Path -Parent $summaryPath)
+  $snapshot | ConvertTo-Json -Depth 6 | Out-File -FilePath $summaryPath -Encoding utf8
+  if ($EmitHtml) {
+    $target = if ($HtmlPath) { Resolve-RepoPath -Relative $HtmlPath } else { Resolve-RepoPath -Relative 'tests/results/dashboard-warmup.html' }
+    Write-Info ("Rendering dashboard HTML to {0}." -f $target)
+    & $dashboardScript -Group $Group -ResultsRoot $resultsPath -Quiet -Html -HtmlPath $target | Out-Null
+  }
+  Write-Info "Dashboard snapshot stored."
+}
+
 Write-Info "Starting agent warm-up."
 
 Set-EnvToggle -Name 'LV_SUPPRESS_UI' -Value '1'
@@ -216,7 +296,7 @@ if (-not $WatchResultsDir) {
 }
 
 if (-not $SkipWatch) {
-  Invoke-WatchSmoke -TestPath $WatchTestsPath -ResultsDir $WatchResultsDir -SkipSchema:$SkipSchemaValidation.IsPresent
+  Invoke-WatchSmoke -TestPath $WatchTestsPath -ResultsDir $WatchResultsDir -SkipSchema:$SkipSchemaValidation.IsPresent -ValidateAgentWait:(! $SkipAgentWaitValidation.IsPresent)
 } else {
   Write-Info "Skipping watch smoke execution (per flag)."
 }
@@ -225,6 +305,16 @@ if (-not $SkipSessionLock) {
   Invoke-SessionLockUnitSuite -TestPath $SessionLockTestsPath
 } else {
   Write-Info "Skipping Session-Lock unit suite (per flag)."
+}
+
+if (-not $SkipRogueScan) {
+  Invoke-RogueScan -ResultsRoot $DashboardResultsRoot
+} else {
+  Write-Info "Skipping rogue LV scan (per flag)."
+}
+
+if ($GenerateDashboard) {
+  Invoke-DashboardSnapshot -Group $DashboardGroup -ResultsRoot $DashboardResultsRoot -EmitHtml:$GenerateDashboardHtml.IsPresent -HtmlPath $DashboardHtmlPath
 }
 
 Write-Info "Agent warm-up completed successfully."

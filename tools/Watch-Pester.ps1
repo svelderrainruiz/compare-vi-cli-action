@@ -289,15 +289,21 @@ function Invoke-PesterSelective {
         $payload['previous'] = [ordered]@{ tests = $prev.Tests; failed = $prev.Failed; skipped = $prev.Skipped }
         $payload['delta'] = [ordered]@{ tests = $dTests; failed = $dFailed; skipped = $dSkipped }
       }
-      if ($RerunFailedAttempts -gt 0) {
-        $flakyInfo = [ordered]@{ enabled = $true; attempts = $RerunFailedAttempts }
-        if ($flakyRecoveredAfter) { $flakyInfo['recoveredAfter'] = [int]$flakyRecoveredAfter }
-        if ($flakyInitialFailedFiles -and $flakyInitialFailedFiles.Count -gt 0) {
-          $flakyInfo['initialFailedFiles'] = @($flakyInitialFailedFiles).Count
-          $flakyInfo['initialFailedFileNames'] = $flakyInitialFailedFiles | ForEach-Object { Split-Path $_ -Leaf }
-        }
-        $payload['flaky'] = $flakyInfo
+      $flakyInfo = [ordered]@{
+        enabled = ($RerunFailedAttempts -gt 0)
+        attempts = $RerunFailedAttempts
+        recoveredAfter = 0
+        initialFailedFiles = 0
+        initialFailedFileNames = @()
       }
+      if ($RerunFailedAttempts -gt 0) {
+        if ($flakyRecoveredAfter) { $flakyInfo.recoveredAfter = [int]$flakyRecoveredAfter }
+        if ($flakyInitialFailedFiles -and $flakyInitialFailedFiles.Count -gt 0) {
+          $flakyInfo.initialFailedFiles = @($flakyInitialFailedFiles).Count
+          $flakyInfo.initialFailedFileNames = $flakyInitialFailedFiles | ForEach-Object { Split-Path $_ -Leaf }
+        }
+      }
+      $payload['flaky'] = $flakyInfo
       $json = $payload | ConvertTo-Json -Depth 5
       $outDir = Split-Path -Parent $DeltaJsonPath
       if ($outDir -and -not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }

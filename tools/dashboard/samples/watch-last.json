@@ -5,5 +5,11 @@
   "previous": { "tests": 18, "failed": 2, "skipped": 0 },
   "delta": { "tests": 2, "failed": 1, "skipped": 0 },
   "classification": "worsened",
-  "flaky": { "enabled": true, "attempts": 2 }
+  "flaky": {
+    "enabled": true,
+    "attempts": 2,
+    "recoveredAfter": 0,
+    "initialFailedFiles": 0,
+    "initialFailedFileNames": []
+  }
 }
