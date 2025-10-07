@@ -180,7 +180,8 @@ jobs:
             Write-Host "::error::Dispatcher not found at $dispatcherPath"
             exit 1
           }
-          $cmd = $dispatcherPath
+          Import-Module $dispatcherPath -Force
+          $cmd = Get-Command Invoke-PesterTests.ps1 -ErrorAction Stop
           $lockScript = Join-Path (Get-Location) 'tools/Session-Lock.ps1'
           $bound = [ordered]@{}
           $bound.TestsPath = 'tests'
