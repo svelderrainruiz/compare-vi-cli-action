@@ -20,6 +20,9 @@ Session Lock (local)
 - Single test file: ./Invoke-PesterTests.ps1 -TestsPath tests/SessionLock.Tests.ps1
 - Full unit pass (includes loaders/CLI): ./Invoke-PesterTests.ps1
 
+Warm-up Shortcut
+- pwsh -File tools/Agent-Warmup.ps1  (sets env toggles, runs watch smoke + session-lock tests, validates telemetry)
+
 Watch Mode (single-run smoke)
 - $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
 - pwsh -File tools/Watch-Pester.ps1 -SingleRun -RunAllOnStart -TestPath tests/WatchSmoke.Tests.ps1 -Tag WatchSmoke -Quiet
