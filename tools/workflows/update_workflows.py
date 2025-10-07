@@ -302,11 +302,36 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         c11 = ensure_session_index_post_in_job(doc, 'compare', 'tests/results', 'smoke-session-index')
         g6 = ensure_runner_unblock_guard(doc, 'compare', 'tests/results/runner-unblock-snapshot.json')
         changed = changed or c11 or g6
-    # compare-artifacts.yml: ensure session index post in publish job
     if path.name == 'compare-artifacts.yml':
         c12 = ensure_session_index_post_in_job(doc, 'publish', 'tests/results', 'compare-session-index')
         g7 = ensure_runner_unblock_guard(doc, 'publish', 'tests/results/runner-unblock-snapshot.json')
         changed = changed or c12 or g7
+    # pester-reusable.yml: add a Runner Unblock Guard to preflight with CLEAN_LVCOMPARE cleanup gating
+    if path.name == 'pester-reusable.yml':
+        try:
+            jobs = doc.get('jobs') or {}
+            job = jobs.get('preflight')
+            if isinstance(job, dict):
+                steps = job.setdefault('steps', [])
+                insert_at = 1 if steps and isinstance(steps[0], dict) and str(steps[0].get('uses','')).startswith('actions/checkout') else 0
+                has_guard = any(isinstance(st, dict) and str(st.get('uses','')).endswith('runner-unblock-guard') for st in steps)
+                if not has_guard:
+                    guard = {
+                        'name': 'Runner Unblock Guard (preflight)',
+                        'uses': './.github/actions/runner-unblock-guard',
+                        'with': {
+                            'snapshot-path': 'tests/results/runner-unblock-snapshot.json',
+                            'cleanup': DQS("${{ env.CLEAN_LVCOMPARE == '1' }}"),
+                            'process-names': 'LabVIEW,LVCompare',
+                        },
+                    }
+                    steps.insert(insert_at, guard)
+                    job['steps'] = steps
+                    changed = True
+        except Exception:
+            pass
+
+
     if changed:
         new = dump_yaml(doc, path)
         return True, new
@@ -343,3 +368,4 @@ def main(argv: List[str]) -> int:
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
+
