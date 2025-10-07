@@ -252,8 +252,13 @@ function Invoke-CompareVI {
     }
 
     $diff = $false
-    if ($code -eq 1) { $diff = $true }
-    elseif ($code -ne 0) { throw "Compare CLI failed with exit code $code" }
+    $pendingErrorMessage = $null
+    if ($code -eq 1) {
+      $diff = $true
+      if ($FailOnDiff) { $pendingErrorMessage = "Compare CLI reported differences (exit code $code)" }
+    } elseif ($code -ne 0) {
+      $pendingErrorMessage = "Compare CLI failed with exit code $code"
+    }
 
     if ($GitHubOutputPath) {
       "exitCode=$code" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
@@ -303,6 +308,8 @@ function Invoke-CompareVI {
       )
       ($summaryLines -join "`n") | Out-File -FilePath $GitHubStepSummaryPath -Append -Encoding utf8
     }
+
+    if ($pendingErrorMessage) { throw $pendingErrorMessage }
 
     [pscustomobject]@{
       Base                         = $baseAbs
