@@ -75,6 +75,12 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v5
+      - name: Runner Unblock Guard (preflight)
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/runner-unblock-snapshot.json
+          cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+          process-names: 'LabVIEW,LVCompare'
       - name: Verify LVCompare and idle LabVIEW state
         shell: pwsh
         run: |
