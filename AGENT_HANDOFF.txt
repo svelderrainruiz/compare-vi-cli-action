@@ -24,6 +24,7 @@ Warm-up Shortcut
 - pwsh -File tools/Agent-Warmup.ps1  (sets env toggles, runs watch smoke + session-lock tests, validates telemetry)
   - Add -GenerateDashboard [-GenerateDashboardHtml] to emit a dashboard snapshot during warm-up.
   - Use -SkipRogueScan / -SkipAgentWaitValidation when you need a quicker loop.
+  - LabVIEW process snapshot written to tests/results/_warmup/labview-processes.json (via Capture-LabVIEWSnapshot).
 
 Watch Mode (single-run smoke)
 - $env:WATCH_RESULTS_DIR = 'tests/results/_watch'

@@ -26,7 +26,9 @@ param(
   [string]$BaseVi,
   [string]$HeadVi,
   [int]$TimeoutSeconds = 15,
-  [switch]$KeepLVCompare
+  [switch]$KeepLVCompare,
+  [string]$SnapshotPath = 'tests/results/_warmup/labview-processes.json',
+  [switch]$SkipSnapshot
 )
 
 Set-StrictMode -Version Latest
@@ -34,6 +36,23 @@ $ErrorActionPreference = 'Stop'
 
 function Write-StepSummaryLine([string]$line) {
   if ($env:GITHUB_STEP_SUMMARY) { $line | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+}
+
+function Invoke-ProcessSnapshot {
+  if ($SkipSnapshot) {
+    Write-Host "Warmup: skipping LabVIEW process snapshot (per flag)."
+    return
+  }
+  $captureScript = Join-Path $PSScriptRoot 'Capture-LabVIEWSnapshot.ps1'
+  if (-not (Test-Path -LiteralPath $captureScript)) {
+    Write-Host "Warmup: snapshot script not found at $captureScript" -ForegroundColor Yellow
+    return
+  }
+  try {
+    & $captureScript -OutputPath $SnapshotPath -Quiet
+  } catch {
+    Write-Host "Warmup: failed to capture LabVIEW process snapshot: $($_.Exception.Message)" -ForegroundColor Yellow
+  }
 }
 
 if ($IsWindows -ne $true) { return }
@@ -94,6 +113,7 @@ $shouldKeep = $KeepLVCompare.IsPresent -or ($env:WARMUP_KEEP_LVCOMPARE -eq '1')
 if ($shouldKeep) {
   Write-Host "Warmup: leaving LVCompare running (KeepLVCompare requested)."
   Write-StepSummaryLine "- Warmup: LVCompare left running (Keep flag)"
+  Invoke-ProcessSnapshot
   return
 }
 
@@ -122,3 +142,5 @@ try {
 } catch {
   Write-Host "Warmup: error while checking LVCompare state: $($_.Exception.Message)" -ForegroundColor Yellow
 }
+
+Invoke-ProcessSnapshot
