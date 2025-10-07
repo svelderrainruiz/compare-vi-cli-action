@@ -39,6 +39,20 @@
 - Keep integration tests isolated and slower; unit tests fast.
 - Results live under `tests/results/` (e.g., `pester-summary.json`, `pester-results.xml`, `session-index.json`).
 
+## Wire Probes (Long-Wire v2)
+
+- Probes are injected by `tools/workflows/update_workflows.py` into orchestrated/validate workflows.
+- Toggle: set repository variable `WIRE_PROBES=0` to skip probe steps (default is enabled).
+- Phases/anchors (all logged to `results/.../_wire/phase.json`):
+  - `J1` / `J2`: before and after checkout.
+  - `T1`: before Pester categories (`Run Pester tests via local dispatcher`, `Pester categories (serial, deterministic)`).
+  - `C1` / `C2`: around fixture drift execution (orchestrated drift job).
+  - `I1` / `I2`: around `Ensure Invoker (start/stop)`.
+  - `S1`: immediately before `Session index post` (matrix categories use `tests/results/${{ matrix.category }}`; drift uses `results/fixture-drift`).
+  - `G0` / `G1`: before/after `Runner Unblock Guard`.
+  - `P1`: after final summaries (`Summarize orchestrated run`, `Append final summary (single)`).
+- Inspect probes: `_wire` directory under job results and step summaries now show phase/timing markers.
+
 ## Commit & PRs
 
 - Scope commits narrowly; use descriptive messages and link issues.

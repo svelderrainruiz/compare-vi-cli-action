@@ -63,6 +63,11 @@ jobs:
       with:
         phase: J2
         results-dir: tests/results
+    - name: Wire Invoker (start)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-start
+      with:
+        results-dir: tests/results
     - name: Ensure Invoker (start)
       uses: ./.github/actions/ensure-invoker
       with:
@@ -126,6 +131,30 @@ jobs:
       run: |
         ./bin/actionlint -color
 
+    - name: Workflow drift check (ruamel updater - notice on develop)
+      if: github.ref_name == 'develop' || github.base_ref == 'develop'
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        python -m pip install --user ruamel.yaml
+        python tools/workflows/update_workflows.py --check \
+          .github/workflows/pester-selfhosted.yml \
+          .github/workflows/fixture-drift.yml \
+          .github/workflows/ci-orchestrated.yml \
+          .github/workflows/ci-orchestrated-v2.yml \
+          .github/workflows/pester-integration-on-label.yml 
+
+    - name: Workflow drift check (ruamel updater - enforced on main)
+      if: github.ref_name == 'main' || github.base_ref == 'main'
+      shell: pwsh
+      run: |
+        python -m pip install --user ruamel.yaml
+        python tools/workflows/update_workflows.py --check \
+          .github/workflows/pester-selfhosted.yml \
+          .github/workflows/fixture-drift.yml \
+          .github/workflows/ci-orchestrated.yml \
+          .github/workflows/ci-orchestrated-v2.yml \
+          .github/workflows/pester-integration-on-label.yml 
     - name: Setup Node with cache
       uses: actions/setup-node@v4
       with:
@@ -268,6 +297,11 @@ jobs:
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
+    - name: Wire Invoker (start)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-start
+      with:
+        results-dir: tests/results
     - name: Ensure Invoker (start)
       id: inv_start_matrix
       continue-on-error: true
@@ -361,6 +395,11 @@ jobs:
       shell: pwsh
       run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -SummaryJson 'pester-summary.json'
 
+    - name: Wire Session Index (S1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-session-index
+      with:
+        results-dir: tests/results/${{ matrix.category }}
     - name: Session index post
       if: always()
       uses: ./.github/actions/session-index-post
@@ -389,6 +428,11 @@ jobs:
         name: invoker-boot-${{ matrix.category }}
         path: tests/results/${{ matrix.category }}/_invoker/boot.log
 
+    - name: Wire Guard (pre)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-guard-pre
+      with:
+        results-dir: tests/results
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
@@ -397,12 +441,22 @@ jobs:
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
+    - name: Wire Guard (post)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-guard-post
+      with:
+        results-dir: tests/results
     - name: Ensure Invoker (stop)
       if: always()
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
 
+    - name: Wire Invoker (stop)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-stop
+      with:
+        results-dir: tests/results
     - name: Append determinism summary
       if: always()
       shell: pwsh
@@ -460,10 +514,21 @@ jobs:
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
+    - name: Wire Invoker (start)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-start
+      with:
+        results-dir: tests/results
     - name: Ensure Invoker (start)
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
+    - name: Wire Probe (C1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: C1
+        results-dir: results/fixture-drift
     - name: Fixture Drift Orchestrator
       uses: ./.github/actions/fixture-drift
       with:
@@ -472,6 +537,17 @@ jobs:
         upload-artifacts: 'true'
         artifact-name: orchestrated-fixture-drift
 
+    - name: Wire Probe (C2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: C2
+        results-dir: results/fixture-drift
+    - name: Wire Session Index (S1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-session-index
+      with:
+        results-dir: results/fixture-drift
     - name: Session index post (best-effort)
       if: always()
       uses: ./.github/actions/session-index-post
@@ -494,6 +570,11 @@ jobs:
         name: compare-outcome-drift
         path: results/fixture-drift/compare-outcome.json
 
+    - name: Wire Guard (pre)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-guard-pre
+      with:
+        results-dir: tests/results
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
@@ -502,12 +583,22 @@ jobs:
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
+    - name: Wire Guard (post)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-guard-post
+      with:
+        results-dir: tests/results
     - name: Ensure Invoker (stop)
       if: always()
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
 
+    - name: Wire Invoker (stop)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-stop
+      with:
+        results-dir: tests/results
   publish:
     if: ${{ always() && (inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '')) }}
     runs-on: ubuntu-latest
@@ -535,6 +626,12 @@ jobs:
         ) -join "`n"
         $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+    - name: Wire Probe (P1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: P1
+        results-dir: tests/results
     - name: Download Pester category artifacts (dispatcher)
       if: always()
       uses: actions/download-artifact@v4
@@ -702,6 +799,11 @@ jobs:
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
 
+    - name: Wire Invoker (start)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-start
+      with:
+        results-dir: tests/results
     - name: Ensure Invoker (start)
       if: ${{ steps.ip.outputs.ok == 'true' }}
       id: inv_start_single
@@ -771,6 +873,16 @@ jobs:
       with:
         mode: stop
 
+    - name: Wire Invoker (stop)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-invoker-stop
+      with:
+        results-dir: tests/results
+    - name: Wire Session Index (S1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-session-index
+      with:
+        results-dir: tests/results
     - name: Session index post (single)
       if: always()
       uses: ./.github/actions/session-index-post
@@ -804,6 +916,12 @@ jobs:
         $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
         $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+    - name: Wire Probe (P1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: P1
+        results-dir: tests/results
     - name: Agent wait summary (single)
       if: always()
       uses: ./.github/actions/agent-wait-post

@@ -220,6 +220,7 @@ def _insert_wire_j1_j2_in_job(job: dict, results_dir: str = 'tests/results') -> 
     if not has_named('Wire Probe (J1)'):
         steps.insert(checkout_idx, {
             'name': 'Wire Probe (J1)',
+            'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
             'uses': './.github/actions/wire-probe',
             'with': {
                 'phase': 'J1',
@@ -232,6 +233,7 @@ def _insert_wire_j1_j2_in_job(job: dict, results_dir: str = 'tests/results') -> 
     if not has_named('Wire Probe (J2)'):
         steps.insert(checkout_idx + 1, {
             'name': 'Wire Probe (J2)',
+            'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
             'uses': './.github/actions/wire-probe',
             'with': {
                 'phase': 'J2',
