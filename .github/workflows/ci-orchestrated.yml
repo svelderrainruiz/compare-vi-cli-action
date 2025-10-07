@@ -89,18 +89,31 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Install actionlint
+    - name: Install actionlint (retry)
+      shell: bash
       run: |
+        set -euo pipefail
         mkdir -p ./bin
-        curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest ./bin
+        for i in 1 2 3; do \
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+            | bash -s -- latest ./bin && break || { echo "retry $i"; sleep 2; }; \
+        done
 
     - name: Run actionlint
       run: |
         ./bin/actionlint -color
 
-    - name: Install markdownlint-cli
+    - name: Setup Node with cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install markdownlint-cli (retry)
+      shell: bash
       run: |
-        npm install -g markdownlint-cli
+        set -euo pipefail
+        for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo "retry $i"; sleep 2; }; done
 
     - name: Run markdownlint (non-blocking)
       continue-on-error: true
@@ -131,11 +144,31 @@ jobs:
         }
     # Hosted preflight is informational only; enforce LVCompare on self-hosted jobs.
 
+  probe:
+    # Quick interactivity probe on self-hosted Windows to decide single vs fallback
+    if: ${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 2
+    needs: [normalize, preflight]
+    outputs:
+      ok: ${{ steps.out.outputs.ok }}
+    steps:
+    - uses: actions/checkout@v5
+    - name: Run interactivity probe
+      id: out
+      shell: pwsh
+      run: |
+        pwsh -File tools/Write-InteractivityProbe.ps1
+        $ui = [System.Environment]::UserInteractive
+        $in = $false; try { $in  = [Console]::IsInputRedirected } catch {}
+        $ok = ($ui -and -not $in)
+        "ok=$ok" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
   pester-category:
-    if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') }}
+    if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') || (inputs.strategy == 'single' && needs.probe.outputs.ok == 'false') }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
-    needs: [normalize, preflight]
+    needs: [normalize, preflight, probe]
     strategy:
       matrix:
         category: [dispatcher, fixtures, schema, comparevi, loop, psummary, workflow]
@@ -519,10 +552,10 @@ jobs:
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
   windows-single:
-    if: ${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}
+    if: ${{ (inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single') && needs.probe.outputs.ok == 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 10
-    needs: [normalize, preflight]
+    needs: [normalize, preflight, probe]
     env:
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'

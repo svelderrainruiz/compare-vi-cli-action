@@ -25,6 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Setup Node with cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
       - name: CLI lints (notice on develop)
         if: github.ref_name == 'develop' || github.base_ref == 'develop'
@@ -78,10 +83,15 @@ jobs:
             $msg | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
-      - name: Install actionlint
+      - name: Install actionlint (retry)
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p ./bin
-          curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest ./bin
+          for i in 1 2 3; do \
+            curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+              | bash -s -- latest ./bin && break || { echo "retry $i"; sleep 2; }; \
+          done
 
       - name: Run actionlint
         run: |
@@ -97,9 +107,11 @@ jobs:
         shell: pwsh
         run: pwsh -File tools/Lint-InlineIfInFormat.ps1
 
-      - name: Install markdownlint-cli
+      - name: Install markdownlint-cli (retry)
+        shell: bash
         run: |
-          npm install -g markdownlint-cli
+          set -euo pipefail
+          for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo "retry $i"; sleep 2; }; done
 
       - name: Run markdownlint
         run: |
