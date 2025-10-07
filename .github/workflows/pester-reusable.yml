@@ -164,30 +164,43 @@ jobs:
 
       - name: Run Pester tests via local dispatcher
         id: dispatcher
-        continue-on-error: true
         shell: pwsh
         run: |
           $logPath = 'tests/results/pester-dispatcher.log'
           $logDir = Split-Path -Parent $logPath
           if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
           if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
-          $args = @()
-          $args += '-TestsPath'; $args += 'tests'
-          $args += '-IncludeIntegration'; $args += '${{ needs.normalize.outputs.include_integration }}'
-          $args += '-ResultsPath'; $args += 'tests/results'
-          $args += '-EmitFailuresJsonAlways'
+          Import-Module ./tools/Invoke-PesterTests.ps1 -Force
+          $cmd = Get-Command Invoke-PesterTests.ps1 -ErrorAction Stop
+          $bound = [ordered]@{}
+          $bound.TestsPath = 'tests'
+          $bound.IncludeIntegration = '${{ needs.normalize.outputs.include_integration }}'
+          $bound.ResultsPath = 'tests/results'
+          if ('${{ steps.dprofile.outputs.emit_failures_json_always }}' -eq 'true') { $bound.EmitFailuresJsonAlways = $true }
           if ('${{ inputs.include_patterns }}' -ne '') {
-            $args += '-IncludePatterns'; $args += '${{ inputs.include_patterns }}'
+            $patternInput = '${{ inputs.include_patterns }}'
+            $pattern = (Split-Path -Leaf $patternInput)
+            $bound.IncludePatterns = $pattern
           }
-          & ./Invoke-PesterTests.ps1 @args 2>&1 | Tee-Object -FilePath $logPath
+          $timeoutSeconds = '${{ steps.dprofile.outputs.timeout_seconds }}'
+          if ($timeoutSeconds -and $timeoutSeconds -match '^-?\d+(\.\d+)?$') {
+            try {
+              $bound.TimeoutSeconds = [double]$timeoutSeconds
+            } catch {
+              Write-Host "::warning::Unable to parse timeout_seconds ('$timeoutSeconds') as double."
+            }
+          }
+          $boundString = $bound.Keys | ForEach-Object { "$_=$($bound[$_])" } -join ', '
+          Write-Host "::debug::Dispatcher parameters: $boundString"
+          & $cmd @bound 2>&1 | Tee-Object -FilePath $logPath
           $exitCode = $LASTEXITCODE
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          if ('${{ inputs.continue_on_error }}' -ne 'true' -and $exitCode -ne 0) {
-            exit $exitCode
+          if ($exitCode -ne 0) {
+            Write-Host "::error::Pester dispatcher exited with code $exitCode"
           }
 
       - name: Summarize dispatcher log (failure)
-        if: ${{ steps.dispatcher.outcome == 'failure' }}
+        if: ${{ steps.dispatcher.outputs.exit_code != '0' }}
         shell: pwsh
         run: |
           $logPath = 'tests/results/pester-dispatcher.log'
@@ -196,25 +209,23 @@ jobs:
             return
           }
           $analysis = & ./tools/Analyze-JobLog.ps1 -LogPath $logPath -Pattern "Cannot process argument transformation on parameter 'TimeoutMinutes'"
-          $matchSnippet = $null
           if ($analysis.Matches -and $analysis.Matches.Count -gt 0) {
-            $matchSnippet = $analysis.Matches[0].Value
+            $first = $analysis.Matches[0].Value
+            Write-Host "::error::$first"
           } else {
-            $matchSnippet = 'Cannot process argument transformation on parameter ''TimeoutMinutes'' was not detected in dispatcher output.'
+            Write-Host "::notice::TimeoutMinutes conversion issue not detected; see dispatcher log for details."
           }
-          $excerpt = $null
-          $lines = $analysis.Content -split "`r?`n"
-          foreach ($line in $lines) {
-            if ($line -match 'Cannot process argument transformation on parameter') {
-              $excerpt = $line.Trim()
-              break
-            }
-          }
-          if ($excerpt) { Write-Host "::error::$excerpt" }
           if ($env:GITHUB_STEP_SUMMARY) {
-            $summaryLines = @('### Dispatcher Failure Insight','',$matchSnippet)
-            if ($excerpt) { $summaryLines += ('- Excerpt: {0}' -f $excerpt) }
-            $summaryLines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            $lines = @('### Dispatcher Failure Insight','')
+            if ($analysis.Matches -and $analysis.Matches.Count -gt 0) {
+              $lines += '- Encountered `Cannot process argument transformation on parameter ''TimeoutMinutes''`.'
+              $preview = $analysis.Content -split "`r?`n" | Where-Object { $_ -match 'Cannot process argument transformation on parameter' } | Select-Object -First 1
+              if ($preview) { $lines += ('- Excerpt: `{0}`' -f $preview.Trim()) }
+            } else {
+              $lines += '- TimeoutMinutes binding issue not detected; inspect dispatcher log manually.'
+            }
+            $lines += '- Log: tests/results/pester-dispatcher.log'
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           }
 
       - name: Publish Pester summary
