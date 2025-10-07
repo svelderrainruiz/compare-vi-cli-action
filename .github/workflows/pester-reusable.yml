@@ -389,6 +389,46 @@ jobs:
           if (-not (Test-Path $env:WATCH_RESULTS_DIR)) { New-Item -ItemType Directory -Force -Path $env:WATCH_RESULTS_DIR | Out-Null }
           pwsh -File tools/Watch-Pester.ps1 -SingleRun -RunAllOnStart -TestPath tests/WatchSmoke.Tests.ps1 -Tag WatchSmoke -Quiet
 
+      - name: Validate watch/queue schemas (notice-only)
+        if: always()
+        shell: pwsh
+        run: |
+          function Invoke-Validate($json,$schema){
+            if (Test-Path -LiteralPath $json) {
+              try {
+                pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $json -SchemaPath $schema
+                if ($LASTEXITCODE -ne 0) { Write-Host "::notice::Schema validation FAIL for $json (schema=$schema)" } else { Write-Host "::notice::Schema validation OK for $json" }
+              } catch { Write-Host "::notice::Schema validation EXC for $json: $($_.Exception.Message)" }
+            } else { Write-Host "::notice::Schema validation skipped (missing): $json" }
+          }
+          Invoke-Validate 'tests/results/_watch/watch-last.json' 'docs/schemas/watch-last-v1.schema.json'
+          Invoke-Validate 'tests/results/_agent/wait-last.json' 'docs/schemas/agent-wait-last-v1.schema.json'
+          $log = 'tests/results/_agent/wait-log.ndjson'
+          if (Test-Path -LiteralPath $log) {
+            $buf = ''
+            Get-Content -LiteralPath $log | ForEach-Object {
+              if ([string]::IsNullOrWhiteSpace($_)) {
+                if ($buf) {
+                  $tmp = New-TemporaryFile
+                  $buf | Set-Content -LiteralPath $tmp -Encoding UTF8
+                  pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $tmp -SchemaPath 'docs/schemas/agent-wait-log-item-v1.schema.json'
+                  Remove-Item $tmp -Force
+                  $buf = ''
+                }
+              } else {
+                $buf += ("$_`n")
+              }
+            }
+            if ($buf) {
+              $tmp = New-TemporaryFile
+              $buf | Set-Content -LiteralPath $tmp -Encoding UTF8
+              pwsh -File tools/Invoke-JsonSchemaLite.ps1 -JsonPath $tmp -SchemaPath 'docs/schemas/agent-wait-log-item-v1.schema.json'
+              Remove-Item $tmp -Force
+            }
+          } else {
+            Write-Host "::notice::Schema validation skipped (missing): $log"
+          }
+
       - name: Generate dev dashboard report
         if: always()
         shell: pwsh
