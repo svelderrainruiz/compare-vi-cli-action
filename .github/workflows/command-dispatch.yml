@@ -61,6 +61,24 @@ jobs:
             echo "fork=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Guard PR state (open)
+        id: guard
+        if: always()
+        shell: bash
+        env:
+          AUTH: ${{ steps.auth.outputs.token }}
+        run: |
+          pr="$PR_NUMBER"
+          resp=$(curl -s -H "Authorization: Bearer $AUTH" -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/$REPO/pulls/$pr")
+          state=$(echo "$resp" | jq -r '.state // ""')
+          merged=$(echo "$resp" | jq -r '.merged // false')
+          if [ "$state" = "open" ] && [ "$merged" != "true" ]; then allowed=true; else allowed=false; fi
+          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          if [ "$allowed" != "true" ]; then
+            echo "::notice::PR #$PR_NUMBER is not open; skipping command dispatch."
+          fi
+
       - name: Parse orchestrated options from comment
         id: orch
         if: steps.cmd.outputs.target == 'orchestrated'
@@ -135,7 +153,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Dispatch orchestrated workflow
-        if: steps.cmd.outputs.target == 'orchestrated'
+        if: steps.cmd.outputs.target == 'orchestrated' && steps.guard.outputs.allowed == 'true'
         shell: bash
         env:
           TARGET_REF: ${{ steps.ref.outputs.target_ref }}
@@ -187,7 +205,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Dispatch unit tests
-        if: steps.cmd.outputs.target == 'unit'
+        if: steps.cmd.outputs.target == 'unit' && steps.guard.outputs.allowed == 'true'
         shell: bash
         run: |
           curl -s -X POST \
@@ -197,7 +215,7 @@ jobs:
            -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'","inputs":{"include_integration":"false"}}' | cat
 
       - name: Dispatch mock tests
-        if: steps.cmd.outputs.target == 'mock'
+        if: steps.cmd.outputs.target == 'mock' && steps.guard.outputs.allowed == 'true'
         shell: bash
         run: |
           curl -s -X POST \
@@ -207,7 +225,7 @@ jobs:
            -d '{"ref":"'"${{ steps.ref.outputs.target_ref }}"'"}' | cat
 
       - name: Dispatch smoke tests
-        if: steps.cmd.outputs.target == 'smoke'
+        if: steps.cmd.outputs.target == 'smoke' && steps.guard.outputs.allowed == 'true'
         shell: bash
         env:
           TARGET_REF: ${{ steps.ref.outputs.target_ref }}

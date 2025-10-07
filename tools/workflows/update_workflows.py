@@ -113,7 +113,7 @@ def _mk_hosted_preflight_step() -> dict:
         '  Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"',
         '} else { Write-Host "LVCompare present: $cli" }',
         "$lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue",
-        'if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }',
+        "if ($lv) { $pids = ($lv | ForEach-Object Id); $msg = \"::error::LabVIEW.exe is running (PID(s): {0})\" -f ([string]::Join(\",\", $pids)); Write-Host $msg; exit 1 }",
         "Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'",
         'if ($env:GITHUB_STEP_SUMMARY) {',
         "  $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join \"`n\"",
@@ -126,6 +126,83 @@ def _mk_hosted_preflight_step() -> dict:
         'shell': 'pwsh',
         'run': LIT(body),
     }
+
+
+def _mk_hosted_notice_step() -> dict:
+    # Normalize the hosted Windows notice-only step to avoid -join folding
+    lines = [
+        "$cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'",
+        'if (-not (Test-Path -LiteralPath $cli)) {',
+        '  Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"',
+        '} else {',
+        '  Write-Host "LVCompare present: $cli"',
+        '}',
+        "$lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue",
+        "if ($lv) { $pids = ($lv | ForEach-Object Id); $msg = '::notice::LabVIEW.exe is running (PID(s): {0}).' -f ([string]::Join(',', $pids)); Write-Host $msg } else { Write-Host 'LabVIEW not running.' }",
+        "Write-Host 'Preflight check complete.'",
+    ]
+    body = "\n".join(lines)
+    return {
+        'name': 'Verify LVCompare and idle LabVIEW state (notice-only on hosted)',
+        'shell': 'pwsh',
+        'run': LIT(body),
+    }
+
+
+def ensure_hosted_notice(doc, job_key: str) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    job = jobs.get(job_key)
+    if not isinstance(job, dict):
+        return changed
+    steps = job.setdefault('steps', [])
+    idx_notice = None
+    for i, st in enumerate(steps):
+        if isinstance(st, dict) and 'Verify LVCompare and idle LabVIEW state' in str(st.get('name', '')):
+            idx_notice = i
+            break
+    new_step = _mk_hosted_notice_step()
+    if idx_notice is None:
+        steps.append(new_step)
+        job['steps'] = steps
+        return True
+    # Update run body to canonical hosted content
+    if steps[idx_notice].get('run') != new_step['run']:
+        steps[idx_notice]['run'] = new_step['run']
+        steps[idx_notice]['shell'] = 'pwsh'
+        changed = True
+    return changed
+
+
+def normalize_hosted_preflight_steps(doc) -> bool:
+    """Normalize any hosted Windows preflight/notice steps across all jobs by name.
+    Safe no-op if steps are absent or names differ.
+    """
+    changed = False
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return False
+    preflight_tmpl = _mk_hosted_preflight_step()
+    notice_tmpl = _mk_hosted_notice_step()
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps') or []
+        for i, st in enumerate(steps):
+            if not isinstance(st, dict):
+                continue
+            nm = str(st.get('name', ''))
+            if nm == preflight_tmpl['name']:
+                if st.get('run') != preflight_tmpl['run'] or st.get('shell') != 'pwsh':
+                    st['run'] = preflight_tmpl['run']
+                    st['shell'] = 'pwsh'
+                    changed = True
+            elif nm == notice_tmpl['name']:
+                if st.get('run') != notice_tmpl['run'] or st.get('shell') != 'pwsh':
+                    st['run'] = notice_tmpl['run']
+                    st['shell'] = 'pwsh'
+                    changed = True
+    return changed
 
 
 def _mk_rerun_hint_step(default_strategy: str) -> dict:
@@ -296,8 +373,16 @@ def ensure_lint_resiliency(doc, job_name: str, include_node: bool = True, markdo
     job = jobs.get(job_name)
     if not isinstance(job, dict):
         return False
-    steps = job.setdefault('steps', [])
+    # Ensure job-level env has ACTIONLINT_VERSION wired to repo vars with default
     changed = False
+    job_env = job.setdefault('env', {})
+    desired = SQS("${{ vars.ACTIONLINT_VERSION || '1.7.7' }}")
+    if job_env.get('ACTIONLINT_VERSION') != desired:
+        job_env['ACTIONLINT_VERSION'] = desired
+        job['env'] = job_env
+        changed = True
+
+    steps = job.setdefault('steps', [])
 
     # Determine checkout index for insertion points
     checkout_idx = _find_step_index(steps, 'actions/checkout@v5')
@@ -382,7 +467,15 @@ def ensure_lint_resiliency(doc, job_name: str, include_node: bool = True, markdo
     # Install markdownlint step
     md_body = (
         "set -euo pipefail\n"
-        "for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo \"retry $i\"; sleep 2; }; done\n"
+        "for i in 1 2 3; do\n"
+        "  if npm install -g markdownlint-cli; then\n"
+        "    break\n"
+        "  else\n"
+        "    npm cache clean --force || true\n"
+        "    echo \"retry $i\"\n"
+        "    sleep 2\n"
+        "  fi\n"
+        "done\n"
     )
     md_install_step = {
         'name': 'Install markdownlint-cli (retry)',
@@ -560,6 +653,210 @@ def ensure_runner_unblock_guard(doc, job_key: str, snapshot_path: str) -> bool:
     return changed
 
 
+def _ensure_job_concurrency(doc, job_key: str, group: str, cancel_in_progress: bool) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    job = jobs.get(job_key)
+    if not isinstance(job, dict):
+        return changed
+    want = {
+        'group': group,
+        'cancel-in-progress': cancel_in_progress,
+    }
+    cur = job.get('concurrency')
+    if cur != want:
+        job['concurrency'] = want
+        changed = True
+    return changed
+
+
+def _mk_wire_probe_step(phase: str, results_dir: str = 'results/fixture-drift') -> dict:
+    return {
+        'name': f'Wire Probe ({phase})',
+        'uses': './.github/actions/wire-probe',
+        'with': {
+            'phase': phase,
+            'results-dir': results_dir,
+        },
+    }
+
+
+def _mk_lv_guard_pre_step() -> dict:
+    return {
+        'name': 'LV Guard (pre)',
+        'uses': './.github/actions/runner-unblock-guard',
+        'with': {
+            'snapshot-path': 'results/fixture-drift/lv-guard-pre.json',
+            'cleanup': DQS("${{ env.CLEAN_LVCOMPARE == '1' }}"),
+            'process-names': 'LVCompare,LabVIEW',
+        },
+    }
+
+
+def _mk_wire_guard_pre_step() -> dict:
+    return {
+        'name': 'Wire Guard (pre)',
+        'uses': './.github/actions/wire-guard-pre',
+        'with': {
+            'results-dir': 'results/fixture-drift',
+        },
+    }
+
+
+def _mk_wire_guard_post_step() -> dict:
+    return {
+        'name': 'Wire Guard (post)',
+        'uses': './.github/actions/wire-guard-post',
+        'with': {
+            'results-dir': 'results/fixture-drift',
+        },
+    }
+
+
+def _mk_warmup_step() -> dict:
+    return {
+        'name': 'LabVIEW warmup (best-effort)',
+        'shell': 'pwsh',
+        'run': LIT('pwsh -File tools/Warmup-LabVIEW.ps1\n'),
+    }
+
+
+def _mk_wire_invoker_start_step() -> dict:
+    return {
+        'name': 'Wire Invoker (start)',
+        'uses': './.github/actions/wire-invoker-start',
+        'with': {
+            'results-dir': 'results/fixture-drift',
+        },
+    }
+
+
+def _mk_wire_invoker_stop_step() -> dict:
+    return {
+        'name': 'Wire Invoker (stop)',
+        'uses': './.github/actions/wire-invoker-stop',
+        'with': {
+            'results-dir': 'results/fixture-drift',
+        },
+    }
+
+
+def _mk_wire_session_index_step() -> dict:
+    return {
+        'name': 'Wire Session Index (S1)',
+        'if': SQS('${{ always() }}'),
+        'uses': './.github/actions/wire-session-index',
+        'with': {
+            'results-dir': 'results/fixture-drift',
+        },
+    }
+
+
+def _step_exists(steps: list, predicate) -> bool:
+    for st in steps:
+        try:
+            if predicate(st):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _insert_step_relative(steps: list, anchor_name: str, new_step: dict, where: str = 'after') -> bool:
+    """Insert new_step relative to the first step with name==anchor_name.
+    where: 'before' or 'after'
+    """
+    for idx, st in enumerate(steps):
+        if isinstance(st, dict) and st.get('name') == anchor_name:
+            insert_at = idx if where == 'before' else idx + 1
+            steps.insert(insert_at, new_step)
+            return True
+    return False
+
+
+def ensure_long_wire_fixture_drift_windows(doc) -> bool:
+    changed = False
+    jobs = doc.get('jobs') or {}
+    job = jobs.get('validate-windows')
+    if not isinstance(job, dict):
+        return changed
+    # job-level serialization
+    c0 = _ensure_job_concurrency(doc, 'validate-windows', 'lv-fixture-win', False)
+    changed = changed or c0
+    steps = job.setdefault('steps', [])
+
+    # Ensure J1 before checkout and J2 after checkout
+    checkout_idx = next((i for i, s in enumerate(steps) if isinstance(s, dict) and str(s.get('uses','')).startswith('actions/checkout@')), None)
+    if checkout_idx is not None:
+        # J1
+        if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (J1)'):
+            steps.insert(checkout_idx, _mk_wire_probe_step('J1'))
+            changed = True
+            checkout_idx += 1  # shift due to insertion
+        # J2
+        if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (J2)'):
+            steps.insert(checkout_idx + 1, _mk_wire_probe_step('J2'))
+            changed = True
+
+    # After docs-only detection: LV Guard (pre), Wire Guard (pre), Warmup, Wire Invoker (start)
+    anchor = 'Detect docs-only change'
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'LV Guard (pre)'):
+        if _insert_step_relative(steps, anchor, _mk_lv_guard_pre_step(), 'after'):
+            changed = True
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Guard (pre)'):
+        if _insert_step_relative(steps, anchor, _mk_wire_guard_pre_step(), 'after'):
+            changed = True
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'LabVIEW warmup (best-effort)'):
+        if _insert_step_relative(steps, anchor, _mk_warmup_step(), 'after'):
+            changed = True
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Invoker (start)'):
+        if _insert_step_relative(steps, anchor, _mk_wire_invoker_start_step(), 'after'):
+            changed = True
+
+    # C1 before orchestrator, C2 after orchestrator
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (C1)'):
+        if _insert_step_relative(steps, 'Fixture Drift Orchestrator', _mk_wire_probe_step('C1'), 'before'):
+            changed = True
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (C2)'):
+        if _insert_step_relative(steps, 'Fixture Drift Orchestrator', _mk_wire_probe_step('C2'), 'after'):
+            changed = True
+
+    # After Verify fixture step: C3 and V1
+    ver_name = 'Verify fixture vs LVCompare (notice-only)'
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (C3)'):
+        if _insert_step_relative(steps, ver_name, _mk_wire_probe_step('C3'), 'after'):
+            changed = True
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (V1)'):
+        if _insert_step_relative(steps, ver_name, _mk_wire_probe_step('V1'), 'after'):
+            changed = True
+
+    # Ensure wire session index S1 before session-index-post
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('uses','') == './.github/actions/wire-session-index'):
+        # Insert before Session index post (best-effort)
+        if _insert_step_relative(steps, 'Session index post (best-effort)', _mk_wire_session_index_step(), 'before'):
+            changed = True
+
+    # After Runner Unblock Guard, add Wire Invoker (stop)
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Invoker (stop)'):
+        if _insert_step_relative(steps, 'Runner Unblock Guard', _mk_wire_invoker_stop_step(), 'after'):
+            changed = True
+
+    # After Ensure Invoker (stop), add P1
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('name') == 'Wire Probe (P1)'):
+        if _insert_step_relative(steps, 'Ensure Invoker (stop)', _mk_wire_probe_step('P1'), 'after'):
+            changed = True
+
+    # After LV Guard (post), add wire-guard-post
+    if not _step_exists(steps, lambda s: isinstance(s, dict) and s.get('uses','') == './.github/actions/wire-guard-post'):
+        if _insert_step_relative(steps, 'LV Guard (post)', _mk_wire_guard_post_step(), 'after'):
+            changed = True
+
+    job['steps'] = steps
+    jobs['validate-windows'] = job
+    doc['jobs'] = jobs
+    return changed
+
+
 def apply_transforms(path: Path) -> tuple[bool, str]:
     orig = path.read_text(encoding='utf-8')
     doc = load_yaml(path)
@@ -574,8 +871,13 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
     # fixture-drift.yml hosted preflight + session index post in validate-windows
     if path.name == 'fixture-drift.yml':
         c3 = ensure_hosted_preflight(doc, 'preflight-windows')
-        c4 = ensure_session_index_post_in_job(doc, 'validate-windows', 'results/fixture-drift', 'fixture-drift-session-index')
-        changed = changed or c3 or c4
+        c4 = ensure_hosted_notice(doc, 'preflight-windows')
+        c5 = ensure_session_index_post_in_job(doc, 'validate-windows', 'results/fixture-drift', 'fixture-drift-session-index')
+        lw = ensure_long_wire_fixture_drift_windows(doc)
+        changed = changed or c3 or c4 or c5 or lw
+    # Normalize hosted preflight steps across any workflow
+    c_global = normalize_hosted_preflight_steps(doc)
+    changed = changed or c_global
     # ci-orchestrated.yml hosted preflight + pester matrix session index post + rerun hints + interactivity probe wiring
     if path.name == 'ci-orchestrated.yml':
         c5 = ensure_hosted_preflight(doc, 'preflight')
@@ -652,7 +954,8 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         except Exception:
             pass
     if path.name == 'validate.yml':
-        lr2 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=False)
+        # Make markdownlint non-blocking in Validate to avoid PR noise; Workflows Lint is the required check.
+        lr2 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
         changed = changed or lr2
 
 
