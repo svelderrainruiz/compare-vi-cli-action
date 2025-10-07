@@ -4,6 +4,35 @@ $ErrorActionPreference = 'Stop'
 # Import shared tokenization pattern
 Import-Module (Join-Path $PSScriptRoot 'ArgTokenization.psm1') -Force
 
+# Native helpers for idle and window activation control
+if (-not ([System.Management.Automation.PSTypeName]'User32').Type) {
+  Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+[StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
+public static class User32 {
+  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+}
+"@
+}
+
+function Get-UserIdleSeconds {
+  try {
+    $lii = New-Object LASTINPUTINFO
+    $lii.cbSize = [uint32][System.Runtime.InteropServices.Marshal]::SizeOf($lii)
+    [void][User32]::GetLastInputInfo([ref]$lii)
+    $tickCount = [Environment]::TickCount
+    $idleMs = [uint32]($tickCount - $lii.dwTime)
+    return [int]([math]::Round($idleMs/1000.0))
+  } catch { return 0 }
+}
+
+function Get-CursorPos { try { $pt = New-Object POINT; [void][User32]::GetCursorPos([ref]$pt); return $pt } catch { $null } }
+function Set-CursorPosXY([int]$x,[int]$y) { try { [void][User32]::SetCursorPos($x,$y) } catch {} }
+
 function Resolve-Cli {
   param(
     [string]$Explicit
@@ -96,15 +125,21 @@ function Invoke-CompareVI {
     Push-Location -LiteralPath $WorkingDirectory; $pushed = $true
   }
   $lvBefore = @(); try { $lvBefore = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch {}
+  $lvcomparePid = $null
 
   try {
     if ([string]::IsNullOrWhiteSpace($Base)) { throw "Input 'base' is required and cannot be empty" }
     if ([string]::IsNullOrWhiteSpace($Head)) { throw "Input 'head' is required and cannot be empty" }
-    if (-not (Test-Path -LiteralPath $Base)) { throw "Base VI not found: $Base" }
-    if (-not (Test-Path -LiteralPath $Head)) { throw "Head VI not found: $Head" }
+    if (-not (Test-Path -LiteralPath $Base -PathType Any)) { throw "Base path not found: $Base" }
+    if (-not (Test-Path -LiteralPath $Head -PathType Any)) { throw "Head path not found: $Head" }
 
-    $baseAbs = (Resolve-Path -LiteralPath $Base).Path
-    $headAbs = (Resolve-Path -LiteralPath $Head).Path
+    $baseItem = Get-Item -LiteralPath $Base -ErrorAction Stop
+    $headItem = Get-Item -LiteralPath $Head -ErrorAction Stop
+    if ($baseItem.PSIsContainer) { throw "Base path refers to a directory, expected a VI file: $($baseItem.FullName)" }
+    if ($headItem.PSIsContainer) { throw "Head path refers to a directory, expected a VI file: $($headItem.FullName)" }
+
+    $baseAbs = (Resolve-Path -LiteralPath $baseItem.FullName).Path
+    $headAbs = (Resolve-Path -LiteralPath $headItem.FullName).Path
     $canonical = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
     $cliCandidate = $canonical
 
@@ -132,6 +167,17 @@ function Invoke-CompareVI {
     if ($PreviewArgs) { return $cmdline }
 
     $cwd = (Get-Location).Path
+    # Notice helper
+    function Write-LVNotice([hashtable]$h) {
+      try {
+        $dir = if ($env:LV_NOTICE_DIR) { $env:LV_NOTICE_DIR } else { Join-Path 'tests/results' '_lvcompare_notice' }
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        $ts = (Get-Date).ToString('yyyyMMdd-HHmmssffff')
+        $file = Join-Path $dir ("notice-" + $ts + ".json")
+        ($h | ConvertTo-Json -Depth 6) | Out-File -FilePath $file -Encoding utf8
+      } catch {}
+    }
+
     if ($Executor) {
       $code = & $Executor $cli $baseAbs $headAbs ,$cliArgs
       $compareDurationSeconds = 0
@@ -139,7 +185,26 @@ function Invoke-CompareVI {
     } else {
       $sw = [System.Diagnostics.Stopwatch]::StartNew()
       $code = $null
-    if ($env:LV_SUPPRESS_UI -eq '1') {
+      # Optional: wait for user idle before launching LVCompare to avoid mouse/focus disruption
+      $idleWait = 0
+      if ($env:LV_IDLE_WAIT_SECONDS -match '^[0-9]+$') { $idleWait = [int]$env:LV_IDLE_WAIT_SECONDS }
+      if ($idleWait -gt 0) {
+        $maxWait = 30; if ($env:LV_IDLE_MAX_WAIT_SECONDS -match '^[0-9]+$') { $maxWait = [int]$env:LV_IDLE_MAX_WAIT_SECONDS }
+        $deadline = (Get-Date).AddSeconds($maxWait)
+        while ((Get-Date) -lt $deadline) {
+          if ((Get-UserIdleSeconds) -ge $idleWait) { break }
+          Start-Sleep -Milliseconds 250
+        }
+      }
+      $origCursor = $null; if ($env:LV_CURSOR_RESTORE -match '^(?i:1|true|yes|on)$') { $origCursor = Get-CursorPos }
+      $noActivate = ($env:LV_NO_ACTIVATE -match '^(?i:1|true|yes|on)$')
+      # Emit pre-launch notice
+      $notice = @{ schema='lvcompare-notice/v1'; when=(Get-Date).ToString('o'); phase='pre-launch'; cli=$cli; base=$baseAbs; head=$headAbs; args=$cliArgs; cwd=$cwd }
+      if ($CompareExecJsonPath) { $notice.execJsonPath = $CompareExecJsonPath }
+      Write-Host ("[lvcompare-notice] Launching LVCompare: base='{0}' head='{1}' args='{2}'" -f $baseAbs,$headAbs,($cliArgs -join ' '))
+      Write-LVNotice $notice
+
+      if ($env:LV_SUPPRESS_UI -eq '1') {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $cli
         $null = $psi.ArgumentList.Clear()
@@ -148,13 +213,38 @@ function Invoke-CompareVI {
         foreach ($a in $cliArgs) { if ($a) { $null = $psi.ArgumentList.Add([string]$a) } }
         $psi.UseShellExecute = $false
         try { $psi.CreateNoWindow = $true } catch {}
-        try { $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden } catch {}
+        try { $psi.WindowStyle = ($noActivate ? [System.Diagnostics.ProcessWindowStyle]::Minimized : [System.Diagnostics.ProcessWindowStyle]::Hidden) } catch {}
         $proc = [System.Diagnostics.Process]::Start($psi)
+        $lvcomparePid = $proc.Id
+        # Post-start notice with PID
+        try {
+          $n = @{ schema='lvcompare-notice/v1'; when=(Get-Date).ToString('o'); phase='post-start'; pid=$proc.Id; cli=$cli; base=$baseAbs; head=$headAbs; args=$cliArgs; cwd=$cwd }
+          if ($CompareExecJsonPath) { $n.execJsonPath = $CompareExecJsonPath }
+          Write-Host ("[lvcompare-notice] Started LVCompare PID={0}" -f $proc.Id)
+          Write-LVNotice $n
+        } catch {}
+        if ($noActivate) {
+          try {
+            $null = $proc.WaitForInputIdle(5000)
+            for ($i=0; $i -lt 20 -and $proc -and -not $proc.HasExited; $i++) {
+              if ($proc.MainWindowHandle -ne [IntPtr]::Zero) { [void][User32]::ShowWindowAsync($proc.MainWindowHandle, 7); break }
+              Start-Sleep -Milliseconds 200; $proc.Refresh()
+            }
+          } catch {}
+        }
+        if ($origCursor -ne $null) { try { Set-CursorPosXY $origCursor.X $origCursor.Y } catch {} }
         $proc.WaitForExit()
         $code = [int]$proc.ExitCode
       } else {
         & $cli $baseAbs $headAbs @cliArgs
         $code = if (Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue) { $LASTEXITCODE } else { 0 }
+        # We do not have PID in this path; record completion
+        try {
+          $n = @{ schema='lvcompare-notice/v1'; when=(Get-Date).ToString('o'); phase='completed'; exitCode=$code; cli=$cli; base=$baseAbs; head=$headAbs; args=$cliArgs; cwd=$cwd }
+          if ($CompareExecJsonPath) { $n.execJsonPath = $CompareExecJsonPath }
+          Write-Host ("[lvcompare-notice] Completed LVCompare with exitCode={0}" -f $code)
+          Write-LVNotice $n
+        } catch {}
       }
       $sw.Stop()
       $compareDurationSeconds = [math]::Round($sw.Elapsed.TotalSeconds, 3)
@@ -228,6 +318,16 @@ function Invoke-CompareVI {
     }
   }
   finally {
+    # Emit post-complete LabVIEW PID tracking notice
+    try {
+      $lvAfter = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
+      $beforeSet = @{}
+      foreach ($id in $lvBefore) { $beforeSet[[string]$id] = $true }
+      $newLV = @(); foreach ($p in $lvAfter) { if (-not $beforeSet.ContainsKey([string]$p.Id)) { $newLV += [int]$p.Id } }
+      $noticeComplete = @{ schema='lvcompare-notice/v1'; when=(Get-Date).ToString('o'); phase='post-complete'; labviewPids=$newLV }
+      if ($lvcomparePid) { $noticeComplete.lvcomparePid = [int]$lvcomparePid }
+      Write-LVNotice $noticeComplete
+    } catch {}
     # Policy: do not close LabVIEW by default. Allow opt-in via ENABLE_LABVIEW_CLEANUP=1.
     $allowCleanup = ($env:ENABLE_LABVIEW_CLEANUP -match '^(?i:1|true|yes|on)$')
     if ($allowCleanup) {
@@ -258,4 +358,5 @@ function Invoke-CompareVI {
 }
 
 Export-ModuleMember -Function Invoke-CompareVI
+
 

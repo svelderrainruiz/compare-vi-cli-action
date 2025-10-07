@@ -92,6 +92,11 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     needs: [normalize, preflight]
+    env:
+      LV_NO_ACTIVATE: ${{ vars.LV_NO_ACTIVATE || '1' }}
+      LV_CURSOR_RESTORE: ${{ vars.LV_CURSOR_RESTORE || '1' }}
+      LV_IDLE_WAIT_SECONDS: ${{ vars.LV_IDLE_WAIT_SECONDS || '2' }}
+      LV_IDLE_MAX_WAIT_SECONDS: ${{ vars.LV_IDLE_MAX_WAIT_SECONDS || '5' }}
     outputs:
       total: ${{ steps.export.outputs.total }}
       passed: ${{ steps.export.outputs.passed }}
