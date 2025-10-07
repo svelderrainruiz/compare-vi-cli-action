@@ -293,9 +293,27 @@ function ConvertTo-HtmlReport {
   $failedTestsHtml = if ($pester.FailedTests.Count -gt 0) {
     $rows = foreach ($test in $pester.FailedTests) {
       "<li>$(& $encode $test.Name) — $(& $encode $test.Result)</li>"
-    }
-    "<ul>$([string]::Join('', $rows))</ul>"
+  }
+  "<ul>$([string]::Join('', $rows))</ul>"
   } else { '<p>None</p>' }
+
+  $watchHasLast = ($watch -and $watch.Last)
+  $watchStatusValue = $null
+  $watchTrendValue = $null
+  $watchTestsValue = $null
+  $watchFailedValue = $null
+  $watchUpdatedValue = $null
+  if ($watchHasLast) {
+    $props = $watch.Last.PSObject.Properties.Name
+    if ($props -contains 'status') { $watchStatusValue = $watch.Last.status }
+    if ($props -contains 'classification') { $watchTrendValue = $watch.Last.classification }
+    if ($props -contains 'stats' -and $watch.Last.stats) {
+      $statProps = $watch.Last.stats.PSObject.Properties.Name
+      if ($statProps -contains 'tests') { $watchTestsValue = $watch.Last.stats.tests }
+      if ($statProps -contains 'failed') { $watchFailedValue = $watch.Last.stats.failed }
+    }
+    if ($props -contains 'timestamp') { $watchUpdatedValue = $watch.Last.timestamp }
+  }
 
   $actionItemsHtml = if ($items.Count -gt 0) {
     $rows = foreach ($item in $items) {
@@ -378,13 +396,13 @@ function ConvertTo-HtmlReport {
 
   <section>
     <h2>Watch Mode</h2>
-    @(if ($watch.Last) {
+    @(if ($watchHasLast) {
         "<dl>"
-        "<dt>Status</dt><dd>$(& $encode ($watch.Last.status))</dd>"
-        "<dt>Trend</dt><dd>$(& $encode ($watch.Last.classification))</dd>"
-        "<dt>Tests</dt><dd>$(& $encode ($watch.Last.stats.tests))</dd>"
-        "<dt>Failed</dt><dd>$(& $encode ($watch.Last.stats.failed))</dd>"
-        "<dt>Updated</dt><dd>$(& $encode ($watch.Last.timestamp))</dd>"
+        "<dt>Status</dt><dd>$(& $encode ($watchStatusValue ?? 'n/a'))</dd>"
+        "<dt>Trend</dt><dd>$(& $encode ($watchTrendValue ?? 'n/a'))</dd>"
+        "<dt>Tests</dt><dd>$(& $encode ($watchTestsValue ?? 'n/a'))</dd>"
+        "<dt>Failed</dt><dd>$(& $encode ($watchFailedValue ?? 'n/a'))</dd>"
+        "<dt>Updated</dt><dd>$(& $encode ($watchUpdatedValue ?? ''))</dd>"
         "</dl>"
       } else {
         '<p>No telemetry</p>'
