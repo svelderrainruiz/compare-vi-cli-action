@@ -217,8 +217,9 @@ def _insert_wire_j1_j2_in_job(job: dict, results_dir: str = 'tests/results') -> 
     def has_named(name: str) -> bool:
         return any(isinstance(s, dict) and s.get('name') == name for s in steps)
     # Insert J1 before checkout
+    insert_after = checkout_idx + 1
     if not has_named('Wire Probe (J1)'):
-        steps.insert(checkout_idx, {
+        steps.insert(insert_after, {
             'name': 'Wire Probe (J1)',
             'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
             'uses': './.github/actions/wire-probe',
@@ -228,10 +229,9 @@ def _insert_wire_j1_j2_in_job(job: dict, results_dir: str = 'tests/results') -> 
             },
         })
         changed = True
-        checkout_idx += 1
-    # Insert J2 after checkout
+        insert_after += 1
     if not has_named('Wire Probe (J2)'):
-        steps.insert(checkout_idx + 1, {
+        steps.insert(insert_after, {
             'name': 'Wire Probe (J2)',
             'if': SQS("${{ vars.WIRE_PROBES != '0' }}"),
             'uses': './.github/actions/wire-probe',
