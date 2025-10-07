@@ -89,19 +89,10 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Install actionlint (retry)
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p ./bin
-        for i in 1 2 3; do \
-          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
-            | bash -s -- latest ./bin && break || { echo "retry $i"; sleep 2; }; \
-        done
-
     - name: Run actionlint
-      run: |
-        ./bin/actionlint -color
+      uses: rhysd/actionlint@v1
+      with:
+        args: -color
 
     - name: Setup Node with cache
       uses: actions/setup-node@v4
