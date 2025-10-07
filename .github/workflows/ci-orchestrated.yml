@@ -94,9 +94,12 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./bin
-        for i in 1 2 3; do \
-          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
-            | bash -s -- latest ./bin && break || { echo "retry $i"; sleep 2; }; \
+        for i in 1 2 3; do
+          if curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest ./bin; then
+            break
+          else
+            echo "retry $i"; sleep 2
+          fi
         done
 
     - name: Run actionlint
@@ -113,7 +116,14 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo "retry $i"; sleep 2; }; done
+        for i in 1 2 3; do
+          if npm install -g markdownlint-cli; then
+            break
+          else
+            npm cache clean --force || true
+            echo "retry $i"; sleep 2
+          fi
+        done
 
     - name: Emit tool versions
       if: always()
