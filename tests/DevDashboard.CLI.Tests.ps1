@@ -19,6 +19,7 @@ Describe 'Dev Dashboard CLI' -Tag 'Unit' {
     $json.Stakeholders.Channels | Should -Contain 'slack://#ci-selfhosted'
     $json.WatchTelemetry.Last.status | Should -Be 'FAIL'
     $json.WatchTelemetry.History.Count | Should -Be 2
+    $json.LabVIEWSnapshot.ProcessCount | Should -Be 1
   }
 
   It 'writes HTML report when requested' {
@@ -30,5 +31,6 @@ Describe 'Dev Dashboard CLI' -Tag 'Unit' {
     $content | Should -Match '<html'
     $content | Should -Match 'Session Lock'
     $content | Should -Match 'Watch Mode'
+    $content | Should -Match 'LabVIEW Snapshot'
   }
 }

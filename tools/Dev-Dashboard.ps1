@@ -55,7 +55,18 @@ function Get-DashboardSnapshot {
   $agentWait = Get-AgentWaitTelemetry -ResultsRoot $ResultsDir
   $watch = Get-WatchTelemetry -ResultsRoot $ResultsDir
   $stakeholders = Get-StakeholderInfo -Group $GroupName -StakeholderPath $StakeholderFile
-  $actions = Get-ActionItems -SessionLock $session -PesterTelemetry $pester -AgentWait $agentWait -Stakeholder $stakeholders -WatchTelemetry $watch
+  $labviewSnapshotPath = $null
+  if ($ResultsDir) {
+    $candidateWarmup = Join-Path $ResultsDir '_warmup' 'labview-processes.json'
+    if (Test-Path -LiteralPath $candidateWarmup) {
+      $labviewSnapshotPath = $candidateWarmup
+    } else {
+      $candidateFlat = Join-Path $ResultsDir 'labview-processes.json'
+      if (Test-Path -LiteralPath $candidateFlat) { $labviewSnapshotPath = $candidateFlat }
+    }
+  }
+  $labview = Get-LabVIEWSnapshot -SnapshotPath $labviewSnapshotPath
+  $actions = Get-ActionItems -SessionLock $session -PesterTelemetry $pester -AgentWait $agentWait -Stakeholder $stakeholders -WatchTelemetry $watch -LabVIEWSnapshot $labview
 
   $branch = Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD')
   $commit = Invoke-Git -Arguments @('rev-parse', 'HEAD')
@@ -77,6 +88,7 @@ function Get-DashboardSnapshot {
     AgentWait        = $agentWait
     Stakeholders     = $stakeholders
     WatchTelemetry   = $watch
+    LabVIEWSnapshot  = $labview
     ActionItems      = $actions
   }
 }
@@ -192,6 +204,40 @@ function Write-TerminalReport {
   }
   Write-Host ''
 
+  $labview = $Snapshot.LabVIEWSnapshot
+  Write-Host "LabVIEW Snapshot"
+  if ($labview.ProcessCount -gt 0) {
+    Write-Host "  Count    : $($labview.ProcessCount)"
+    $display = @($labview.Processes | Select-Object -First 3)
+    foreach ($proc in $display) {
+      $startDisplay = $proc.startTimeUtc
+      if ($proc.startTimeUtc) {
+        try {
+          $dt = ConvertTo-DateTime -Value $proc.startTimeUtc
+          if ($dt) { $startDisplay = $dt.ToString('u') }
+        } catch {}
+      }
+      $workingSetKb = $null
+      if ($proc.workingSetBytes) { $workingSetKb = [math]::Round($proc.workingSetBytes/1kb) }
+      $workingSetDisplay = if ($null -eq $workingSetKb) { 'n/a' } else { $workingSetKb }
+      $cpuSeconds = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { 'n/a' }
+      $startDisplay = if ($startDisplay) { $startDisplay } else { 'n/a' }
+      Write-Host ("  PID {0} : WorkingSet={1} KB CPU={2} Started={3}" -f $proc.pid, $workingSetDisplay, $cpuSeconds, $startDisplay)
+    }
+    if ($labview.ProcessCount -gt $display.Count) {
+      Write-Host ("  ... {0} additional process(es) not shown" -f ($labview.ProcessCount - $display.Count))
+    }
+  } else {
+    Write-Host "  Status   : no active LabVIEW processes captured"
+  }
+  if ($labview.SnapshotPath) {
+    Write-Host "  Snapshot : $($labview.SnapshotPath)"
+  }
+  foreach ($error in @($labview.Errors)) {
+    Write-Host "  Error    : $error"
+  }
+  Write-Host ''
+
   $stake = $Snapshot.Stakeholders
   Write-Host "Stakeholders"
   if ($stake.Found) {
@@ -237,6 +283,7 @@ function ConvertTo-HtmlReport {
   $wait = $Snapshot.AgentWait
   $stake = $Snapshot.Stakeholders
   $watch = $Snapshot.WatchTelemetry
+  $labview = $Snapshot.LabVIEWSnapshot
   $items = $Snapshot.ActionItems
   $shortCommit = ''
   if ($Snapshot.Commit) {
@@ -282,6 +329,9 @@ function ConvertTo-HtmlReport {
     .severity-error { color: #b00020; }
     .severity-warning { color: #d17f00; }
     .severity-info { color: #1967d2; }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    th, td { border: 1px solid #e0e0e0; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; }
+    thead { background: #f0f0f0; }
   </style>
 </head>
 <body>
@@ -341,6 +391,24 @@ function ConvertTo-HtmlReport {
       })
     @(if ($watch.Stalled -and $watch.StalledSeconds -gt 0) { "<p class='severity-warning'>Stalled: $([math]::Round($watch.StalledSeconds,0)) seconds since last update</p>" })
     @(if ($watch.LogPath) { "<p>Log: $(& $encode $watch.LogPath)</p>" })
+  </section>
+
+  <section>
+    <h2>LabVIEW Snapshot</h2>
+    <dl>
+      <dt>Processes</dt><dd>$(& $encode $labview.ProcessCount)</dd>
+      <dt>Snapshot</dt><dd>$(& $encode $labview.SnapshotPath)</dd>
+    </dl>
+    @(if ($labview.ProcessCount -gt 0) {
+        $rows = foreach ($proc in ($labview.Processes | Select-Object -First 5)) {
+          $workingSet = $proc.workingSetBytes
+          $workingSetKb = if ($workingSet) { [math]::Round($workingSet/1kb) } else { $null }
+          $cpu = if ($proc.totalCpuSeconds -ne $null) { $proc.totalCpuSeconds } else { '' }
+          "<tr><td>$(& $encode $proc.pid)</td><td>$(& $encode $proc.processName)</td><td>$(& $encode $workingSetKb)</td><td>$(& $encode $cpu)</td><td>$(& $encode $proc.startTimeUtc)</td></tr>"
+        }
+        "<table><thead><tr><th>PID</th><th>Name</th><th>Working Set (KB)</th><th>CPU (s)</th><th>Started (UTC)</th></tr></thead><tbody>$([string]::Join('', $rows))</tbody></table>"
+      } else { '<p>No LabVIEW processes recorded.</p>' })
+    @(if ($labview.Errors -and $labview.Errors.Count -gt 0) { "<p class='severity-warning'>Errors: $(& $encode ([string]::Join('; ', $labview.Errors)))</p>" })
   </section>
 
   <section>

@@ -88,6 +88,45 @@ function ConvertTo-DateTime {
   } catch { return $null }
 }
 
+function Get-LabVIEWSnapshot {
+  [CmdletBinding()]
+  param(
+    [string]$SnapshotPath
+  )
+
+  if (-not $SnapshotPath) {
+    $snapshotDefault = Join-Path $script:repoRoot 'tests' 'results' '_warmup' 'labview-processes.json'
+    $SnapshotPath = $snapshotDefault
+  }
+
+  $info = Read-JsonFile -Path $SnapshotPath
+  $errors = @()
+  if ($info.Error) { $errors += "labview-processes.json: $($info.Error)" }
+
+  $data = $info.Data
+  $processes = @()
+  $processCount = 0
+  if ($data) {
+    if ($data.PSObject.Properties.Name -contains 'processes') {
+      $processes = @($data.processes)
+    }
+    if ($data.PSObject.Properties.Name -contains 'processCount') {
+      try { $processCount = [int]$data.processCount } catch { $processCount = 0 }
+    } else {
+      $processCount = $processes.Count
+    }
+  }
+
+  return [pscustomobject][ordered]@{
+    SnapshotPath = $info.Path
+    Exists       = $info.Exists
+    Snapshot     = $data
+    ProcessCount = $processCount
+    Processes    = $processes
+    Errors       = $errors
+  }
+}
+
 function Get-SessionLockStatus {
   [CmdletBinding()]
   param(
@@ -453,7 +492,8 @@ function Get-ActionItems {
     [pscustomobject]$PesterTelemetry,
     [pscustomobject]$AgentWait,
     [pscustomobject]$Stakeholder,
-    [pscustomobject]$WatchTelemetry
+    [pscustomobject]$WatchTelemetry,
+    [pscustomobject]$LabVIEWSnapshot
   )
 
   $items = @()
@@ -636,6 +676,29 @@ function Get-ActionItems {
         Category = 'Watch'
         Severity = 'info'
         Message  = "Flaky recovery observed after $($WatchTelemetry.Last.flaky.recoveredAfter) retry attempts."
+      }
+    }
+  }
+
+  if ($LabVIEWSnapshot) {
+    $snapshotErrors = @()
+    if ($LabVIEWSnapshot.Errors) {
+      $snapshotErrors = @($LabVIEWSnapshot.Errors | Where-Object { $_ -and $_ -ne '' })
+    }
+    foreach ($error in $snapshotErrors) {
+      $items += [pscustomobject]@{
+        Category = 'LabVIEW'
+        Severity = 'error'
+        Message  = "Unable to read LabVIEW snapshot ($error)."
+      }
+    }
+    if ($LabVIEWSnapshot.ProcessCount -gt 0) {
+      $pids = $LabVIEWSnapshot.Processes | ForEach-Object { $_.pid } | Where-Object { $_ } | Sort-Object
+      $pidList = if ($pids) { $pids -join ',' } else { 'unknown' }
+      $items += [pscustomobject]@{
+        Category = 'LabVIEW'
+        Severity = 'info'
+        Message  = "LabVIEW warm-up snapshot reports $($LabVIEWSnapshot.ProcessCount) running instance(s) (PID(s): $pidList). Review tests/results/_warmup for details."
       }
     }
   }

@@ -37,6 +37,15 @@ Describe 'Dev Dashboard loaders' -Tag 'Unit' {
     ($wait.History | Where-Object { $_.WithinMargin -eq $false }).Count | Should -BeGreaterThan 0
   }
 
+  It 'loads LabVIEW snapshot telemetry' {
+    $snapshotPath = Join-Path $script:samplesRoot 'labview-processes.json'
+    $lv = Get-LabVIEWSnapshot -SnapshotPath $snapshotPath
+    $lv.Exists | Should -BeTrue
+    $lv.ProcessCount | Should -Be 1
+    $lv.Processes[0].pid | Should -Be 4242
+    $lv.Processes[0].processName | Should -Be 'LabVIEW'
+  }
+
   It 'resolves stakeholder information from configuration' {
     $info = Get-StakeholderInfo -Group 'pester-selfhosted' -StakeholderPath $script:stakeholderPath
     $info.Found | Should -BeTrue
@@ -110,7 +119,16 @@ Describe 'Dev Dashboard loaders' -Tag 'Unit' {
       Errors = @()
     }
 
-    $items = Get-ActionItems -SessionLock $session -PesterTelemetry $pester -AgentWait $wait -Stakeholder $stake
+    $labview = [pscustomobject]@{
+      ProcessCount = 2
+      Processes = @(
+        [pscustomobject]@{ pid = 111; startTimeUtc = (Get-Date).ToString('o'); workingSetBytes = 1024; totalCpuSeconds = 5 },
+        [pscustomobject]@{ pid = 222; startTimeUtc = (Get-Date).AddMinutes(-2).ToString('o'); workingSetBytes = 2048; totalCpuSeconds = 7 }
+      )
+      Errors = @()
+    }
+
+    $items = Get-ActionItems -SessionLock $session -PesterTelemetry $pester -AgentWait $wait -Stakeholder $stake -WatchTelemetry $null -LabVIEWSnapshot $labview
     $items | Should -Not -BeNullOrEmpty
     $sessionItems = $items | Where-Object { $_.Category -eq 'SessionLock' }
     $sessionItems.Count | Should -BeGreaterThan 0
@@ -123,6 +141,7 @@ Describe 'Dev Dashboard loaders' -Tag 'Unit' {
     @($queueItems | Where-Object { $_.Message -match 'exceeded tolerance' }).Count | Should -BeGreaterThan 0
     @($queueItems | Where-Object { $_.Message -match 'Longest recorded' }).Count | Should -BeGreaterThan 0
     ($items | Where-Object { $_.Category -eq 'Stakeholders' } | Measure-Object).Count | Should -BeGreaterThan 0
+    ($items | Where-Object { $_.Category -eq 'LabVIEW' -and $_.Message -match 'running instance' }).Count | Should -Be 1
   }
 
   It 'references stakeholder dx issue when available' {
