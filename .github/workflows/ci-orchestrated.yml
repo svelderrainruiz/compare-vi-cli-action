@@ -136,7 +136,8 @@ jobs:
           Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
         } else { Write-Host "LVCompare present: $cli" }
         $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
-        if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ',') )"; exit 1 }
+        if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join 
+        ))"; exit 1 }
         Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
         if ($env:GITHUB_STEP_SUMMARY) {
           $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
@@ -541,9 +542,9 @@ jobs:
       if: ${{ always() }}
       shell: pwsh
       env:
-        GH_STRATEGY: ${{ inputs.strategy }}
-        GH_INCLUDE: ${{ inputs.include_integration }}
-        GH_SAMPLE_ID: ${{ inputs.sample_id }}
+        GH_STRATEGY: '${{ inputs.strategy }}'
+        GH_INCLUDE: '${{ inputs.include_integration }}'
+        GH_SAMPLE_ID: '${{ inputs.sample_id }}'
       run: |-
         $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'matrix' }
         $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }
@@ -717,9 +718,9 @@ jobs:
       if: ${{ always() }}
       shell: pwsh
       env:
-        GH_STRATEGY: ${{ inputs.strategy }}
-        GH_INCLUDE: ${{ needs.normalize.outputs.include_integration }}
-        GH_SAMPLE_ID: ${{ inputs.sample_id }}
+        GH_STRATEGY: '${{ inputs.strategy }}'
+        GH_INCLUDE: '${{ inputs.include_integration }}'
+        GH_SAMPLE_ID: '${{ inputs.sample_id }}'
       run: |-
         $strategy = if ($env:GH_STRATEGY) { $env:GH_STRATEGY } else { 'single' }
         $include = if ($env:GH_INCLUDE) { $env:GH_INCLUDE } else { 'true' }

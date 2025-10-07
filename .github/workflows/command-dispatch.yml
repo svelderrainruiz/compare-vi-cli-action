@@ -72,21 +72,59 @@ jobs:
           strategy="matrix"
           integ="true"
           sample=""
+          expect_strategy=0
+          expect_include=0
+          expect_sample=0
           tail=$(printf "%s" "$RAW_BODY" | sed -n 's#^/run[[:space:]]\+orchestrated[[:space:]]\?##Ip')
           read -r -a arr <<< "$tail"
           for tok in "${arr[@]}"; do
+            if [ "$expect_strategy" = "1" ]; then
+              lc="${tok,,}"
+              case "$lc" in
+                single|matrix) strategy="$lc" ;;
+                *) strategy="$tok" ;;
+              esac
+              expect_strategy=0
+              continue
+            fi
+            if [ "$expect_include" = "1" ]; then
+              lc="${tok,,}"
+              case "$lc" in
+                true|yes|1|on) integ="true" ;;
+                false|no|0|off) integ="false" ;;
+                *) integ="$lc" ;;
+              esac
+              expect_include=0
+              continue
+            fi
+            if [ "$expect_sample" = "1" ]; then
+              sample="$tok"
+              expect_sample=0
+              continue
+            fi
+            lc="${tok,,}"
+            clean="${lc//:/=}"
+            clean="${clean#--}"
             case "$tok" in
               # strategy controls
-              strategy=*) strategy="${tok#strategy=}" ;;
-              single)     strategy="single" ;;
-              matrix)     strategy="matrix" ;;
+              strategy)   expect_strategy=1 ;;
+            esac
+            case "$clean" in
+              strategy=*) strategy="${clean#strategy=}" ;;
+              single|single=true|single=yes|single=1|single=on) strategy="single" ;;
+              matrix|matrix=true|matrix=yes|matrix=1|matrix=on) strategy="matrix" ;;
               # explicit integration toggles first (more specific)
               integration=true|include_integration=true)   integ="true" ;;
               integration=false|include_integration=false) integ="false" ;;
               # generic include_integration=... after specifics
-              include_integration=*) integ="${tok#include_integration=}" ;;
+              include_integration=*) integ="${clean#include_integration=}" ;;
               # sampling
+              include_integration) expect_include=1 ;;
+              integration)         expect_include=1 ;;
               sample=*|sample_id=*) sample="${tok#*=}" ;;
+              sample|sample_id)     expect_sample=1 ;;
+              --single)             strategy="single" ;;
+              --matrix)             strategy="matrix" ;;
             esac
           done
           if [ -z "$sample" ]; then sample="$(date +%Y%m%d-%H%M%S)-oc"; fi

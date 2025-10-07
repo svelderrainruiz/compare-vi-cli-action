@@ -147,7 +147,7 @@ def _mk_rerun_hint_step(default_strategy: str) -> dict:
         'shell': 'pwsh',
         'env': {
             'GH_STRATEGY': SQS("${{ inputs.strategy }}"),
-            'GH_INCLUDE': SQS("${{ needs.normalize.outputs.include_integration }}"),
+            'GH_INCLUDE': SQS("${{ inputs.include_integration }}"),
             'GH_SAMPLE_ID': SQS("${{ inputs.sample_id }}"),
         },
         'run': LIT("\n".join(lines)),
@@ -214,6 +214,217 @@ def ensure_rerun_hint_after_summary(doc, default_strategy: str) -> bool:
             steps.insert(idx + 1, want)
             job['steps'] = steps
             changed = True
+    return changed
+
+
+def ensure_interactivity_probe_job(doc) -> bool:
+    """Add a lightweight 'probe' job to check interactivity on self-hosted Windows.
+    Wires outputs.ok from steps.out.outputs.ok and depends on normalize+preflight.
+    """
+    jobs = doc.get('jobs') or {}
+    if not isinstance(jobs, dict):
+        return False
+    if 'probe' in jobs:
+        return False
+    job = {
+        'if': SQS("${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}"),
+        'runs-on': ['self-hosted', 'Windows', 'X64'],
+        'timeout-minutes': 2,
+        'needs': ['normalize', 'preflight'],
+        'outputs': {
+            'ok': SQS("${{ steps.out.outputs.ok }}"),
+        },
+        'steps': [
+            {'uses': 'actions/checkout@v5'},
+            {
+                'name': 'Run interactivity probe',
+                'id': 'out',
+                'shell': 'pwsh',
+                'run': LIT(
+                    "pwsh -File tools/Write-InteractivityProbe.ps1\n"
+                    "$ui = [System.Environment]::UserInteractive\n"
+                    "$in = $false; try { $in  = [Console]::IsInputRedirected } catch {}\n"
+                    "$ok = ($ui -and -not $in)\n"
+                    '"ok=$ok" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8\n'
+                ),
+            },
+        ],
+    }
+    jobs['probe'] = job
+    doc['jobs'] = jobs
+    return True
+
+
+def _ensure_job_needs(doc, job_name: str, need: str) -> bool:
+    jobs = doc.get('jobs') or {}
+    job = jobs.get(job_name)
+    if not isinstance(job, dict):
+        return False
+    needs = job.get('needs')
+    changed = False
+    if needs is None:
+        job['needs'] = [need]
+        changed = True
+    elif isinstance(needs, list) and need not in needs:
+        needs.append(need)
+        job['needs'] = needs
+        changed = True
+    return changed
+
+
+def _set_job_if(doc, job_name: str, new_if: str) -> bool:
+    jobs = doc.get('jobs') or {}
+    job = jobs.get(job_name)
+    if not isinstance(job, dict):
+        return False
+    want = SQS(new_if)
+    if job.get('if') != want:
+        job['if'] = want
+        return True
+    return False
+
+
+def _find_step_index(steps: list, name: str) -> int | None:
+    for idx, st in enumerate(steps):
+        if isinstance(st, dict) and st.get('name') == name:
+            return idx
+    return None
+
+
+def ensure_lint_resiliency(doc, job_name: str, include_node: bool = True, markdown_non_blocking: bool = False) -> bool:
+    jobs = doc.get('jobs') or {}
+    job = jobs.get(job_name)
+    if not isinstance(job, dict):
+        return False
+    steps = job.setdefault('steps', [])
+    changed = False
+
+    # Determine checkout index for insertion points
+    checkout_idx = _find_step_index(steps, 'actions/checkout@v5')
+    if checkout_idx is None:
+        checkout_idx = next((i for i, st in enumerate(steps) if isinstance(st, dict) and str(st.get('uses', '')).startswith('actions/checkout@')), None)
+
+    def insert_after_checkout(step_dict):
+        nonlocal changed
+        idx = checkout_idx + 1 if checkout_idx is not None else 0
+        steps.insert(idx, step_dict)
+        changed = True
+
+    # Install actionlint step
+    install_body = (
+        "set -euo pipefail\n"
+        "mkdir -p ./bin\n"
+        "for i in 1 2 3; do \\\n"
+        "  curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \\\n"
+        "    | bash -s -- latest ./bin && break || { echo \"retry $i\"; sleep 2; }; \\\n"
+        "done\n"
+    )
+    idx_install = _find_step_index(steps, 'Install actionlint (retry)')
+    install_step = {
+        'name': 'Install actionlint (retry)',
+        'shell': 'bash',
+        'run': LIT(install_body),
+    }
+    if idx_install is None:
+        insert_after_checkout(install_step)
+    else:
+        cur = steps[idx_install]
+        if cur.get('shell') != 'bash' or cur.get('run') != install_step['run']:
+            steps[idx_install] = install_step
+            changed = True
+
+    # Run actionlint step
+    idx_run = _find_step_index(steps, 'Run actionlint')
+    run_step = {
+        'name': 'Run actionlint',
+        'run': LIT('./bin/actionlint -color\n'),
+    }
+    if idx_run is None:
+        # place directly after install step if possible
+        idx_install = _find_step_index(steps, 'Install actionlint (retry)')
+        insert_at = idx_install + 1 if idx_install is not None else (checkout_idx + 1 if checkout_idx is not None else len(steps))
+        steps.insert(insert_at, run_step)
+        changed = True
+    else:
+        cur = steps[idx_run]
+        if cur.get('run') != run_step['run']:
+            steps[idx_run]['run'] = run_step['run']
+            changed = True
+
+    # Node setup step
+    if include_node:
+        node_step = {
+            'name': 'Setup Node with cache',
+            'uses': 'actions/setup-node@v4',
+            'with': {
+                'node-version': DQS('20'),
+                'cache': DQS('npm'),
+            },
+        }
+        idx_node = _find_step_index(steps, 'Setup Node with cache')
+        if idx_node is None:
+            insert_at = _find_step_index(steps, 'Install markdownlint-cli (retry)')
+            if insert_at is None:
+                insert_at = len(steps)
+            steps.insert(insert_at, node_step)
+            changed = True
+        else:
+            # Ensure with block is normalized
+            cur_with = steps[idx_node].setdefault('with', {})
+            if cur_with.get('node-version') != DQS('20') or cur_with.get('cache') != DQS('npm'):
+                steps[idx_node]['with'] = node_step['with']
+                changed = True
+
+    # Install markdownlint step
+    md_body = (
+        "set -euo pipefail\n"
+        "for i in 1 2 3; do npm install -g markdownlint-cli && break || { npm cache clean --force || true; echo \"retry $i\"; sleep 2; }; done\n"
+    )
+    md_install_step = {
+        'name': 'Install markdownlint-cli (retry)',
+        'shell': 'bash',
+        'run': LIT(md_body),
+    }
+    idx_md_install = _find_step_index(steps, 'Install markdownlint-cli (retry)')
+    if idx_md_install is None:
+        steps.append(md_install_step)
+        changed = True
+    else:
+        cur = steps[idx_md_install]
+        if cur.get('shell') != 'bash' or cur.get('run') != md_install_step['run']:
+            steps[idx_md_install] = md_install_step
+            changed = True
+
+    # Run markdownlint step
+    idx_md_run = _find_step_index(steps, 'Run markdownlint (non-blocking)' if markdown_non_blocking else 'Run markdownlint')
+    name_md = 'Run markdownlint (non-blocking)' if markdown_non_blocking else 'Run markdownlint'
+    md_run_step = {
+        'name': name_md,
+        'run': LIT('markdownlint "**/*.md" --ignore node_modules\n'),
+    }
+    if markdown_non_blocking:
+        md_run_step['continue-on-error'] = True
+    idx_target = _find_step_index(steps, name_md)
+    if idx_target is None:
+        steps.append(md_run_step)
+        changed = True
+    else:
+        cur = steps[idx_target]
+        need_update = False
+        if cur.get('run') != md_run_step['run']:
+            need_update = True
+        if markdown_non_blocking:
+            if cur.get('continue-on-error') is not True:
+                need_update = True
+        else:
+            if 'continue-on-error' in cur:
+                del cur['continue-on-error']
+                changed = True
+        if need_update:
+            steps[idx_target] = md_run_step
+            changed = True
+
+    job['steps'] = steps
     return changed
 
 
@@ -361,7 +572,7 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         c3 = ensure_hosted_preflight(doc, 'preflight-windows')
         c4 = ensure_session_index_post_in_job(doc, 'validate-windows', 'results/fixture-drift', 'fixture-drift-session-index')
         changed = changed or c3 or c4
-    # ci-orchestrated.yml hosted preflight + pester matrix session index post + rerun hints
+    # ci-orchestrated.yml hosted preflight + pester matrix session index post + rerun hints + interactivity probe wiring
     if path.name == 'ci-orchestrated.yml':
         c5 = ensure_hosted_preflight(doc, 'preflight')
         # The matrix job may be named 'pester' or 'pester-category'; try both
@@ -371,10 +582,22 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
         g1 = ensure_runner_unblock_guard(doc, 'drift', 'results/fixture-drift/runner-unblock-snapshot.json')
         g2 = ensure_runner_unblock_guard(doc, 'pester', 'tests/results/${{ matrix.category }}/runner-unblock-snapshot.json')
         g3 = ensure_runner_unblock_guard(doc, 'pester-category', 'tests/results/${{ matrix.category }}/runner-unblock-snapshot.json')
-        # Rerun hints: publish (matrix default) and windows-single (single default)
+        # Rerun hints across jobs
         r1 = ensure_rerun_hint_after_summary(doc, 'matrix')
         r2 = ensure_rerun_hint_in_job(doc, 'windows-single', 'single')
-        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2
+        r3 = ensure_rerun_hint_in_job(doc, 'publish', 'matrix')
+        # Interactivity probe job + gating
+        p1 = ensure_interactivity_probe_job(doc)
+        # windows-single needs probe and requires ok==true
+        w_if = "${{ (inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single') && needs.probe.outputs.ok == 'true' }}"
+        w1 = _set_job_if(doc, 'windows-single', w_if)
+        w2 = _ensure_job_needs(doc, 'windows-single', 'probe')
+        # pester-category runs matrix or fallback when single is requested but probe is false
+        pc_if = "${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') || (inputs.strategy == 'single' && needs.probe.outputs.ok == 'false') }}"
+        pc1 = _set_job_if(doc, 'pester-category', pc_if)
+        pc2 = _ensure_job_needs(doc, 'pester-category', 'probe')
+        lr1 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=True)
+        changed = changed or c5 or c6 or c7 or g1 or g2 or g3 or r1 or r2 or r3 or p1 or w1 or w2 or pc1 or pc2 or lr1
     # Skip transforms for deprecated ci-orchestrated-v2.yml (kept as a stub/manual only)
     if path.name == 'ci-orchestrated-v2.yml':
         pass
@@ -424,6 +647,9 @@ def apply_transforms(path: Path) -> tuple[bool, str]:
                     changed = True
         except Exception:
             pass
+    if path.name == 'validate.yml':
+        lr2 = ensure_lint_resiliency(doc, 'lint', include_node=True, markdown_non_blocking=False)
+        changed = changed or lr2
 
 
     if changed:
@@ -462,4 +688,3 @@ def main(argv: List[str]) -> int:
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
-
