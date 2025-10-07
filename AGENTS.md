@@ -78,8 +78,11 @@
 
 ### Fast Path for #88
 
-- Comment dispatch (on an open PR): `/run orchestrated single include_integration=true sample_id=<id>`
-- Manual dispatch (CLI): `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -IncludeIntegration true`
+- Comment dispatch (on an open PR): `/run orchestrated strategy=single include_integration=true sample_id=<id>`
+  - Backward‑compatible: `/run orchestrated single ...` still maps to strategy=single.
+- Manual dispatch (CLI):
+  - `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -Strategy single -IncludeIntegration true`
+  - Use `-Strategy matrix` for parallel categories when runners are idle.
 - Merge policy: when all required checks are green and #88 acceptance is satisfied, proceed to merge (admin token available).
 
 ## Workflow Maintenance (ruamel.yaml updater)
@@ -105,4 +108,3 @@ Use the Python-based updater only when you need consistent, mechanical edits acr
 - Scope and PR hygiene:
   - Keep updater changes in small, focused PRs; include a summary of files touched and the transforms applied.
   - If the updater warns or skips a file, fall back to a manual edit and re-run `actionlint`.
-
