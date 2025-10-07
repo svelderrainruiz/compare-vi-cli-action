@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check last two orchestrated runs on develop (paged)
+        id: check
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,7 +47,7 @@ jobs:
           fi
 
       - name: Open PR to remove ci-orchestrated-v2.yml
-        if: ${{ steps.two-green.outputs.two_green == 'true' && hashFiles('.github/workflows/ci-orchestrated-v2.yml') != '' }}
+        if: ${{ steps.check.outputs.two_green == 'true' && hashFiles('.github/workflows/ci-orchestrated-v2.yml') != '' }}
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
