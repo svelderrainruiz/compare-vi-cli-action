@@ -715,6 +715,7 @@ For common issues including path resolution problems, exit code interpretation, 
 - **[Testing Patterns](./docs/TESTING_PATTERNS.md)** - Advanced test design patterns
 - **[E2E Testing Guide](./docs/E2E_TESTING_GUIDE.md)** - End-to-end testing strategies
 - **[Self-Hosted CI Setup](./docs/SELFHOSTED_CI_SETUP.md)** - Setting up self-hosted runners
+- **[LabVIEW Runtime Gating](./docs/LABVIEW_GATING.md)** - Using LabVIEW.exe presence as a warm-up/ownership signal
 
 ## License
 

@@ -25,6 +25,7 @@ Warm-up Shortcut
   - Add -GenerateDashboard [-GenerateDashboardHtml] to emit a dashboard snapshot during warm-up.
   - Use -SkipRogueScan / -SkipAgentWaitValidation when you need a quicker loop.
   - LabVIEW process snapshot written to tests/results/_warmup/labview-processes.json (via Capture-LabVIEWSnapshot).
+  - Treat LabVIEW.exe as a runtime lock; see docs/LABVIEW_GATING.md for gating guidance.
 
 Watch Mode (single-run smoke)
 - $env:WATCH_RESULTS_DIR = 'tests/results/_watch'

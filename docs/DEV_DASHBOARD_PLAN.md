@@ -18,6 +18,7 @@ A local developer dashboard will summarize telemetry from recent runs (session l
    - Parse Watch-Mode artefacts from `WATCH_RESULTS_DIR` (default `tests/results/_watch`):
      - `watch-last.json` with `timestamp`, `status`, `classification`, `stats.{tests,failed,skipped}`, `runSequence`, optional `flaky.recoveredAfter`.
      - `watch-log.ndjson` append-only history (blank-line separated JSON blocks).
+   - Surface LabVIEW warm-up state by loading `tests/results/_warmup/labview-processes.json` (see [LabVIEW Runtime Gating](./LABVIEW_GATING.md)).
    - Support additional workflows (fixture drift, orchestrated) when lock artefacts exist, showing status if available.
    - Load stakeholder metadata from a configuration file (`tools/dashboard/stakeholders.json` or `.psd1`) mapping groups to primary/backup owners, communication channels, and DX issue numbers.
    - Provide per-section recommendations (e.g., how to inspect a lock or rerun tests) based on detected conditions (stale lock, TimeoutMinutes, etc.).
