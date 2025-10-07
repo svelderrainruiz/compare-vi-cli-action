@@ -300,6 +300,7 @@ function Invoke-CompareVI {
           generatedAt  = (Get-Date).ToString('o')
           cliPath      = $cli
           command      = $cmdline
+          args         = @($argsArr)
           exitCode     = $code
           diff         = $diff
           cwd          = $cwd

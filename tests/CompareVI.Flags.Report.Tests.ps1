@@ -96,5 +96,6 @@ Describe 'LVCompare flags (report verifications)' -Tag 'Unit' {
     $exec.command | Should -Match $patternHead
     $exec.command | Should -Match '(^|\s)-noattr(\s|$)'
     $exec.command | Should -Match '(^|\s)-nofp(\s|$)'
-      }
+    @($exec.args) | Should -Be @('-noattr','-nofp')
+  }
 }
