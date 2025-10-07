@@ -146,7 +146,8 @@ do {
 
   if (-not $Quiet) {
     Write-Host ''
-    Write-Host ("Run status: {0} (conclusion: {1})" -f $run.status, ($run.conclusion ?? 'n/a'))
+    $runConclusionDisplay = if ($null -ne $run.conclusion -and $run.conclusion -ne '') { $run.conclusion } else { 'n/a' }
+    Write-Host ("Run status: {0} (conclusion: {1})" -f $run.status, $runConclusionDisplay)
     if ($tableRows.Count -gt 0) {
       $tableRows | Format-Table -AutoSize | Out-String | Write-Host
     } else {
@@ -182,6 +183,6 @@ if ($OutputPath) {
   Write-Info ("Snapshot written to {0}" -f $target)
 }
 
-if ($snapshot.timedOut -eq $true) {
+if ($snapshot -and $snapshot.Contains('timedOut') -and $snapshot['timedOut']) {
   exit 1
 }

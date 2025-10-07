@@ -110,15 +110,19 @@ do {
 } while ($true)
 
 # Monitor job status
-$trackerPath = Join-Path $PSScriptRoot 'Track-WorkflowRun.ps1'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$trackerPath = Join-Path $scriptDir 'Track-WorkflowRun.ps1'
 if (-not (Test-Path -LiteralPath $trackerPath)) {
   throw "Track-WorkflowRun.ps1 not found at $trackerPath"
 }
 
-$trackerArgs = @('-RunId', $newRunId, '-Repo', $repoFull, '-PollSeconds', $MonitorPollSeconds)
-if ($OutputPath) { $trackerArgs += @('-OutputPath', $OutputPath) }
-if ($TrackQuiet) { $trackerArgs += '-Quiet' }
+$trackerParams = @{
+  RunId       = [long]$newRunId
+  Repo        = $repoFull
+  PollSeconds = $MonitorPollSeconds
+}
+if ($OutputPath) { $trackerParams['OutputPath'] = $OutputPath }
+if ($TrackQuiet) { $trackerParams['Quiet'] = $true }
 
 Write-Info ("Starting job monitor for run {0}" -f $newRunId)
-& $trackerPath @trackerArgs
-
+& $trackerPath @trackerParams
