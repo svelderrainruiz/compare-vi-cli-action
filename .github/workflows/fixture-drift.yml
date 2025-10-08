@@ -135,6 +135,7 @@ jobs:
       LV_SUPPRESS_UI: ${{ vars.LV_SUPPRESS_UI || '1' }}
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
+      LV_NOTICE_DIR: 'results/fixture-drift/_lv'
       LV_NO_ACTIVATE: ${{ vars.LV_NO_ACTIVATE || '1' }}
       LV_CURSOR_RESTORE: ${{ vars.LV_CURSOR_RESTORE || '1' }}
       LV_IDLE_WAIT_SECONDS: ${{ vars.LV_IDLE_WAIT_SECONDS || '2' }}
@@ -275,6 +276,32 @@ jobs:
         }
         # Notice-only step, never fail the job here
         exit 0
+
+    - name: Assert single LVCompare launch
+      if: always()
+      shell: pwsh
+      run: |
+        $d = $env:LV_NOTICE_DIR
+        if (-not $d -or -not (Test-Path -LiteralPath $d)) {
+          Write-Host "::error::LV notice directory not found: $d"; exit 1
+        }
+        $files = @(Get-ChildItem -LiteralPath $d -Filter 'notice-*.json' -File -ErrorAction SilentlyContinue)
+        $postStarts = 0
+        foreach ($f in $files) {
+          try {
+            $j = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+            if ($j.phase -eq 'post-start') { $postStarts++ }
+          } catch {}
+        }
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### LVCompare Launch Check','',"- Notice dir: $d", "- Notices: $($files.Count)", "- post-start: $postStarts")
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+        if ($postStarts -ne 1) {
+          Write-Host "::error::Expected exactly one LVCompare launch (post-start=$postStarts)"; exit 1
+        } else {
+          Write-Host "Single LVCompare launch verified (post-start=1)"
+        }
     - name: Wire Probe (C3)
       uses: ./.github/actions/wire-probe
       with:
