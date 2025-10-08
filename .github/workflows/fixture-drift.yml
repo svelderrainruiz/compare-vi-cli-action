@@ -132,7 +132,7 @@ jobs:
     env:
       INVOKER_REQUIRED: '1'
       UNBLOCK_GUARD: '0'
-      LV_SUPPRESS_UI: '0'
+      LV_SUPPRESS_UI: ${{ vars.LV_SUPPRESS_UI || '1' }}
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
       LV_NO_ACTIVATE: ${{ vars.LV_NO_ACTIVATE || '1' }}
