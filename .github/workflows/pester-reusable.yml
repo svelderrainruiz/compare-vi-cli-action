@@ -175,14 +175,7 @@ jobs:
           $logDir = Split-Path -Parent $logPath
           if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
           if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
-          $workspace = $env:GITHUB_WORKSPACE
-          if (-not $workspace) { $workspace = (Get-Location).ProviderPath }
-          $dispatcherPath = Join-Path $workspace 'Invoke-PesterTests.ps1'
-          if (-not (Test-Path -LiteralPath $dispatcherPath)) {
-            Write-Host ("::error::Dispatcher not found at {0}" -f $dispatcherPath)
-            exit 1
-          }
-          Import-Module $dispatcherPath -Force
+          Import-Module ./Invoke-PesterTests.ps1 -Force
           $cmd = Get-Command Invoke-PesterTests.ps1 -ErrorAction Stop
           $lockScript = Join-Path (Get-Location) 'tools/Session-Lock.ps1'
           $bound = [ordered]@{}
