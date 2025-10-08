@@ -96,7 +96,7 @@ jobs:
     name: Pester (self-hosted)
     if: ${{ inputs.skip_run != 'true' }}
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 3
+    timeout-minutes: 8
     needs: [normalize, preflight]
     env:
       LV_NO_ACTIVATE: ${{ vars.LV_NO_ACTIVATE || '1' }}

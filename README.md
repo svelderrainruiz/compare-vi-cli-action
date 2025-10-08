@@ -63,7 +63,7 @@ pwsh ./tools/Dev-Dashboard.ps1 `
 Keep an eye on queued or long-running workflows without leaving the terminal:
 
 ```powershell
-pwsh ./tools/Track-WorkflowRun.ps1 -RunId 18327092270 -PollSeconds 20 -Json
+pwsh ./tools/Track-WorkflowRun.ps1 -RunId 18327092270 -PollSeconds 20 -IncludeCheckRuns -Json
 ```
 
 - Automatically resolves the repository from `GITHUB_REPOSITORY` or git remote;

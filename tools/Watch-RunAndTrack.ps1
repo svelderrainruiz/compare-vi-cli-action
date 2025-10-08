@@ -37,6 +37,9 @@
 
 .PARAMETER TrackQuiet
   Pass `-Quiet` to Track-WorkflowRun (suppresses job table output).
+
+.PARAMETER DisableCheckRuns
+  Opt-out of the enhanced check-run table emitted by Track-WorkflowRun.
 #>
 [CmdletBinding()]
 param(
@@ -48,7 +51,8 @@ param(
   [int]$TimeoutSeconds = 300,
   [string]$OutputPath,
   [switch]$Quiet,
-  [switch]$TrackQuiet
+  [switch]$TrackQuiet,
+  [switch]$DisableCheckRuns
 )
 
 Set-StrictMode -Version Latest
@@ -123,6 +127,7 @@ $trackerParams = @{
 }
 if ($OutputPath) { $trackerParams['OutputPath'] = $OutputPath }
 if ($TrackQuiet) { $trackerParams['Quiet'] = $true }
+if (-not $DisableCheckRuns) { $trackerParams['IncludeCheckRuns'] = $true }
 
 Write-Info ("Starting job monitor for run {0}" -f $newRunId)
 & $trackerPath @trackerParams

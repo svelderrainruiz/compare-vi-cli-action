@@ -49,7 +49,7 @@ Next Steps (suggested)
 
 Workflow Tracking
 - Tracker:
-  - `pwsh -File tools/Track-WorkflowRun.ps1 -RunId 18327092270`
+  - `pwsh -File tools/Track-WorkflowRun.ps1 -RunId 18327092270 -IncludeCheckRuns`
     (optionally add `-Repo owner/name`, `-PollSeconds 30`,
     `-OutputPath logs/run-18327092270.json`).
 - Dispatch + monitor:

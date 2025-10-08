@@ -33,6 +33,9 @@
 .PARAMETER Quiet
   Suppress console table output; useful when only JSON/file output is desired.
 
+.PARAMETER IncludeCheckRuns
+  When set, fetch and display check run details for the workflow run's head commit.
+
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +45,8 @@ param(
   [int]$TimeoutSeconds = 1800,
   [switch]$Json,
   [string]$OutputPath,
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$IncludeCheckRuns
 )
 
 Set-StrictMode -Version Latest
@@ -68,6 +72,30 @@ function Invoke-GhApi {
   $raw = gh api $Path --header "Accept: application/vnd.github+json" 2>$null
   if (-not $raw) { return $null }
   return $raw | ConvertFrom-Json
+}
+
+function Get-CheckRuns {
+  param(
+    [string]$RepoFull,
+    [string]$Sha
+  )
+
+  if (-not $Sha) { return @() }
+
+  $page = 1
+  $collected = @()
+  do {
+    $path = "repos/{0}/commits/{1}/check-runs?per_page=100&page={2}" -f $RepoFull, $Sha, $page
+    $response = Invoke-GhApi -Path $path
+    if (-not $response) { break }
+    if ($response.check_runs) {
+      $collected += @($response.check_runs)
+    }
+    if ($response.total_count -le $collected.Count) { break }
+    $page += 1
+  } while ($true)
+
+  return $collected
 }
 
 function Write-Info {
@@ -112,6 +140,7 @@ do {
       htmlUrl     = $run.html_url
     }
     jobs      = @()
+    checkRuns = @()
   }
 
   $tableRows = @()
@@ -144,6 +173,46 @@ do {
     }
   }
 
+  $checkRows = @()
+  if ($IncludeCheckRuns) {
+    $checks = Get-CheckRuns -RepoFull $repoFull -Sha $run.head_sha
+    foreach ($check in $checks) {
+      $checkDuration = $null
+      if ($check.started_at -and $check.completed_at) {
+        try {
+          $start = [DateTime]::Parse($check.started_at)
+          $end = [DateTime]::Parse($check.completed_at)
+          $checkDuration = [math]::Round(($end - $start).TotalSeconds,2)
+        } catch {}
+      }
+
+      $snapshot.checkRuns += [ordered]@{
+        id          = $check.id
+        name        = $check.name
+        status      = $check.status
+        conclusion  = $check.conclusion
+        startedAt   = $check.started_at
+        completedAt = $check.completed_at
+        duration_s  = $checkDuration
+        detailsUrl  = $check.details_url
+        externalId  = $check.external_id
+        app         = if ($check.app) { $check.app.name } else { $null }
+        checkSuiteId= if ($check.check_suite) { $check.check_suite.id } else { $null }
+        summary     = if ($check.output) { $check.output.summary } else { $null }
+        text        = if ($check.output) { $check.output.text } else { $null }
+        title       = if ($check.output) { $check.output.title } else { $null }
+      }
+
+      $checkRows += [pscustomobject]@{
+        Name      = $check.name
+        Status    = $check.status
+        Result    = $check.conclusion
+        App       = if ($check.app) { $check.app.name } else { '' }
+        Duration  = if ($checkDuration) { "$checkDuration s" } else { '' }
+      }
+    }
+  }
+
   if (-not $Quiet) {
     Write-Host ''
     $runConclusionDisplay = if ($null -ne $run.conclusion -and $run.conclusion -ne '') { $run.conclusion } else { 'n/a' }
@@ -152,6 +221,17 @@ do {
       $tableRows | Format-Table -AutoSize | Out-String | Write-Host
     } else {
       Write-Host "(no jobs reported yet)"
+    }
+
+    if ($IncludeCheckRuns) {
+      Write-Host ''
+      $shaDisplay = if ($run.head_sha) { $run.head_sha } else { '(unknown sha)' }
+      Write-Host ("Check runs for head SHA {0}:" -f $shaDisplay)
+      if ($checkRows.Count -gt 0) {
+        $checkRows | Sort-Object Name | Format-Table -AutoSize | Out-String | Write-Host
+      } else {
+        Write-Host "(no check runs reported yet)"
+      }
     }
   }
 
