@@ -147,7 +147,12 @@ function Invoke-CompareVI {
     $headLeaf = Split-Path -Leaf $headAbs
     if ($baseLeaf -ieq $headLeaf -and $baseAbs -ne $headAbs) { throw "LVCompare limitation: Cannot compare two VIs sharing the same filename '$baseLeaf' located in different directories. Rename one copy or provide distinct filenames. Base=$baseAbs Head=$headAbs" }
 
-    $cli = if ($LvComparePath) { (Resolve-Cli -Explicit $LvComparePath) } else { (Resolve-Cli) }
+    # Resolve LVCompare path. In preview mode, bypass file existence checks to allow unit tests
+    if ($PreviewArgs) {
+      $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+    } else {
+      $cli = if ($LvComparePath) { (Resolve-Cli -Explicit $LvComparePath) } else { (Resolve-Cli) }
+    }
     $cliArgs = @()
     if ($LvCompareArgs) {
       $raw = $LvCompareArgs
