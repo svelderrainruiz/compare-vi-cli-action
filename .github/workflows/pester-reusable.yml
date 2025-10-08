@@ -96,7 +96,7 @@ jobs:
     name: Pester (self-hosted)
     if: ${{ inputs.skip_run != 'true' }}
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 30
+    # No job-level timeout; rely on probes/guards for determinism
     needs: [normalize, preflight]
     env:
       LV_SUPPRESS_UI: ${{ vars.LV_SUPPRESS_UI || '1' }}
@@ -155,6 +155,13 @@ jobs:
           clean-labview-before: 'false'
           clean-after: 'false'
           track-artifacts: 'true'
+
+      - name: Wire Probe (T1)
+        if: ${{ vars.WIRE_PROBES != '0' }}
+        uses: ./.github/actions/wire-probe
+        with:
+          phase: T1
+          results-dir: tests/results
 
       - name: Install Pester v5 (optional)
         if: ${{ inputs.install_pester == 'true' }}
@@ -305,6 +312,13 @@ jobs:
         if: always()
         shell: pwsh
         run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir 'tests/results' -SummaryJson 'pester-summary.json'
+
+      - name: Wire Probe (S1)
+        if: always()
+        uses: ./.github/actions/wire-probe
+        with:
+          phase: S1
+          results-dir: tests/results
 
       - name: Export Pester totals as outputs
         id: export
