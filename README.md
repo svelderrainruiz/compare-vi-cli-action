@@ -770,5 +770,30 @@ Set `STUCK_GUARD=1` when invoking `Invoke-PesterTests.ps1` to record:
 
 The guard is notice-only and never fails the job; rely on job-level timeouts for termination.
 
+### Single-Compare Invoker Autostop
+
+For one-shot invoker loops, set `LVCI_SINGLE_COMPARE=1`. The runner now auto-enables
+`LVCI_SINGLE_COMPARE_AUTOSTOP=1`, so the sentinel is removed and the invoker exits
+as soon as the first compare (preview or run) completes. Example:
+
+```powershell
+$env:LVCI_SINGLE_COMPARE = '1'
+./Invoke-PesterTests.ps1 -IncludePatterns 'RunnerInvoker.*'
+```
+
+### Session Lock Guard
+
+When multiple shells share the same self-hosted runner, enable a cooperative session
+lock so only one dispatcher runs at a time:
+
+```powershell
+$env:SESSION_LOCK_ENABLED = '1'        # optional alias: CLAIM_PESTER_LOCK=1
+$env:SESSION_LOCK_GROUP   = 'pester'   # defaults to pester-selfhosted
+./Invoke-PesterTests.ps1 -IncludePatterns 'RunnerInvoker.*'
+```
+
+If acquisition fails the dispatcher now stops immediately. Set
+`SESSION_LOCK_FORCE=1` to take over the lock (use sparingly).
+
 
 \n

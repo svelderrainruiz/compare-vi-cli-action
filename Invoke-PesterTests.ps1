@@ -145,6 +145,31 @@ function _IsTruthyEnv {
 if (-not $EmitResultShapeDiagnostics) { $EmitResultShapeDiagnostics = (_IsTruthyEnv $env:EMIT_RESULT_SHAPES) }
 if (-not $DisableStepSummary) { $DisableStepSummary = (_IsTruthyEnv $env:DISABLE_STEP_SUMMARY) }
 
+# Session lock support (optional)
+$sessionLockEnabled = $false
+try { if ($env:SESSION_LOCK_ENABLED -match '^(?i:1|true|yes|on)$') { $sessionLockEnabled = $true } } catch {}
+if (-not $sessionLockEnabled) { try { if ($env:CLAIM_PESTER_LOCK -match '^(?i:1|true|yes|on)$') { $sessionLockEnabled = $true } } catch {} }
+$lockGroup = 'pester-selfhosted'
+if ($sessionLockEnabled -and $env:SESSION_LOCK_GROUP) { $lockGroup = $env:SESSION_LOCK_GROUP }
+$lockAcquired = $false
+$lockForce = $false
+try { if ($env:SESSION_LOCK_FORCE -match '^(?i:1|true|yes|on)$') { $lockForce = $true } } catch {}
+
+function Invoke-SessionLock {
+  param([string]$Action,[string]$Group,[switch]$Force)
+  $scriptPath = Join-Path (Get-Location) 'tools/Session-Lock.ps1'
+  if (-not (Test-Path -LiteralPath $scriptPath)) { return $false }
+  $invokeArgs = @('-Action', $Action, '-Group', $Group)
+  if ($Force) { $invokeArgs += '-ForceTakeover' }
+  try {
+    & $scriptPath @invokeArgs | Out-Null
+    return ($LASTEXITCODE -eq 0)
+  } catch {
+    Write-Warning "Session lock $Action failed: $($_.Exception.Message)"
+    return $false
+  }
+}
+
 # Derive effective timeout seconds (seconds param takes precedence if >0)
 $effectiveTimeoutSeconds = 0
 if ($TimeoutSeconds -gt 0) { $effectiveTimeoutSeconds = [double]$TimeoutSeconds }
@@ -156,6 +181,15 @@ $SchemaFailuresVersion = '1.0.0'
 $SchemaManifestVersion = '1.0.0'
 ${SchemaLeakReportVersion} = '1.0.0'
 ${SchemaDiagnosticsVersion} = '1.1.0'
+
+if ($sessionLockEnabled) {
+  Write-Host "::notice::Attempting to acquire session lock '$lockGroup'" -ForegroundColor DarkGray
+  if ($lockForce) { Write-Host "::notice::Session lock force takeover enabled" -ForegroundColor DarkGray }
+  $lockAcquired = Invoke-SessionLock -Action 'Acquire' -Group $lockGroup -Force:$lockForce
+  if (-not $lockAcquired) {
+    throw "Failed to acquire session lock '$lockGroup'. Set SESSION_LOCK_FORCE=1 to allow takeover or unset SESSION_LOCK_ENABLED."
+  }
+}
 
 function Ensure-FailuresJson {
   param(
@@ -2013,3 +2047,10 @@ if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Norma
   } catch { Write-Warning "Failed to emit final sweep leak report: $_" }
 }
 exit 0
+finally {
+  if ($sessionLockEnabled -and $lockAcquired) {
+    Write-Host "::notice::Releasing session lock '$lockGroup'" -ForegroundColor DarkGray
+    $released = Invoke-SessionLock -Action 'Release' -Group $lockGroup
+    if (-not $released) { Write-Warning "Failed to release session lock '$lockGroup'" }
+  }
+}

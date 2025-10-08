@@ -35,7 +35,7 @@ param(
   [string]$JsonReport,
   [switch]$FailOnDiff,
   [switch]$IncludeIntegrationTests,
-  [int]$LoopIterations = 15,
+  [int]$LoopIterations = 1,
   [switch]$Loop,
   [switch]$PassThru
 )
@@ -167,8 +167,18 @@ function Invoke-PhaseLoop {
   param($r,$ctx)
   Write-PhaseBanner $r.name
   $env:LOOP_SIMULATE = ''  # ensure real
+  # Optional quick/override controls via env (non-breaking defaults)
+  try {
+    if (-not $PSBoundParameters.ContainsKey('LoopIterations')) {
+      if ($env:RUNBOOK_LOOP_ITERATIONS -match '^[0-9]+$') { $LoopIterations = [int]$env:RUNBOOK_LOOP_ITERATIONS }
+    }
+    if ($env:RUNBOOK_LOOP_QUICK -match '^(?i:1|true|yes|on)$') { $LoopIterations = 1 }
+  } catch {}
   if ($LoopIterations -gt 0) { $env:LOOP_MAX_ITERATIONS = $LoopIterations } else { Remove-Item Env:LOOP_MAX_ITERATIONS -ErrorAction SilentlyContinue }
-  $env:LOOP_FAIL_ON_DIFF = 'false'
+  $failOn = $false
+  try { if ($env:RUNBOOK_LOOP_FAIL_ON_DIFF -match '^(?i:1|true|yes|on)$') { $failOn = $true } } catch {}
+  try { if ($env:RUNBOOK_LOOP_QUICK -match '^(?i:1|true|yes|on)$') { $failOn = $true } } catch {}
+  $env:LOOP_FAIL_ON_DIFF = ($failOn ? 'true' : 'false')
   try {
     & (Join-Path (Get-Location) 'scripts' 'Run-AutonomousIntegrationLoop.ps1')
     $code = $LASTEXITCODE

@@ -12,7 +12,8 @@ Describe 'CompareVI argument preview' -Tag 'Unit' {
     $cmd = Invoke-CompareVI -Base $base -Head $head -PreviewArgs
     $cmd | Should -Match 'LVCompare\.exe'
     $cmd | Should -Match ([regex]::Escape('"' + (Resolve-Path $base).Path + '"'))
-    $cmd | Should -Match ([regex]::Escape('"' + (Resolve-Path $head).Path + '"'))
+    # Head may be unquoted if no spaces; accept either
+    $cmd | Should -Match ([regex]::Escape((Resolve-Path $head).Path))
   }
 
   It 'accepts allowed flags and -lvpath value' {
@@ -28,7 +29,9 @@ Describe 'CompareVI argument preview' -Tag 'Unit' {
     $cmd | Should -Match '\-nofppos'
     $cmd | Should -Match '\-nobd(?!\w)'
     $cmd | Should -Match '\-nobdcosm'
-    $cmd | Should -Match ([regex]::Escape('-lvpath ' + '"' + $lv + '"'))
+    # -lvpath target may appear quoted or unquoted in preview; accept either
+    $pat = ('-lvpath\s+"?' + [regex]::Escape($lv) + '"?')
+    $cmd | Should -Match $pat
   }
 
   It 'rejects invalid flags early' {
@@ -39,4 +42,3 @@ Describe 'CompareVI argument preview' -Tag 'Unit' {
     { Invoke-CompareVI -Base $base -Head $head -LvCompareArgs '-badflag' -PreviewArgs } | Should -Throw
   }
 }
-

@@ -133,6 +133,8 @@ jobs:
       INVOKER_REQUIRED: '1'
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: ${{ vars.LV_SUPPRESS_UI || '1' }}
+      CLEAN_LVCOMPARE: '1'
+      LVCI_SINGLE_COMPARE: '1'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: 'C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe'
       LV_NOTICE_DIR: 'results/fixture-drift/_lv'

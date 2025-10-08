@@ -1,4 +1,18 @@
+($__testDir = $null)
+try { if ($PSCommandPath) { $__testDir = Split-Path -Parent $PSCommandPath } } catch {}
+if (-not $__testDir) { try { $__testDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch {} }
+if (-not $__testDir) { $__testDir = (Resolve-Path '.').Path }
+. (Join-Path $__testDir '_TestPathHelper.ps1')
+
 Describe 'CompareVI single-run diff details' -Tag 'Unit' {
+  BeforeAll {
+    $testDir = $null
+    try { if ($PSCommandPath) { $testDir = Split-Path -Parent $PSCommandPath } } catch {}
+    if (-not $testDir) { try { $testDir = Split-Path -Parent $MyInvocation.MyCommand.Path } catch {} }
+    if (-not $testDir) { $testDir = (Resolve-Path '.').Path }
+    . (Join-Path $testDir '_TestPathHelper.ps1')
+    $script:repoRoot = Resolve-RepoRoot
+  }
   It 'reads diff-details.json and reports 4 head changes' {
     $td = $TestDrive
     $out = Join-Path $td 'out'
@@ -27,7 +41,8 @@ Describe 'CompareVI single-run diff details' -Tag 'Unit' {
 
     # Render report and assert presence of head changes line
     $htmlOut = Join-Path $out 'compare-report.html'
-    pwsh -NoLogo -NoProfile -File (Join-Path $PSScriptRoot '..' 'scripts' 'Render-CompareReport.ps1') `
+    $render = Join-Path (Join-Path $script:repoRoot 'scripts') 'Render-CompareReport.ps1'
+    & $render `
       -Command $exec.command -ExitCode $exec.exitCode -Diff 'true' -CliPath $exec.cliPath `
       -OutputPath $htmlOut -DurationSeconds $exec.duration_s -ExecJsonPath $execPath | Out-Null
 
@@ -36,4 +51,3 @@ Describe 'CompareVI single-run diff details' -Tag 'Unit' {
     $html | Should -Match '<div class="key">Head Changes</div><div class="value">4</div>'
   }
 }
-

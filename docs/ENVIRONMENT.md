@@ -28,6 +28,10 @@ Used by `Invoke-PesterTests.ps1` to keep runs deterministic and diagnose leaks.
 | CLEAN_AFTER | Post-run best-effort stop of LabVIEW/LVCompare | 1/0 | 0 |
 | SCAN_ARTIFACTS | Enable artifact trail (pre/post hashing) | 1/0 | 0 |
 | ARTIFACT_GLOBS | Roots to include in trail | ';' or ',' separated paths | repo defaults |
+| SESSION_LOCK_ENABLED | Acquire a cooperative dispatcher lock before running | 1/0 | 0 |
+| CLAIM_PESTER_LOCK | Alias for `SESSION_LOCK_ENABLED` (legacy) | 1/0 | 0 |
+| SESSION_LOCK_GROUP | Lock namespace (directory name) | pester-selfhosted | pester-selfhosted |
+| SESSION_LOCK_FORCE | Force takeover when an existing lock is stale | 1/0 | 0 |
 
 Artifacts written when enabled:
 
@@ -41,14 +45,29 @@ Subset commonly used by `scripts/Run-AutonomousIntegrationLoop.ps1` and loop-ena
 | Variable | Purpose | Example | Default |
 |---------|---------|---------|---------|
 | LOOP_SIMULATE | Simulate loop (no real CLI) | 1/0 | 0 |
-| LOOP_MAX_ITERATIONS | Max iterations | 100 | 30 |
+| LOOP_MAX_ITERATIONS | Max iterations | 100 | 50 |
 | LOOP_INTERVAL_SECONDS | Delay between iterations | 0.1 | 0 |
-| LOOP_DIFF_SUMMARY_FORMAT | Diff summary output (Html/Markdown) | Html | Html |
+| LOOP_DIFF_SUMMARY_FORMAT | Diff summary output (Html/Markdown) | Html | None |
 | LOOP_EMIT_RUN_SUMMARY | Emit final run summary JSON | 1/0 | 1 |
-| LOOP_JSON_LOG | NDJSON event log path | loop-events.ndjson | — |
+| LOOP_JSON_LOG | NDJSON event log path | loop-events.ndjson | - |
 | LOOP_HISTOGRAM_BINS | Histogram bin count | 20 | 0 (disabled) |
 
 For full loop inputs/outputs and percentile strategies, see `docs/COMPARE_LOOP_MODULE.md`.
+
+## Runner Invoker Controls
+
+| Variable | Purpose | Accepted values | Default |
+|---------|---------|------------------|---------|
+| LVCI_SINGLE_COMPARE | Gate additional `CompareVI` requests after the first preview/run | 1/0 | 0 |
+| LVCI_SINGLE_COMPARE_AUTOSTOP | Remove the sentinel and stop the invoker automatically after the first handled compare | 1/0 | 0 (auto-set to 1 when `LVCI_SINGLE_COMPARE=1` via `Start-RunnerInvoker.ps1`) |
+
+## Integration Runbook Controls
+
+| Variable | Purpose | Accepted values | Default |
+|---------|---------|------------------|---------|
+| RUNBOOK_LOOP_ITERATIONS | Override `Invoke-IntegrationRunbook` loop iteration count | integer | 1 |
+| RUNBOOK_LOOP_QUICK | Force a single iteration and enable fail-on-diff for the Loop phase | 1/0 | 0 |
+| RUNBOOK_LOOP_FAIL_ON_DIFF | Fail the Loop phase when a diff is detected | 1/0 | 0 |
 
 ## Fixture Validation and Reporting
 
