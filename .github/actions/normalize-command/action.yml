@@ -1,0 +1,15 @@
+name: normalize-command
+description: Normalize PR comment command and classify target
+inputs:
+  body:
+    description: Raw comment body
+    required: true
+outputs:
+  comment:
+    description: Lowercased comment body
+  target:
+    description: Detected target (unit|mock|smoke|pester-selfhosted|orchestrated)
+runs:
+  using: node20
+  main: dist/actions/normalize-command.js
+
