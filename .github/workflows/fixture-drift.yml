@@ -283,27 +283,63 @@ jobs:
       if: always()
       shell: pwsh
       run: |
-        $d = $env:LV_NOTICE_DIR
-        if (-not $d -or -not (Test-Path -LiteralPath $d)) {
-          Write-Host "::error::LV notice directory not found: $d"; exit 1
+        $originalDir = $env:LV_NOTICE_DIR
+        if (-not $originalDir) {
+          Write-Host '::error::LV notice directory environment variable (LV_NOTICE_DIR) not set.'; exit 1
         }
-        $files = @(Get-ChildItem -LiteralPath $d -Filter 'notice-*.json' -File -ErrorAction SilentlyContinue)
+        $noticeDir = $originalDir
+        if (-not (Test-Path -LiteralPath $noticeDir)) {
+          $searchRoot = 'results/fixture-drift'
+          $fallbackDirs = @()
+          if (Test-Path -LiteralPath $searchRoot) {
+            $fallbackDirs = Get-ChildItem -LiteralPath $searchRoot -Directory -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq '_lv' }
+          }
+          if ($fallbackDirs -and $fallbackDirs.Count -gt 0) {
+            $noticeDir = $fallbackDirs[0].FullName
+            Write-Host ("::notice::LV notice directory fallback → {0} (original={1})" -f $noticeDir,$originalDir)
+          } else {
+            Write-Host ("::error::LV notice directory not found: {0}" -f $originalDir); exit 1
+          }
+        }
+        $files = @(Get-ChildItem -LiteralPath $noticeDir -Filter 'notice-*.json' -File -ErrorAction SilentlyContinue | Sort-Object FullName)
         $postStarts = 0
+        $legacyWithoutPath = 0
+        $pathsObserved = New-Object System.Collections.Generic.List[string]
         foreach ($f in $files) {
           try {
             $j = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
-            if ($j.phase -eq 'post-start') { $postStarts++ }
-          } catch {}
+          } catch {
+            continue
+          }
+          if ($j.phase -eq 'post-start') {
+            $candidatePath = $null
+            if ($j.PSObject.Properties['path'] -and -not [string]::IsNullOrWhiteSpace([string]$j.path)) {
+              $candidatePath = [string]$j.path
+            } elseif ($j.PSObject.Properties['cli'] -and -not [string]::IsNullOrWhiteSpace([string]$j.cli)) {
+              $candidatePath = [string]$j.cli
+              $legacyWithoutPath++
+            } else {
+              $legacyWithoutPath++
+            }
+            if ($candidatePath) { $null = $pathsObserved.Add($candidatePath) }
+            $postStarts++
+          }
         }
         if ($env:GITHUB_STEP_SUMMARY) {
-          $lines = @('### LVCompare Launch Check','',"- Notice dir: $d", "- Notices: $($files.Count)", "- post-start: $postStarts")
+          $lines = @('### LVCompare Launch Check','',"- Notice dir: $noticeDir", "- Notices: $($files.Count)", "- post-start: $postStarts")
+          if ($legacyWithoutPath -gt 0) {
+            $lines += ("- post-start without path metadata: {0}" -f $legacyWithoutPath)
+          }
+          if ($pathsObserved.Count -gt 0) {
+            $uniquePaths = ($pathsObserved | Sort-Object -Unique)
+            $lines += ("- paths observed: {0}" -f ([string]::Join(', ', $uniquePaths)))
+          }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
         if ($postStarts -ne 1) {
-          Write-Host "::error::Expected exactly one LVCompare launch (post-start=$postStarts)"; exit 1
-        } else {
-          Write-Host "Single LVCompare launch verified (post-start=1)"
+          Write-Host ("::error::Expected exactly one LVCompare launch (post-start={0})" -f $postStarts); exit 1
         }
+        Write-Host "Single LVCompare launch verified (post-start=1)"
     - name: Wire Probe (C3)
       uses: ./.github/actions/wire-probe
       with:
