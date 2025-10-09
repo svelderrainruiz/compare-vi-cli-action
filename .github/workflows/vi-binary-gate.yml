@@ -17,6 +17,6 @@ jobs:
     uses: ./.github/workflows/pester-reusable.yml
     with:
       include_integration: ${{ 'false' }}
-      install_pester: ${{ 'false' }}
+      install_pester: ${{ 'true' }}
       include_patterns: ${{ 'tests/ViBinaryHandling.Tests.ps1' }}
       sample_id: ${{ github.event.inputs.sample_id || '' }}
