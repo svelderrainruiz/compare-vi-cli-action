@@ -294,6 +294,7 @@ jobs:
       LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
     - name: Configure Git safe.directory (service)
@@ -321,6 +322,7 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
@@ -353,6 +355,7 @@ jobs:
         $lines = @('### Post-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-invoker'
     - name: Prepare fixture copies (base/head)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       id: fixtures
@@ -476,6 +479,11 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+    - name: Emit LV closure telemetry (category post-stop)
+      if: always()
+      shell: pwsh
+      run: |
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
@@ -554,6 +562,7 @@ jobs:
       LVCI_SINGLE_COMPARE: '1'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
     - name: Configure Git safe.directory (service)
@@ -688,6 +697,11 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+    - name: Emit LV closure telemetry (drift post-stop)
+      if: always()
+      shell: pwsh
+      run: |
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
@@ -863,6 +877,7 @@ jobs:
       WATCH_CONSOLE: '1'
       INVOKER_REQUIRED: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      EMIT_LV_CLOSURE_CRUMBS: '1'
       TRACE_MATRIX: '1'
       TRACE_MATRIX_HTML: '1'
     steps:
@@ -905,6 +920,7 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
@@ -938,6 +954,7 @@ jobs:
         $lines = @('### Post-Invoker/Warmup Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-warmup'
 
     - name: Wire Probe (T1)
       uses: ./.github/actions/wire-probe
@@ -990,6 +1007,11 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+    - name: Emit LV closure telemetry (single post-stop)
+      if: always()
+      shell: pwsh
+      run: |
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
