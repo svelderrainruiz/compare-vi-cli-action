@@ -558,7 +558,9 @@ jobs:
       INVOKER_REQUIRED: '1'
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'
-      CLEAN_LVCOMPARE: '1'
+      CLEAN_LV_BEFORE: ${{ vars.CLEAN_LV_BEFORE || 'true' }}
+      CLEAN_LV_AFTER: ${{ vars.CLEAN_LV_AFTER || 'true' }}
+      CLEAN_LV_INCLUDE_COMPARE: ${{ vars.CLEAN_LV_INCLUDE_COMPARE || vars.CLEAN_LVCOMPARE || 'true' }}
       LVCI_SINGLE_COMPARE: '1'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe

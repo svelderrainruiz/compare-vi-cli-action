@@ -142,9 +142,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Test-EnvTruthy {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+  return ($Value.Trim() -match '^(?i:1|true|yes|on)$')
+}
+
 # Env toggle support: CLEAN_LABVIEW=1 and/or CLEAN_AFTER=1 act as implicit switches
-if (-not $CleanLabVIEW) { $CleanLabVIEW = ($env:CLEAN_LABVIEW -eq '1') }
-if (-not $CleanAfter)   { $CleanAfter   = ($env:CLEAN_AFTER   -eq '1') }
+if (-not $CleanLabVIEW) {
+  $CleanLabVIEW = Test-EnvTruthy $env:CLEAN_LV_BEFORE
+  if (-not $CleanLabVIEW) { $CleanLabVIEW = Test-EnvTruthy $env:CLEAN_LABVIEW }
+}
+if (-not $CleanAfter)   {
+  $CleanAfter = Test-EnvTruthy $env:CLEAN_LV_AFTER
+  if (-not $CleanAfter) { $CleanAfter = Test-EnvTruthy $env:CLEAN_AFTER }
+}
 if (-not $TrackArtifacts) { $TrackArtifacts = ($env:SCAN_ARTIFACTS -eq '1') }
 if (-not $ArtifactGlobs -and $env:ARTIFACT_GLOBS) { $ArtifactGlobs = ($env:ARTIFACT_GLOBS -split ';|,') }
 if (-not $DetectLeaks) { $DetectLeaks = ($env:DETECT_LEAKS -eq '1') }
@@ -157,14 +169,14 @@ if ($env:LEAK_GRACE_SECONDS) {
 }
 if (-not $KillLeaks) { $KillLeaks = ($env:KILL_LEAKS -eq '1') }
 
-# Optional: allow explicit opt-in to clean LVCompare alongside LabVIEW during post-run cleanup
-$script:CleanLVCompare = ($env:CLEAN_LVCOMPARE -eq '1')
+# Optional: allow explicit opt-in to clean LVCompare alongside LabVIEW during cleanup
+$includeLVCompare = Test-EnvTruthy $env:CLEAN_LV_INCLUDE_COMPARE
+if (-not $includeLVCompare) { $includeLVCompare = Test-EnvTruthy $env:CLEAN_LVCOMPARE }
+$script:CleanLVCompare = $includeLVCompare
 # Helper to interpret truthy env toggles (1/true/yes/on)
 function _IsTruthyEnv {
   param([string]$Value)
-  if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
-  $v = $Value.Trim()
-  return ($v -match '^(?i:1|true|yes|on)$')
+  return (Test-EnvTruthy $Value)
 }
 if (-not $EmitResultShapeDiagnostics) { $EmitResultShapeDiagnostics = (_IsTruthyEnv $env:EMIT_RESULT_SHAPES) }
 if (-not $DisableStepSummary) { $DisableStepSummary = (_IsTruthyEnv $env:DISABLE_STEP_SUMMARY) }

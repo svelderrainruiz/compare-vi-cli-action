@@ -74,25 +74,51 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
     env:
-      CLEAN_LVCOMPARE: ${{ vars.CLEAN_LVCOMPARE || '1' }}
+      CLEAN_LV_BEFORE: ${{ vars.CLEAN_LV_BEFORE || 'true' }}
+      CLEAN_LV_AFTER: ${{ vars.CLEAN_LV_AFTER || 'true' }}
+      CLEAN_LV_INCLUDE_COMPARE: ${{ vars.CLEAN_LV_INCLUDE_COMPARE || vars.CLEAN_LVCOMPARE || 'true' }}
+      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH || '' }}
+      LV_SUPPRESS_UI: ${{ vars.LV_SUPPRESS_UI || '1' }}
+      LV_NO_ACTIVATE: ${{ vars.LV_NO_ACTIVATE || '1' }}
+      LV_CURSOR_RESTORE: ${{ vars.LV_CURSOR_RESTORE || '1' }}
+      LV_IDLE_WAIT_SECONDS: ${{ vars.LV_IDLE_WAIT_SECONDS || '2' }}
+      LV_IDLE_MAX_WAIT_SECONDS: ${{ vars.LV_IDLE_MAX_WAIT_SECONDS || '5' }}
     steps:
       - uses: actions/checkout@v5
+      - name: Rogue LV scan (notice-only)
+        shell: pwsh
+        run: pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900
       - name: Runner Unblock Guard (preflight)
         uses: ./.github/actions/runner-unblock-guard
         with:
           snapshot-path: tests/results/runner-unblock-snapshot.json
-          cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+          cleanup: ${{ env.CLEAN_LV_BEFORE == 'true' }}
           process-names: 'LabVIEW,LVCompare'
       - name: Verify LVCompare and idle LabVIEW state
         shell: pwsh
         run: |
-          $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+          $defaultCli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          $cli = if ($env:LVCOMPARE_PATH) { $env:LVCOMPARE_PATH } else { $defaultCli }
           if (-not (Test-Path -LiteralPath $cli)) {
-            Write-Host "::error::LVCompare.exe not found at canonical path: $cli"; exit 1
+            Write-Host "::error::LVCompare.exe not found at resolved path: $cli"; exit 1
+          } else {
+            Write-Host ("Resolved LVCompare path: {0}" -f $cli)
           }
           $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
-          if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
+          if ($lv) {
+            $pids = $lv | ForEach-Object { '{0}(session={1})' -f $_.Id,$_.SessionId }
+            Write-Host ("::error::LabVIEW.exe is running (details: {0})" -f ($pids -join ', '))
+            if ($env:GITHUB_STEP_SUMMARY) {
+              $lines = @('### Preflight Checks','','- LVCompare: missing LabVIEW idle requirement','- Detected LabVIEW processes: {0}' -f ($pids -join ', '))
+              $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+            exit 1
+          }
           Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
+          if ($env:GITHUB_STEP_SUMMARY) {
+            $lines = @('### Preflight Checks','','- LVCompare: ok (path resolved)','- LabVIEW idle gate: ok')
+            $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
 
   pester:
     name: Pester (self-hosted)
@@ -107,7 +133,10 @@ jobs:
       LV_IDLE_WAIT_SECONDS: ${{ vars.LV_IDLE_WAIT_SECONDS || '2' }}
       LV_IDLE_MAX_WAIT_SECONDS: ${{ vars.LV_IDLE_MAX_WAIT_SECONDS || '5' }}
       STUCK_GUARD: ${{ vars.STUCK_GUARD || '1' }}
-      CLEAN_LVCOMPARE: ${{ vars.CLEAN_LVCOMPARE || '1' }}
+      CLEAN_LV_BEFORE: ${{ vars.CLEAN_LV_BEFORE || 'true' }}
+      CLEAN_LV_AFTER: ${{ vars.CLEAN_LV_AFTER || 'true' }}
+      CLEAN_LV_INCLUDE_COMPARE: ${{ vars.CLEAN_LV_INCLUDE_COMPARE || vars.CLEAN_LVCOMPARE || 'true' }}
+      LVCOMPARE_PATH: ${{ vars.LVCOMPARE_PATH || '' }}
     outputs:
       total: ${{ steps.export.outputs.total }}
       passed: ${{ steps.export.outputs.passed }}
@@ -126,7 +155,7 @@ jobs:
         uses: ./.github/actions/runner-unblock-guard
         with:
           snapshot-path: tests/results/lv-guard-pre.json
-          cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+          cleanup: ${{ env.CLEAN_LV_BEFORE == 'true' }}
           process-names: 'LVCompare,LabVIEW'
 
       # When running integration tests, prepare temp base/head VIs and export env vars
@@ -542,5 +571,29 @@ jobs:
         uses: ./.github/actions/runner-unblock-guard
         with:
           snapshot-path: tests/results/lv-guard-post.json
-          cleanup: ${{ env.CLEAN_LVCOMPARE == '1' }}
+          cleanup: ${{ env.CLEAN_LV_AFTER == 'true' }}
           process-names: 'LVCompare,LabVIEW'
+
+      - name: Append re-run hint
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not $env:GITHUB_STEP_SUMMARY) { return }
+          $workflowName = '${{ github.workflow }}'
+          $refName = '${{ github.ref_name }}'
+          $sampleId = '${{ inputs.sample_id }}'
+          $cmdParts = @("gh workflow run `"$workflowName`"", "-r `"$refName`"")
+          if ($sampleId) { $cmdParts += "-f sample_id=$sampleId" }
+          $command = $cmdParts -join ' '
+          $workflowRef = '${{ github.workflow_ref }}'
+          $workflowPath = ''
+          if ($workflowRef -match '\.github/workflows/(?<path>[^@]+)@') {
+            $workflowPath = $Matches['path']
+          }
+          $repo = '${{ github.repository }}'
+          $lines = @('### Re-run With Same Inputs','',"- Command: `$command`")
+          if (-not $sampleId) { $lines += '- sample_id omitted; workflow will auto-generate if supported.' }
+          if ($workflowPath) {
+            $lines += ("- Workflow: https://github.com/{0}/actions/workflows/{1}" -f $repo, $workflowPath)
+          }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

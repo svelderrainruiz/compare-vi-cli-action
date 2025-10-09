@@ -29,7 +29,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Changed
 
-- Dispatcher now hard-gates on a running `LabVIEW.exe` (will not start tests with LabVIEW open); post-run cleanup focuses on LabVIEW, with opt-in to close LVCompare via `CLEAN_LVCOMPARE=1`.
+- Dispatcher now hard-gates on a running `LabVIEW.exe` (will not start tests with LabVIEW open); cleanup is controlled by `CLEAN_LV_BEFORE`/`CLEAN_LV_AFTER` with LVCompare inclusion via `CLEAN_LV_INCLUDE_COMPARE` (legacy alias: `CLEAN_LVCOMPARE=1`).
 - Composite drift action improved: reliable discovery of `drift-summary.json` (timestamped and direct paths) and richer debug breadcrumbs in job summary.
 - Artifact manifest now includes `session-index.json`.
 - Workflows append the session index `stepSummary` for quick scanability and upload the session index as an artifact.

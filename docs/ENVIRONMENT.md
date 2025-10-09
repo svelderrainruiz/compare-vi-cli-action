@@ -29,8 +29,11 @@ Used by `Invoke-PesterTests.ps1` to keep runs deterministic and diagnose leaks.
 | KILL_LEAKS | Attempt to auto-stop leaked procs/jobs | 1/0 | 0 |
 | LEAK_PROCESS_PATTERNS | Comma/semicolon-separated process patterns | LVCompare,LabVIEW,LabVIEWCLI | LVCompare,LabVIEW |
 | LEAK_GRACE_SECONDS | Seconds to wait before final leak check | float (e.g., 0.25) | 0 |
-| CLEAN_LABVIEW | Pre-run best-effort stop of LabVIEW/LVCompare | 1/0 | 0 |
-| CLEAN_AFTER | Post-run best-effort stop of LabVIEW/LVCompare | 1/0 | 0 |
+| CLEAN_LV_BEFORE | Pre-run best-effort stop of LabVIEW (preferred) | true/false | true (repo default) |
+| CLEAN_LV_AFTER | Post-run best-effort stop of LabVIEW | true/false | true (repo default) |
+| CLEAN_LV_INCLUDE_COMPARE | Also stop LVCompare when cleanup runs | true/false | true (repo default) |
+| CLEAN_LABVIEW | Legacy alias for `CLEAN_LV_BEFORE` | 1/0 | 0 |
+| CLEAN_AFTER | Legacy alias for `CLEAN_LV_AFTER` | 1/0 | 0 |
 | SCAN_ARTIFACTS | Enable artifact trail (pre/post hashing) | 1/0 | 0 |
 | ARTIFACT_GLOBS | Roots to include in trail | ';' or ',' separated paths | repo defaults |
 | SESSION_LOCK_ENABLED | Acquire a cooperative dispatcher lock before running | 1/0 | 0 |
