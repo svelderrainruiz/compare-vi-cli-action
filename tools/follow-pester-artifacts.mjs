@@ -43,6 +43,11 @@ parser.add_argument('--poll-ms', {
   type: 'int',
   default: 10000,
 });
+parser.add_argument('--exit-on-hang', {
+  help: 'Exit with non-zero code when hang is suspected',
+  action: 'store_true',
+  default: false,
+});
 parser.add_argument('--quiet', {
   help: 'Suppress informational messages',
   action: 'store_true',
@@ -59,6 +64,7 @@ const quiet = Boolean(args.quiet);
 const warnSeconds = Math.max(1, Number(args['warn_seconds'] ?? args.warn_seconds ?? args['warn-seconds']));
 const hangSeconds = Math.max(warnSeconds + 1, Number(args['hang_seconds'] ?? args.hang_seconds ?? args['hang-seconds']));
 const pollMs = Math.max(250, Number(args['poll_ms'] ?? args.poll_ms ?? args['poll-ms']));
+const exitOnHang = Boolean(args['exit_on_hang'] ?? args.exit_on_hang ?? args['exit-on-hang']);
 
 let logPosition = 0;
 let logProcessing = Promise.resolve();
@@ -66,6 +72,8 @@ let summaryTimer = null;
 let lastActivityAt = Date.now();
 let lastStatsSize = 0;
 let lastStatsMtimeMs = 0;
+let hangReported = false;
+let shuttingDown = false;
 
 function info(message) {
   if (!quiet) {
@@ -101,6 +109,7 @@ async function readFileTail(filePath, lines) {
     lastStatsSize = stats.size;
     lastStatsMtimeMs = stats.mtimeMs;
     lastActivityAt = Date.now();
+    hangReported = false;
   } catch (err) {
     if (err.code === 'ENOENT') {
       logPosition = 0;
@@ -138,6 +147,7 @@ async function readLogDelta(filePath) {
       }
       // Count any appended bytes as activity even if lines were blank/partial
       lastActivityAt = Date.now();
+      hangReported = false;
     } finally {
       await fh.close();
     }
@@ -189,6 +199,7 @@ async function emitSummary(filePath) {
       parts.push(`Duration=${duration}`);
     }
     console.log(parts.join(' '));
+    hangReported = false;
   } catch (err) {
     if (err.code === 'ENOENT') {
       return;
@@ -297,22 +308,42 @@ async function watch() {
     const idleMs = Date.now() - lastActivityAt;
     const idleSec = Math.floor(idleMs / 1000);
     if (idleSec >= hangSeconds) {
-      warn(`[hang-suspect] idle ~${idleSec}s (no new log bytes or summary). live-bytes=${lastStatsSize} consumed-bytes=${logPosition}`);
+      if (!hangReported) {
+        warn(`[hang-suspect] idle ~${idleSec}s (no new log bytes or summary). live-bytes=${lastStatsSize} consumed-bytes=${logPosition}`);
+        hangReported = true;
+      }
+      if (exitOnHang && !shuttingDown) {
+        shuttingDown = true;
+        clearInterval(pollTimer);
+        Promise.all([logWatcher.close(), summaryWatcher.close()])
+          .catch((err) => {
+            warn(`[watch] Error while closing watchers: ${err.message ?? err}`);
+          })
+          .finally(() => {
+            process.exit(2);
+          });
+      }
     } else if (idleSec >= warnSeconds) {
       info(`[hang-watch] idle ~${idleSec}s (monitoring). live-bytes=${lastStatsSize} consumed-bytes=${logPosition}`);
     }
   }, pollMs);
 
+  async function closeWatchers() {
+    if (shuttingDown) { return }
+    shuttingDown = true;
+    clearInterval(pollTimer);
+    try {
+      await Promise.all([logWatcher.close(), summaryWatcher.close()]);
+    } catch (err) {
+      warn(`[watch] Error while closing watchers: ${err.message ?? err}`);
+    }
+  }
+
   function shutdown(signal) {
     info(`[watch] Received ${signal}; shutting down watchers.`);
-    Promise.all([logWatcher.close(), summaryWatcher.close()])
-      .catch((err) => {
-        warn(`[watch] Error while closing watchers: ${err.message ?? err}`);
-      })
-      .finally(() => {
-        try { clearInterval(pollTimer); } catch {}
-        process.exit(0);
-      });
+    closeWatchers()
+      .catch(() => {})
+      .finally(() => process.exit(0));
   }
 
   process.on('SIGINT', () => shutdown('SIGINT'));

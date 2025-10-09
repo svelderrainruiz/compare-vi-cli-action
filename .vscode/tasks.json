@@ -39,6 +39,49 @@
       }
     },
     {
+      "label": "Watch Pester Artifacts (Node, fail fast)",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "tools/follow-pester-artifacts.mjs",
+        "--results",
+        "tests/results",
+        "--warn-seconds",
+        "60",
+        "--hang-seconds",
+        "120",
+        "--poll-ms",
+        "2000",
+        "--exit-on-hang"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        {
+          "owner": "pester-hang",
+          "severity": "warning",
+          "pattern": {
+            "regexp": "^\\[hang-watch\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "error",
+          "pattern": {
+            "regexp": "^\\[hang-suspect\\]\\s+(.*)$",
+            "message": 1
+          }
+        }
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
       "label": "Run Tests (Local)",
       "type": "shell",
       "command": "pwsh",
@@ -95,7 +138,49 @@
         "panel": "dedicated",
         "clear": true
       }
+    },
+    {
+      "label": "Watch Pester Artifacts (PS fallback, fail fast)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Follow-PesterArtifacts.ps1",
+        "-ResultsDir",
+        "tests/results",
+        "-WarnSeconds",
+        "60",
+        "-HangSeconds",
+        "120",
+        "-PollMs",
+        "2000",
+        "-ExitOnHang"
+      ],
+      "problemMatcher": [
+        {
+          "owner": "pester-hang",
+          "severity": "warning",
+          "pattern": {
+            "regexp": "^\\[hang-watch\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "error",
+          "pattern": {
+            "regexp": "^\\[hang-suspect\\]\\s+(.*)$",
+            "message": 1
+          }
+        }
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
     }
   ]
 }
-

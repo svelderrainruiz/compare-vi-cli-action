@@ -10,7 +10,9 @@
     "lint:md": "markdownlint-cli2 \"**/*.md\" --config .markdownlint.jsonc || exit 1",
     "watch:pester": "node tools/follow-pester-artifacts.mjs --results tests/results",
     "watch:pester:fast": "node tools/follow-pester-artifacts.mjs --results tests/results --warn-seconds 60 --hang-seconds 120",
-    "watch:pester:ps": "pwsh -NoLogo -NoProfile -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120"
+    "watch:pester:fast:exit": "node tools/follow-pester-artifacts.mjs --results tests/results --warn-seconds 60 --hang-seconds 120 --poll-ms 2000 --exit-on-hang",
+    "watch:pester:ps": "pwsh -NoLogo -NoProfile -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120",
+    "watch:pester:ps:exit": "pwsh -NoLogo -NoProfile -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120 -PollMs 2000 -ExitOnHang"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
