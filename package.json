@@ -7,7 +7,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "generate:outputs": "node dist/generate-action-outputs.js",
-    "lint:md": "markdownlint-cli2 \"**/*.md\" --config .markdownlint.jsonc || exit 1"
+    "lint:md": "markdownlint-cli2 \"**/*.md\" --config .markdownlint.jsonc || exit 1",
+    "watch:pester": "node tools/follow-pester-artifacts.mjs --results tests/results",
+    "watch:pester:fast": "node tools/follow-pester-artifacts.mjs --results tests/results --warn-seconds 60 --hang-seconds 120",
+    "watch:pester:ps": "pwsh -NoLogo -NoProfile -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
