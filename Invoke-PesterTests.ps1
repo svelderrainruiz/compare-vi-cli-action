@@ -529,6 +529,7 @@ if ($__SingleInvokerRequested -eq '1') {
   $script:UseSingleInvoker = $true
   Write-Host "Single-invoker mode: step-based outer loop will run via scripts/Pester-Invoker.psm1" -ForegroundColor Yellow
 }
+if (-not $script:UseSingleInvoker) { $script:UseSingleInvoker = $false }
 
 # Debug instrumentation (opt-in via COMPARISON_ACTION_DEBUG=1)
 if ($env:COMPARISON_ACTION_DEBUG -eq '1') {
