@@ -53,6 +53,9 @@ function Write-WatcherStatusSummary {
     return
   }
 
+  $autoTrimRequested = ($PSBoundParameters.ContainsKey('AutoTrim') -and $AutoTrim) -or ($env:HANDOFF_AUTOTRIM -and ($env:HANDOFF_AUTOTRIM -match '^(1|true|yes)$'))
+  $autoTrimExecuted = $false
+
   Write-Host ''
   Write-Host '[Watcher Status]' -ForegroundColor Cyan
   Write-Host ("  resultsDir      : {0}" -f (Format-NullableValue $ResultsRoot))
@@ -80,15 +83,59 @@ function Write-WatcherStatusSummary {
     if ($status.files -and $status.files.err -and $status.files.err.path) {
       Write-Host ("    err           : {0}" -f $status.files.err.path)
     }
+  }
 
-    if ($PSBoundParameters.ContainsKey('AutoTrim') -and $AutoTrim) {
-      try {
-        & pwsh -NoLogo -NoProfile -File $watcherCli -Trim -ResultsDir $ResultsRoot | Out-Null
-        Write-Host '  auto-trim       : executed' -ForegroundColor Green
-      } catch {
-        Write-Warning ("Auto-trim failed: {0}" -f $_.Exception.Message)
-      }
+  if ($status.needsTrim -and $autoTrimRequested) {
+    try {
+      & pwsh -NoLogo -NoProfile -File $watcherCli -Trim -ResultsDir $ResultsRoot | Out-Null
+      $autoTrimExecuted = $true
+      Write-Host '  auto-trim       : executed' -ForegroundColor Green
+    } catch {
+      Write-Warning ("Auto-trim failed: {0}" -f $_.Exception.Message)
     }
+  }
+
+  # Emit a compact JSON telemetry object for automation consumers and write step summary if available
+  $telemetry = [ordered]@{
+    schema = 'agent-handoff/watcher-telemetry-v1'
+    timestamp = (Get-Date).ToString('o')
+    resultsDir = $ResultsRoot
+    state = $status.state
+    alive = $status.alive
+    verifiedProcess = $status.verifiedProcess
+    heartbeatFresh = $status.heartbeatFresh
+    heartbeatReason = $status.heartbeatReason
+    lastHeartbeatAt = $status.lastHeartbeatAt
+    heartbeatAgeSeconds = $status.heartbeatAgeSeconds
+    needsTrim = $status.needsTrim
+    autoTrimExecuted = $autoTrimExecuted
+    outPath = if ($status.files -and $status.files.out) { $status.files.out.path } else { $null }
+    errPath = if ($status.files -and $status.files.err) { $status.files.err.path } else { $null }
+  }
+  $telemetryJson = ($telemetry | ConvertTo-Json -Depth 4)
+  Write-Host ''
+  Write-Host '[Watcher Telemetry JSON]'
+  Write-Host $telemetryJson
+
+  try {
+    $outDir = Join-Path $ResultsRoot '_agent/handoff'
+    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+    $telemetryPath = Join-Path $outDir 'watcher-telemetry.json'
+    $telemetryJson | Out-File -FilePath $telemetryPath -Encoding utf8
+  } catch {}
+
+  if ($env:GITHUB_STEP_SUMMARY) {
+    $summaryLines = @()
+    $summaryLines += '### Handoff — Watcher Status'
+    $summaryLines += "- State: $($status.state)"
+    $summaryLines += "- Alive: $(Format-BoolLabel $status.alive)"
+    $summaryLines += "- Verified: $(Format-BoolLabel $status.verifiedProcess)"
+    $summaryLines += "- Heartbeat Fresh: $(Format-BoolLabel $status.heartbeatFresh)"
+    if ($status.heartbeatReason) { $summaryLines += "- Heartbeat Reason: $($status.heartbeatReason)" }
+    if ($status.lastHeartbeatAt) { $summaryLines += "- Last Heartbeat: $($status.lastHeartbeatAt) (~$heartbeatAgeLabel s)" }
+    $summaryLines += "- Needs Trim: $(Format-BoolLabel $status.needsTrim)"
+    $summaryLines += if ($autoTrimExecuted) { '- Auto-Trim: executed' } else { '- Auto-Trim: not executed' }
+    ($summaryLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
   }
 }
 

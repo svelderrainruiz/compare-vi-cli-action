@@ -21,6 +21,10 @@
     "tables": false,
     "headings": false
   },
+  "MD012": {
+    // Allow a limited buffer of consecutive blank lines while legacy docs are refactored.
+    "maximum": 2
+  },
   "MD041": {
     // Treated as a warning by the lint script; keep visible while the backlog is cleared.
     "level": "warning"

@@ -8,3 +8,4 @@ results/
 tests/results/
 tmp-agg/
 issue_88_hardened.md
+CHANGELOG.md

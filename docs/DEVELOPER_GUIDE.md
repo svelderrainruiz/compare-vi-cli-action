@@ -52,6 +52,19 @@ pwsh -File tools/Watch-Pester.ps1 -RunAllOnStart -ChangedOnly
 Artifacts: `watch-last.json`, `watch-log.ndjson`. Dev Dashboard surfaces these along with
 queue telemetry and stakeholder contacts.
 
+## Handoff telemetry & auto-trim
+
+```powershell
+pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim
+```
+
+- Surfaces watcher status inline (alive, verifiedProcess, heartbeatFresh/Reason, needsTrim).
+- Emits a compact JSON snapshot to `tests/results/_agent/handoff/watcher-telemetry.json` and, when in CI,
+  appends a summary block to the step summary.
+- Auto-trim policy: if `needsTrim=true`, watcher logs are trimmed to the last ~4000 lines when either
+  `-AutoTrim` is passed or `HANDOFF_AUTOTRIM=1` is set. Dev watcher also trims on start.
+- Trim thresholds: ~5MB per log file; only oversized logs are trimmed.
+
 ## Quick verification
 
 ```powershell

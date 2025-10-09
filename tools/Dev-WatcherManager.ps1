@@ -3,6 +3,7 @@ param(
   [switch]$Stop,
   [switch]$Status,
   [switch]$Trim,
+  [switch]$AutoTrim,
   [string]$ResultsDir = 'tests/results',
   [int]$WarnSeconds = 60,
   [int]$HangSeconds = 120,
@@ -413,12 +414,32 @@ elseif ($Trim) {
   }
   if ($trimmed) { Write-Host 'Trimmed watcher logs.' } else { Write-Host 'No trimming needed.' }
 }
+elseif ($AutoTrim) {
+  $statusJson = Get-DevWatcherStatus -ResultsDir $ResultsDir
+  $status = $null
+  try { $status = $statusJson | ConvertFrom-Json -ErrorAction Stop } catch {}
+  if ($status -and $status.needsTrim) {
+    $paths = Get-WatcherPaths -ResultsDir $ResultsDir
+    $trimmed = $false
+    foreach ($logPath in @($paths.OutFile, $paths.ErrFile)) {
+      try {
+        if (Trim-LogFile -Path $logPath) { $trimmed = $true }
+      } catch {
+        Write-Warning ("[watcher] Failed to trim log {0}: {1}" -f $logPath, $_.Exception.Message)
+      }
+    }
+    if ($trimmed) { Write-Host 'Trimmed watcher logs.' } else { Write-Host 'No trimming needed.' }
+  } else {
+    Write-Host 'No trimming needed.'
+  }
+}
 else {
   Write-Host 'Usage:'
   Write-Host '  Ensure watcher:  pwsh -File tools/Dev-WatcherManager.ps1 -Ensure'
   Write-Host '  Show status:     pwsh -File tools/Dev-WatcherManager.ps1 -Status'
   Write-Host '  Stop watcher:    pwsh -File tools/Dev-WatcherManager.ps1 -Stop'
   Write-Host '  Trim logs:       pwsh -File tools/Dev-WatcherManager.ps1 -Trim'
+  Write-Host '  Auto-trim if needed: pwsh -File tools/Dev-WatcherManager.ps1 -AutoTrim'
 }
 
 

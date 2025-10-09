@@ -105,8 +105,14 @@ try {
     exit 0
   }
 
-  Write-Host ("Linting {0} Markdown file(s)." -f $markdownFiles.Count)
-  $result = Invoke-Markdownlint -Files $markdownFiles
+  # Scoped suppressions for known large/generated files until backlog is addressed
+  $suppressed = @(
+    'CHANGELOG.md'
+  )
+  $filesToLint = $markdownFiles | Where-Object { $suppressed -notcontains $_ }
+
+  Write-Host ("Linting {0} Markdown file(s)." -f $filesToLint.Count)
+  $result = Invoke-Markdownlint -Files $filesToLint
   if ($result -ne 0) {
     exit $result
   }

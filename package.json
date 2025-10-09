@@ -18,7 +18,8 @@
     "dev:watcher:ensure": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Ensure",
     "dev:watcher:status": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Status",
     "dev:watcher:stop": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Stop",
-    "dev:watcher:trim": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Trim"
+    "dev:watcher:trim": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Trim",
+    "dev:watcher:autotrim": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -AutoTrim"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
