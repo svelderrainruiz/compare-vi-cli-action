@@ -138,6 +138,7 @@ A local developer dashboard will summarize telemetry from recent runs (session l
 - **TimeoutMinutes Failure:** Inject known error into dispatcher log; confirm recommended rerun steps appear.
 - **Fixture Drift Group:** Provide lock sample for fixture drift; ensure owner mapping displayed when run with `-Group fixture-drift`.
 - **Stakeholder Coverage:** For each configured group, validate that owners, backup, channels, and DX issue references render correctly.
+- **Live Pester Tail:** While tests execute, run ``pwsh -File tools/Follow-PesterArtifacts.ps1`` to stream updates from `pester-dispatcher.log` and see summary refreshes as artefacts land.
 - **Documentation:** Ensure README/`SESSION_LOCK.md` instructions match actual CLI usage and outputs.
 
 #### 4. Regression
