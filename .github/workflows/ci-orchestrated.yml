@@ -53,6 +53,9 @@ jobs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -105,6 +108,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
 
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
@@ -203,6 +209,9 @@ jobs:
     # Run preflight for both strategies
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -243,6 +252,9 @@ jobs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -284,6 +296,9 @@ jobs:
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -540,6 +555,9 @@ jobs:
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -681,6 +699,9 @@ jobs:
     needs: [lint, pester-category, drift]
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -841,8 +862,13 @@ jobs:
       WATCH_CONSOLE: '1'
       INVOKER_REQUIRED: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      TRACE_MATRIX: '1'
+      TRACE_MATRIX_HTML: '1'
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
 
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
@@ -1011,6 +1037,15 @@ jobs:
           tests/results/dev-dashboard/dashboard.json
         if-no-files-found: warn
 
+    - name: Upload traceability matrix (single)
+      if: always() && hashFiles('tests/results/_trace/trace-matrix.json') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: traceability-matrix-single
+        path: |
+          tests/results/_trace/trace-matrix.json
+          tests/results/_trace/trace-matrix.html
+        if-no-files-found: warn
     - name: Append dev dashboard summary (single)
       if: always()
       shell: pwsh

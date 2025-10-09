@@ -73,6 +73,12 @@ runs:
         $delay    = [int]'${{ inputs.retry-delay-seconds }}'
         $to       = [int]'${{ inputs.timeout-seconds }}'
         $ok = $false; $err=''
+        # Resolve PowerShell 7 executable explicitly (service context may lack PATH)
+        $psExe = $null
+        try { $cmd = Get-Command pwsh -ErrorAction SilentlyContinue; if ($cmd -and $cmd.Source) { $psExe = $cmd.Source } } catch {}
+        if (-not $psExe -and $PSHome) { $psExe = Join-Path $PSHome 'pwsh.exe' }
+        if (-not (Test-Path -LiteralPath $psExe -PathType Leaf)) { $psExe = 'pwsh' }
+
         for ($i=1; $i -le $attempts; $i++) {
           $ts = (Get-Date -Format o)
           try {
@@ -83,7 +89,7 @@ runs:
               if ($v -and $v -ne '') { $envMap[$k] = $v }
             }
             $wd = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
-            $p = Start-Process -FilePath pwsh -ArgumentList $args -WindowStyle Hidden -PassThru -WorkingDirectory $wd -Environment $envMap
+            $p = Start-Process -FilePath $psExe -ArgumentList $args -WindowStyle Hidden -PassThru -WorkingDirectory $wd -Environment $envMap
             Write-Host "Started invoker attempt #$i pid=$($p.Id) pipe=$pipe"
             "[$ts] attempt#$i spawn pid=$($p.Id) pipe=$pipe" | Out-File -FilePath $boot -Append -Encoding utf8
           } catch {
