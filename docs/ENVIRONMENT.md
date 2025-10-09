@@ -5,6 +5,11 @@ This appendix lists environment variables recognized by this repository’s GitH
 > Note: Windows-only. LVCompare must exist at the canonical path:
 > C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe
 
+## Orchestrated Workflow Strategy
+
+- The `ci-orchestrated.yml` workflow now defaults to the single self-hosted Windows runner path. This keeps deterministic checks on one machine and avoids the flaky multi-runner matrix.
+- When broader coverage is required, manually dispatch the workflow with `strategy=matrix` (or set the repository variable `ORCH_STRATEGY=matrix`). Matrix-only aggregation steps are skipped automatically if the matrix jobs do not run.
+
 ## Core Paths and Inputs
 
 | Variable | Purpose | Example | Default |
@@ -32,6 +37,8 @@ Used by `Invoke-PesterTests.ps1` to keep runs deterministic and diagnose leaks.
 | CLAIM_PESTER_LOCK | Alias for `SESSION_LOCK_ENABLED` (legacy) | 1/0 | 0 |
 | SESSION_LOCK_GROUP | Lock namespace (directory name) | pester-selfhosted | pester-selfhosted |
 | SESSION_LOCK_FORCE | Force takeover when an existing lock is stale | 1/0 | 0 |
+| SESSION_LOCK_STRICT | Fail the run when the lock cannot be acquired | 1/0 | `1` when `GITHUB_ACTIONS=true`, otherwise 0 |
+| LOCAL_DISPATCHER | Enable local mode (reduced verbosity, soft session lock fallback) | 1/0 | 0 |
 
 Artifacts written when enabled:
 
@@ -45,12 +52,15 @@ Subset commonly used by `scripts/Run-AutonomousIntegrationLoop.ps1` and loop-ena
 | Variable | Purpose | Example | Default |
 |---------|---------|---------|---------|
 | LOOP_SIMULATE | Simulate loop (no real CLI) | 1/0 | 0 |
-| LOOP_MAX_ITERATIONS | Max iterations | 100 | 50 |
+| LOOP_MAX_ITERATIONS | Max iterations | 100 | 1 |
 | LOOP_INTERVAL_SECONDS | Delay between iterations | 0.1 | 0 |
 | LOOP_DIFF_SUMMARY_FORMAT | Diff summary output (Html/Markdown) | Html | None |
 | LOOP_EMIT_RUN_SUMMARY | Emit final run summary JSON | 1/0 | 1 |
 | LOOP_JSON_LOG | NDJSON event log path | loop-events.ndjson | - |
 | LOOP_HISTOGRAM_BINS | Histogram bin count | 20 | 0 (disabled) |
+| LOOP_LABVIEW_VERSION | LabVIEW version string used by the post-loop closer | 2025 | 2025 |
+| LOOP_LABVIEW_BITNESS | LabVIEW bitness used by the post-loop closer | 32/64 | 64 |
+| LOOP_LABVIEW_PATH | Override LabVIEW.exe path handed to LVCompare helpers | C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe | Derived from version/bitness |
 
 For full loop inputs/outputs and percentile strategies, see `docs/COMPARE_LOOP_MODULE.md`.
 
