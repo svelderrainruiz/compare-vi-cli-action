@@ -161,10 +161,19 @@ Helper commands and integrations:
   - ``npm run watch:pester:fast`` – 60s/120s thresholds.
   - ``npm run watch:pester:fast:exit`` – fast thresholds + fail-fast exit.
   - ``npm run watch:pester:ps`` / ``:ps:exit`` – explicit PowerShell fallback.
+  - ``npm run dev:watcher:ensure`` / ``status`` / ``stop`` – manage the persistent watcher that emits JSON telemetry under `tests/results/_agent/watcher/`.
 - **VS Code tasks (`.vscode/tasks.json`):**
   - “Watch Pester Artifacts (Node)” launches the watcher in the terminal panel with problem matchers that surface `[hang-suspect]` as task errors.
   - “Watch Pester Artifacts (Node, fail fast)” adds `--exit-on-hang` and a tighter poll interval for immediate feedback.
   - Equivalent PowerShell tasks provide a fallback when Node tooling is unavailable.
+
+
+#### Known Gaps & Follow-ups
+
+- **Initial busy state:** The persistent watcher reports `busy-watch`/`busy-suspect` until the dispatcher starts emitting progress markers; call this out so agents and developers interpret early signals correctly.
+- **Automation surfacing:** Now that `watcher-self.json` and status expose heartbeat freshness, thread the JSON summary into hand-off automation so humans see `heartbeatFresh`, `needsTrim`, and command hints automatically.
+- **Trim cadence:** `npm run dev:watcher:trim` rotates logs when they exceed 5 MB or ~4 000 lines (threshold used by `needsTrim`). The hand-off script can auto-trim via `Print-AgentHandoff.ps1 -AutoTrim`; consider wiring interval trims only if `needsTrim` still fires frequently.
+- **Markdown lint backlog:** Repo-wide MD013/MD041 issues remain; lint runs on changed files while nightly notice-only runs track the backlog.
 
 Recommended workflow for local triage:
 
@@ -274,3 +283,4 @@ With these requirements, tests, and the implementation roadmap, the dashboard wi
 - GitHub Issue [#99](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/99) – DX tracking for session lock visibility and inspection.
 
 With the requirements, test plan, and implementation roadmap consolidated here, the dashboard can be developed methodically while aligning with our developer-experience goals.***
+

@@ -1,13 +1,28 @@
 {
-  // Markdownlint configuration for this repository
-  // Keep rules default; only ignore generated/draft paths.
+  // Markdownlint configuration for this repository.
+  // Keep the default rule set, then tune specific rules for DX backlog work.
+  "default": true,
   "ignores": [
-    "issues-drafts/**",
-    "tests/results/**",
-    "results/**",
     "cats/**",
+    "docs/knowledgebase/**",
+    "issues-drafts/**",
     "prov/**",
+    "results/**",
+    "tests/results/**",
+    "tmp-agg/**",
     "**/node_modules/**"
-  ]
+  ],
+  "MD013": {
+    // Allow wider lines and ignore structured content while legacy docs are updated.
+    "line_length": 120,
+    "heading_line_length": 120,
+    "code_block_line_length": 160,
+    "code_blocks": false,
+    "tables": false,
+    "headings": false
+  },
+  "MD041": {
+    // Treated as a warning by the lint script; keep visible while the backlog is cleared.
+    "level": "warning"
+  }
 }
-

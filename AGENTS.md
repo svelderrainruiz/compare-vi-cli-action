@@ -157,6 +157,7 @@ Tip: Local terminals lack the GitHub UI’s visibility—rely on the `[lvcompare
 
 - Convenience (optional):
   - `pwsh -File tools/Print-AgentHandoff.ps1` prints `AGENT_HANDOFF.txt` to the console and suggests the next commands.
+  - `pwsh -File tools/Print-AgentHandoff.ps1 -AutoTrim` prints the hand-off summary and trims watcher logs automatically when `needsTrim=true` (useful for CI/job-summary steps).
 
 ### Fast Path for #88
 

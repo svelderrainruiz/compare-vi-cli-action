@@ -606,3 +606,8 @@ jobs:
             $lines += ("- Workflow: https://github.com/{0}/actions/workflows/{1}" -f $repo, $workflowPath)
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Print agent hand-off summary (auto-trim)
+        if: always()
+        shell: pwsh
+        run: pwsh -File tools/Print-AgentHandoff.ps1 -AutoTrim

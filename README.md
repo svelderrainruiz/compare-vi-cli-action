@@ -83,9 +83,33 @@ npm run watch:pester:ps
 - `[hang-watch]` → `[hang-suspect]` mark idle periods, including `live-bytes` vs `consumed-bytes` so you can tell if the file is still growing.
 - `[busy-watch]` → `[busy-suspect]` flag busy loops where the log keeps growing but no test progress markers are observed.
 - `--exit-on-hang` (code `2`) and `--exit-on-no-progress` (code `3`) power the `:fast:exit`, `:busyexit`, and `:ps:exit` scripts for automated triage.
-- VS Code users can launch “Watch Pester Artifacts (Node)” / “(Node, fail fast)” from `.vscode/tasks.json`; problem matchers raise both hang and busy alerts as task warnings/errors.
+- `npm run dev:watcher:ensure` keeps a background watcher running; `npm run dev:watcher:status` prints JSON (`state`, heartbeat freshness, last activity/progress timestamps, byte counters) that's perfect for agent hand-offs; `npm run dev:watcher:stop` clears PID/status/heartbeat metadata; `npm run dev:watcher:trim` trims `watch.out`/`watch.err` when either file exceeds 5 MB or ~4 000 lines (mirrors the `needsTrim` flag).
+- `tools/Print-AgentHandoff.ps1` now emits a condensed watcher summary (`state`, `verifiedProcess`, `heartbeatFresh`, `needsTrim`) immediately after the hand-off text so humans see telemetry without extra commands.
+- VS Code users can launch "Watch Pester Artifacts (Node)" / "(Node, fail fast)" from `.vscode/tasks.json`; problem matchers raise both hang and busy alerts as task warnings/errors.
+- Persistent status lives under `tests/results/_agent/watcher/watcher-status.json` and reports states such as `ok`, `hang-watch`, `hang-suspect`, `busy-watch`, `busy-suspect`, and `stopped` alongside timing/byte counters. The matching heartbeat lives at `watcher-self.json` and includes `state`, `timestamp`, and metrics mirroring the status file.
+- Known gaps: the initial status often shows `busy-watch`/`busy-suspect` until tests start emitting progress, and long-running sessions may still need scheduled trims until log rotation is fully automated.
+
+**Auto-trim tip**
+
+When handing off a long run, call:
+
+```powershell
+pwsh -File tools/Print-AgentHandoff.ps1 -AutoTrim
+```
+
+If `needsTrim=true`, the script trims both logs (using the thresholds above) before printing the summary.
 
 ### Workflow Run Tracker
+
+### Markdown Lint Strategy
+
+- `.markdownlint.jsonc` relaxes MD013 to 120 columns (tables/headings/URLs ignored) and keeps MD041 visible.
+  The lint script treats MD041 as a warning while we burn down the backlog.
+- `.markdownlintignore` lists generated/legacy paths so linting stays focused on authored docs.
+- `npm run lint:md:changed` lints Markdown files touched in the branch (deterministic, sorted list).
+  `npm run lint:md` still runs a full sweep for nightly notice-only jobs.
+- PR lint is blocking; nightly full runs continue to publish MD013/MD041 summaries without failing the pipeline.
+
 
 Keep an eye on queued or long-running workflows without leaving the terminal:
 
@@ -947,4 +971,5 @@ pwsh -File scripts/Invoke-PesterSingleLoop.ps1 -TraceMatrix -RenderTraceMatrixHt
 
 
 \n
+
 
