@@ -12,4 +12,3 @@ outputs:
 runs:
   using: node20
   main: dist/actions/normalize-command.js
-
