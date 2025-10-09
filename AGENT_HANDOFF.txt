@@ -1,65 +1,63 @@
-Local Agent Handoff — Dev Dashboard & Watch Telemetry
+Deterministic Runs Hand-off – Updated 2025-10-09 @ 00:44 UTC
 
-Context
-- Focus: Developer dashboard, session-lock guard, watch-mode and queue telemetry (#88).
-- PR: #100 — Dev Dashboard loaders, CLI/HTML/JSON, workflow artifacts, watch telemetry.
+Context Snapshot
+- Branch: `issue/88-dev-dashboard-phase2`
+- Issue/PR: #88 (open), PR #100 (open against develop)
+- Latest commits on branch: service-safe invoker spawn + git safe.directory (`4d92d99`), UseSingleInvoker guard (`c1a64c3`), fixture manifest cleanup + pair block (`66d2b63`)
+- Active workflows (monitor):
+  * Validate – run `18361996747` (queued)
+  * CI Orchestrated (strategy=single, include_integration=true, sample `ts-20251008-174402-lgv4`) – run `18361999212` (in progress)
 
-Safe Environment Toggles (local)
-- Set these in the current PowerShell session to avoid UI popups and preserve focus:
-  - $env:LV_SUPPRESS_UI = '1'
-  - $env:LV_NO_ACTIVATE = '1'
-  - $env:LV_CURSOR_RESTORE = '1'
-  - $env:LV_IDLE_WAIT_SECONDS = '2'
-  - $env:LV_IDLE_MAX_WAIT_SECONDS = '5'
-  - $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
+Top Priorities for Next Agent
+1. Watch the queued Validate run and the orchestrated single run until completion. Capture READY status, artifact summaries, rerun hints, and confirm dispatcher job success.
+2. Fix the dispatcher "Append artifact map" failure: update `.github/workflows/ci-orchestrated.yml` (matrix + single sections) to call `tools/Write-ArtifactMap.ps1` with explicit named parameters (`-PathsList` or splatting) to avoid positional binding errors.
+3. Re-run orchestrated single after the artifact map fix and ensure dispatcher job exits cleanly.
+4. Confirm both Ubuntu and Windows fixture-drift jobs succeed with the refreshed manifest (`fixtures.manifest.json` now contains only one base/head pair plus the deterministic `pair` block). Review `results/fixture-drift/**/drift-summary.json` for `status=ok`.
+5. Continue work on #88 once CI is green (traceability matrix coverage, LV closure telemetry crumbs, runbook DX).
 
-Quick Rogue Scan
-- pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary
+Environment Preconditions (set at session start)
+- `$env:LV_SUPPRESS_UI = '1'`
+- `$env:LV_NO_ACTIVATE = '1'`
+- `$env:LV_CURSOR_RESTORE = '1'`
+- `$env:LVCI_SINGLE_COMPARE = '1'`
+- `$env:LVCI_SINGLE_COMPARE_AUTOSTOP = '1'`
+- `$env:LOCAL_DISPATCHER = '1'`
+- `$env:SESSION_LOCK_ENABLED = '1'`
+- `$env:SESSION_LOCK_STRICT = '1'`
+- Optional telemetry: `$env:EMIT_LV_CLOSURE_CRUMBS = '1'`
 
-Session Lock (local)
-- Single test file: ./Invoke-PesterTests.ps1 -TestsPath tests/SessionLock.Tests.ps1
-- Full unit pass (includes loaders/CLI): ./Invoke-PesterTests.ps1
+Recent Changes / What’s Fixed
+- Fixture manifest duplicate entry removed; `tools/Validate-Fixtures.ps1 -Json` now returns `exitCode: 0` locally.
+- Ensure-Invoker composite now resolves pwsh via `Get-Command`/`$PSHome`, preventing service-context READY failures.
+- `$script:UseSingleInvoker` is defaulted to `$false`, so Quick-DispatcherSmoke runs succeed in non-single-invoker mode.
 
-Warm-up Shortcut
-- pwsh -File tools/Agent-Warmup.ps1  (sets env toggles, runs watch smoke + session-lock tests, validates telemetry)
-  - Add -GenerateDashboard [-GenerateDashboardHtml] to emit a dashboard snapshot during warm-up.
-  - Use -SkipRogueScan / -SkipAgentWaitValidation when you need a quicker loop.
-  - LabVIEW process snapshot written to tests/results/_warmup/labview-processes.json (via Capture-LabVIEWSnapshot).
-  - Treat LabVIEW.exe as a runtime lock; see docs/LABVIEW_GATING.md for gating guidance.
+Open Issues / Pending Work
+- Dispatcher artifact map step still fails (`Write-ArtifactMap.ps1` positional parameter error). Needs workflow patch + retest.
+- Validate & orchestrated CI runs are outstanding – must verify green before new changes merge.
+- Fixture drift workflows need re-verification post-manifest fix; prior runs showed `fail-structural` with exitCode 8 (duplicate) and exitCode 5 (untracked/duplicate) – expect clean summaries after rerun.
 
-Watch Mode (single-run smoke)
-- $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
-- pwsh -File tools/Watch-Pester.ps1 -SingleRun -RunAllOnStart -TestPath tests/WatchSmoke.Tests.ps1 -Tag WatchSmoke -Quiet
-- Produces: tests/results/_watch/watch-last.json, tests/results/_watch/watch-log.ndjson
+Useful Commands & Scripts
+- Fixture validator: `pwsh -File tools/Validate-Fixtures.ps1 -Json`
+- Update manifest with pair: `pwsh -File tools/Update-FixtureManifest.ps1 -Allow -InjectPair -SetExpectedOutcome any -SetEnforce notice`
+- Dispatcher quick smoke: `pwsh -File tools/Quick-DispatcherSmoke.ps1 -PreferWorkspace`
+- Orchestrated dispatch helper: `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref issue/88-dev-dashboard-phase2 -IncludeIntegration true -Strategy single`
+- Traceability matrix builder: `pwsh -File scripts/Invoke-PesterSingleLoop.ps1 -TraceMatrix -RenderTraceMatrixHtml`
+- Workflow monitor: `pwsh -File tools/Track-WorkflowRun.ps1 -RunId <id> -IncludeCheckRuns`
 
-Dashboard
-- Terminal + JSON: ./tools/Dev-Dashboard.ps1 -Group pester-selfhosted -ResultsRoot tests/results -Json
-- HTML: ./tools/Dev-Dashboard.ps1 -Group pester-selfhosted -ResultsRoot tests/results -Html
-- CI artifacts are linked in job summaries under “Dev Dashboard”.
+Artifacts & Logs to Review After Runs
+- `tests/results/_diagnostics/guard.json` – dispatcher guard crumb (READY status)
+- `tests/results/_diagnostics/lv-closure.ndjson` – LV closure telemetry when crumbs enabled
+- `tests/results/_trace/trace-matrix.json` & `trace-matrix.html` – ensure schema compliance
+- `results/fixture-drift/<timestamp>/drift-summary.json` – verify `status=ok`, no duplicate/untracked categories
+- Dispatcher job summary – confirm artifact map step passes once patched
 
-Schema-Lite (notice-only validation)
-- Watch last: tools/Invoke-JsonSchemaLite.ps1 -JsonPath tests/results/_watch/watch-last.json -SchemaPath docs/schemas/watch-last-v1.schema.json
-- Agent wait last: tools/Invoke-JsonSchemaLite.ps1 -JsonPath tests/results/_agent/wait-last.json -SchemaPath docs/schemas/agent-wait-last-v1.schema.json
-- Agent wait log (ndjson): validate each record against docs/schemas/agent-wait-log-item-v1.schema.json
+Reference Docs
+- `docs/DEV_DASHBOARD_PLAN.md`
+- `docs/requirements/WATCH_AND_QUEUE.md`
+- `docs/LABVIEW_GATING.md`
+- `docs/plans/TRACEABILITY_MATRIX_PLAN.md`
+- ADR 0001 and linked requirements (use `tools/New-Adr.ps1`, `tools/Link-RequirementToAdr.ps1` for updates)
 
-Next Steps (suggested)
-- Optional: enable orchestrated publish watch smoke by setting repo var WATCH_SMOKE_ENABLE=1.
-- HTML polish: add last 3 watch entries table; widen queue-history signals if needed.
-- Extend schema-lite coverage to drift compare outcomes if required.
-
-Workflow Tracking
-- Tracker:
-  - `pwsh -File tools/Track-WorkflowRun.ps1 -RunId 18327092270 -IncludeCheckRuns`
-    (optionally add `-Repo owner/name`, `-PollSeconds 30`,
-    `-OutputPath logs/run-18327092270.json`).
-- Dispatch + monitor:
-  - `pwsh -File tools/Watch-RunAndTrack.ps1 -Workflow validate.yml`
-    `-Ref issue/88-dev-dashboard-phase2 -OutputPath logs/validate-run.json`
-  - Dispatches the workflow, monitors per-job status, and writes the snapshot
-    for hand-offs.
-Use these to watch queued/active runs without leaving the terminal.
-
-Contact & References
-- Stakeholders: tools/dashboard/stakeholders.json (DX links appear in dashboard).
-- Requirements & Test Plan: docs/DEV_DASHBOARD_PLAN.md
-- Watch/Queue requirements: docs/requirements/WATCH_AND_QUEUE.md
+Reminder
+- Keep commits scoped and reference `#88`.
+- Leave CI green before handoff; rerun Validate + orchestrated jobs as needed.
