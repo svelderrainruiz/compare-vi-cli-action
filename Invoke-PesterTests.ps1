@@ -137,10 +137,6 @@ param(
 ,
   [Parameter(Mandatory = $false)]
   [switch]$EmitIts
-,
-  [Parameter(Mandatory = $false)]
-  [ValidateNotNullOrEmpty()]
-  [string]$Seed
 )
 
 Set-StrictMode -Version Latest
@@ -2289,4 +2285,3 @@ finally {
     if (-not $released) { Write-Warning "Failed to release session lock '$lockGroup'" }
   }
 }
-
