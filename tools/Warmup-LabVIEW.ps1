@@ -35,7 +35,7 @@
 param(
   [string]$LabVIEWPath,
   [string]$MinimumSupportedLVVersion,
-  [ValidateSet('32','64')][string]$SupportedBitness,
+  [string]$SupportedBitness,
   [int]$TimeoutSeconds = 30,
   [int]$IdleWaitSeconds = 2,
   [string]$JsonLogPath,
@@ -50,6 +50,27 @@ $runtime = Join-Path (Split-Path -Parent $PSCommandPath) 'Warmup-LabVIEWRuntime.
 if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) {
   Write-Error "Warmup-LabVIEWRuntime.ps1 not found next to this script"
   exit 1
+}
+
+# Normalize bitness (fallback to env or default 64)
+if ([string]::IsNullOrWhiteSpace($SupportedBitness)) {
+  if ($env:LABVIEW_BITNESS) {
+    $SupportedBitness = $env:LABVIEW_BITNESS
+  } elseif ($env:MINIMUM_SUPPORTED_LV_BITNESS) {
+    $SupportedBitness = $env:MINIMUM_SUPPORTED_LV_BITNESS
+  } else {
+    $SupportedBitness = '64'
+  }
+}
+$SupportedBitness = $SupportedBitness.Trim()
+if ($SupportedBitness -notin @('32','64')) {
+  if ($SupportedBitness -match '32') {
+    $SupportedBitness = '32'
+  } elseif ($SupportedBitness -match '64') {
+    $SupportedBitness = '64'
+  } else {
+    $SupportedBitness = '64'
+  }
 }
 
 Write-Host '[deprecated] Warmup-LabVIEW.ps1 forwarding to Warmup-LabVIEWRuntime.ps1' -ForegroundColor DarkYellow
