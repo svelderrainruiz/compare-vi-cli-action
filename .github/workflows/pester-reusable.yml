@@ -98,9 +98,18 @@ jobs:
         shell: pwsh
         run: |
           $defaultCli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-          $cli = if ($env:LVCOMPARE_PATH) { $env:LVCOMPARE_PATH } else { $defaultCli }
-          if (-not (Test-Path -LiteralPath $cli)) {
-            Write-Host "::error::LVCompare.exe not found at resolved path: $cli"; exit 1
+          $x86Cli     = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          $candidates = @()
+          if ($env:LVCOMPARE_PATH) { $candidates += $env:LVCOMPARE_PATH }
+          $candidates += @($defaultCli, $x86Cli)
+          $cli = $null
+          foreach ($p in $candidates) {
+            if ($p -and (Test-Path -LiteralPath $p)) { $cli = $p; break }
+          }
+          if (-not $cli) {
+            $tried = ($candidates | Where-Object { $_ }) -join '; '
+            Write-Host ("::error::LVCompare.exe not found. Tried: {0}" -f $tried)
+            exit 1
           } else {
             Write-Host ("Resolved LVCompare path: {0}" -f $cli)
           }
