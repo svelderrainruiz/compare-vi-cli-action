@@ -497,7 +497,8 @@ jobs:
       shell: pwsh
       run: |
         $paths = @('tests/results/${{ matrix.category }}/pester-summary.json','tests/results/${{ matrix.category }}/pester-results.xml','tests/results/${{ matrix.category }}/pester-failures.json','tests/results/${{ matrix.category }}/session-index.json')
-        pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
+        $pathsList = $paths -join ';'
+        pwsh -File tools/Write-ArtifactMap.ps1 -PathsList $pathsList -Title 'Artifacts'
 
     - name: Append top failures
       if: always()
