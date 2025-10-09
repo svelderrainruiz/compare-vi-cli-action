@@ -1057,34 +1057,17 @@ $script:stuckGuardEnabled = ($env:STUCK_GUARD -eq '1')
 $script:hbSec = 15
 try { if ($env:LVCI_HEARTBEAT_SEC) { $script:hbSec = [int]$env:LVCI_HEARTBEAT_SEC } } catch { $script:hbSec = 15 }
 $script:hbPath = Join-Path $resultsDir 'pester-heartbeat.ndjson'
-$script:hbJob = $null
-function _Append-HbLine { param([string]$type)
+function _Write-HeartbeatLine {
+  param([string]$Type)
+  if (-not $script:stuckGuardEnabled) { return }
   try {
-    if (-not (Test-Path -LiteralPath (Split-Path -Parent $script:hbPath))) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $script:hbPath) | Out-Null }
-    $line = @{ tsUtc = (Get-Date).ToUniversalTime().ToString('o'); type = $type } | ConvertTo-Json -Compress
+    $dir = Split-Path -Parent $script:hbPath
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    }
+    $line = @{ tsUtc = (Get-Date).ToUniversalTime().ToString('o'); type = $Type } | ConvertTo-Json -Compress
     Add-Content -Path $script:hbPath -Value $line -Encoding UTF8
   } catch {}
-}
-function _Start-HeartbeatJob {
-  param([int]$Sec)
-  try {
-    _Append-HbLine 'start'
-    return (Start-Job -ScriptBlock {
-      param($path,$sec)
-      $ErrorActionPreference='SilentlyContinue'
-      while ($true) {
-        try {
-          $line = @{ tsUtc = (Get-Date).ToUniversalTime().ToString('o'); type = 'beat' } | ConvertTo-Json -Compress
-          Add-Content -Path $path -Value $line -Encoding UTF8
-        } catch {}
-        Start-Sleep -Seconds $sec
-      }
-    } -ArgumentList @($script:hbPath,$Sec))
-  } catch { return $null }
-}
-function _Stop-HeartbeatJob {
-  try { if ($script:hbJob) { Stop-Job -Job $script:hbJob -ErrorAction SilentlyContinue; Remove-Job -Job $script:hbJob -Force -ErrorAction SilentlyContinue } } catch {}
-  _Append-HbLine 'stop'
 }
 
 # Early (idempotent) failures JSON emission when always requested. This guarantees existence
@@ -1217,12 +1200,13 @@ $partialLogPath = $null     # Set when timeout job path uses partial logging
 $result = $null              # Initialize result object holder to satisfy StrictMode before first conditional access
 try {
 if (-not $script:UseSingleInvoker) {
-  if ($script:stuckGuardEnabled) { $script:hbJob = _Start-HeartbeatJob -Sec $script:hbSec }
+  if ($script:stuckGuardEnabled) { _Write-HeartbeatLine 'start' }
   if ($effectiveTimeoutSeconds -gt 0) {
     Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
     $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
     $partialLogPath = Join-Path $resultsDir 'pester-partial.log'
     $lastWriteLen = 0
+    $lastHeartbeat = Get-Date
     while ($true) {
       if ($job.State -eq 'Completed') { break }
       if ($job.State -eq 'Failed') { break }
@@ -1240,6 +1224,13 @@ if (-not $script:UseSingleInvoker) {
           }
         }
       } catch { }
+      if ($script:stuckGuardEnabled) {
+        $now = Get-Date
+        if ((($now - $lastHeartbeat).TotalSeconds) -ge $script:hbSec) {
+          _Write-HeartbeatLine 'beat'
+          $lastHeartbeat = $now
+        }
+      }
       if ($elapsed.TotalSeconds -ge $effectiveTimeoutSeconds) {
         Write-Warning "Pester execution exceeded timeout of $effectiveTimeoutSeconds second(s); stopping job." 
         try { Stop-Job -Job $job -ErrorAction SilentlyContinue } catch {}
@@ -1254,6 +1245,13 @@ if (-not $script:UseSingleInvoker) {
     Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
     $testEndTime = Get-Date
     $testDuration = $testEndTime - $testStartTime
+    if ($script:stuckGuardEnabled) {
+      if ($timedOut) {
+        _Write-HeartbeatLine 'timeout'
+      } else {
+        _Write-HeartbeatLine 'stop'
+      }
+    }
   } else {
     try {
       # Capture output; Pester may emit both rich objects and strings. We keep ordering for detection.
@@ -1280,6 +1278,10 @@ if (-not $script:UseSingleInvoker) {
         if ($maybe) { $result = $maybe[-1] }
       }
     } catch {
+      if ($script:stuckGuardEnabled) {
+        _Write-HeartbeatLine 'error'
+        _Write-HeartbeatLine 'stop'
+      }
       Write-Error "Pester execution failed: $_"
       try {
         if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
@@ -1294,11 +1296,13 @@ if (-not $script:UseSingleInvoker) {
       } catch { Write-Warning "Failed to write placeholder XML: $_" }
       exit 1
     }
+    if ($script:stuckGuardEnabled) { _Write-HeartbeatLine 'stop' }
   }
 } else {
   # Single-invoker outer loop path
   Write-Host "[single-invoker] Running step-based outer loop..." -ForegroundColor Yellow
   $testStartTime = Get-Date
+  if ($script:stuckGuardEnabled) { _Write-HeartbeatLine 'start' }
 
   function _Is-IntegrationFile {
     param([System.IO.FileInfo]$File)
@@ -1366,6 +1370,7 @@ if (-not $script:UseSingleInvoker) {
 
   $testEndTime = Get-Date
   $testDuration = $testEndTime - $testStartTime
+  if ($script:stuckGuardEnabled) { _Write-HeartbeatLine 'stop' }
   
   # Emit minimal JSON summary so downstream artifact/indices have data without running the classic path
   try {
@@ -1593,8 +1598,6 @@ try {
 } catch { Write-Warning "Failed to compute timing metrics: $_" }
 
 # Stop heartbeat (if enabled) before rendering summaries
-try { if ($script:stuckGuardEnabled) { _Stop-HeartbeatJob } } catch {}
-
 # Generate summary
 $summary = @(
   "=== Pester Test Summary ===",
