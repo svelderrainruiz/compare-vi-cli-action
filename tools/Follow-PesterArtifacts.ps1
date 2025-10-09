@@ -4,11 +4,62 @@ param(
   [Parameter()][string]$SummaryFile = 'pester-summary.json',
   [Parameter()][int]$Tail = 40,
   [Parameter()][switch]$SkipSummaryWatch,
-  [Parameter()][switch]$Quiet
+  [Parameter()][switch]$Quiet,
+  [Parameter()][switch]$PreferNodeWatcher,
+  [Parameter()][switch]$ForcePowerShell
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Invoke-NodeWatcher {
+  param(
+    [string]$ResultsDir,
+    [string]$LogFile,
+    [string]$SummaryFile,
+    [int]$TailLines,
+    [switch]$Quiet
+  )
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCmd) { return $null }
+  $scriptRoot = Split-Path -Parent $PSCommandPath
+  $nodeScript = Join-Path $scriptRoot 'follow-pester-artifacts.mjs'
+  if (-not (Test-Path -LiteralPath $nodeScript)) { return $null }
+  $arguments = @($nodeScript, '--results', $ResultsDir, '--log', $LogFile, '--summary', $SummaryFile, '--tail', $TailLines.ToString())
+  if ($Quiet) { $arguments += '--quiet' }
+  try {
+    $process = Start-Process -FilePath $nodeCmd.Source -ArgumentList $arguments -NoNewWindow -PassThru
+    $process.WaitForExit()
+    return $process.ExitCode
+  } catch {
+    Write-Warning "[follow] Node watcher failed to start: $($_.Exception.Message)"
+    return $null
+  }
+}
+
+$watcherPreference = 'auto'
+if ($ForcePowerShell) {
+  $watcherPreference = 'powershell'
+} elseif ($PreferNodeWatcher) {
+  $watcherPreference = 'node'
+} elseif ($env:PREFERRED_PESTER_WATCHER) {
+  $watcherPreference = $env:PREFERRED_PESTER_WATCHER
+}
+
+$preferNode = $false
+switch -Regex ($watcherPreference) {
+  '^(?i:ps|powershell)$' { $preferNode = $false; break }
+  '^(?i:node)$' { $preferNode = $true; break }
+  default { $preferNode = $true }
+}
+
+if ($preferNode -and -not $ForcePowerShell) {
+  $exitCode = Invoke-NodeWatcher -ResultsDir $ResultsDir -LogFile $LogFile -SummaryFile $SummaryFile -TailLines $Tail -Quiet:$Quiet
+  if ($exitCode -ne $null) {
+    exit $exitCode
+  }
+  Write-Warning '[follow] Falling back to PowerShell watcher (Node watcher unavailable).'
+}
 
 function Invoke-FileTailRead {
   param(

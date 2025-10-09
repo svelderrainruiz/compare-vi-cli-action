@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "argparse": "^2.0.1",
+    "chokidar": "^3.6.0",
     "braces": "^3.0.3",
     "entities": "^4.5.0",
     "fast-glob": "^3.3.3",
