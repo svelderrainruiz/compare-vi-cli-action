@@ -1019,7 +1019,7 @@ def _mk_warmup_step() -> dict:
     return {
         'name': 'LabVIEW warmup (best-effort)',
         'shell': 'pwsh',
-        'run': LIT('pwsh -File tools/Warmup-LabVIEW.ps1\n'),
+        'run': LIT('pwsh -File tools/Warmup-LabVIEWRuntime.ps1\n'),
     }
 
 

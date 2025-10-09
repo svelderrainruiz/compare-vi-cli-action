@@ -40,7 +40,7 @@ The gating model rests on three data sources:
      footprint, no guard warnings). Proceed to the next phase without extra
      cleanup.
    - _Reset_ by invoking `Stop-LabVIEWProcesses` followed by
-     `tools/Warmup-LabVIEW.ps1` if the snapshot looks suspicious or you need a
+     `tools/Warmup-LabVIEWRuntime.ps1` if the snapshot looks suspicious or you need a
      pristine LabVIEW state.
 
 4. **Always append observations**  
