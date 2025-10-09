@@ -964,6 +964,17 @@ jobs:
           ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
         }
 
+    - name: Generate traceability matrix (single)
+      if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
+      shell: pwsh
+      run: |
+        $builder = Join-Path $PWD 'tools/Traceability-Matrix.ps1'
+        if (Test-Path -LiteralPath $builder) {
+          & $builder -TestsPath 'tests' -ResultsRoot 'tests/results' -RenderHtml -RunId '${{ github.run_id }}'
+        } else {
+          Write-Warning "[TraceMatrix] Builder script not found at $builder"
+        }
+
     - name: Drift (invoker; reuse LabVIEW via -lvpath)
       if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
       uses: ./.github/actions/fixture-drift
