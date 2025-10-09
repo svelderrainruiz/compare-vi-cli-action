@@ -91,7 +91,8 @@ runs:
         foreach ($detail in $cleanupDetails) { $lines += ('- ' + $detail) }
         if ($procs.Count -gt 0) {
           $sessionGroups = $procs | Group-Object SessionId | ForEach-Object {
-            ('session {0}: {1}' -f $_.Name, ($_.Group | ForEach-Object { '{0}(PID={1})' -f $_.ProcessName,$_.Id } -join ', '))
+            $entries = $_.Group | ForEach-Object { '{0}(PID={1})' -f $_.ProcessName,$_.Id }
+            'session {0}: {1}' -f $_.Name, ($entries -join ', ')
           }
           if ($sessionGroups) {
             $lines += ''
