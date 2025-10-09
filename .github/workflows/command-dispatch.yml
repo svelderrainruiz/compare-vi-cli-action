@@ -30,12 +30,12 @@ jobs:
           if [ -n "$XCLI_PAT" ]; then echo "token=$XCLI_PAT" >> "$GITHUB_OUTPUT"; else echo "token=$GITHUB_TOKEN" >> "$GITHUB_OUTPUT"; fi
 
       - name: Normalize command
-  id: cmd
-  uses: ./.github/actions/normalize-command
-  with:
-    body: ${{ github.event.comment.body }}
+        id: cmd
+        uses: ./.github/actions/normalize-command
+        with:
+          body: ${{ github.event.comment.body }}
 
-- name: Resolve target ref (PR head when same-repo, else main)
+      - name: Resolve target ref (PR head when same-repo, else main)
         id: ref
         shell: bash
         env:
@@ -74,13 +74,13 @@ jobs:
           fi
 
       - name: Parse orchestrated options from comment
-  id: orch
-  if: steps.cmd.outputs.target == 'orchestrated'
-  uses: ./.github/actions/parse-orchestrated
-  with:
-    body: ${{ github.event.comment.body }}
+        id: orch
+        if: steps.cmd.outputs.target == 'orchestrated'
+        uses: ./.github/actions/parse-orchestrated
+        with:
+          body: ${{ github.event.comment.body }}
 
-- name: Dispatch orchestrated workflow
+      - name: Dispatch orchestrated workflow
         if: steps.cmd.outputs.target == 'orchestrated' && steps.guard.outputs.allowed == 'true'
         shell: bash
         env:
