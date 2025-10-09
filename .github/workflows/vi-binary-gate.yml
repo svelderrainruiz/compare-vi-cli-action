@@ -12,6 +12,11 @@ on:
       - 'scripts/**'
       - 'tests/ViBinaryHandling.Tests.ps1'
   workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Optional run sample identifier for provenance'
+        required: false
+        default: ''
 
 jobs:
   vi-binary-check:
