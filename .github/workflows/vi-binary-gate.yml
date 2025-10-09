@@ -11,6 +11,7 @@ on:
       - '.gitattributes'
       - 'scripts/**'
       - 'tests/ViBinaryHandling.Tests.ps1'
+  workflow_dispatch:
 
 jobs:
   vi-binary-check:
