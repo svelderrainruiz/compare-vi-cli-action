@@ -10,7 +10,10 @@ param(
   [Parameter()][int]$WarnSeconds = 90,
   [Parameter()][int]$HangSeconds = 180,
   [Parameter()][int]$PollMs = 10000,
-  [Parameter()][switch]$ExitOnHang
+  [Parameter()][int]$NoProgressSeconds = 0,
+  [Parameter()][string]$ProgressRegex = '^(?:\s*\[[-+\*]\]|\s*It\s)',
+  [Parameter()][switch]$ExitOnHang,
+  [Parameter()][switch]$ExitOnNoProgress
 )
 
 Set-StrictMode -Version Latest
@@ -26,16 +29,31 @@ function Invoke-NodeWatcher {
     [int]$WarnSeconds,
     [int]$HangSeconds,
     [int]$PollMs,
-    [switch]$ExitOnHang
+    [int]$NoProgressSeconds,
+    [string]$ProgressRegex,
+    [switch]$ExitOnHang,
+    [switch]$ExitOnNoProgress
   )
   $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
   if (-not $nodeCmd) { return $null }
   $scriptRoot = Split-Path -Parent $PSCommandPath
   $nodeScript = Join-Path $scriptRoot 'follow-pester-artifacts.mjs'
   if (-not (Test-Path -LiteralPath $nodeScript)) { return $null }
-  $arguments = @($nodeScript, '--results', $ResultsDir, '--log', $LogFile, '--summary', $SummaryFile, '--tail', $TailLines.ToString(), '--warn-seconds', $WarnSeconds.ToString(), '--hang-seconds', $HangSeconds.ToString(), '--poll-ms', $PollMs.ToString())
+  $arguments = @(
+    $nodeScript,
+    '--results', $ResultsDir,
+    '--log', $LogFile,
+    '--summary', $SummaryFile,
+    '--tail', $TailLines.ToString(),
+    '--warn-seconds', $WarnSeconds.ToString(),
+    '--hang-seconds', $HangSeconds.ToString(),
+    '--poll-ms', $PollMs.ToString(),
+    '--no-progress-seconds', $NoProgressSeconds.ToString(),
+    '--progress-regex', $ProgressRegex
+  )
   if ($Quiet) { $arguments += '--quiet' }
   if ($ExitOnHang) { $arguments += '--exit-on-hang' }
+  if ($ExitOnNoProgress) { $arguments += '--exit-on-no-progress' }
   try {
     $process = Start-Process -FilePath $nodeCmd.Source -ArgumentList $arguments -NoNewWindow -PassThru
     $process.WaitForExit()
@@ -63,13 +81,16 @@ switch -Regex ($watcherPreference) {
 }
 
 if ($preferNode -and -not $ForcePowerShell) {
-  $exitCode = Invoke-NodeWatcher -ResultsDir $ResultsDir -LogFile $LogFile -SummaryFile $SummaryFile -TailLines $Tail -Quiet:$Quiet -WarnSeconds $WarnSeconds -HangSeconds $HangSeconds -PollMs $PollMs -ExitOnHang:$ExitOnHang
+  $exitCode = Invoke-NodeWatcher -ResultsDir $ResultsDir -LogFile $LogFile -SummaryFile $SummaryFile -TailLines $Tail -Quiet:$Quiet -WarnSeconds $WarnSeconds -HangSeconds $HangSeconds -PollMs $PollMs -NoProgressSeconds $NoProgressSeconds -ProgressRegex $ProgressRegex -ExitOnHang:$ExitOnHang -ExitOnNoProgress:$ExitOnNoProgress
   if ($exitCode -ne $null) {
     exit $exitCode
   }
   Write-Warning '[follow] Falling back to PowerShell watcher (Node watcher unavailable).'
   if ($ExitOnHang) {
     Write-Warning '[follow] ExitOnHang is only available with the Node watcher; continuing without fail-fast behaviour.'
+  }
+  if ($ExitOnNoProgress) {
+    Write-Warning '[follow] ExitOnNoProgress is only available with the Node watcher; continuing without fail-fast behaviour.'
   }
 }
 

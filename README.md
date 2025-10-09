@@ -58,6 +58,33 @@ pwsh ./tools/Dev-Dashboard.ps1 `
 - Workflow runs call `tools/Invoke-DevDashboard.ps1`, which writes both HTML and JSON under `tests/results/dev-dashboard/` for artifact upload.
 - The dashboard inspects session-lock heartbeat age, queue wait trends (including `_agent/wait-log.ndjson` history), and highlights DX issue links when stakeholders configure them.
 
+### Live Pester Watcher
+
+Monitor `pester-dispatcher.log` and `pester-summary.json` in real time to diagnose long-running or stalled dispatchers.
+
+- Requirements: [REQ-WATCHER-LIVE-FEED](./docs/requirements/WATCHER_LIVE_FEED.md) (live feed + hang detection) and [REQ-WATCHER-BUSY-LOOP](./docs/requirements/WATCHER_BUSY_LOOP.md) (busy loop detection and fail-fast behaviour).
+
+```bash
+# Default thresholds (warn 90s, hang 180s)
+npm run watch:pester
+
+# Faster detection with fail-fast exit (warn 60s, hang 120s)
+npm run watch:pester:fast:exit
+
+# Busy-loop fail fast (no progress for 90s)
+npm run watch:pester:busyexit
+
+# PowerShell fallback when Node/chokidar is unavailable
+npm run watch:pester:ps
+```
+
+- `[log] …` lines mirror new content from the dispatcher log and survive file rotations.
+- `[summary] …` echoes updated totals every time `pester-summary.json` changes.
+- `[hang-watch]` → `[hang-suspect]` mark idle periods, including `live-bytes` vs `consumed-bytes` so you can tell if the file is still growing.
+- `[busy-watch]` → `[busy-suspect]` flag busy loops where the log keeps growing but no test progress markers are observed.
+- `--exit-on-hang` (code `2`) and `--exit-on-no-progress` (code `3`) power the `:fast:exit`, `:busyexit`, and `:ps:exit` scripts for automated triage.
+- VS Code users can launch “Watch Pester Artifacts (Node)” / “(Node, fail fast)” from `.vscode/tasks.json`; problem matchers raise both hang and busy alerts as task warnings/errors.
+
 ### Workflow Run Tracker
 
 Keep an eye on queued or long-running workflows without leaving the terminal:

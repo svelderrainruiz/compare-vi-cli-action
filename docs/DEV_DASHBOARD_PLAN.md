@@ -139,6 +139,39 @@ A local developer dashboard will summarize telemetry from recent runs (session l
 - **Fixture Drift Group:** Provide lock sample for fixture drift; ensure owner mapping displayed when run with `-Group fixture-drift`.
 - **Stakeholder Coverage:** For each configured group, validate that owners, backup, channels, and DX issue references render correctly.
 - **Live Pester Tail:** While tests execute, run ``pwsh -File tools/Follow-PesterArtifacts.ps1`` to stream updates from `pester-dispatcher.log` and see summary refreshes as artefacts land (automatically prefers ``node tools/follow-pester-artifacts.mjs`` when available). Use ``--exit-on-hang`` / ``-ExitOnHang`` (or ``npm run watch:pester:fast:exit``) to fail fast when the idle detector triggers a hang.
+
+### Live Watcher Tooling
+
+To complement the dashboard, we ship a dual-mode watcher that tails `pester-dispatcher.log`, emits `[summary]` lines as `pester-summary.json` changes, and surfaces idle diagnostics:
+
+- **Requirements:** [REQ-WATCHER-LIVE-FEED](./requirements/WATCHER_LIVE_FEED.md) (live feed + hang detection) and [REQ-WATCHER-BUSY-LOOP](./requirements/WATCHER_BUSY_LOOP.md) (busy loop detection and fail-fast support).
+
+- **Preferred (Node + chokidar):** ``node tools/follow-pester-artifacts.mjs --results tests/results``
+  - Emits `[hang-watch] idle ~Ns` once the log has been stagnant beyond `--warn-seconds` (default 90s) and escalates to `[hang-suspect]` after `--hang-seconds` (default 180s).
+  - Add `--exit-on-hang` (or use ``npm run watch:pester:fast:exit``) to exit with code `2` when a hang is suspected—ideal for local smoke automation or VS Code tasks.
+  - Tunable polling via `--poll-ms` to catch missed writes; defaults keep overhead minimal while still catching rotations.
+- **PowerShell fallback:** ``pwsh -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results``
+  - Automatically prefers the Node path but falls back to .NET `FileSystemWatcher` when Node/chokidar is unavailable.
+  - Flags idle via the same `[hang-watch]`/`[hang-suspect]` markers; `-ExitOnHang` warns when fail-fast is requested without the Node backend.
+
+Helper commands and integrations:
+
+- **npm scripts:**
+  - ``npm run watch:pester`` – default watcher.
+  - ``npm run watch:pester:fast`` – 60s/120s thresholds.
+  - ``npm run watch:pester:fast:exit`` – fast thresholds + fail-fast exit.
+  - ``npm run watch:pester:ps`` / ``:ps:exit`` – explicit PowerShell fallback.
+- **VS Code tasks (`.vscode/tasks.json`):**
+  - “Watch Pester Artifacts (Node)” launches the watcher in the terminal panel with problem matchers that surface `[hang-suspect]` as task errors.
+  - “Watch Pester Artifacts (Node, fail fast)” adds `--exit-on-hang` and a tighter poll interval for immediate feedback.
+  - Equivalent PowerShell tasks provide a fallback when Node tooling is unavailable.
+
+Recommended workflow for local triage:
+
+1. Start the watcher (`npm run watch:pester:fast:exit` or VS Code task).
+2. Run `./Invoke-PesterTests.ps1` (or relevant helper) to reproduce the issue.
+3. Capture final watcher output (especially `[hang-suspect]` lines that include `live-bytes` vs `consumed-bytes`) and attach it to PRs or issue #88 updates.
+4. When automation completes, the fail-fast watcher exits automatically; re-run for subsequent iterations.
 - **Documentation:** Ensure README/`SESSION_LOCK.md` instructions match actual CLI usage and outputs.
 
 #### 4. Regression

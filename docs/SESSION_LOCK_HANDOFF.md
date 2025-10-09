@@ -32,6 +32,7 @@
    - Move this handoff into a polished doc (`docs/SESSION_LOCK.md`) once implementation stabilises.  
    - Document environment toggles (`SESSION_GROUP`, `SESSION_STALE_SECONDS`, `SESSION_FORCE_TAKEOVER`, etc.).  
    - Provide instructions for inspecting lock files (`Session-Lock.ps1 -Action Inspect`).
+   - Reference the live watcher (`node tools/follow-pester-artifacts.mjs`) so hand-offs capture `[hang-suspect]` diagnostics alongside lock status when reproducing queue starvation or leaked sessions.
 
 6. **Manual Verification**
    - After tests pass, run two workflow instances to confirm queued behaviour and gather logs for the PR.  

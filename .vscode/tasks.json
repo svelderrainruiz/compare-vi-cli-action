@@ -30,6 +30,22 @@
             "regexp": "^\\[hang-suspect\\]\\s+(.*)$",
             "message": 1
           }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "warning",
+          "pattern": {
+            "regexp": "^\\[busy-watch\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "error",
+          "pattern": {
+            "regexp": "^\\[busy-suspect\\]\\s+(.*)$",
+            "message": 1
+          }
         }
       ],
       "presentation": {
@@ -52,7 +68,10 @@
         "120",
         "--poll-ms",
         "2000",
-        "--exit-on-hang"
+        "--no-progress-seconds",
+        "60",
+        "--exit-on-hang",
+        "--exit-on-no-progress"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -71,6 +90,22 @@
           "severity": "error",
           "pattern": {
             "regexp": "^\\[hang-suspect\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "warning",
+          "pattern": {
+            "regexp": "^\\[busy-watch\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "error",
+          "pattern": {
+            "regexp": "^\\[busy-suspect\\]\\s+(.*)$",
             "message": 1
           }
         }
@@ -131,6 +166,22 @@
             "regexp": "^\\[hang-suspect\\]\\s+(.*)$",
             "message": 1
           }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "warning",
+          "pattern": {
+            "regexp": "^\\[busy-watch\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "error",
+          "pattern": {
+            "regexp": "^\\[busy-suspect\\]\\s+(.*)$",
+            "message": 1
+          }
         }
       ],
       "presentation": {
@@ -156,7 +207,10 @@
         "120",
         "-PollMs",
         "2000",
-        "-ExitOnHang"
+        "-NoProgressSeconds",
+        "60",
+        "-ExitOnHang",
+        "-ExitOnNoProgress"
       ],
       "problemMatcher": [
         {
@@ -172,6 +226,22 @@
           "severity": "error",
           "pattern": {
             "regexp": "^\\[hang-suspect\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "warning",
+          "pattern": {
+            "regexp": "^\\[busy-watch\\]\\s+(.*)$",
+            "message": 1
+          }
+        },
+        {
+          "owner": "pester-hang",
+          "severity": "error",
+          "pattern": {
+            "regexp": "^\\[busy-suspect\\]\\s+(.*)$",
             "message": 1
           }
         }

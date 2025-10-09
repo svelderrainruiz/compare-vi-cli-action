@@ -48,6 +48,20 @@ parser.add_argument('--exit-on-hang', {
   action: 'store_true',
   default: false,
 });
+parser.add_argument('--no-progress-seconds', {
+  help: 'Seconds without progress before warning/failure (0 to disable)',
+  type: 'int',
+  default: 0,
+});
+parser.add_argument('--progress-regex', {
+  help: 'Regex that identifies progress log lines',
+  default: '^(?:\\s*\\[[-+\\*]\\]|\\s*It\\s)'
+});
+parser.add_argument('--exit-on-no-progress', {
+  help: 'Exit with non-zero code when no-progress threshold is exceeded',
+  action: 'store_true',
+  default: false,
+});
 parser.add_argument('--quiet', {
   help: 'Suppress informational messages',
   action: 'store_true',
@@ -65,6 +79,12 @@ const warnSeconds = Math.max(1, Number(args['warn_seconds'] ?? args.warn_seconds
 const hangSeconds = Math.max(warnSeconds + 1, Number(args['hang_seconds'] ?? args.hang_seconds ?? args['hang-seconds']));
 const pollMs = Math.max(250, Number(args['poll_ms'] ?? args.poll_ms ?? args['poll-ms']));
 const exitOnHang = Boolean(args['exit_on_hang'] ?? args.exit_on_hang ?? args['exit-on-hang']);
+const noProgressSecondsRaw = Number(args['no_progress_seconds'] ?? args.no_progress_seconds ?? args['no-progress-seconds']);
+const noProgressSeconds = Number.isFinite(noProgressSecondsRaw) ? Math.max(0, noProgressSecondsRaw) : 0;
+const progressPattern = args['progress_regex'] ?? args.progress_regex ?? args['progress-regex'] ?? '^(?:\s*\[[-+\*]\]|\s*It\s)';
+const progressRegex = new RegExp(progressPattern, 'i');
+const exitOnNoProgress = Boolean(args['exit_on_no_progress'] ?? args.exit_on_no_progress ?? args['exit-on-no-progress']);
+const noProgressWarnSeconds = noProgressSeconds > 0 ? Math.max(1, Math.min(noProgressSeconds, Math.floor(noProgressSeconds / 2) || 1)) : 0;
 
 let logPosition = 0;
 let logProcessing = Promise.resolve();
@@ -74,6 +94,9 @@ let lastStatsSize = 0;
 let lastStatsMtimeMs = 0;
 let hangReported = false;
 let shuttingDown = false;
+let lastProgressAt = Date.now();
+let lastProgressBytes = 0;
+let busyReported = false;
 
 function info(message) {
   if (!quiet) {
@@ -101,7 +124,11 @@ async function readFileTail(filePath, lines) {
     const allLines = raw.split(/\r?\n/).filter(Boolean);
     const start = lines > 0 ? Math.max(0, allLines.length - lines) : allLines.length;
     const tail = allLines.slice(start);
+    let progressDetected = false;
     for (const line of tail) {
+      if (line && progressRegex.test(line)) {
+        progressDetected = true;
+      }
       console.log(line);
     }
     const stats = await fsp.stat(filePath);
@@ -110,6 +137,13 @@ async function readFileTail(filePath, lines) {
     lastStatsMtimeMs = stats.mtimeMs;
     lastActivityAt = Date.now();
     hangReported = false;
+    if (progressDetected) {
+      lastProgressAt = Date.now();
+      lastProgressBytes = stats.size;
+      busyReported = false;
+    } else if (lastProgressBytes === 0) {
+      lastProgressBytes = stats.size;
+    }
   } catch (err) {
     if (err.code === 'ENOENT') {
       logPosition = 0;
@@ -140,13 +174,24 @@ async function readLogDelta(filePath) {
       lastStatsSize = stats.size;
       lastStatsMtimeMs = stats.mtimeMs;
       const text = buffer.toString('utf8');
+      let progressDetected = false;
       for (const line of text.split(/\r?\n/)) {
         if (line.trim().length > 0) {
+          if (progressRegex.test(line)) {
+            progressDetected = true;
+          }
           console.log(`[log] ${line}`);
         }
       }
       // Count any appended bytes as activity even if lines were blank/partial
       lastActivityAt = Date.now();
+      if (progressDetected) {
+        lastProgressAt = Date.now();
+        lastProgressBytes = stats.size;
+        busyReported = false;
+      } else if (lastProgressBytes === 0) {
+        lastProgressBytes = stats.size;
+      }
       hangReported = false;
     } finally {
       await fh.close();
@@ -199,6 +244,9 @@ async function emitSummary(filePath) {
       parts.push(`Duration=${duration}`);
     }
     console.log(parts.join(' '));
+    lastProgressAt = Date.now();
+    lastProgressBytes = logPosition;
+    busyReported = false;
     hangReported = false;
   } catch (err) {
     if (err.code === 'ENOENT') {
@@ -251,6 +299,9 @@ async function watch() {
       logPosition = 0;
       lastStatsSize = 0;
       lastStatsMtimeMs = 0;
+      lastProgressBytes = 0;
+      lastProgressAt = Date.now();
+      busyReported = false;
     })
     .on('error', (error) => {
       warn(`[watch] Log watcher error: ${error.message ?? error}`);
@@ -263,6 +314,9 @@ async function watch() {
       info('[watch] Summary file created.');
       emitSummary(summaryPath);
       lastActivityAt = Date.now();
+      lastProgressAt = Date.now();
+      lastProgressBytes = logPosition;
+      busyReported = false;
     })
     .on('change', () => {
       if (summaryTimer) {
@@ -271,6 +325,9 @@ async function watch() {
       summaryTimer = setTimeout(() => {
         emitSummary(summaryPath);
         lastActivityAt = Date.now();
+        lastProgressAt = Date.now();
+        lastProgressBytes = logPosition;
+        busyReported = false;
       }, 150);
     })
     .on('unlink', () => {
@@ -325,6 +382,36 @@ async function watch() {
       }
     } else if (idleSec >= warnSeconds) {
       info(`[hang-watch] idle ~${idleSec}s (monitoring). live-bytes=${lastStatsSize} consumed-bytes=${logPosition}`);
+    }
+
+    // Busy (no-progress) detection
+    if (noProgressSeconds > 0) {
+      const now = Date.now();
+      const noProgMs = now - lastProgressAt;
+      const noProgSec = Math.floor(noProgMs / 1000);
+      const bytesSinceProgress = Math.max(0, logPosition - lastProgressBytes);
+      const bytesChanging = bytesSinceProgress > 0;
+      if (noProgSec >= noProgressSeconds) {
+        if (!busyReported) {
+          warn(`[busy-suspect] no-progress ~${noProgSec}s (bytes-changing=${bytesChanging})`);
+          busyReported = true;
+        }
+        if (exitOnNoProgress && !shuttingDown) {
+          shuttingDown = true;
+          clearInterval(pollTimer);
+          Promise.all([logWatcher.close(), summaryWatcher.close()])
+            .catch((err) => {
+              warn(`[watch] Error while closing watchers: ${err.message ?? err}`);
+            })
+            .finally(() => {
+              process.exit(3);
+            });
+        }
+      } else if (noProgressWarnSeconds > 0 && noProgSec >= noProgressWarnSeconds) {
+        info(`[busy-watch] no-progress ~${noProgSec}s (bytes-changing=${bytesChanging})`);
+      } else if (noProgSec === 0) {
+        busyReported = false;
+      }
     }
   }, pollMs);
 
