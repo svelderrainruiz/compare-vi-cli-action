@@ -6,7 +6,10 @@ param(
   [Parameter()][switch]$SkipSummaryWatch,
   [Parameter()][switch]$Quiet,
   [Parameter()][switch]$PreferNodeWatcher,
-  [Parameter()][switch]$ForcePowerShell
+  [Parameter()][switch]$ForcePowerShell,
+  [Parameter()][int]$WarnSeconds = 90,
+  [Parameter()][int]$HangSeconds = 180,
+  [Parameter()][int]$PollMs = 10000
 )
 
 Set-StrictMode -Version Latest
@@ -18,14 +21,17 @@ function Invoke-NodeWatcher {
     [string]$LogFile,
     [string]$SummaryFile,
     [int]$TailLines,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [int]$WarnSeconds,
+    [int]$HangSeconds,
+    [int]$PollMs
   )
   $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
   if (-not $nodeCmd) { return $null }
   $scriptRoot = Split-Path -Parent $PSCommandPath
   $nodeScript = Join-Path $scriptRoot 'follow-pester-artifacts.mjs'
   if (-not (Test-Path -LiteralPath $nodeScript)) { return $null }
-  $arguments = @($nodeScript, '--results', $ResultsDir, '--log', $LogFile, '--summary', $SummaryFile, '--tail', $TailLines.ToString())
+  $arguments = @($nodeScript, '--results', $ResultsDir, '--log', $LogFile, '--summary', $SummaryFile, '--tail', $TailLines.ToString(), '--warn-seconds', $WarnSeconds.ToString(), '--hang-seconds', $HangSeconds.ToString(), '--poll-ms', $PollMs.ToString())
   if ($Quiet) { $arguments += '--quiet' }
   try {
     $process = Start-Process -FilePath $nodeCmd.Source -ArgumentList $arguments -NoNewWindow -PassThru
@@ -54,7 +60,7 @@ switch -Regex ($watcherPreference) {
 }
 
 if ($preferNode -and -not $ForcePowerShell) {
-  $exitCode = Invoke-NodeWatcher -ResultsDir $ResultsDir -LogFile $LogFile -SummaryFile $SummaryFile -TailLines $Tail -Quiet:$Quiet
+  $exitCode = Invoke-NodeWatcher -ResultsDir $ResultsDir -LogFile $LogFile -SummaryFile $SummaryFile -TailLines $Tail -Quiet:$Quiet -WarnSeconds $WarnSeconds -HangSeconds $HangSeconds -PollMs $PollMs
   if ($exitCode -ne $null) {
     exit $exitCode
   }

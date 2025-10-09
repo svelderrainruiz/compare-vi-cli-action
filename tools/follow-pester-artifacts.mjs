@@ -28,6 +28,21 @@ parser.add_argument('--tail', {
   type: 'int',
   default: 40,
 });
+parser.add_argument('--warn-seconds', {
+  help: 'Idle seconds before warning',
+  type: 'int',
+  default: 90,
+});
+parser.add_argument('--hang-seconds', {
+  help: 'Idle seconds before hang suspicion',
+  type: 'int',
+  default: 180,
+});
+parser.add_argument('--poll-ms', {
+  help: 'Periodic poll to catch missed writes',
+  type: 'int',
+  default: 10000,
+});
 parser.add_argument('--quiet', {
   help: 'Suppress informational messages',
   action: 'store_true',
@@ -41,10 +56,16 @@ const logPath = path.resolve(resultsDir, args.log);
 const summaryPath = path.resolve(resultsDir, args.summary);
 const tailLines = Math.max(0, args.tail);
 const quiet = Boolean(args.quiet);
+const warnSeconds = Math.max(1, Number(args['warn_seconds'] ?? args.warn_seconds ?? args['warn-seconds']));
+const hangSeconds = Math.max(warnSeconds + 1, Number(args['hang_seconds'] ?? args.hang_seconds ?? args['hang-seconds']));
+const pollMs = Math.max(250, Number(args['poll_ms'] ?? args.poll_ms ?? args['poll-ms']));
 
 let logPosition = 0;
 let logProcessing = Promise.resolve();
 let summaryTimer = null;
+let lastActivityAt = Date.now();
+let lastStatsSize = 0;
+let lastStatsMtimeMs = 0;
 
 function info(message) {
   if (!quiet) {
@@ -77,6 +98,9 @@ async function readFileTail(filePath, lines) {
     }
     const stats = await fsp.stat(filePath);
     logPosition = stats.size;
+    lastStatsSize = stats.size;
+    lastStatsMtimeMs = stats.mtimeMs;
+    lastActivityAt = Date.now();
   } catch (err) {
     if (err.code === 'ENOENT') {
       logPosition = 0;
@@ -96,17 +120,24 @@ async function readLogDelta(filePath) {
       }
       const length = stats.size - logPosition;
       if (length <= 0) {
+        // no new bytes; update stats baselines
+        lastStatsSize = stats.size;
+        lastStatsMtimeMs = stats.mtimeMs;
         return;
       }
       const buffer = Buffer.alloc(length);
       await fh.read(buffer, 0, length, logPosition);
       logPosition = stats.size;
+      lastStatsSize = stats.size;
+      lastStatsMtimeMs = stats.mtimeMs;
       const text = buffer.toString('utf8');
       for (const line of text.split(/\r?\n/)) {
         if (line.trim().length > 0) {
           console.log(`[log] ${line}`);
         }
       }
+      // Count any appended bytes as activity even if lines were blank/partial
+      lastActivityAt = Date.now();
     } finally {
       await fh.close();
     }
@@ -207,6 +238,8 @@ async function watch() {
     .on('unlink', () => {
       warn('[watch] Log file deleted; resetting position.');
       logPosition = 0;
+      lastStatsSize = 0;
+      lastStatsMtimeMs = 0;
     })
     .on('error', (error) => {
       warn(`[watch] Log watcher error: ${error.message ?? error}`);
@@ -218,6 +251,7 @@ async function watch() {
     .on('add', () => {
       info('[watch] Summary file created.');
       emitSummary(summaryPath);
+      lastActivityAt = Date.now();
     })
     .on('change', () => {
       if (summaryTimer) {
@@ -225,6 +259,7 @@ async function watch() {
       }
       summaryTimer = setTimeout(() => {
         emitSummary(summaryPath);
+        lastActivityAt = Date.now();
       }, 150);
     })
     .on('unlink', () => {
@@ -238,6 +273,36 @@ async function watch() {
       warn(`[watch] Summary watcher error: ${error.message ?? error}`);
     });
 
+  // Periodic poll to detect missed writes and idle/hang suspicion
+  const pollTimer = setInterval(async () => {
+    try {
+      // Check for missed writes
+      const exists = fs.existsSync(logPath);
+      if (exists) {
+        const stats = await fsp.stat(logPath);
+        if (stats.size > logPosition) {
+          enqueueLogRead(async () => {
+            await readLogDelta(logPath);
+          });
+        } else {
+          // Update baselines
+          lastStatsSize = stats.size;
+          lastStatsMtimeMs = stats.mtimeMs;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    // Idle/hang detection
+    const idleMs = Date.now() - lastActivityAt;
+    const idleSec = Math.floor(idleMs / 1000);
+    if (idleSec >= hangSeconds) {
+      warn(`[hang-suspect] idle ~${idleSec}s (no new log bytes or summary). live-bytes=${lastStatsSize} consumed-bytes=${logPosition}`);
+    } else if (idleSec >= warnSeconds) {
+      info(`[hang-watch] idle ~${idleSec}s (monitoring). live-bytes=${lastStatsSize} consumed-bytes=${logPosition}`);
+    }
+  }, pollMs);
+
   function shutdown(signal) {
     info(`[watch] Received ${signal}; shutting down watchers.`);
     Promise.all([logWatcher.close(), summaryWatcher.close()])
@@ -245,6 +310,7 @@ async function watch() {
         warn(`[watch] Error while closing watchers: ${err.message ?? err}`);
       })
       .finally(() => {
+        try { clearInterval(pollTimer); } catch {}
         process.exit(0);
       });
   }
