@@ -85,4 +85,6 @@ Write-Host '[deprecated] Warmup-LabVIEW.ps1 forwarding to Warmup-LabVIEWRuntime.
   -KillOnTimeout:$KillOnTimeout.IsPresent `
   -DryRun:$DryRun.IsPresent
 
-exit $LASTEXITCODE
+$exitCodeVar = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+$exitCode = if ($exitCodeVar) { $exitCodeVar.Value } else { 0 }
+exit ([int]$exitCode)
