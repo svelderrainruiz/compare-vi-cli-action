@@ -1,62 +1,51 @@
-# Fixture Drift and Manifest Refresh
+<!-- markdownlint-disable-next-line MD041 -->
+# Fixture Drift & Manifest Refresh
 
-This repository tracks canonical fixtures (`VI1.vi`, `VI2.vi`) and a JSON manifest (`fixtures.manifest.json`) that records their `bytes` and `sha256`.
+Canonical fixtures (`VI1.vi`, `VI2.vi`) are tracked by `fixtures.manifest.json` (bytes + sha256).
+The validator keeps fixtures deterministic and records auto-refresh events for review.
 
-## Validator Behavior
+## Validator overview
 
 - Run locally: `pwsh -File tools/Validate-Fixtures.ps1 -Json`
+- Key exit codes: `0` ok, `4` size issue, `6` hash mismatch, `5` multiple issues
+- JSON output includes `summaryCounts` and `autoManifest` block (`written`, `reason`, `path`)
 
-- Exit codes (subset):
-  - `0` ok
-  - `4` size issues (bytes mismatch or below fallback)
-  - `6` hash mismatch
-  - `5` multiple issues (combined)
+When both fixtures change, the validator treats it as deterministic drift and writes a new
+manifest (`autoManifest.written=true`).
 
-- JSON fields include `summaryCounts` and an `autoManifest` block:
-  - `autoManifest.written`: `true` when both fixtures changed (`hashMismatch >= 2`) and the manifest was automatically refreshed
-  - `autoManifest.reason`: `hashMismatch>=2`
-  - `autoManifest.path`: path to the written manifest
+## CI usage
 
-## Deterministic Flag
+The Fixture Drift workflow:
 
-When both fixtures change together, the validator treats this as a deterministic drift signal and writes a new `fixtures.manifest.json`.
+- Runs strict and override validations (`strict.json`, `override.json`)
+- Notes manifest refreshes in the job summary when `autoManifest.written` is true
+- Uploads the refreshed manifest as an artifact
 
-CI can gate on either:
+CI can gate on non-zero exit code or inspect `autoManifest.written` to flag drift.
 
-- Non‑zero validator `exitCode`, or
+## Manual manifest updates
 
-- `autoManifest.written == true`
+For intentional fixture updates (outside automation):
 
-## CI Integration
+```powershell
+pwsh -File tools/Update-FixtureManifest.ps1 -Allow
+```
 
-The `Fixture Drift` composite action:
+Include `[fixture-update]` in the commit message to acknowledge the change.
 
-- Runs the validator in strict and override modes (`strict.json`, `override.json`).
+## Optional pair digest block
 
-- Appends a “Fixture Manifest Refresh” note to the job summary when `autoManifest.written` is true.
+`fixtures.manifest.json` can include a deterministic `pair` block (schema `fixture-pair/v1`). It
+captures the combined base/head digest and expected outcome.
 
-- Uploads the refreshed `fixtures.manifest.json` as an artifact for review.
+Fields:
 
-## Updating the Manifest Intentionally
+- `basePath`, `headPath`, `algorithm` (sha256)
+- `canonical`, `digest`
+- `expectedOutcome` (`identical`, `diff`, `any`)
+- `enforce` (`notice`, `warn`, `fail`)
 
-For intentional fixture updates (outside auto‑refresh):
-
-- Regenerate locally: `pwsh -File tools/Update-FixtureManifest.ps1 -Allow`
-
-- Commit with message containing `[fixture-update]` to acknowledge the change.
-
-## Notes
-
-- The manifest uses `bytes` (exact size) and `sha256` for integrity.
-
-- CI retains the non-zero exit to keep drift visible; the summary and artifact help reviewers confirm expectations.
-
-## Pair Digest & Expected Outcome (Optional)
-
-The manifest can include a deterministic `pair` block (schema `fixture-pair/v1`) derived from the first `base` and `head` items. It helps detect stale manifests and verify that drift runs match the intended result.
-
-- Fields: `basePath`, `headPath`, `algorithm=sha256`, `canonical`, `digest`, optional `expectedOutcome` (`identical|diff|any`), `enforce` (`notice|warn|fail`).
-- Inject/refresh locally:
+Inject locally:
 
 ```powershell
 pwsh -File tools/Update-FixtureManifest.ps1 -Allow -InjectPair `
@@ -64,17 +53,17 @@ pwsh -File tools/Update-FixtureManifest.ps1 -Allow -InjectPair `
   -SetEnforce warn
 ```
 
-- Validate in CI with drift evidence:
+Validate with evidence:
 
 ```powershell
 pwsh -File tools/Validate-Fixtures.ps1 -Json -RequirePair -FailOnExpectedMismatch `
   -EvidencePath results/fixture-drift/compare-exec.json
 ```
 
-Evidence resolution order (if `-EvidencePath` is omitted):
+Evidence search order (when `-EvidencePath` omitted):
 
 1. `results/fixture-drift/compare-exec.json`
-2. Newest `tests/results/**/(compare-exec.json|lvcompare-capture.json)`
+2. Latest `tests/results/**/(compare-exec.json|lvcompare-capture.json)`
 
-Outcome mapping: LVCompare exitCode `0 → identical`, `1 → diff`; otherwise `unknown` (or use the `diff` boolean when present).
-
+Outcome mapping: LVCompare exit code `0` → identical, `1` → diff, else `unknown` (or use the
+`diff` boolean when available).

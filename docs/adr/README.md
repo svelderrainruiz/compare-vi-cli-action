@@ -1,26 +1,23 @@
+<!-- markdownlint-disable-next-line MD041 -->
 # Architecture Decision Records
 
-This index tracks all ADRs in the repository. Add new entries at the top of the
-table when decisions are recorded. See `/docs/requirements` for requirement
-documents linked to each ADR.
+Index of ADRs. Use `tools/New-Adr.ps1` to scaffold new entries and update the table below.
 
-| ADR | Title                                   | Status   | Date       | Related Requirements |
-|-----|-----------------------------------------|----------|------------|----------------------|
+| ADR | Title | Status | Date | Related requirements |
+| --- | ----- | ------ | ---- | -------------------- |
 | [0003](0003-test-decision.md) | Test Decision | Draft | 2025-10-08 | _TBD_ |
-| [0001](0001-single-invoker-step-module.md) | Adopt Step-Based Pester Invoker Module | Accepted | 2025-10-08 | [`PESTER_SINGLE_INVOKER`](../requirements/PESTER_SINGLE_INVOKER.md), [`SINGLE_INVOKER_SYSTEM_DEFINITION`](../requirements/SINGLE_INVOKER_SYSTEM_DEFINITION.md), [$reqName](../../requirements/PESTER_SINGLE_INVOKER.md) |
+| [0001](0001-single-invoker-step-module.md) | Step-Based Pester Invoker Module | Accepted | 2025-10-08 | [`PESTER_SINGLE_INVOKER`](../requirements/PESTER_SINGLE_INVOKER.md), [`SINGLE_INVOKER_SYSTEM_DEFINITION`](../requirements/SINGLE_INVOKER_SYSTEM_DEFINITION.md) |
 
 ## Validation
 
-Run `pwsh -File tools/Validate-AdrLinks.ps1` to ensure each requirement file
-references an existing ADR.
-
-## Creating a New ADR
-
-Use the helper script to scaffold a new decision record and update this index:
-
 ```powershell
-pwsh -File tools/New-Adr.ps1 -Title 'My Decision Title' -Status Draft -Requirements PESTER_SINGLE_INVOKER
+pwsh -File tools/Validate-AdrLinks.ps1
 ```
 
-Then fill in the context/decision sections, update the requirements’ traceability
-entries, and run the validation script.
+## Create a new ADR
+
+```powershell
+pwsh -File tools/New-Adr.ps1 -Title 'Decision Title' -Status Draft -Requirements PESTER_SINGLE_INVOKER
+```
+
+After scaffolding, fill in context/decision/consquences sections and update linked requirements.

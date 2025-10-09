@@ -1,286 +1,107 @@
-# Local Telemetry Dashboard – Requirements & Test Plan
+<!-- markdownlint-disable-next-line MD041 -->
+# Dev Dashboard Plan
 
 ## Overview
-A local developer dashboard will summarize telemetry from recent runs (session locks, Pester results, queue telemetry, logs) and surface stakeholder information so the right people can react quickly. The dashboard operates entirely from the workspace and produces terminal, HTML, or JSON output on demand.
 
-> **Status (2025-10-07):** Phase 2 data loaders and the Phase 3 CLI/HTML/JSON outputs now live in `tools/Dev-Dashboard.psm1` and `tools/Dev-Dashboard.ps1`. Phase 5 added `tools/Invoke-DevDashboard.ps1`, workflow artifact uploads, queue-trend warnings (via `_agent/wait-log.ndjson`), and stakeholder DX links. Upcoming work focuses on HTML polish, richer watch-mode telemetry, and deeper action heuristics.
+The Dev Dashboard provides a local summary of recent self-hosted telemetry: session locks,
+Pester results, queue/wait artifacts, and stakeholder contacts. It renders to the terminal,
+HTML, or JSON and operates entirely on files under `tests/results/`.
 
----
+## Goals
 
-## Requirements
+- Offer a "single pane" summarizing lock status, test outcomes, and queue health.
+- Surface contact information (primary, backup, channel) per session group.
+- Produce actionable hints (inspect, takeover, rerun, follow-up issues).
+- Remain offline-friendly, deterministic, and fast (< 2 seconds typical).
 
-### Functional Requirements
-1. **Data Collection**
-   - Gather session-lock telemetry (`lock.json`, `status.md`) from `tests/results/_session_lock/<group>/`.
-   - Read Pester results (`pester-summary.json`, `pester-results.xml`, `pester-dispatcher.log`) and report totals, failures, include patterns, and dispatcher exit code.
-   - Parse Agent-Wait artefacts (e.g., `tests/results/_agent/wait-last.json`) to display queue durations and heartbeat information.
-   - Parse queue-trend history from `_agent/wait-log.ndjson` (when present) to surface longest and tolerance-exceeded waits.
-   - Parse Watch-Mode artefacts from `WATCH_RESULTS_DIR` (default `tests/results/_watch`):
-     - `watch-last.json` with `timestamp`, `status`, `classification`, `stats.{tests,failed,skipped}`, `runSequence`, optional `flaky.recoveredAfter`.
-     - `watch-log.ndjson` append-only history (blank-line separated JSON blocks).
-   - Surface LabVIEW warm-up state by loading `tests/results/_warmup/labview-processes.json` (see [LabVIEW Runtime Gating](./LABVIEW_GATING.md)).
-   - Support additional workflows (fixture drift, orchestrated) when lock artefacts exist, showing status if available.
-   - Load stakeholder metadata from a configuration file (`tools/dashboard/stakeholders.json` or `.psd1`) mapping groups to primary/backup owners, communication channels, and DX issue numbers.
-   - Provide per-section recommendations (e.g., how to inspect a lock or rerun tests) based on detected conditions (stale lock, TimeoutMinutes, etc.).
+## Data Sources
 
-2. **Outputs**
-   - Produce concise terminal output summarizing current branch/commit, session lock status, test results, queue telemetry, and recent logs with action items.
-   - Optionally generate an HTML report (`tools/dashboard/dashboard.html`) mirroring the terminal sections with improved readability.
-   - Optionally emit JSON (`-Json` flag) for automation or integration with other tools.
+| Area | Files | Purpose |
+| ---- | ----- | ------- |
+| Session lock | `tests/results/_session_lock/<group>/lock.json`, `status.md` | Ownership, queue wait, heartbeat |
+| Pester | `tests/results/pester-summary.json`, `pester-results.xml`, `pester-dispatcher.log` | Totals, failures, dispatcher exit code |
+| Agent wait | `tests/results/_agent/wait-last.json`, `_agent/wait-log.ndjson` | Queue durations, outliers |
+| Watcher | `tests/results/_watch/watch-last.json`, `_watch/watch-log.ndjson` | Live watcher status |
+| Warmup | `tests/results/_warmup/labview-processes.json` | LabVIEW runtime warmup state |
+| Stakeholders | `tools/dashboard/stakeholders.json` (or `.psd1`) | Owners, channels, DX issue |
 
-3. **Usage & Parameters**
-   - CLI entry point `tools/Dev-Dashboard.ps1` accepting parameters:
-     - `-Group <name>` (default `pester-selfhosted`).
-     - `-Html` (generate HTML report).
-     - `-Json` (output JSON data).
-     - `-Watch <seconds>` (optional live-refresh loop).
-   - Gracefully handle missing data files by reporting “not found” rather than failing.
+Missing files should result in warnings rather than failures.
 
-4. **Stakeholder Surfacing**
-   - Display primary and backup owners, optional communication channels, and link to DX issues for the selected session group in all outputs.
-   - Fall back to “Stakeholders: not configured” when no mapping exists.
+## Outputs
 
-5. **Recommendations & Action Items**
-   - Provide actionable hints per detected issue (e.g., inspect/takeover commands, rerun instructions).
-   - Reference DX issue #99 or other relevant tracking items when requirements aren’t met.
+- **Terminal** – concise summary (branch, lock state, tests, queue highlights, action list).
+- **HTML** – templated report mirroring terminal sections with richer formatting.
+- **JSON** – machine-readable object for automation.
 
-### Non-Functional Requirements
-- Operate fully offline using PowerShell 7 (no external dependencies).
-- Run under StrictMode and fail fast on unexpected errors.
-- Keep terminal output concise (< ~60 lines) with detailed information available via HTML.
-- Execute quickly (< 2 seconds typical) by reading cached telemetry.
-- Keep CI additions minimal (watch smoke is a single-run PASS test; typical < 3 seconds).
-- Support both Windows and non-Windows environments (use `Join-Path`, no hard-coded separators).
+The CLI lives in `tools/Dev-Dashboard.ps1` with parameters:
 
-### Stakeholder Configuration
-- Configuration format (JSON/PSD1) must allow entries like:
-  ```json
-  {
-    "pester-selfhosted": {
-      "primaryOwner": "svelderrainruiz",
-      "backup": "release-owner",
-      "channels": ["slack://#ci-selfhosted"],
-      "dxIssue": 99
-    }
+```powershell
+-Group <name>       # default pester-selfhosted
+-Html               # emit dashboard.html
+-Json               # emit JSON to stdout
+-Watch <seconds>    # optional live-refresh loop
+```
+
+## Stakeholder Mapping
+
+Example entry (`tools/dashboard/stakeholders.json`):
+
+```json
+{
+  "pester-selfhosted": {
+    "primaryOwner": "ci-maintainer",
+    "backup": "oncall",
+    "channels": ["slack://#ci-selfhosted"],
+    "dxIssue": 99
   }
-  ```
-- Dashboard must gracefully handle missing entries.
+}
+```
 
-### Deliverables
-1. Stakeholder configuration file (`tools/dashboard/stakeholders.json` or `.psd1`).
-2. `tools/Dev-Dashboard.psm1` with data loaders and rendering helpers.
-3. `tools/Dev-Dashboard.ps1` CLI script supporting terminal/HTML/JSON outputs.
-4. HTML template or generator for the dashboard report.
-5. Documentation updates (README, `SESSION_LOCK.md`) covering usage/examples.
-6. Pester tests validating loader behaviour and rendering logic.
+When no entry exists, display “Stakeholders: not configured”.
 
----
+## Recommendations & Heuristics
 
-## Test Plan
+Translate telemetry into next steps, e.g.:
 
-### Scope
-- **In scope:** session lock telemetry, Pester results, Agent-Wait data, stakeholder metadata, terminal/HTML/JSON rendering, CLI parameters, documentation alignment, DX issue references.
-- **Out of scope:** remote telemetry aggregation, advanced visualization (charts).
+- Stale lock → `tools/SessionLock-Locate.ps1`, takeover instructions.
+- Dispatcher failure → rerun command, link to watch logs.
+- Long queues → highlight wait-log entries and stakeholder contacts.
+- Warmup pending → pointer to runtime gating doc.
 
-### Test Environment
-- PowerShell 7.x with access to repository workspace.
-- Optional repo vars: `WATCH_SMOKE_ENABLE` gates orchestrated publish watch smoke; default off.
+## Test Strategy
 
-### Unit Tests (Pester)
-- Session Lock Loader: status parse (queue wait, heartbeat age), takeover signals, missing files resilience.
-- Stakeholder Mapping: renders DX issue links and channels; not configured path.
-- Pester Summary Loader: totals, failures, dispatcher errors.
-- Agent-Wait Loader: derives latest/longest waits and tolerance flags from `_agent/wait-log.ndjson`.
-- Watch Loader: ingests `watch-last.json` and `watch-log.ndjson`; detects stalled loop (> 600s) and `worsened` trend.
-- Action Items: assert presence of hints for stale/takeover, queue exceed/longest, watch stalled/worsened, DX link.
+1. **Unit tests** (`tests/DevDashboard.Tests.ps1`)
+   - Loader error handling, missing files, sample data parsing.
+   - Stakeholder resolution and action item generation.
+2. **Integration tests**
+   - CLI invocation producing terminal/HTML/JSON using sample telemetry.
+3. **Regression**
+   - `./Invoke-PesterTests.ps1` covers the new suites.
 
-### CLI/Render Tests
-- CLI JSON: snapshot includes `SessionLock`, `PesterTelemetry`, `AgentWait.History/Longest`, `WatchTelemetry.Last/History`.
-- HTML: contains sections for Session Lock, Pester, Agent Wait, Watch Mode; renders watch summary and optional last-3 history rows.
+## Implementation Phases (Summary)
 
-### Workflow (CI) Tests
-- Pester Reusable (self-hosted):
-  - Executes watch single-run smoke with `WATCH_RESULTS_DIR=tests/results/_watch`.
-  - Generates dev-dashboard HTML/JSON and uploads artifacts; step summary lists paths.
-- Orchestrated (matrix/single) and Fixture Drift (Windows):
-  - Generate and upload dev-dashboard artifacts per path; link from summaries.
-- Optional: Orchestrated publish watch smoke guarded by `WATCH_SMOKE_ENABLE==1`.
+1. **Foundations** – stakeholder map, sample telemetry, module skeleton.
+2. **Loaders** – session lock, Pester, Agent-Wait, watcher, warmup, stakeholders.
+3. **Rendering** – terminal sections, optional HTML template, JSON emitter.
+4. **CLI** – parameter handling, watch loop, graceful missing-file behaviour.
+5. **Testing** – unit + integration coverage, real-run validation, artifact upload wiring.
+6. **Docs** – update README, hand-off notes, DX issue #99, sample outputs.
 
-### Acceptance Criteria
-- Watch-mode outputs exist locally/CI when `WATCH_RESULTS_DIR` is set.
-- Dashboard terminal/HTML/JSON display Watch Mode; action items appear for stalled/worsened/trend violations.
-- Queue history parsed: tolerance-exceeded and longest>600s yield action items.
-- All unit/CLI tests pass; actionlint remains green; additional CI time remains within bounds.
-- Sample telemetry files under `tests/results/` (real or mocked).
-- Stakeholder configuration populated with sample entries.
+Each phase should be merged incrementally with supporting tests and documentation.
 
-### Test Categories & Cases
+## Workflow Integration Notes
 
-#### 1. Unit Tests (Pester)
-- **Session Lock Loader:** Validate parsed status (including queue wait, heartbeat age) and graceful handling when files missing.
-- **Stakeholder Mapping:** Confirm correct merge of telemetry with owner/contact info.
-- **Pester Summary Loader:** Ensure totals, include patterns, and dispatcher exit code extracted.
-- **Agent-Wait Loader:** Verify queue duration and timestamps reported correctly.
-- **Action Hint Generator:** Validate suggestions for stale lock takeover and TimeoutMinutes reruns.
+- `tools/Invoke-DevDashboard.ps1` runs in CI to upload HTML/JSON artifacts.
+- Summaries can append dashboard links via step outputs.
+- Ensure generated files (HTML, JSON) are either ignored or cleaned between runs.
 
-#### 2. CLI Integration Tests
-- **Terminal Output:** Run dashboard; confirm sections appear and stakeholders surfaced.
-- **HTML Output:** Use `-Html`; confirm file created with all sections and owner info.
-- **JSON Output:** Use `-Json`; validate schema/keys for downstream automation.
-- **Missing Data Handling:** Remove files; ensure outputs show “not found” without crash.
-- **Unknown Stakeholder:** Use group without config; expect fallback message.
-- **Watch Mode (optional):** Run with `-Watch` to ensure periodic refresh works and can be terminated cleanly.
+## Related References
 
-#### 3. Manual Validation
-- **Standard Run:** After a successful local run, execute dashboard; capture terminal + HTML outputs showing `Status: released` and queue details.
-- **Queued Run:** Simulate active lock before running; ensure dashboard shows queue wait and owner guidance.
-- **Stale Lock:** Modify heartbeat to be stale; verify action hints referencing takeover/cleanup.
-- **TimeoutMinutes Failure:** Inject known error into dispatcher log; confirm recommended rerun steps appear.
-- **Fixture Drift Group:** Provide lock sample for fixture drift; ensure owner mapping displayed when run with `-Group fixture-drift`.
-- **Stakeholder Coverage:** For each configured group, validate that owners, backup, channels, and DX issue references render correctly.
-- **Live Pester Tail:** While tests execute, run ``pwsh -File tools/Follow-PesterArtifacts.ps1`` to stream updates from `pester-dispatcher.log` and see summary refreshes as artefacts land (automatically prefers ``node tools/follow-pester-artifacts.mjs`` when available). Use ``--exit-on-hang`` / ``-ExitOnHang`` (or ``npm run watch:pester:fast:exit``) to fail fast when the idle detector triggers a hang.
+- [`docs/SESSION_LOCK_HANDOFF.md`](./SESSION_LOCK_HANDOFF.md)
+- [`docs/FIXTURE_DRIFT.md`](./FIXTURE_DRIFT.md)
+- [`docs/COMPARE_LOOP_MODULE.md`](./COMPARE_LOOP_MODULE.md)
+- [`docs/TRACEABILITY_GUIDE.md`](./TRACEABILITY_GUIDE.md)
+- Issue [#99](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/99)
 
-### Live Watcher Tooling
-
-To complement the dashboard, we ship a dual-mode watcher that tails `pester-dispatcher.log`, emits `[summary]` lines as `pester-summary.json` changes, and surfaces idle diagnostics:
-
-- **Requirements:** [REQ-WATCHER-LIVE-FEED](./requirements/WATCHER_LIVE_FEED.md) (live feed + hang detection) and [REQ-WATCHER-BUSY-LOOP](./requirements/WATCHER_BUSY_LOOP.md) (busy loop detection and fail-fast support).
-
-- **Preferred (Node + chokidar):** ``node tools/follow-pester-artifacts.mjs --results tests/results``
-  - Emits `[hang-watch] idle ~Ns` once the log has been stagnant beyond `--warn-seconds` (default 90s) and escalates to `[hang-suspect]` after `--hang-seconds` (default 180s).
-  - Add `--exit-on-hang` (or use ``npm run watch:pester:fast:exit``) to exit with code `2` when a hang is suspected—ideal for local smoke automation or VS Code tasks.
-  - Tunable polling via `--poll-ms` to catch missed writes; defaults keep overhead minimal while still catching rotations.
-- **PowerShell fallback:** ``pwsh -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results``
-  - Automatically prefers the Node path but falls back to .NET `FileSystemWatcher` when Node/chokidar is unavailable.
-  - Flags idle via the same `[hang-watch]`/`[hang-suspect]` markers; `-ExitOnHang` warns when fail-fast is requested without the Node backend.
-
-Helper commands and integrations:
-
-- **npm scripts:**
-  - ``npm run watch:pester`` – default watcher.
-  - ``npm run watch:pester:fast`` – 60s/120s thresholds.
-  - ``npm run watch:pester:fast:exit`` – fast thresholds + fail-fast exit.
-  - ``npm run watch:pester:ps`` / ``:ps:exit`` – explicit PowerShell fallback.
-  - ``npm run dev:watcher:ensure`` / ``status`` / ``stop`` – manage the persistent watcher that emits JSON telemetry under `tests/results/_agent/watcher/`.
-- **VS Code tasks (`.vscode/tasks.json`):**
-  - “Watch Pester Artifacts (Node)” launches the watcher in the terminal panel with problem matchers that surface `[hang-suspect]` as task errors.
-  - “Watch Pester Artifacts (Node, fail fast)” adds `--exit-on-hang` and a tighter poll interval for immediate feedback.
-  - Equivalent PowerShell tasks provide a fallback when Node tooling is unavailable.
-
-
-#### Known Gaps & Follow-ups
-
-- **Initial busy state:** The persistent watcher reports `busy-watch`/`busy-suspect` until the dispatcher starts emitting progress markers; call this out so agents and developers interpret early signals correctly.
-- **Automation surfacing:** Now that `watcher-self.json` and status expose heartbeat freshness, thread the JSON summary into hand-off automation so humans see `heartbeatFresh`, `needsTrim`, and command hints automatically.
-- **Trim cadence:** `npm run dev:watcher:trim` rotates logs when they exceed 5 MB or ~4 000 lines (threshold used by `needsTrim`). The hand-off script can auto-trim via `Print-AgentHandoff.ps1 -AutoTrim`; consider wiring interval trims only if `needsTrim` still fires frequently.
-- **Markdown lint backlog:** Repo-wide MD013/MD041 issues remain; lint runs on changed files while nightly notice-only runs track the backlog.
-
-Recommended workflow for local triage:
-
-1. Start the watcher (`npm run watch:pester:fast:exit` or VS Code task).
-2. Run `./Invoke-PesterTests.ps1` (or relevant helper) to reproduce the issue.
-3. Capture final watcher output (especially `[hang-suspect]` lines that include `live-bytes` vs `consumed-bytes`) and attach it to PRs or issue #88 updates.
-4. When automation completes, the fail-fast watcher exits automatically; re-run for subsequent iterations.
-- **Documentation:** Ensure README/`SESSION_LOCK.md` instructions match actual CLI usage and outputs.
-
-#### 4. Regression
-- Verify existing scripts (session lock utility, workflows) still operate without invoking dashboard.
-- Re-run `./Invoke-PesterTests.ps1` to ensure no broader pipeline regressions.
-
-### Test Data
-- Provide mock telemetry samples in `tools/dashboard/samples/` (lock.json, pester summary, stakeholders config) for reproducible tests.
-
-### Reporting
-- Record unit/integration results (Pester output) and attach manual validation evidence (screenshots or logs).  
-- Note findings or follow-up tasks on GitHub issue #99.
-
-### Exit Criteria
-- All unit and integration tests pass.
-- Manual scenarios (acquired, queued, stale, failure) verified.
-- Documentation updated with accurate commands and screenshots if possible.
-- DX issue #99 requirements satisfied (summary block, artifact exposure, inspect guidance, optional helper considered).
-
----
-
-With these requirements, tests, and the implementation roadmap, the dashboard will deliver a consistent, stakeholder-aware view of local telemetry, reinforcing the developer experience improvements we’re tracking in issue #99.
-
----
-
-## Implementation Plan
-
-### Phase 1 – Foundations & Configuration
-1. **Stakeholder Mapping**
-   - Create `tools/dashboard/stakeholders.json` (or `.psd1`) with entries for each session group (e.g., `pester-selfhosted`, `fixture-drift`).
-   - Include `primaryOwner`, `backup`, `channels`, and `dxIssue` fields.
-   - Seed with sample contacts for testing.
-2. **Sample Telemetry**
-   - Under `tools/dashboard/samples/`, place representative files:
-     - `lock.json` and `status.md` (with queue wait, heartbeat).
-     - `pester-summary.json`, `pester-dispatcher.log`.
-     - `wait-last.json` (Agent-Wait sample).
-   - Document dataset so tests know where to load from.
-3. **Module Skeleton (`Dev-Dashboard.psm1`)**
-   - Define stub loader functions (`Get-SessionLockStatus`, `Get-PesterTelemetry`, etc.) returning empty placeholders.
-   - Export functions via `Export-ModuleMember` to lock in structure.
-
-### Phase 2 – Data Loaders & Logic
-4. **Session Lock Loader**
-   - Implement `Get-SessionLockStatus` to read lock files, compute queue wait/heartbeat age, handle missing data gracefully.
-5. **Pester Telemetry Loader**
-   - Implement `Get-PesterTelemetry` to parse summary, results XML (if needed), and dispatcher exit code.
-6. **Agent Wait Loader**
-   - Implement `Get-AgentWaitTelemetry` using Agent-Wait artefacts.
-7. **Stakeholder Resolver**
-   - Implement `Get-StakeholderInfo` to merge session group with stakeholder config (fallback when absent).
-8. **Action Item Engine**
-   - Implement `Get-ActionItems` to produce recommendations (inspect, takeover, rerun) based on telemetry and stakeholder info.
-
-### Phase 3 – CLI & Rendering
-9. **CLI Script (`Dev-Dashboard.ps1`)**
-   - Parse parameters `-Group`, `-Html`, `-Json`, `-Watch`.
-   - Invoke loaders; build dashboard object.
-   - Render terminal summary with sections (header, session lock, tests, queue, logs, actions) highlighting stakeholders and DX issue.
-10. **HTML Renderer**
-   - Generate `tools/dashboard/dashboard.html` mirroring terminal sections with inline CSS.
-11. **JSON Output**
-   - Emit JSON when `-Json` flag set.
-12. **Watch Mode (Optional)**
-   - Implement `-Watch <seconds>` to refresh telemetry in loop with clean exit on Ctrl+C.
-
-### Phase 4 – Testing
-13. **Unit Tests**
-   - Add `tests/DevDashboard.Tests.ps1` covering loaders, action items, and error handling with sample data.
-14. **Integration Tests**
-   - Execute CLI via Pester (mock data) verifying terminal/HTML/JSON outputs.
-15. **Regression**
-   - Run `./Invoke-PesterTests.ps1` to ensure new tests integrate without regressions.
-
-### Phase 5 – Workflow Integration & Documentation
-16. **Workflow Artefact Updates**
-   - Ensure session-lock artefacts (`lock.json`, `status.md`) are included in workflow uploads or document where they reside.
-   - Optionally reference dashboard command in summary output.
-17. **Documentation**
-   - Update README and `SESSION_LOCK.md` with dashboard usage, sample output, stakeholder config instructions, and references to DX issue #99.
-18. **Manual Validation**
-   - Run real scenarios (standard run, queued run, stale lock, TimeoutMinutes) capturing terminal + HTML outputs and verifying stakeholder surfacing.
-
-### Phase 6 – Finalization
-19. **Cleanup & Polish**
-   - Ensure generated artefacts (HTML/JSON) are ignored or clearly documented.
-   - Double-check StrictMode/PS7 compatibility.
-   - Confirm this document (`docs/DEV_DASHBOARD_PLAN.md`) and `docs/SESSION_LOCK_HANDOFF.md` reflect latest information.
-20. **Issue Tracking**
-   - Update issue #99 with completion notes once requirements satisfied.
-21. **Merge Preparation**
-   - Run full test suite.
-   - Prepare PR summarizing changes, requirements fulfilment, and test results.
-   - Attach sample outputs (terminal/HTML) to PR for reviewer context.
-
----
-
-**Related Documents**
-- [Session Lock Handoff](./SESSION_LOCK_HANDOFF.md) – current implementation state and outstanding guard tasks.
-- GitHub Issue [#99](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/99) – DX tracking for session lock visibility and inspection.
-
-With the requirements, test plan, and implementation roadmap consolidated here, the dashboard can be developed methodically while aligning with our developer-experience goals.***
-
+This plan keeps implementation incremental, emphasises testability, and ensures the dashboard
+highlights actionable DX information for self-hosted runs.

@@ -1,32 +1,30 @@
+<!-- markdownlint-disable-next-line MD041 -->
 # Traceability Matrix Guide
 
-The traceability matrix links Pester test files to requirements (`docs/requirements`) and
-architecture decision records (`docs/adr`). It produces both a structured JSON artifact and an optional
-HTML report; both live under `tests/results/_trace/`.
+Maps Pester test files to requirements (`docs/requirements/**.md`) and ADRs (`docs/adr/**`).
+Outputs JSON and optional HTML under `tests/results/_trace/`.
 
-## Annotating Tests
+## Annotating tests
 
-Add requirement and ADR identifiers using either approach:
-
-1. **Pester tags** (preferred):
+Preferred: Pester tags.
 
 ```powershell
-Describe 'My Feature' -Tag 'Unit','REQ:REQ_ID','ADR:0001' {
-  It 'does something' { 1 | Should -Be 1 }
+Describe 'My Feature' -Tag 'Unit','REQ:REQ_FOO','ADR:0001' {
+  It 'behaves' { 1 | Should -Be 1 }
 }
 ```
 
-2. **Header comment** (first 50 lines; comma or pipe separated):
+Fallback: header comment (first 50 lines).
 
 ```powershell
 # trace: req=REQ_FOO,REQ_BAR adr=0001|0002
 Describe 'Legacy' -Tag 'Unit' { ... }
 ```
 
-- Requirement IDs match filenames in `docs/requirements/*.md` (case-insensitive).
+- Requirement IDs mirror filenames under `docs/requirements/` (case-insensitive).
 - ADR IDs are four-digit prefixes (e.g., `0001`).
 
-## Running the Outer Loop
+## Generating the matrix
 
 ```powershell
 # JSON only
@@ -36,28 +34,26 @@ pwsh -File scripts/Invoke-PesterSingleLoop.ps1 -TraceMatrix
 pwsh -File scripts/Invoke-PesterSingleLoop.ps1 -TraceMatrix -RenderTraceMatrixHtml
 ```
 
-Environment overrides:
-- `TRACE_MATRIX=1` enables JSON.
-- `TRACE_MATRIX_HTML=1` enables HTML (implies JSON).
+Environment shortcuts:
+
+- `TRACE_MATRIX=1` → JSON
+- `TRACE_MATRIX_HTML=1` → HTML (+JSON)
 
 ## Outputs
 
-- `tests/results/_trace/trace-matrix.json` (`trace-matrix/v1`):
-  - Summaries, per-test entries, requirement/ADR coverage, and gaps.
-- `tests/results/_trace/trace-matrix.html`:
-  - Human-readable tables with status chips, links to requirements/ADRs and per-file results.
+- `tests/results/_trace/trace-matrix.json` (schema `trace-matrix/v1`)
+  - Covers summaries, per-test entries, uncovered requirements/ADRs.
+- `tests/results/_trace/trace-matrix.html`
+  - Human-readable tables with status chips and links to docs/results.
 
-## Validation & Tooling
+## Validation
 
-- `tests/Traceability.Matrix.Tests.ps1` covers JSON aggregation.
-- JSON schema: `trace-matrix/v1` (see plan; add schema file if enforcement needed).
-- Optional future ideas:
-  - `tools/Validate-TraceMatrix.ps1` schema check.
-  - `TraceMatrixStrict` mode to fail on uncovered requirements.
+- `tests/Traceability.Matrix.Tests.ps1` exercises aggregation.
+- Consider adding schema validation (`tools/Validate-TraceMatrix.ps1`) or strict mode failing
+  on uncovered requirements.
 
-## Best Practices
+## Best practices
 
 - Tag each new test with at least one requirement (`REQ:`).
-- Prefer direct association with ADRs when tests validate architectural decisions.
-- Review `trace-matrix.html` locally before enabling the feature in CI.
-
+- Reference ADRs when tests verify architectural decisions.
+- Review the HTML report locally before enabling traceability in CI.

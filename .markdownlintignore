@@ -7,6 +7,4 @@ prov/
 results/
 tests/results/
 tmp-agg/
-.copilot-instructions.md
-.github/copilot-instructions.md
 issue_88_hardened.md

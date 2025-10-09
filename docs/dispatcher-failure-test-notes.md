@@ -1,10 +1,24 @@
-## Dispatcher Failure Handling Notes
+<!-- markdownlint-disable-next-line MD041 -->
+# Dispatcher Failure Handling Notes
 
-- Scenario A: `ResultsPath` is an existing file.
-  - Setup: create `blocked-results.txt`, invoke dispatcher with `-ResultsPath blocked-results.txt`.
-  - Expectation: exit code non-zero, terminating error references the guard crumb (`tests/results/_diagnostics/guard.json`), crumb `path` matches the resolved file, and `tests/results/_invoker` remains absent (when it did not exist before the run).
-- Scenario B: `ResultsPath` is a read-only directory.
-  - Setup: create directory, set the `ReadOnly` attribute, invoke dispatcher with `-ResultsPath <dir>`.
-  - Expectation: same as scenario A but `path` matches the read-only directory.
+Two guard scenarios to test the dispatcher results directory checks.
 
-Tests should capture stdout/stderr for the terminating error, assert the guard crumb content (schema `dispatcher-results-guard/v1`), and verify that no `pester-results.xml` or `pester-summary.json` files are created under the blocked directory.
+## Scenario A – ResultsPath is an existing file
+
+- Prepare a placeholder (`blocked-results.txt`).
+- Run dispatcher with `-ResultsPath blocked-results.txt`.
+- Expect non-zero exit, terminating error referencing guard crumb (`tests/results/_diagnostics/guard.json`).
+- Crumb `path` should match the resolved file.
+- `_invoker` directory should remain absent when it did not exist beforehand.
+
+## Scenario B – ResultsPath is read-only directory
+
+- Create directory, set `ReadOnly` attribute.
+- Run dispatcher pointing at that directory.
+- Expect same behaviour as Scenario A, crumbs pointing to the directory.
+
+## Assertions
+
+- Capture stdout/stderr and verify terminating error text.
+- Validate guard crumb schema (`dispatcher-results-guard/v1`).
+- Ensure no `pester-results.xml` or `pester-summary.json` are written in the blocked path.
