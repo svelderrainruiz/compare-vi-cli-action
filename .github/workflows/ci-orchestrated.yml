@@ -212,6 +212,10 @@ jobs:
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+    - name: Runner health (notice-only, hosted)
+      if: ${{ vars.RUNNER_HEALTH != ''0'' }}
+      shell: pwsh
+      run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -255,6 +259,10 @@ jobs:
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+    - name: Runner health (notice-only, self-hosted)
+      if: ${{ vars.RUNNER_HEALTH != ''0'' }}
+      shell: pwsh
+      run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
     - name: Wire Probe (J1)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
@@ -1141,3 +1149,4 @@ jobs:
         $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
