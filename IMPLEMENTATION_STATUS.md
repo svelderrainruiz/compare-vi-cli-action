@@ -25,7 +25,7 @@ Snapshot of features, workflows, and docs supporting self-hosted Windows runners
 | `pester-selfhosted.yml` | Integration tests on self-hosted Windows |
 | `pester-integration-on-label.yml` | Auto integration when PR labeled `test-integration` |
 | `smoke-on-label.yml` | Smoke validation when PR labeled `smoke` |
-| `vi-compare-pr.yml` | Full comparison reports (`vi-compare` label)
+| `vi-compare-pr.yml` | Full comparison reports (`vi-compare` label) |
 | `ci-orchestrated.yml` | Deterministic orchestrated checks (single/matrix) |
 
 ## Documentation set

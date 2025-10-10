@@ -1,4 +1,7 @@
-### Session Lock
+<!-- markdownlint-disable-next-line MD041 -->
+# Session Samples
+
+## Session Lock
 
 - Status: acquired
 - LockId: test-lock-id
