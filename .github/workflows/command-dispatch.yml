@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Runner health (notice-only)
-        if: ${{ vars.RUNNER_HEALTH != ''0'' }}
+        if: ${{ vars.RUNNER_HEALTH != '0' }}
         shell: pwsh
         run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
 

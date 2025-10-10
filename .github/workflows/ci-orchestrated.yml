@@ -57,19 +57,19 @@ jobs:
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -113,13 +113,13 @@ jobs:
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
 
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -213,17 +213,17 @@ jobs:
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Runner health (notice-only, hosted)
-      if: ${{ vars.RUNNER_HEALTH != ''0'' }}
+      if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
       run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -260,17 +260,17 @@ jobs:
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Runner health (notice-only, self-hosted)
-      if: ${{ vars.RUNNER_HEALTH != ''0'' }}
+      if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
       run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -309,13 +309,13 @@ jobs:
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results/${{ matrix.category }}
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -333,7 +333,7 @@ jobs:
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -432,7 +432,7 @@ jobs:
       run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -SummaryJson 'pester-summary.json'
 
     - name: Wire Session Index (S1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-session-index
       with:
         results-dir: tests/results/${{ matrix.category }}
@@ -465,7 +465,7 @@ jobs:
         path: tests/results/${{ matrix.category }}/_invoker/boot.log
 
     - name: Wire Guard (pre)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-guard-pre
       with:
         results-dir: tests/results
@@ -478,7 +478,7 @@ jobs:
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Wire Guard (post)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-guard-post
       with:
         results-dir: tests/results
@@ -494,7 +494,7 @@ jobs:
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-stop
       with:
         results-dir: tests/results
@@ -579,13 +579,13 @@ jobs:
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: results/fixture-drift
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -598,7 +598,7 @@ jobs:
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -607,7 +607,7 @@ jobs:
       with:
         mode: start
     - name: Wire Probe (C1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: C1
@@ -621,13 +621,13 @@ jobs:
         artifact-name: orchestrated-fixture-drift
 
     - name: Wire Probe (C2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: C2
         results-dir: results/fixture-drift
     - name: Wire Session Index (S1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-session-index
       with:
         results-dir: results/fixture-drift
@@ -685,7 +685,7 @@ jobs:
         path: results/fixture-drift/compare-outcome.json
 
     - name: Wire Guard (pre)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-guard-pre
       with:
         results-dir: tests/results
@@ -698,7 +698,7 @@ jobs:
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Wire Guard (post)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-guard-post
       with:
         results-dir: tests/results
@@ -714,7 +714,7 @@ jobs:
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-stop
       with:
         results-dir: tests/results
@@ -728,13 +728,13 @@ jobs:
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -751,7 +751,7 @@ jobs:
         $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
     - name: Wire Probe (P1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: P1
@@ -897,13 +897,13 @@ jobs:
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
 
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -933,7 +933,7 @@ jobs:
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -1024,12 +1024,12 @@ jobs:
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-invoker-stop
       with:
         results-dir: tests/results
     - name: Wire Session Index (S1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-session-index
       with:
         results-dir: tests/results
@@ -1107,7 +1107,7 @@ jobs:
         }
 
     - name: Wire Probe (P1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: '${{ vars.WIRE_PROBES != '0' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: P1
