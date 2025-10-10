@@ -3,6 +3,62 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Invoke-ProcessCapture {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$FileName,
+        [Parameter()][string[]]$Arguments = @()
+    )
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $FileName
+    $psi.Arguments = ($Arguments -join ' ')
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    [pscustomobject]@{ Code = $p.ExitCode; Out = $out; Err = $err }
+}
+
+function Get-AgentRunContext {
+    [CmdletBinding()]
+    param()
+    $wf   = $env:GITHUB_WORKFLOW
+    $job  = $env:GITHUB_JOB
+    $sha  = $env:GITHUB_SHA
+    $ref  = $env:GITHUB_REF
+    $actor= $env:GITHUB_ACTOR
+
+    # Fallbacks for local/non-GitHub contexts
+    if (-not $sha) {
+        try {
+            $r = Invoke-ProcessCapture -FileName 'git' -Arguments @('rev-parse','--verify','HEAD')
+            if ($r.Code -eq 0 -and $r.Out) { $sha = ($r.Out.Trim()) }
+        } catch {}
+    }
+    if (-not $ref) {
+        try {
+            $r = Invoke-ProcessCapture -FileName 'git' -Arguments @('rev-parse','--abbrev-ref','HEAD')
+            if ($r.Code -eq 0 -and $r.Out) {
+                $branch = $r.Out.Trim()
+                if ($branch -and $branch -ne 'HEAD') { $ref = "refs/heads/$branch" }
+            }
+        } catch {}
+    }
+    if (-not $wf) { $wf = 'local-session' }
+    if (-not $job) { $job = 'manual' }
+    if (-not $actor) {
+        $actor = $env:USERNAME
+        if (-not $actor -and $env:USER) { $actor = $env:USER }
+        if (-not $actor) { $actor = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name }
+    }
+
+    return [ordered]@{ sha = $sha; ref = $ref; workflow = $wf; job = $job; actor = $actor }
+}
+
 function Start-AgentWait {
     [CmdletBinding()] param(
         [Parameter(Position=0)][string]$Reason = 'unspecified',
@@ -18,7 +74,6 @@ function Start-AgentWait {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
     $markerPath = Join-Path $sessionDir 'wait-marker.json'
     $now = [DateTimeOffset]::UtcNow
-    $wf = $env:GITHUB_WORKFLOW; $job=$env:GITHUB_JOB; $sha=$env:GITHUB_SHA; $ref=$env:GITHUB_REF; $actor=$env:GITHUB_ACTOR
     $sketch = 'brief-' + [string]$ExpectedSeconds
     $o = [ordered]@{
         schema = 'agent-wait/v1'
@@ -30,9 +85,7 @@ function Start-AgentWait {
         startedUnixSeconds = [int][Math]::Floor($now.ToUnixTimeSeconds())
         workspace = $root
         sketch = $sketch
-        runContext = [ordered]@{
-            sha = $sha; ref = $ref; workflow = $wf; job = $job; actor = $actor
-        }
+        runContext = Get-AgentRunContext
     }
     $o | ConvertTo-Json -Depth 5 | Out-File -FilePath $markerPath -Encoding utf8
     $msg = "Agent wait started: reason='$Reason', expected=${ExpectedSeconds}s"
@@ -70,7 +123,6 @@ function End-AgentWait {
     $tol = if ($PSBoundParameters.ContainsKey('ToleranceSeconds')) { $ToleranceSeconds } elseif ($start.PSObject.Properties['toleranceSeconds']) { [int]$start.toleranceSeconds } else { 5 }
     $diff = [int][Math]::Abs($elapsedSec - [int]$start.expectedSeconds)
     $withinMargin = ($diff -le $tol)
-    $wf = $env:GITHUB_WORKFLOW; $job=$env:GITHUB_JOB; $sha=$env:GITHUB_SHA; $ref=$env:GITHUB_REF; $actor=$env:GITHUB_ACTOR
     $sketch = 'brief-' + [string]$start.expectedSeconds
     $result = [ordered]@{
         schema = 'agent-wait-result/v1'
@@ -85,9 +137,7 @@ function End-AgentWait {
         withinMargin = $withinMargin
         markerPath = $markerPath
         sketch = $sketch
-        runContext = [ordered]@{
-            sha = $sha; ref = $ref; workflow = $wf; job = $job; actor = $actor
-        }
+        runContext = Get-AgentRunContext
     }
     $lastPath = Join-Path $sessionDir 'wait-last.json'
     $logPath = Join-Path $sessionDir 'wait-log.ndjson'

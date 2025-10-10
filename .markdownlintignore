@@ -1,6 +1,11 @@
 node_modules/
 bin/
 docs/knowledgebase/
-.copilot-instructions.md
-.github/copilot-instructions.md
+cats/
+issues-drafts/
+prov/
+results/
+tests/results/
+tmp-agg/
 issue_88_hardened.md
+CHANGELOG.md

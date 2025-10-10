@@ -1,144 +1,39 @@
-# Pester Self-Hosted Runner Setup and Fixes
+<!-- markdownlint-disable-next-line MD041 -->
+# Pester Self-Hosted Setup Notes
 
-## Summary of Fixes Applied
+Summary of fixes and requirements for running Pester on self-hosted Windows runners.
 
-### 1. Fixed Markdown Linting Errors
+## Recent fixes
 
-**File:** `.copilot-instructions.md`
+- **Workflow parameter passing** (`.github/workflows/test-pester.yml`)
+  - Replaced incorrect hashtable syntax with conditional invocation of `tools/Run-Pester.ps1`.
+  - Integration flag honoured correctly.
 
-**Problem:** The file had duplicate content, missing blank lines, and bare URLs causing 13 markdown lint errors.
+## Integration test prerequisites
 
-**Fix:** Cleaned up the file to have proper structure with:
+| Requirement | Details |
+| ----------- | ------- |
+| PowerShell | `#Requires -Version 7.0` |
+| LVCompare | Canonical path: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe` |
+| Environment | `LV_BASE_VI`, `LV_HEAD_VI` point to sample VIs |
+| Runner | Labels `[self-hosted, Windows, X64]` |
 
-- Single occurrence of each section
-- Proper heading hierarchy
-- Blank lines around lists and code blocks
-- URLs enclosed in angle brackets
-- No multiple consecutive blank lines
+## Running tests
 
-**Result:** All markdown linting errors fixed (0 errors).
+- **Workflow dispatch**: run "Pester (self-hosted, real CLI)" with `include_integration=true`.
+- **PR comment**: `/run pester-selfhosted`.
+- **PR label**: add `test-integration` to trigger automatically.
 
-### 2. Fixed test-pester.yml Workflow Parameter Passing
+Integration coverage includes CLI presence, diff/no-diff exit codes, and `fail-on-diff` behaviour.
 
-**File:** `.github/workflows/test-pester.yml`
+## Next steps
 
-**Problem:** The workflow was passing parameters to `Run-Pester.ps1` using incorrect hashtable syntax:
+1. Provision/verify self-hosted runner with LabVIEW + LVCompare.
+2. Configure repository variables (`LV_BASE_VI`, `LV_HEAD_VI`).
+3. Dispatch integration workflow and confirm passing results.
 
-```powershell
-./tools/Run-Pester.ps1 @{
-  IncludeIntegration = $include
-}
-```
+## Current status
 
-This doesn't work because the hashtable is not being splatted (missing `@` operator) and the script expects a switch parameter.
-
-**Fix:** Changed to proper conditional invocation:
-
-```powershell
-$include = '${{ inputs.include_integration }}' -ieq 'true'
-if ($include) {
-  ./tools/Run-Pester.ps1 -IncludeIntegration
-} else {
-  ./tools/Run-Pester.ps1
-}
-```
-
-**Result:** Tests now run correctly with proper parameter passing.
-
-## Integration Tests for Self-Hosted Windows Runners
-
-The Integration tests (`tests/CompareVI.Integration.Tests.ps1`) are designed to run on self-hosted Windows runners with the actual LabVIEW Compare CLI installed.
-
-### Requirements
-
-1. **PowerShell 7+**: The test file has `#Requires -Version 7.0`
-
-2. **Canonical LVCompare.exe Path**: Must be installed at:
-
-   ```powershell
-   C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe
-   ```
-
-3. **Environment Variables**: Must be set (via GitHub Actions repository/organization variables):
-   - `LV_BASE_VI`: Full path to a base VI file for testing
-   - `LV_HEAD_VI`: Full path to a different VI file (for diff testing)
-
-4. **Self-Hosted Runner**: Tagged with `[self-hosted, Windows, X64]`
-
-### Test Coverage
-
-The Integration tests verify:
-
-1. **Required files present**: Checks that CLI and test VI files exist
-2. **Exit code 0 (no diff)**: Compares the same VI file twice, expects `Diff = false`
-3. **Exit code 1 (diff detected)**: Compares two different VI files, expects `Diff = true`
-4. **fail-on-diff behavior**: Verifies that outputs are written before throwing when diffs are detected
-
-### Running Integration Tests
-
-#### Via Workflow Dispatch
-
-1. Go to Actions → "Pester (self-hosted, real CLI)"
-2. Click "Run workflow"
-3. Set `include_integration` to `true`
-4. Click "Run workflow"
-
-#### Via PR Comment
-
-Comment on a PR:
-
-```bash
-/run pester-selfhosted
-```
-
-This will dispatch the `pester-selfhosted.yml` workflow with `include_integration=true`.
-
-#### Via Label
-
-Add the `test-integration` label to a PR to trigger integration tests automatically.
-
-### Validation Status
-
-- ✅ Unit tests pass (20 passed, 2 skipped on non-Windows)
-- ✅ Markdown linting passes (0 errors)
-- ✅ Actionlint passes (0 errors)
-- ✅ Workflow parameter passing fixed
-- ⏸️ Integration tests require self-hosted Windows runner with LabVIEW CLI
-
-## Next Steps
-
-To fully enable Integration testing:
-
-1. **Set up self-hosted Windows runner** with:
-   - Windows OS
-   - PowerShell 7+
-   - LabVIEW Compare CLI installed at canonical path
-   - Runner labeled with `[self-hosted, Windows, X64]`
-
-2. **Configure repository variables**:
-   - `LV_BASE_VI`: Path to a test VI file
-   - `LV_HEAD_VI`: Path to a different test VI file
-
-3. **Verify Integration tests** by manually dispatching the `pester-selfhosted.yml` workflow
-
-## Files Modified
-
-- `.copilot-instructions.md` - Fixed markdown linting errors
-- `.github/workflows/test-pester.yml` - Fixed parameter passing to Run-Pester.ps1
-
-## Test Results
-
-### Unit Tests (Mock-based, no CLI)
-
-```text
-Tests Passed: 20, Failed: 0, Skipped: 2
-```
-
-### Linting
-
-```text
-Markdown: 0 errors
-Actionlint: 0 errors
-```
-
-All non-integration tests pass successfully. Integration tests are ready to run on properly configured self-hosted Windows runners.
+- Unit tests: pass (20 run, 2 skipped where CLI absent).
+- Markdownlint / actionlint: clean.
+- Integration tests: ready (require configured runner).

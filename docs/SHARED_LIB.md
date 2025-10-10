@@ -1,31 +1,28 @@
-# CompareVi.Shared Library
+<!-- markdownlint-disable-next-line MD041 -->
+# Shared Library Notes
 
-A small .NET 8 class library providing shared helpers for LVCompare orchestration across repositories.
+Reference for shared PowerShell modules used across scripts.
 
-## Contents
+## Key modules
 
-- ArgTokenizer: Tokenize quoted argument strings and normalize `-flag=value` pairs.
-- PathUtils: Windows path normalization and safe quoting.
-- ProcSnapshot: Capture LabVIEW/LVCompare process snapshots and close newly spawned LabVIEW PIDs.
+| Module | Purpose |
+| ------ | ------- |
+| `CompareVi.Shared` | Common helpers (path resolution, error handling) |
+| `Pester-Invoker` | Step-based Pester execution (see ADR 0001) |
+| `Dev-Dashboard` | Telemetry loaders/renderers |
 
-## Build
+## Usage
 
-- Local: `pwsh -File tools/Build-Shared.ps1 -Pack`
-- CI: `.github/workflows/dotnet-shared.yml` builds and uploads the `.nupkg` artifact when `src/**` changes.
+Import modules from `scripts/` or `tools/` using `Import-Module` (avoid dot-sourcing). Example:
 
-## Usage (PowerShell)
+```powershell
+Import-Module ./scripts/CompareVI.Shared.psm1 -Force
+```
 
-- Load the compiled assembly for experiments:
+## Packaging notes
 
-  ```powershell
-  $dll = Join-Path $PWD 'src/CompareVi.Shared/bin/Release/net8.0/CompareVi.Shared.dll'
-  Add-Type -Path $dll
-  [CompareVi.Shared.ArgTokenizer]::Tokenize('"-flag value" -x=1 a b')
-  ```
+- Modules target PowerShell 7.
+- Run `npm run build` to rebuild TypeScript utilities that produce shared outputs.
+- Keep exported functions documented via comment-based help for discoverability.
 
-## Roadmap
-
-- Publish to GitHub Packages; add a PowerShell binary module wrapper for easy import.
-- Gradual adoption in scripts (tokenization, path quoting, process cleanup) via thin adapters.
-- Stabilize API, then consider NuGet release for broader reuse.
-
+Related docs: [`docs/DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE.md), [`docs/USAGE_GUIDE.md`](./USAGE_GUIDE.md).

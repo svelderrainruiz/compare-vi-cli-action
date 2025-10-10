@@ -1,0 +1,8 @@
+#!/usr/bin/env pwsh
+# Optional hook: ensure the dev watcher is running after merge
+try {
+  pwsh -NoLogo -NoProfile -File "$PSScriptRoot/../Dev-WatcherManager.ps1" -Ensure -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120 -NoProgressSeconds 90 -PollMs 2000 | Out-Null
+} catch {
+  Write-Host "[post-merge] Dev watcher ensure failed: $($_.Exception.Message)"
+}
+

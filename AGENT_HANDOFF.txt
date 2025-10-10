@@ -1,0 +1,45 @@
+# Agent Handoff – Compare VI CLI Action
+
+## Context Snapshot
+- Branch: `issue/88-dev-dashboard-phase2` (tracking #88 and PR #100)
+- Primary focus: live watcher tooling, busy-loop detection, lint strategy hardening
+- Latest changes (not yet committed in this session):
+  - Docs refreshed (`README.md`, `docs/DEV_DASHBOARD_PLAN.md`) with watcher heartbeat/trim notes plus lint roadmap.
+  - `tools/Dev-WatcherManager.ps1` + `tools/follow-pester-artifacts.mjs` now emit both status and heartbeat JSON (`watcher-self.json`) with freshness checks; unit suites exist (`tests/Watcher.Live.Tests.ps1`, `tests/Watcher.BusyLoop.Tests.ps1`, `tests/DevWatcherManager.Tests.ps1`).
+  - Markdown lint tooling staged (`.markdownlint.jsonc`, `.markdownlintignore`, `tools/Lint-Markdown.ps1`, npm scripts) alongside workflow updates; lint script is wired into `npm run lint:md(:changed)`.
+
+## Status & Known Gaps
+1. **Watcher behaviour**
+   - Initial status often reports `busy-watch` / `busy-suspect` until Pester emits `[It ...]` lines (documented).
+   - Heartbeat now writes `watcher-self.json` with timestamps/metrics; `verifiedProcess` degrades when the heartbeat goes stale. Manual trim via `npm run dev:watcher:trim` is available but not automated yet.
+   - `npm run dev:watcher:stop` clears PID/status/heartbeat files; status + heartbeat JSON now surface `heartbeatFresh`, `heartbeatReason`, and `needsTrim` hints.
+2. **Lint backlog**
+   - `npm run lint:md:changed` now targets PR deltas and CI uses it for blocking checks; full sweeps stay notice-only.
+   - Legacy docs still trip MD013/MD012/MD041 (line length + blank lines). Capture backlog in follow-up issue or staged fixes.
+3. **Automation**
+   - Agent hand-off process should emit `npm run dev:watcher:status` output (or embed summary fields) so heartbeat freshness and trim hints are visible without extra commands.
+   - Consider scheduling periodic trims or prompting `npm run dev:watcher:trim` automatically when `needsTrim=true`.
+
+## Suggested Next Actions
+1. Wire `dev:watcher:status` JSON (including `heartbeatFresh`, `heartbeatReason`, `needsTrim`) into automation / hand-off responses to surface telemetry immediately.
+2. Evaluate auto-trim cadence (scheduled trim, size gate, or documentation guidance) now that `dev:watcher:trim` exists.
+3. Triage markdown backlog: capture MD013/MD012 hot spots, decide whether to patch docs or stage suppression for generated blocks.
+4. After code changes, rerun:
+   ```powershell
+   Import-Module Pester
+   Invoke-Pester tests/Watcher.Live.Tests.ps1, tests/Watcher.BusyLoop.Tests.ps1, tests/DevWatcherManager.Tests.ps1
+   npm run lint:md:changed
+   ```
+
+## Useful Commands
+- Start persistent watcher: `npm run dev:watcher:ensure`
+- Check status JSON: `npm run dev:watcher:status`
+- Stop watcher/clear status: `npm run dev:watcher:stop`
+- Trim watcher logs: `npm run dev:watcher:trim`
+- Auto-trim and print summary: `pwsh -File tools/Print-AgentHandoff.ps1 -AutoTrim`
+- Fail-fast during repro: `npm run watch:pester:fast:exit` (hang & busy detection)
+
+## Notes for Next Agent
+- If the watcher status reads `busy-suspect` immediately after ensure, that's expected warm-up; re-check once tests are running.
+- `dev:watcher:status` now reports `needsTrim`; run `npm run dev:watcher:trim` or rely on `Print-AgentHandoff.ps1 -AutoTrim` when set to keep logs manageable.
+- When documenting future changes, keep README's "Known gaps" section in sync.

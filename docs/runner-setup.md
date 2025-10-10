@@ -1,38 +1,36 @@
-# Self-hosted runner setup (Windows, LabVIEW 2025 Q3)
+<!-- markdownlint-disable-next-line MD041 -->
+# Runner Setup (Self-Hosted Windows)
 
-Prerequisites
+Quick checklist for provisioning a self-hosted runner compatible with the LVCompare action.
 
-- Windows Server or Windows 10/11 with administrator access
-- LabVIEW 2025 Q3 installed and licensed for the service account running the GitHub runner
+## Requirements
 
-Steps
+- Windows 10/11 or Server (64-bit).
+- LabVIEW 2025 Q3 with LVCompare CLI feature.
+- PowerShell 7 (`pwsh`).
+- Git installed.
 
-1) Install GitHub runner (self-hosted, Windows)
-   - Follow the GitHub guide: <https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners>
-   - Run the runner as a service under a user with a valid LabVIEW license
+## Steps
 
-2) Install LabVIEW 2025 Q3
-   - Verify `LVCompare.exe` exists after installation
-   - **Required canonical path**: `C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
-   - This is the ONLY supported location; no other paths will work
-   - **Important**: The action enforces this path and will reject any other installation location
+1. Install GitHub Actions runner.
+2. Configure labels: `self-hosted`, `Windows`, `X64`.
+3. Install LabVIEW + LVCompare at canonical path.
+4. Add environment variables (system-wide or runner service):
+   - `LV_BASE_VI`, `LV_HEAD_VI` (sample fixtures).
+   - `LV_NO_ACTIVATE=1`, `LV_SUPPRESS_UI=1`, `LV_CURSOR_RESTORE=1`.
+5. Install Node.js (optional, for repo scripts/watchers).
+6. Start runner service and confirm idle status.
 
-3) Configure the CLI path (optional)
-   - The action will automatically find the CLI at the canonical path
-   - Optionally set environment variable for explicit configuration:
-     - `LVCOMPARE_PATH=C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`
-     - **Note**: Even when set, the path MUST resolve to the canonical location
-     - Restart the runner service after changes
-   - Or provide `lvComparePath` input in workflows:
-     - **Note**: Even when provided, the path MUST match the canonical location
-   - **Path policy**: Only the canonical path is accepted to ensure consistency across runners
+## Validation
 
-4) Validate access
-   - Run the repository’s “Smoke test Compare VI action” workflow (manual) and provide two `.vi` file paths
-   - Confirm outputs `diff`, `exitCode`, `cliPath`, and `command`
+```powershell
+Test-Path 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+[Environment]::GetEnvironmentVariable('LV_BASE_VI', 'Machine')
+```
 
-Notes
+Run `Pester (self-hosted, real CLI)` workflow manually to confirm integration tests pass.
 
-- Ensure the runner service account has GUI-less access sufficient for CLI tools provided by LabVIEW
-- Keep LabVIEW patched at the 2025 Q3 level used by your organization
-- **Path policy**: Only the canonical path is supported to ensure consistency across runners
+## References
+
+- [`docs/SELFHOSTED_CI_SETUP.md`](./SELFHOSTED_CI_SETUP.md)
+- [`docs/E2E_TESTING_GUIDE.md`](./E2E_TESTING_GUIDE.md)

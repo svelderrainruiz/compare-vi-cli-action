@@ -28,7 +28,7 @@ on:
       strategy:
         description: Execution strategy (matrix or single)
         required: false
-        default: matrix
+        default: single
         type: choice
         options: [matrix, single]
       include_integration:
@@ -53,20 +53,23 @@ jobs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -105,15 +108,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
 
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -203,14 +209,21 @@ jobs:
     # Run preflight for both strategies
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+    - name: Runner health (notice-only, hosted)
+      if: ${{ vars.RUNNER_HEALTH != '0' }}
+      shell: pwsh
+      run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -243,14 +256,21 @@ jobs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+    - name: Runner health (notice-only, self-hosted)
+      if: ${{ vars.RUNNER_HEALTH != '0' }}
+      shell: pwsh
+      run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -282,16 +302,20 @@ jobs:
       LV_SUPPRESS_UI: '0'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results/${{ matrix.category }}
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -306,9 +330,10 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -338,6 +363,7 @@ jobs:
         $lines = @('### Post-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-invoker'
     - name: Prepare fixture copies (base/head)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       id: fixtures
@@ -400,13 +426,37 @@ jobs:
           -EmitFailuresJsonAlways `
           -IncludePatterns $inc
 
+    - name: Summarize Pester results (job-level)
+      if: ${{ always() }}
+      shell: pwsh
+      run: |
+        $resDir = Join-Path 'tests/results' '${{ matrix.category }}'
+        $sumPath = Join-Path $resDir 'pester-summary.json'
+        if (Test-Path -LiteralPath $sumPath) {
+          try {
+            $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
+            $tot = $s.totals
+            $lines = @(
+              "### Pester Status (${ {matrix.category} })",
+              "- Result: $($s.result)",
+              "- Tests: $($tot.tests)  Passed: $($tot.passed)  Failed: $($tot.failed)",
+              if ($s.durationSeconds -ne $null) { "- Duration (s): $($s.durationSeconds)" } else { $null }
+            ) | Where-Object { $_ }
+            ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } catch {
+            "Pester summary parse failed: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+        } else {
+          "No pester-summary.json found for category '${{ matrix.category }}'" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+
     - name: Ensure session index (fallback)
       if: always()
       shell: pwsh
       run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -SummaryJson 'pester-summary.json'
 
     - name: Wire Session Index (S1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-session-index
       with:
         results-dir: tests/results/${{ matrix.category }}
@@ -439,7 +489,7 @@ jobs:
         path: tests/results/${{ matrix.category }}/_invoker/boot.log
 
     - name: Wire Guard (pre)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-pre
       with:
         results-dir: tests/results
@@ -452,7 +502,7 @@ jobs:
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Wire Guard (post)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-post
       with:
         results-dir: tests/results
@@ -461,9 +511,14 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+    - name: Emit LV closure telemetry (category post-stop)
+      if: always()
+      shell: pwsh
+      run: |
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-stop
       with:
         results-dir: tests/results
@@ -482,12 +537,44 @@ jobs:
       shell: pwsh
       run: |
         $paths = @('tests/results/${{ matrix.category }}/pester-summary.json','tests/results/${{ matrix.category }}/pester-results.xml','tests/results/${{ matrix.category }}/pester-failures.json','tests/results/${{ matrix.category }}/session-index.json')
-        pwsh -File tools/Write-ArtifactMap.ps1 -Paths $paths -Title 'Artifacts'
+        $pathsList = $paths -join ';'
+        pwsh -File tools/Write-ArtifactMap.ps1 -PathsList $pathsList -Title 'Artifacts'
 
     - name: Append top failures
       if: always()
       shell: pwsh
       run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -Top 5
+
+    - name: Generate dev dashboard (matrix)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot "tests/results/${{ matrix.category }}" -OutputRoot "tests/results/${{ matrix.category }}/dev-dashboard"
+
+    - name: Upload dev dashboard (matrix)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-dashboard-${{ matrix.category }}
+        path: |
+          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.html
+          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
+    - name: Append dev dashboard summary (matrix)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.html'
+        $json = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            "### Dev Dashboard (${{ matrix.category }})",
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
     - name: Re-run hint
       if: always()
@@ -503,18 +590,26 @@ jobs:
       INVOKER_REQUIRED: '1'
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'
+      CLEAN_LV_BEFORE: ${{ vars.CLEAN_LV_BEFORE || 'true' }}
+      CLEAN_LV_AFTER: ${{ vars.CLEAN_LV_AFTER || 'true' }}
+      CLEAN_LV_INCLUDE_COMPARE: ${{ vars.CLEAN_LV_INCLUDE_COMPARE || vars.CLEAN_LVCOMPARE || 'true' }}
+      LVCI_SINGLE_COMPARE: '1'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: results/fixture-drift
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -527,7 +622,7 @@ jobs:
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -536,7 +631,7 @@ jobs:
       with:
         mode: start
     - name: Wire Probe (C1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: C1
@@ -550,13 +645,13 @@ jobs:
         artifact-name: orchestrated-fixture-drift
 
     - name: Wire Probe (C2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: C2
         results-dir: results/fixture-drift
     - name: Wire Session Index (S1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-session-index
       with:
         results-dir: results/fixture-drift
@@ -568,6 +663,37 @@ jobs:
         validate-schema: true
         upload: true
         artifact-name: fixture-drift-session-index
+
+    - name: Generate dev dashboard (drift)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'fixture-drift' -ResultsRoot 'results/fixture-drift' -OutputRoot 'results/fixture-drift/dev-dashboard'
+
+    - name: Upload dev dashboard (drift)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-dashboard-drift
+        path: |
+          results/fixture-drift/dev-dashboard/dashboard.html
+          results/fixture-drift/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
+    - name: Append dev dashboard summary (drift)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.html'
+        $json = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            '### Dev Dashboard (drift)',
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
 
     - name: Parse Compare Exec JSON (drift)
       if: always()
@@ -583,7 +709,7 @@ jobs:
         path: results/fixture-drift/compare-outcome.json
 
     - name: Wire Guard (pre)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-pre
       with:
         results-dir: tests/results
@@ -596,7 +722,7 @@ jobs:
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Wire Guard (post)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-post
       with:
         results-dir: tests/results
@@ -605,26 +731,34 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+    - name: Emit LV closure telemetry (drift post-stop)
+      if: always()
+      shell: pwsh
+      run: |
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-stop
       with:
         results-dir: tests/results
   publish:
-    if: ${{ always() && (inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '')) }}
+    if: ${{ always() && (inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '')) && needs.pester-category.result != 'skipped' }}
     runs-on: ubuntu-latest
     needs: [lint, pester-category, drift]
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -641,7 +775,7 @@ jobs:
         $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
     - name: Wire Probe (P1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: P1
@@ -777,17 +911,23 @@ jobs:
       WATCH_CONSOLE: '1'
       INVOKER_REQUIRED: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
+      EMIT_LV_CLOSURE_CRUMBS: '1'
+      TRACE_MATRIX: '1'
+      TRACE_MATRIX_HTML: '1'
     steps:
     - uses: actions/checkout@v5
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
 
     - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
@@ -814,9 +954,10 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
         results-dir: tests/results
@@ -847,6 +988,7 @@ jobs:
         $lines = @('### Post-Invoker/Warmup Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-warmup'
 
     - name: Wire Probe (T1)
       uses: ./.github/actions/wire-probe
@@ -873,6 +1015,17 @@ jobs:
           ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
         }
 
+    - name: Generate traceability matrix (single)
+      if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
+      shell: pwsh
+      run: |
+        $builder = Join-Path $PWD 'tools/Traceability-Matrix.ps1'
+        if (Test-Path -LiteralPath $builder) {
+          & $builder -TestsPath 'tests' -ResultsRoot 'tests/results' -RenderHtml -RunId '${{ github.run_id }}'
+        } else {
+          Write-Warning "[TraceMatrix] Builder script not found at $builder"
+        }
+
     - name: Drift (invoker; reuse LabVIEW via -lvpath)
       if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
       uses: ./.github/actions/fixture-drift
@@ -888,14 +1041,19 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+    - name: Emit LV closure telemetry (single post-stop)
+      if: always()
+      shell: pwsh
+      run: |
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-stop
       with:
         results-dir: tests/results
     - name: Wire Session Index (S1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-session-index
       with:
         results-dir: tests/results
@@ -932,8 +1090,48 @@ jobs:
         $lines += ('- Include Integration: {0}' -f ('${{ needs.normalize.outputs.include_integration }}'))
         $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+    - name: Generate dev dashboard (single)
+      if: always()
+      shell: pwsh
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot 'tests/results' -OutputRoot 'tests/results/dev-dashboard'
+
+    - name: Upload dev dashboard (single)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dev-dashboard-single
+        path: |
+          tests/results/dev-dashboard/dashboard.html
+          tests/results/dev-dashboard/dashboard.json
+        if-no-files-found: warn
+
+    - name: Upload traceability matrix (single)
+      if: always() && hashFiles('tests/results/_trace/trace-matrix.json') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: traceability-matrix-single
+        path: |
+          tests/results/_trace/trace-matrix.json
+          tests/results/_trace/trace-matrix.html
+        if-no-files-found: warn
+    - name: Append dev dashboard summary (single)
+      if: always()
+      shell: pwsh
+      run: |
+        $html = Join-Path 'tests/results/dev-dashboard' 'dashboard.html'
+        $json = Join-Path 'tests/results/dev-dashboard' 'dashboard.json'
+        if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
+          $lines = @(
+            '### Dev Dashboard (single)',
+            '',
+            "- HTML: $(Resolve-Path $html)",
+            "- JSON: $(Resolve-Path $json)"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+
     - name: Wire Probe (P1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: P1
@@ -975,3 +1173,4 @@ jobs:
         $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+

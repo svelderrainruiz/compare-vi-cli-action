@@ -7,7 +7,21 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "generate:outputs": "node dist/generate-action-outputs.js",
-    "lint:md": "markdownlint-cli2 \"**/*.md\" --config .markdownlint.jsonc || exit 1"
+    "lint:md": "pwsh -NoLogo -NoProfile -File tools/Lint-Markdown.ps1 -All",
+    "lint:md:changed": "pwsh -NoLogo -NoProfile -File tools/Lint-Markdown.ps1",
+    "watch:pester": "node tools/follow-pester-artifacts.mjs --results tests/results",
+    "watch:pester:fast": "node tools/follow-pester-artifacts.mjs --results tests/results --warn-seconds 60 --hang-seconds 120",
+    "watch:pester:fast:exit": "node tools/follow-pester-artifacts.mjs --results tests/results --warn-seconds 60 --hang-seconds 120 --poll-ms 2000 --no-progress-seconds 60 --exit-on-hang --exit-on-no-progress",
+    "watch:pester:busyexit": "node tools/follow-pester-artifacts.mjs --results tests/results --no-progress-seconds 90 --poll-ms 2000 --exit-on-no-progress",
+    "watch:pester:ps": "pwsh -NoLogo -NoProfile -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120",
+    "watch:pester:ps:exit": "pwsh -NoLogo -NoProfile -File tools/Follow-PesterArtifacts.ps1 -ResultsDir tests/results -WarnSeconds 60 -HangSeconds 120 -NoProgressSeconds 60 -PollMs 2000 -ExitOnHang -ExitOnNoProgress",
+    "dev:watcher:ensure": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Ensure",
+    "dev:watcher:status": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Status",
+    "dev:watcher:stop": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Stop",
+    "dev:watcher:trim": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Trim",
+    "dev:watcher:autotrim": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -AutoTrim",
+    "ci:status": "pwsh -NoLogo -NoProfile -File tools/Follow-OrchestratedRun.ps1",
+    "ci:watch": "pwsh -NoLogo -NoProfile -File tools/Follow-OrchestratedRun.ps1 -Watch"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -24,6 +38,7 @@
   },
   "dependencies": {
     "argparse": "^2.0.1",
+    "chokidar": "^3.6.0",
     "braces": "^3.0.3",
     "entities": "^4.5.0",
     "fast-glob": "^3.3.3",
@@ -67,3 +82,4 @@
   },
   "homepage": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action#readme"
 }
+
