@@ -18,7 +18,9 @@ function Resolve-MergeBase {
   param([string[]]$Candidates)
   foreach ($candidate in $Candidates) {
     if (-not $candidate) { continue }
-    $ref = (& git rev-parse --verify $candidate 2>$null).Trim()
+    $rawRef = (& git rev-parse --verify $candidate 2>$null)
+    if (-not $rawRef) { continue }
+    $ref = $rawRef.Trim()
     if (-not $ref) { continue }
     $mergeBase = (& git merge-base HEAD $ref 2>$null).Trim()
     if ($mergeBase) {
