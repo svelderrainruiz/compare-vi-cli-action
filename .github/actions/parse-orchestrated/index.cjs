@@ -139,4 +139,3 @@ catch (err) {
     process.stderr.write(`parse-orchestrated error: ${msg}\n`);
     process.exit(1);
 }
-export {};
