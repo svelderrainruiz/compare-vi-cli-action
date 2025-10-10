@@ -426,6 +426,30 @@ jobs:
           -EmitFailuresJsonAlways `
           -IncludePatterns $inc
 
+    - name: Summarize Pester results (job-level)
+      if: ${{ always() }}
+      shell: pwsh
+      run: |
+        $resDir = Join-Path 'tests/results' '${{ matrix.category }}'
+        $sumPath = Join-Path $resDir 'pester-summary.json'
+        if (Test-Path -LiteralPath $sumPath) {
+          try {
+            $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
+            $tot = $s.totals
+            $lines = @(
+              "### Pester Status (${ {matrix.category} })",
+              "- Result: $($s.result)",
+              "- Tests: $($tot.tests)  Passed: $($tot.passed)  Failed: $($tot.failed)",
+              if ($s.durationSeconds -ne $null) { "- Duration (s): $($s.durationSeconds)" } else { $null }
+            ) | Where-Object { $_ }
+            ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } catch {
+            "Pester summary parse failed: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+        } else {
+          "No pester-summary.json found for category '${{ matrix.category }}'" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+
     - name: Ensure session index (fallback)
       if: always()
       shell: pwsh
