@@ -117,16 +117,42 @@ if ($EmitJson) {
 
 if ($AppendSummary -and $env:GITHUB_STEP_SUMMARY) {
   $lines = @(
-    '### Runner Health',
-    "- Service: $($health.service.name) (found=$($health.service.found))",
-    if ($health.service.status) { "- Service Status: $($health.service.status)" } else { $null },
-    "- OS/PS: $($osInfo) / PS $($psv)",
-    "- Disk free: $($health.workspace.diskFreeGB) GB",
-    if ($health.queue.repo) { "- Orchestrated queued: $($health.queue.repo.queued); running: $($health.queue.repo.running)" } else { $null },
-    "- Processes (pwsh/LVCompare/LabVIEW): $($procs.Count)"
-  ) | Where-Object { $_ }
+    '### Runner Health'
+    "- Service: $($health.service.name) (found=$($health.service.found))"
+  )
+
+  $serviceStatusProp = $null
+  if ($health.service) {
+    $serviceStatusProp = $health.service.PSObject.Properties['status']
+  }
+  if ($serviceStatusProp) {
+    $serviceStatus = $serviceStatusProp.Value
+    if ($serviceStatus) {
+      $lines += "- Service Status: $serviceStatus"
+    }
+  }
+
+  $lines += @(
+    "- OS/PS: $($osInfo) / PS $($psv)"
+    "- Disk free: $($health.workspace.diskFreeGB) GB"
+  )
+
+  $queueRepoProp = $null
+  if ($health.queue) {
+    $queueRepoProp = $health.queue.PSObject.Properties['repo']
+  }
+  if ($queueRepoProp -and $queueRepoProp.Value) {
+    $repoQueue = $queueRepoProp.Value
+    $queuedProp = $repoQueue.PSObject.Properties['queued']
+    $runningProp = $repoQueue.PSObject.Properties['running']
+    $queuedVal = if ($queuedProp) { $queuedProp.Value } else { 'n/a' }
+    $runningVal = if ($runningProp) { $runningProp.Value } else { 'n/a' }
+    $lines += "- Orchestrated queued: $queuedVal; running: $runningVal"
+  }
+
+  $lines += "- Processes (pwsh/LVCompare/LabVIEW): $($procs.Count)"
+
   ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
 
 exit 0
-
