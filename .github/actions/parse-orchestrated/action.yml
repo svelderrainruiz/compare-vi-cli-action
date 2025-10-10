@@ -8,10 +8,9 @@ outputs:
   strategy:
     description: Strategy (single|matrix)
   include_integration:
-    description: 'true' or 'false'
+    description: "true or false"
   sample_id:
     description: Sampling correlation id
 runs:
   using: node20
-  main: dist/actions/parse-orchestrated.js
-
+  main: index.cjs
