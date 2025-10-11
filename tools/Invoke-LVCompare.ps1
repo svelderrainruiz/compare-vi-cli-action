@@ -82,6 +82,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force } catch {}
 
 function Write-JsonEvent {
   param([string]$Type,[hashtable]$Data)
@@ -156,6 +157,9 @@ try {
     RenderReport = $RenderReport.IsPresent
     OutputDir    = $OutputDir
     Quiet        = $Quiet.IsPresent
+  }
+  if (-not $LVComparePath) {
+    try { $LVComparePath = Resolve-LVComparePath } catch {}
   }
   if ($LVComparePath) { $captureParams.LvComparePath = $LVComparePath }
   & $captureScript @captureParams

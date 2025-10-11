@@ -2,44 +2,53 @@
 param()
 
 Set-StrictMode -Version Latest
+Import-Module (Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1') -Force
 $ErrorActionPreference = 'Stop'
 
 $workspace = Get-Location
-$alPath = Join-Path $workspace.Path 'bin/actionlint'
-$alVersion = 'n/a'
-if (Test-Path -LiteralPath $alPath) {
-  try { $alVersion = & $alPath -version } catch {}
-}
 
-function Get-VersionSafe {
-  param([string]$Command,[string[]]$Args)
+$alVersion = 'missing'
+$alExe = Resolve-ActionlintPath
+if ($alExe) {
   try {
-    $result = & $Command @Args
-    if ($null -eq $result) { return '' }
-    return [string]$result
+    $alVersion = (& $alExe -version)
   } catch {
-    return ''
+    $alVersion = 'unavailable'
   }
 }
 
-$nodeVer = Get-VersionSafe -Command 'node' -Args '-v'
-$npmVer  = Get-VersionSafe -Command 'npm'  -Args '-v'
-$mdVer = ''
-# Prefer locally installed binary to avoid npx download prompts
-$mdLocal = Join-Path $workspace.Path 'node_modules/.bin/markdownlint-cli2'
-if (Test-Path -LiteralPath $mdLocal) {
-  $mdVer = Get-VersionSafe -Command $mdLocal -Args '--version'
-} else {
-  # Fall back to package.json metadata before hitting npx
+$nodeVer = 'missing'
+$nodeCmd = Get-Command -Name 'node' -ErrorAction SilentlyContinue
+if ($nodeCmd) {
   try {
-    $pkgJson = Get-Content -LiteralPath (Join-Path $workspace.Path 'package.json') -Raw | ConvertFrom-Json
-    $declared = $pkgJson.devDependencies.'markdownlint-cli2'
-    if ($declared) { $mdVer = "declared $declared" }
-  } catch { }
-  if (-not $mdVer) {
-    $mdVer = Get-VersionSafe -Command 'npx'  -Args @('--yes','markdownlint-cli2','--version')
+    $nodeVer = $nodeCmd.FileVersionInfo.ProductVersion
+  } catch {
+    $nodeVer = 'unavailable'
   }
 }
+
+$npmVer = 'missing'
+$npmCmd = Get-Command -Name 'npm.cmd' -ErrorAction SilentlyContinue
+if (-not $npmCmd) {
+  $npmCmd = Get-Command -Name 'npm' -ErrorAction SilentlyContinue
+}
+if ($npmCmd) {
+  try {
+    $npmRoot = Split-Path -Parent $npmCmd.Source
+    $npmPkgPath = Join-Path -Path $npmRoot -ChildPath 'node_modules'
+    $npmPkgPath = Join-Path -Path $npmPkgPath -ChildPath 'npm/package.json'
+    $npmPkg = (Resolve-Path -LiteralPath $npmPkgPath -ErrorAction Stop).Path
+    $npmJson = Get-Content -LiteralPath $npmPkg -Raw | ConvertFrom-Json
+    if ($npmJson.version) { $npmVer = $npmJson.version } else { $npmVer = 'unavailable' }
+  } catch {
+    $npmVer = 'unavailable'
+  }
+}
+$mdVer = Get-MarkdownlintCli2Version
+if (-not $mdVer) { $mdVer = 'unavailable' }
+
+if (-not $nodeVer) { $nodeVer = 'unavailable' }
+if (-not $npmVer) { $npmVer = 'unavailable' }
 
 Write-Host ("actionlint: {0}" -f $alVersion)
 Write-Host ("node: {0}" -f $nodeVer)

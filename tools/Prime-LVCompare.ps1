@@ -71,6 +71,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force } catch {}
 
 if ($ExpectDiff.IsPresent -and $ExpectNoDiff.IsPresent) {
   throw "ExpectDiff and ExpectNoDiff are mutually exclusive."
@@ -129,7 +130,7 @@ $LVCompareExePath = if ($LVCompareExePath) {
 } elseif ($env:LVCOMPARE_PATH) {
   $env:LVCOMPARE_PATH
 } else {
-  'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+  try { Resolve-LVComparePath } catch { 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe' }
 }
 
 if (-not (Test-Path -LiteralPath $LVCompareExePath -PathType Leaf)) {

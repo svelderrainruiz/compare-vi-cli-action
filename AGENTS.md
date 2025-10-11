@@ -188,3 +188,38 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
 - Runbook: `docs/INTEGRATION_RUNBOOK.md`
 - Fixture drift: `docs/FIXTURE_DRIFT.md`
 - Loop mode: `docs/COMPARE_LOOP_MODULE.md`
+
+## Vendor tool resolvers
+
+Use the shared resolver module to locate vendor CLIs consistently across OSes and self-hosted runners. This avoids
+PATH drift and issues like picking a non-Windows binary on Windows.
+
+- Module: `tools/VendorTools.psm1`
+- Functions:
+  - `Resolve-ActionlintPath` – returns `bin/actionlint.exe` on Windows or `bin/actionlint` elsewhere.
+  - `Resolve-MarkdownlintCli2Path` – returns local CLI from `node_modules/.bin` (cmd/ps1 on Windows).
+  - `Get-MarkdownlintCli2Version` – reads installed or declared version (no network).
+  - `Resolve-LVComparePath` – returns canonical `LVCompare.exe` under Program Files (Windows only).
+
+Examples:
+
+```powershell
+# In tools/* scripts
+Import-Module (Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1') -Force
+$alPath = Resolve-ActionlintPath
+$mdCli  = Resolve-MarkdownlintCli2Path
+$mdVer  = Get-MarkdownlintCli2Version
+```
+
+```powershell
+# In scripts/* modules (one directory up from tools/)
+Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force
+$lvCompare = Resolve-LVComparePath
+```
+
+Guidance:
+
+- Prefer resolvers over hardcoded paths or PATH lookups in local scripts.
+- For markdownlint, try `Resolve-MarkdownlintCli2Path`; only fall back to `npx --no-install` when necessary.
+- For LVCompare, continue to enforce the canonical path; pass `-lvpath` to LVCompare and never launch `LabVIEW.exe`.
+- Do not lint or link-check vendor documentation under `bin/`; scope link checks to `docs/` or ignore `bin/**`.

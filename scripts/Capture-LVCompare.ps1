@@ -15,6 +15,9 @@ Import-Module (Join-Path $PSScriptRoot 'ArgTokenization.psm1') -Force
 # Reuse CompareVI normalization logic
 $script:CompareModule = Import-Module (Join-Path $PSScriptRoot 'CompareVI.psm1') -Force -PassThru
 
+# Optional vendor tool resolvers (for canonical LVCompare path)
+try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force } catch {}
+
 function Resolve-CanonicalCliPath {
 	param([string]$Override)
 	if ($Override) {
@@ -30,10 +33,13 @@ function Resolve-CanonicalCliPath {
 		}
 		try { return (Resolve-Path -LiteralPath $envOverride).Path } catch { return $envOverride }
 	}
+	# Prefer resolver from VendorTools when available
+	try {
+		$resolved = Resolve-LVComparePath
+		if ($resolved) { return $resolved }
+	} catch {}
 	$cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-	if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-		throw "LVCompare.exe not found at canonical path: $cli"
-	}
+	if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $cli" }
 	return $cli
 }
 

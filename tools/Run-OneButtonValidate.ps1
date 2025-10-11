@@ -71,7 +71,9 @@ $validateSteps = @(
   @{ Name = 'PrePush gates (actionlint + schemas)'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/PrePush-Checks.ps1') -FailureMessage 'PrePush checks failed.' } },
   @{ Name = 'Lint inline-if format (-f)'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Lint-InlineIfInFormat.ps1') -FailureMessage 'Inline-if format lint failed.' } },
   @{ Name = 'Markdown lint (changed)'; Action = { Invoke-CommandWithExit -Command 'npm' -Arguments @('run','lint:md:changed') -FailureMessage 'Markdown lint (changed) failed.' } },
-  @{ Name = 'Docs links check'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Check-DocsLinks.ps1') -FailureMessage 'Docs link check failed.' } },
+  @{ Name = 'Docs links check'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @(
+      '-NoLogo','-NoProfile','-File','./tools/Check-DocsLinks.ps1','-Path','docs',
+      '-AllowListPath','.ci/link-allowlist.txt','-OutputJson','tests/results/lint/docs-links.json') -FailureMessage 'Docs link check failed.' } },
   @{ Name = 'Workflow drift (auto-fix)'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Check-WorkflowDrift.ps1','-AutoFix') -FailureMessage 'Workflow drift check failed.' } },
   @{ Name = 'Loop determinism (enforced)'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Run-LoopDeterminism.ps1','-FailOnViolation') -FailureMessage 'Loop determinism lint failed.' } },
   @{ Name = 'Derive environment snapshot'; Action = { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Write-DerivedEnv.ps1') -FailureMessage 'Derive environment snapshot failed.' } },
