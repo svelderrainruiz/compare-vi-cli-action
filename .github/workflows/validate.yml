@@ -112,6 +112,22 @@ jobs:
       run: |
         ./bin/actionlint -color
 
+    - name: Derive environment snapshot
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm run --silent derive:env > derived-env.json
+        mkdir -p tests/results/_agent
+        cp derived-env.json tests/results/_agent/derived-env.json
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo '### Derived Environment';
+            echo '```json';
+            cat derived-env.json;
+            echo '```';
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
     - name: PrePush local gates (includes watcher schema validation)
       shell: pwsh
       run: |

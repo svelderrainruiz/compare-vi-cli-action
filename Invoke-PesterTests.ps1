@@ -988,7 +988,7 @@ if ($limitToSingle) {
   }
 
   # If manifest exists and integration disabled, pre-exclude files with Integration tag
-  if (-not $IncludeIntegration -and (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+  if (-not $includeIntegrationBool -and (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     try {
       $m = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -ErrorAction Stop
       $intPaths = @($m.files | Where-Object { $_.tags -and ($_.tags -contains 'Integration') } | ForEach-Object { $_.fullPath })
@@ -1003,6 +1003,23 @@ if ($limitToSingle) {
     } catch {
       Write-Warning "Failed to apply manifest-based pre-exclusion: $_"
     }
+  }
+
+  # Fallback: when manifest isn't used, perform content-based tag prefilter for Integration
+  if (-not $includeIntegrationBool -and ($env:DISABLE_INTEGRATION_TAG_PREFILTER -ne '1') -and (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf))) {
+    $beforeTag = $testFiles.Count
+    $filtered = New-Object System.Collections.Generic.List[object]
+    foreach ($f in $testFiles) {
+      $nameIsIntegration = ($f.Name -match '\.Integration\.Tests\.ps1$')
+      if ($nameIsIntegration) { continue }
+      $text = try { Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop } catch { '' }
+      $hasTag = $false
+      if ($text) { $hasTag = ($text -match '(?im)-Tag\s*(?:''Integration''|"Integration"|Integration\b)') }
+      if (-not $hasTag) { [void]$filtered.Add($f) }
+    }
+    $testFiles = @($filtered.ToArray())
+    $removedTag = $beforeTag - $testFiles.Count
+    if ($removedTag -gt 0) { Write-Host ("Content pre-excluded {0} Integration-tagged file(s)." -f $removedTag) -ForegroundColor Cyan }
   }
   # Apply IncludePatterns/ExcludePatterns if provided
   function _Match-AnyPattern([IO.FileInfo]$file,[string[]]$patterns){
@@ -2387,3 +2404,4 @@ finally {
     if (-not $released) { Write-Warning "Failed to release session lock '$lockGroup'" }
   }
 }
+

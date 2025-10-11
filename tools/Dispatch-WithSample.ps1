@@ -42,14 +42,41 @@ if (-not $repo) { throw 'Unable to determine repository. Set GITHUB_REPOSITORY o
 
 # Resolve workflow id for robust dispatch
 $wfId = $null
-try { $wfId = (gh workflow view $Workflow -R $repo --json id --jq .id) } catch {}
+$workflowKey = $Workflow
+if ($workflowKey -match '\.ya?ml$') {
+  try { $workflowKey = Split-Path -Path $workflowKey -Leaf } catch {}
+}
+try {
+  $wfIdCandidate = gh api "repos/$repo/actions/workflows/$workflowKey" --jq .id 2>$null
+  if ($wfIdCandidate) { $wfId = $wfIdCandidate.ToString().Trim() }
+} catch { $wfId = $null }
 if (-not $wfId) {
   try {
     $listJson = gh workflow list -R $repo --json name,path,id
     $list = $null; try { $list = $listJson | ConvertFrom-Json -ErrorAction Stop } catch {}
     if ($list) {
       foreach ($wf in $list) {
-        if ($wf.path -and $wf.path.ToString().ToLower().EndsWith($Workflow.ToLower())) { $wfId = $wf.id; break }
+        if (-not $wfId -and $wf.name -and $wf.name.Equals($Workflow, [System.StringComparison]::OrdinalIgnoreCase)) {
+          $wfId = $wf.id
+          break
+        }
+        if (-not $wfId -and $wf.path) {
+          $pathLeaf = $null
+          try { $pathLeaf = Split-Path -Path $wf.path -Leaf } catch {}
+          if ($pathLeaf) {
+            if ($pathLeaf.Equals($Workflow, [System.StringComparison]::OrdinalIgnoreCase)) {
+              $wfId = $wf.id
+              break
+            }
+            if ($Workflow -match '\.ya?ml$') {
+              $targetLeaf = $workflowKey
+              if ($pathLeaf.Equals($targetLeaf, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $wfId = $wf.id
+                break
+              }
+            }
+          }
+        }
       }
     }
   } catch {}

@@ -53,21 +53,21 @@ jobs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Invoker (start)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
@@ -108,22 +108,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
-
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+
     - name: Install actionlint (retry)
       shell: bash
       run: |
@@ -209,6 +209,18 @@ jobs:
     # Run preflight for both strategies
     steps:
     - uses: actions/checkout@v5
+    - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
+    - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -216,18 +228,6 @@ jobs:
       if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
       run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
-    - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J1
-        results-dir: tests/results
-    - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J2
-        results-dir: tests/results
     - name: Verify Windows runner and idle LabVIEW (surface LVCompare notice)
       shell: pwsh
       run: |-
@@ -256,6 +256,18 @@ jobs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
     - uses: actions/checkout@v5
+    - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
+    - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -263,18 +275,6 @@ jobs:
       if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
       run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
-    - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J1
-        results-dir: tests/results
-    - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J2
-        results-dir: tests/results
     - name: Run interactivity probe
       id: out
       shell: pwsh
@@ -305,21 +305,21 @@ jobs:
       EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results/${{ matrix.category }}
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results/${{ matrix.category }}
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
@@ -601,21 +601,21 @@ jobs:
       EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: results/fixture-drift
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: results/fixture-drift
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: LabVIEW warmup (best-effort)
       if: runner.os == 'Windows'
       shell: pwsh
@@ -750,21 +750,21 @@ jobs:
     needs: [lint, pester-category, drift]
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Summarize orchestrated run
       shell: pwsh
       run: |
@@ -775,6 +775,70 @@ jobs:
           '- Drift: ${{ needs.drift.result }}'
         ) -join "`n"
         $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+    - name: Setup Node.js (derive env)
+      if: always()
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Derive environment snapshot (publish)
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm run --silent derive:env > derived-env.json
+        mkdir -p tests/results/_agent
+        cp derived-env.json tests/results/_agent/derived-env.json
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo '### Derived Environment';
+            echo '```json';
+            cat derived-env.json;
+            echo '```';
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Append run links (publish)
+      if: always()
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $summaryPath = $env:GITHUB_STEP_SUMMARY
+        if (-not $summaryPath) { return }
+        if (-not $env:GH_TOKEN) {
+          Write-Warning '[run-links] GH_TOKEN missing; skipping run link summary.'
+          return
+        }
+        $repo = $env:GITHUB_REPOSITORY
+        if (-not $repo) {
+          Write-Warning '[run-links] GITHUB_REPOSITORY missing; skipping run link summary.'
+          return
+        }
+        $runId = '${{ github.run_id }}'
+        $uri = "https://api.github.com/repos/$repo/actions/runs/$runId/jobs?per_page=100"
+        $headers = @{
+          Authorization = "Bearer $env:GH_TOKEN"
+          'X-GitHub-Api-Version' = '2022-11-28'
+          Accept = 'application/vnd.github+json'
+        }
+        try {
+          $resp = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop
+        } catch {
+          Write-Warning ("[run-links] failed to fetch run jobs: {0}" -f $_.Exception.Message)
+          return
+        }
+        $jobs = @($resp.jobs)
+        if (-not $jobs -or $jobs.Count -eq 0) { return }
+        $items = @()
+        foreach ($job in $jobs) {
+          if (-not $job.name -or -not $job.html_url) { continue }
+          $items += ('- [{0}]({1})' -f $job.name, $job.html_url)
+        }
+        if ($items.Count -eq 0) { return }
+        $block = @('### Run Links','') + $items
+        $block -join "`n" | Out-File -FilePath $summaryPath -Append -Encoding utf8
 
     - name: Wire Probe (P1)
       if: ${{ vars.WIRE_PROBES != '0' }}
@@ -840,6 +904,7 @@ jobs:
 
     - name: Download run provenance artifact
       if: always()
+      continue-on-error: true
       uses: actions/download-artifact@v4
       with:
         name: orchestrated-provenance
@@ -897,6 +962,11 @@ jobs:
         $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
+    - name: Append re-run hint (gh)
+      if: ${{ always() }}
+      shell: pwsh
+      run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ inputs.include_integration || 'true' }}' -SampleId '${{ inputs.sample_id || '' }}'
   windows-single:
     if: ${{ (inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single') && needs.probe.outputs.ok == 'true' }}
     runs-on: [self-hosted, Windows, X64]
@@ -918,22 +988,22 @@ jobs:
       TRACE_MATRIX_HTML: '1'
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
-
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+
     - name: Interactivity Probe (gate)
       id: ip
       shell: pwsh
@@ -1175,3 +1245,8 @@ jobs:
         $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
+    - name: Append re-run hint (gh; single)
+      if: ${{ always() }}
+      shell: pwsh
+      run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ inputs.include_integration || 'true' }}' -SampleId '${{ inputs.sample_id || '' }}'

@@ -9,6 +9,6 @@
     "strict": true,
     "outDir": "dist"
   },
-  "include": ["tools/**/*.ts"],
+  "include": ["tools/**/*.ts", "src/**/*.ts"],
   "exclude": ["node_modules"]
 }

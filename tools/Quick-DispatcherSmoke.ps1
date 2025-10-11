@@ -65,6 +65,9 @@ try {
   if ([string]::IsNullOrWhiteSpace($ResultsPath)) { $ResultsPath = Join-Path $tmp 'results' }
   # Avoid writing to a GitHub step summary during local runs
   $env:DISABLE_STEP_SUMMARY = '1'
+  if (-not (Get-Variable -Name includeIntegrationBool -Scope Global -ErrorAction SilentlyContinue)) {
+    Set-Variable -Name includeIntegrationBool -Scope Global -Value $false
+  }
 
   Write-Host ("[schema-test] Mini test path: {0}" -f $((Resolve-Path -LiteralPath (Join-Path $testsDir 'Mini.Tests.ps1')).Path))
   & $dispatcher -TestsPath $testsDir -ResultsPath $ResultsPath | Out-Null
