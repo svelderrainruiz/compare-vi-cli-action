@@ -639,6 +639,26 @@
       }
     },
     {
+      "label": "Validate: Non-LabVIEW (containers)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-NonLVChecksInDocker.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
       "label": "Validate: Loop Determinism (notice)",
       "type": "shell",
       "command": "pwsh",
