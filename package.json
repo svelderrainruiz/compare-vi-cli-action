@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "derive:env": "tsc -p tsconfig.json && node dist/src/env/derive-env.js --json",
+    "derive:env": "node dist/src/env/derive-env.js --json",
     "generate:outputs": "node dist/generate-action-outputs.js",
     "schemas:generate": "tsc -p tsconfig.json && node dist/schemas/generate-schemas.js",
     "tests:discover": "tsc -p tsconfig.json && node dist/test-discovery.js --tests tests --out tests/results/_agent/test-manifest.json",
