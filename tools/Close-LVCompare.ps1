@@ -66,6 +66,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force } catch {}
 
 function Get-FirstValue {
   param([string[]]$Values)
@@ -85,10 +86,13 @@ $defaultLvComparePath = 'C:\Program Files\National Instruments\Shared\LabVIEW Co
 $defaultVersion = '2025'
 $defaultBitness = '64'
 
+$resolvedVendor = $null
+try { $resolvedVendor = Resolve-LVComparePath } catch {}
 $LVComparePath = Get-FirstValue @(
   $LVComparePath,
   $env:LVCOMPARE_PATH,
   $env:LV_COMPARE_PATH,
+  $resolvedVendor,
   $defaultLvComparePath
 )
 if (-not (Test-Path -LiteralPath $LVComparePath -PathType Leaf)) {

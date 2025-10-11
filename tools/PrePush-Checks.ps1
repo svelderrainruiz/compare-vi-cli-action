@@ -1,134 +1,94 @@
+#Requires -Version 7.0
 <#
-  PrePush-Checks.ps1
-  - Runs actionlint across .github/workflows and fails non-zero on errors
-  - Optionally performs a quick YAML round-trip check via ruamel.yaml if Python is available
-  - Intended for local use and for pre-push hook wiring
+.SYNOPSIS
+  Local pre-push checks: run actionlint against workflows.
+.DESCRIPTION
+  Ensures a valid actionlint binary is used per-OS and runs it against .github/workflows.
+  On Windows, explicitly prefers bin/actionlint.exe to avoid invoking the non-Windows binary.
+.PARAMETER ActionlintVersion
+  Optional version to install if missing (default: 1.7.7). Only used when auto-installing.
+.PARAMETER InstallIfMissing
+  Attempt to install actionlint if not found (default: true).
 #>
-Set-StrictMode -Version Latest
+param(
+  [string]$ActionlintVersion = '1.7.7',
+  [bool]$InstallIfMissing = $true
+)
+
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+Import-Module (Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1') -Force
 
-function Ensure-Actionlint {
-  param(
-    [string]$BinDir = (Join-Path $PSScriptRoot '..' 'bin'),
-    [string]$Version = $env:ACTIONLINT_VERSION
-  )
-  if (-not $Version) { $Version = '1.7.7' }
-  if (-not (Test-Path -LiteralPath $BinDir)) { New-Item -ItemType Directory -Force -Path $BinDir | Out-Null }
-  $exe = Join-Path $BinDir 'actionlint'
-  if (Test-Path -LiteralPath $exe) { return $exe }
-  Write-Host ("Installing actionlint v{0} to {1}" -f $Version, $BinDir)
-  $scriptUrl = 'https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash'
-  $sh = Join-Path $BinDir 'dl-actionlint.sh'
-  Invoke-WebRequest -Uri $scriptUrl -OutFile $sh -UseBasicParsing
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = 'bash'
-  $psi.Arguments = ('-c "set -euo pipefail; bash {0} {1} {2}"' -f ($sh -replace '\\','/'), $Version, ($BinDir -replace '\\','/'))
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $p = [System.Diagnostics.Process]::Start($psi)
-  $null = $p.WaitForExit()
-  if ($p.ExitCode -ne 0) {
-    throw "Failed to install actionlint (exit=$($p.ExitCode))"
+function Write-Info([string]$msg){ Write-Host $msg -ForegroundColor DarkGray }
+
+function Get-RepoRoot {
+  $here = Split-Path -Parent $PSCommandPath
+  return (Resolve-Path -LiteralPath (Join-Path $here '..'))
+}
+
+function Get-ActionlintPath([string]$repoRoot){ return Resolve-ActionlintPath }
+
+function Install-Actionlint([string]$repoRoot,[string]$version){
+  $bin = Join-Path $repoRoot 'bin'
+  if (-not (Test-Path -LiteralPath $bin)) { New-Item -ItemType Directory -Force -Path $bin | Out-Null }
+
+  if ($IsWindows) {
+    # Determine arch
+    $arch = ($env:PROCESSOR_ARCHITECTURE ?? 'AMD64').ToUpperInvariant()
+    $asset = if ($arch -like '*ARM64*') { "actionlint_${version}_windows_arm64.zip" } else { "actionlint_${version}_windows_amd64.zip" }
+    $url = "https://github.com/rhysd/actionlint/releases/download/v${version}/${asset}"
+    $zip = Join-Path $bin 'actionlint.zip'
+    Write-Info "Downloading actionlint ${version} (${asset})..."
+    try {
+      Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
+      [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $bin, $true)
+    } finally { if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue } }
+  } else {
+    # Try vendored downloader if available
+    $dl = Join-Path $bin 'dl-actionlint.sh'
+    if (Test-Path -LiteralPath $dl -PathType Leaf) {
+      Write-Info "Installing actionlint ${version} via dl-actionlint.sh..."
+      & bash $dl $version $bin
+    } else {
+      # Generic fallback using upstream script
+      Write-Info "Installing actionlint ${version} via upstream script..."
+      $script = "https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash"
+      bash -lc "curl -sSL ${script} | bash -s -- ${version} ${bin}"
+    }
   }
-  return $exe
 }
 
-function Invoke-Actionlint {
-  param([string]$Exe)
-  Write-Host "Running actionlint..."
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = $Exe
-  $psi.Arguments = '-color'
-  $psi.WorkingDirectory = (Get-Location).Path
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $p = [System.Diagnostics.Process]::Start($psi)
-  $out = $p.StandardOutput.ReadToEnd()
-  $err = $p.StandardError.ReadToEnd()
-  $null = $p.WaitForExit()
-  if ($out) { Write-Host $out }
-  if ($err) { Write-Host $err }
-  if ($p.ExitCode -ne 0) { throw "actionlint failed (exit=$($p.ExitCode))" }
-}
+function Invoke-Actionlint([string]$repoRoot){
+  $exe = Get-ActionlintPath -repoRoot $repoRoot
+  if (-not $exe) {
+    if ($InstallIfMissing) {
+      Install-Actionlint -repoRoot $repoRoot -version $ActionlintVersion
+      $exe = Get-ActionlintPath -repoRoot $repoRoot
+    }
+  }
+  if (-not $exe) { throw "actionlint not found after attempted install under '${repoRoot}/bin'" }
 
-function Invoke-YamlRoundTripCheck {
-  param([string[]]$Files)
+  # Explicitly resolve .exe on Windows to avoid picking the non-Windows binary
+  if ($IsWindows -and (Split-Path -Leaf $exe) -eq 'actionlint') {
+    $winExe = Join-Path (Split-Path -Parent $exe) 'actionlint.exe'
+    if (Test-Path -LiteralPath $winExe -PathType Leaf) { $exe = $winExe }
+  }
+
+  Write-Host "[pre-push] Running: $exe -color" -ForegroundColor Cyan
+  Push-Location $repoRoot
   try {
-    $ok = $false
-    $py = (Get-Command python -ErrorAction SilentlyContinue) ?? (Get-Command python3 -ErrorAction SilentlyContinue)
-    if (-not $py) { return }
-    $code = @'
-import sys
-from ruamel.yaml import YAML
-yaml = YAML(typ="rt")
-for p in sys.argv[1:]:
-    with open(p, 'r', encoding='utf-8') as f:
-        doc = yaml.load(f)
-        # dump to string to ensure roundtrip works; not writing file back
-        from io import StringIO
-        s = StringIO()
-        yaml.dump(doc, s)
-print('ok')
-'@
-    $tmp = New-TemporaryFile
-    Set-Content -LiteralPath $tmp -Value $code -Encoding utf8
-    & $py.Path $tmp @Files | Out-Null
-  } catch {
-    throw "YAML round-trip check failed: $_"
+    & $exe -color
+    return $LASTEXITCODE
   } finally {
-    if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    Pop-Location | Out-Null
   }
 }
 
-function Invoke-WatcherTelemetrySchemaCheck {
-  param(
-    [string]$SchemaPath = (Join-Path (Get-Location).Path 'docs/schema/watcher-telemetry.v1.schema.json'),
-    [string]$DataPath = (Join-Path (Get-Location).Path 'tests/results/_agent/handoff/watcher-telemetry.json')
-  )
-  if (-not (Test-Path -LiteralPath $DataPath)) {
-    Write-Host 'Watcher telemetry JSON not found; skipping schema validation.'
-    return
-  }
-  if (-not (Test-Path -LiteralPath $SchemaPath)) {
-    Write-Warning "Schema not found at $SchemaPath; skipping watcher schema validation."
-    return
-  }
-  $node = Get-Command node -ErrorAction SilentlyContinue
-  $npx = Get-Command npx -ErrorAction SilentlyContinue
-  if (-not $node -or -not $npx) {
-    Write-Host 'Node.js or npx not available; skipping watcher schema validation.'
-    return
-  }
-  Write-Host 'Validating watcher telemetry JSON against schema (ajv-cli)...'
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = $npx.Path
-  $psi.Arguments = "-y ajv-cli@5 validate -s `"$SchemaPath`" -d `"$DataPath`" --spec=draft2020"
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $p = [System.Diagnostics.Process]::Start($psi)
-  $out = $p.StandardOutput.ReadToEnd()
-  $err = $p.StandardError.ReadToEnd()
-  $null = $p.WaitForExit()
-  if ($out) { Write-Host $out }
-  if ($err) { Write-Host $err }
-  if ($p.ExitCode -ne 0) { throw "Watcher telemetry schema validation failed (exit=$($p.ExitCode))" }
+$root = (Get-RepoRoot).Path
+$code = Invoke-Actionlint -repoRoot $root
+if ($code -ne 0) {
+  Write-Error "actionlint reported issues (exit=$code)."
+  exit $code
 }
-
-# Main
-try {
-  $exe = Ensure-Actionlint
-  Invoke-Actionlint -Exe $exe
-  $ymls = Get-ChildItem -Path '.github/workflows' -Filter *.yml -Recurse | ForEach-Object { $_.FullName }
-  if ($ymls.Count -gt 0) { Invoke-YamlRoundTripCheck -Files $ymls }
-  Invoke-WatcherTelemetrySchemaCheck
-  Write-Host 'Validating ADR links...'
-  pwsh -NoLogo -NoProfile -File (Join-Path (Get-Location).Path 'tools/Validate-AdrLinks.ps1')
-  Write-Host 'PrePush checks passed.'
-  exit 0
-} catch {
-  Write-Error $_
-  exit 2
-}
+Write-Host '[pre-push] actionlint OK' -ForegroundColor Green

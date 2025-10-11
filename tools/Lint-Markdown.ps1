@@ -4,6 +4,7 @@ param(
 )
 
 Set-StrictMode -Version Latest
+Import-Module (Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1') -Force
 $ErrorActionPreference = 'Stop'
 
 function Resolve-GitRoot {
@@ -49,10 +50,23 @@ function Get-AllMarkdownFiles {
 
 function Invoke-Markdownlint {
   param([string[]]$Files)
-  $npx = Get-Command -Name 'npx' -ErrorAction Stop
-  $args = @('--no-install', 'markdownlint-cli2', '--config', '.markdownlint.jsonc')
-  $args += $Files
-  $output = & $npx.Source @args 2>&1
+  $output = @()
+  $exitCode = 0
+  $cli = Resolve-MarkdownlintCli2Path
+  if ($cli) {
+    $args = @('--config', '.markdownlint.jsonc') + $Files
+    $output = & $cli @args 2>&1
+    $exitCode = $LASTEXITCODE
+  } else {
+    $npx = Get-Command -Name 'npx' -ErrorAction SilentlyContinue
+    if (-not $npx) {
+      Write-Warning 'markdownlint-cli2 not found locally and npx is unavailable; skipping markdown lint.'
+      return 0
+    }
+    $args = @('--no-install', 'markdownlint-cli2', '--config', '.markdownlint.jsonc') + $Files
+    $output = & $npx.Source @args 2>&1
+    $exitCode = $LASTEXITCODE
+  }
   $exitCode = $LASTEXITCODE
   if ($output) {
     foreach ($entry in $output) {
@@ -96,11 +110,13 @@ try {
     $mergeBase = Resolve-MergeBase -Candidates $candidateRefs
   }
 
-  $markdownFiles = if ($All) {
-    Get-AllMarkdownFiles
-  } else {
-    Get-ChangedMarkdownFiles -Base $mergeBase
-  }
+  $markdownFiles = @(
+    if ($All) {
+      Get-AllMarkdownFiles
+    } else {
+      Get-ChangedMarkdownFiles -Base $mergeBase
+    }
+  )
 
   if (-not $markdownFiles -or $markdownFiles.Count -eq 0) {
     Write-Host 'No Markdown files to lint.'
@@ -112,7 +128,12 @@ try {
     'CHANGELOG.md',
     'fixture-summary.md'
   )
-  $filesToLint = $markdownFiles | Where-Object { $suppressed -notcontains $_ }
+  $filesToLint = @($markdownFiles | Where-Object { $suppressed -notcontains $_ })
+
+  if (-not $filesToLint -or $filesToLint.Count -eq 0) {
+    Write-Host 'No Markdown files to lint.'
+    exit 0
+  }
 
   Write-Host ("Linting {0} Markdown file(s)." -f $filesToLint.Count)
   $result = Invoke-Markdownlint -Files $filesToLint

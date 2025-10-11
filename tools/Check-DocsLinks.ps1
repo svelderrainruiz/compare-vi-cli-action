@@ -36,7 +36,17 @@ Set-StrictMode -Version Latest
 
 function Match-Any($value,[string[]]$patterns){
   if (-not $patterns -or $patterns.Count -eq 0) { return $false }
-  foreach($pat in $patterns){ if ($value -like $pat) { return $true } }
+  # Normalize to forward slashes for cross-OS matching
+  $norm = ($value -replace '\\','/')
+  foreach ($pat in $patterns) {
+    if (-not $pat) { continue }
+    $p = ($pat -replace '\\','/')
+    # Treat consecutive wildcards as single and ensure loose matching
+    $p = ($p -replace '\*{2,}','*')
+    if ($p -notmatch '^\*') { $p = "*$p" }
+    if ($p -notmatch '\*$') { $p = "$p*" }
+    if ($norm -like $p) { return $true }
+  }
   return $false
 }
 function Write-Info($msg){ if (-not $Quiet) { Write-Host $msg -ForegroundColor DarkGray } }
@@ -45,6 +55,12 @@ $checkHttp = $External -or $Http
 $root = Resolve-Path -LiteralPath $Path
 $md = Get-ChildItem -LiteralPath $root -Recurse -File -Include *.md -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -notmatch "\\\.git\\|\\node_modules\\|\\.venv\\|\\dist\\|\\build\\|\\coverage\\" }
+$autoIgnore = @(
+  '*/bin/*','*\\bin\\*',
+  '*/vendor/*','*\\vendor\\*',
+  '*/node_modules/*','*\\node_modules\\*'
+)
+$md = $md | Where-Object { $p = $_.FullName; -not (Match-Any $p $autoIgnore) }
 if ($Ignore) {
   $md = $md | Where-Object { $p = $_.FullName; -not (Match-Any $p $Ignore) }
 }
@@ -115,4 +131,3 @@ if ($env:GITHUB_STEP_SUMMARY) {
 
 if ($missing.Count -gt 0 -or $badHttp.Count -gt 0) { exit 2 }
 Write-Info 'All links look good.'
-

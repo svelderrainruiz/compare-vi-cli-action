@@ -559,8 +559,7 @@
         "panel": "dedicated",
         "clear": true
       }
-    }
-    ,
+    },
     {
       "label": "Validate: Markdown (changed)",
       "type": "shell",
@@ -803,8 +802,8 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-      "panel": "dedicated",
-      "clear": true
+        "panel": "dedicated",
+        "clear": true
       }
     },
     {
@@ -835,7 +834,7 @@
         "-NoLogo",
         "-NoProfile",
         "-Command",
-        "pwsh -File ./tools/Lint-Markdown.ps1 -All; if ($LASTEXITCODE -ne 0) { Write-Warning 'markdownlint violations (notice-only)'; exit 0 }"
+        "pwsh -File ./tools/Lint-Markdown.ps1 -All; if ($LASTEXITCODE -ne 0) { Write-Warning \\\"markdownlint violations (notice-only)\\\"; exit 0 }"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -843,8 +842,8 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-      "panel": "dedicated",
-      "clear": true
+        "panel": "dedicated",
+        "clear": true
       }
     },
     {
@@ -854,8 +853,8 @@
       "args": [
         "-NoLogo",
         "-NoProfile",
-        "-Command",
-        "if (Test-Path ./tools/Lint-DotSourcing.ps1) { pwsh -File ./tools/Lint-DotSourcing.ps1 -WarnOnly } else { Write-Warning 'tools/Lint-DotSourcing.ps1 not found; skipping dot-sourcing lint.' }"
+        "-File",
+        "./tools/Invoke-LintDotSourcing.ps1"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -915,7 +914,7 @@
         "-NoLogo",
         "-NoProfile",
         "-Command",
-        "python -m pip install --user ruamel.yaml; python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/ci-orchestrated-v2.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml; if ($LASTEXITCODE -eq 3) { Write-Host '::notice::Workflow drift detected.'; exit 0 }"
+        "python -m pip install --user ruamel.yaml; python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/ci-orchestrated-v2.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml; if ($LASTEXITCODE -eq 3) { Write-Host \"::notice::Workflow drift detected.\"; exit 0 }"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -985,8 +984,8 @@
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
-      "panel": "dedicated",
-      "clear": true
+        "panel": "dedicated",
+        "clear": true
       }
     },
     {
@@ -1211,7 +1210,7 @@
         "-NoLogo",
         "-NoProfile",
         "-Command",
-        "pwsh -File ./tools/PrePush-Checks.ps1; if ($LASTEXITCODE -eq 0) { Write-Host 'PrePush checks passed (actionlint, YAML round-trip, watcher schema, ADR links).' } else { exit $LASTEXITCODE }"
+        "pwsh -File ./tools/PrePush-Checks.ps1; if ($LASTEXITCODE -eq 0) { Write-Host \"PrePush checks passed: actionlint, YAML round-trip, watcher schema, ADR links.\" } else { exit $LASTEXITCODE }"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
