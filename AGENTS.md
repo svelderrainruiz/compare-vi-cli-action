@@ -35,6 +35,7 @@ This document summarizes the expectations for automation agents working in the
 - Custom paths: `./Invoke-PesterTests.ps1 -TestsPath tests -ResultsPath tests/results`
 - Pattern filter: `./Invoke-PesterTests.ps1 -IncludePatterns 'CompareVI.*'`
 - Quick smoke: `./tools/Quick-DispatcherSmoke.ps1 -Keep`
+- Containerized non-LV checks: `pwsh -File tools/Run-NonLVChecksInDocker.ps1`
 
 ## Coding style
 

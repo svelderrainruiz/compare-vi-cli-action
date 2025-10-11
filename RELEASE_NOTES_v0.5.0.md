@@ -6,6 +6,10 @@ Highlights
   - Per-ref concurrency with cancel-in-progress, job timeouts
   - Preflight gate: refuse to start if LabVIEW.exe is running; clear error
   - Post-run guard (opt-in) to snapshot/cleanup and append summary
+- Tooling hardening for non-LV checks
+  - Centralized vendor resolvers (`tools/VendorTools.psm1`) used by actionlint, markdownlint, and LVCompare helpers
+  - New VS Code task + script (`tools/Run-NonLVChecksInDocker.ps1`) to run actionlint/markdownlint/docs/workflow drift inside Docker
+  - Docs link checker auto-skips vendor bundles under `bin/`, `vendor/`, and `node_modules/`
 - Stable session visibility
   - Dispatcher emits `tests/results/session-index.json` with pointers and a ready-to-append `stepSummary`
   - All relevant workflows validate session-index schema (lite) and upload artifact
@@ -33,4 +37,3 @@ Post-Release
 
 - Tag v0.5.0 on main
 - Open follow-ups for composites consolidation and managed tokenizer adoption (separate PRs)
-
