@@ -2,6 +2,92 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Validate: Prechecks (container)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-ValidateContainer.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Run: One Button (container validate)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/OneButton-CI.ps1",
+        "-UseContainerValidate",
+        "-AutoOpen"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Run: One Button (container-only validate)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/OneButton-CI.ps1",
+        "-UseContainerValidate",
+        "-SkipRemoteValidate",
+        "-AutoOpen"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Run: One Button (#88)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/OneButton-CI.ps1",
+        "-AutoOpen"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
       "label": "Watch Pester Artifacts (Node)",
       "type": "shell",
       "command": "node",
@@ -53,6 +139,228 @@
         "panel": "dedicated",
         "clear": true
       }
+    },
+    {
+      "label": "Diagnostics: Rogue Scan (notice-only)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Detect-RogueLV.ps1",
+        "-ResultsDir",
+        "tests/results",
+        "-AppendToStepSummary"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run TestStand Session (DX)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-DX.ps1",
+        "-Suite",
+        "TestStand",
+        "-ResultsPath",
+        "tests/results",
+        "-BaseVi",
+        "${workspaceFolder}/VI1.vi",
+        "-HeadVi",
+        "${workspaceFolder}/VI2.vi",
+        "-OutputRoot",
+        "tests/results/teststand-session",
+        "-RenderReport",
+        "-Warmup",
+        "detect",
+        "-ReplaceFlags",
+        "-OpenReport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DX_CONSOLE_LEVEL": "concise",
+          "DX_CONSOLE_PREFERRED": "1",
+          "LV_SUPPRESS_UI": "1",
+          "LV_NO_ACTIVATE": "1",
+          "LV_CURSOR_RESTORE": "1",
+          "LV_IDLE_WAIT_SECONDS": "2",
+          "LV_IDLE_MAX_WAIT_SECONDS": "5"
+        }
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Run TestStand Session (DX, Prompted)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-DX.ps1",
+        "-Suite",
+        "TestStand",
+        "-ResultsPath",
+        "tests/results",
+        "-BaseVi",
+        "${input:teststandBase}",
+        "-HeadVi",
+        "${input:teststandHead}",
+        "-OutputRoot",
+        "${input:teststandOutput}",
+        "-RenderReport",
+        "-OpenReport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DX_CONSOLE_LEVEL": "concise",
+          "DX_CONSOLE_PREFERRED": "1",
+          "LV_SUPPRESS_UI": "1",
+          "LV_NO_ACTIVATE": "1",
+          "LV_CURSOR_RESTORE": "1",
+          "LV_IDLE_WAIT_SECONDS": "2",
+          "LV_IDLE_MAX_WAIT_SECONDS": "5"
+        }
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Tests (DX: Pester Integration)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-DX.ps1",
+        "-Suite",
+        "Pester",
+        "-ResultsPath",
+        "tests/results",
+        "-IncludeIntegration"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DX_CONSOLE_LEVEL": "concise",
+          "DX_CONSOLE_PREFERRED": "1",
+          "LV_SUPPRESS_UI": "1",
+          "LV_NO_ACTIVATE": "1",
+          "LV_CURSOR_RESTORE": "1",
+          "LV_IDLE_WAIT_SECONDS": "2",
+          "LV_IDLE_MAX_WAIT_SECONDS": "5"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Tests (DX: Pester Unit)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-DX.ps1",
+        "-Suite",
+        "Pester",
+        "-ResultsPath",
+        "tests/results"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DX_CONSOLE_LEVEL": "concise",
+          "DX_CONSOLE_PREFERRED": "1",
+          "LV_SUPPRESS_UI": "1",
+          "LV_NO_ACTIVATE": "1",
+          "LV_CURSOR_RESTORE": "1",
+          "LV_IDLE_WAIT_SECONDS": "2",
+          "LV_IDLE_MAX_WAIT_SECONDS": "5"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Current Test File (DX)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-DX.ps1",
+        "-Suite",
+        "Pester",
+        "-ResultsPath",
+        "tests/results",
+        "-IncludePatterns",
+        "${fileBasename}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DX_CONSOLE_LEVEL": "concise",
+          "DX_CONSOLE_PREFERRED": "1",
+          "LV_SUPPRESS_UI": "1",
+          "LV_NO_ACTIVATE": "1",
+          "LV_CURSOR_RESTORE": "1",
+          "LV_IDLE_WAIT_SECONDS": "2",
+          "LV_IDLE_MAX_WAIT_SECONDS": "5"
+        }
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Open Results Folder",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "ii (Resolve-Path 'tests/results')"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Watch-Pester (DX SingleRun)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Watch-Pester.ps1",
+        "-SingleRun",
+        "-Quiet"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DX_CONSOLE_LEVEL": "concise",
+          "DX_CONSOLE_PREFERRED": "1"
+        }
+      },
+      "problemMatcher": []
     },
     {
       "label": "Watch Pester Artifacts (Node, fail fast)",
@@ -251,6 +559,931 @@
         "panel": "dedicated",
         "clear": true
       }
+    }
+    ,
+    {
+      "label": "Validate: Markdown (changed)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "lint:md:changed"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Markdown (all)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "lint:md"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Tracked Build Artifacts (guard)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Check-TrackedBuildArtifacts.ps1",
+        "-AllowListPath",
+        ".ci/build-artifacts-allow.txt"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: PrePush Gates (actionlint + schemas)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/PrePush-Checks.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Loop Determinism (notice)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-LoopDeterminism.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Loop Determinism (enforced)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-LoopDeterminism.ps1",
+        "-FailOnViolation"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Docs Links (intra-repo)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Check-DocsLinks.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Workflow Drift (ruamel check)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "python -m pip install --user ruamel.yaml; python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/ci-orchestrated-v2.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Workflow Drift (auto-fix + check)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Check-WorkflowDrift.ps1",
+        "-AutoFix"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Workflow Drift (apply + stage)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Check-WorkflowDrift.ps1",
+        "-AutoFix",
+        "-Stage"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Workflow Drift (apply + commit #88)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Check-WorkflowDrift.ps1",
+        "-AutoFix",
+        "-Stage",
+        "-CommitMessage",
+        "Normalize: ci-orchestrated via ruamel (#88)"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Derive Env Snapshot",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Write-DerivedEnv.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+      "panel": "dedicated",
+      "clear": true
+      }
+    },
+    {
+      "label": "Validate: Inline-If in Format (-f)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Lint-InlineIfInFormat.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Markdown (notice-only)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "pwsh -File ./tools/Lint-Markdown.ps1 -All; if ($LASTEXITCODE -ne 0) { Write-Warning 'markdownlint violations (notice-only)'; exit 0 }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+      "panel": "dedicated",
+      "clear": true
+      }
+    },
+    {
+      "label": "Validate: Dot-Sourcing (notice-only)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "if (Test-Path ./tools/Lint-DotSourcing.ps1) { pwsh -File ./tools/Lint-DotSourcing.ps1 -WarnOnly } else { Write-Warning 'tools/Lint-DotSourcing.ps1 not found; skipping dot-sourcing lint.' }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Session Index (smoke + schema)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-SessionIndexValidation.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Tool Versions",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Print-ToolVersions.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Workflow Drift (notice-only)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "python -m pip install --user ruamel.yaml; python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/ci-orchestrated-v2.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml; if ($LASTEXITCODE -eq 3) { Write-Host '::notice::Workflow drift detected.'; exit 0 }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Fixtures (snapshot)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Validate-Fixtures.ps1",
+        "-Json"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Labels Sync (summary)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Invoke-LabelsSync.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Labels Sync (enforced)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Invoke-LabelsSync.ps1",
+        "-Enforce"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+      "panel": "dedicated",
+      "clear": true
+      }
+    },
+    {
+      "label": "Validate: Labels Sync (auto)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Invoke-LabelsSync.ps1",
+        "-Auto"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Fixtures (delta flow)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-FixtureValidation.ps1",
+        "-NoticeOnly"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Run All (local, notice)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Validate: Tracked Build Artifacts (guard)",
+        "Validate: PrePush Gates (actionlint + schemas)",
+        "Validate: Dot-Sourcing (notice-only)",
+        "Validate: Inline-If in Format (-f)",
+        "Validate: Markdown (notice-only)",
+        "Validate: Docs Links (intra-repo)",
+        "Validate: Workflow Drift (notice-only)",
+        "Validate: Loop Determinism (notice)",
+        "Validate: Derive Env Snapshot",
+        "Validate: Session Index (smoke + schema)",
+        "Validate: Fixtures (delta flow)",
+        "Validate: Tool Versions",
+        "Validate: Labels Sync (summary)"
+      ]
+    },
+    {
+      "label": "Validate: Fixtures (delta flow, enforced)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-FixtureValidation.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Run All (local, enforced)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Validate: Tracked Build Artifacts (guard)",
+        "Validate: PrePush Gates (actionlint + schemas)",
+        "Validate: Inline-If in Format (-f)",
+        "Validate: Markdown (changed)",
+        "Validate: Docs Links (intra-repo)",
+        "Validate: Workflow Drift (apply + stage)",
+        "Validate: Loop Determinism (enforced)",
+        "Validate: Derive Env Snapshot",
+        "Validate: Session Index (smoke + schema)",
+        "Validate: Fixtures (delta flow, enforced)",
+        "Validate: Tool Versions",
+        "Validate: Labels Sync (auto)"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Validate: Run All (notice + open results)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Validate: Run All (local, notice)",
+        "Open Results Folder"
+      ]
+    },
+    {
+      "label": "Validate: Run All (enforced + open results)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Validate: Run All (local, enforced)",
+        "Open Results Folder"
+      ]
+    },
+    {
+      "label": "Validate: Verify Notice Outputs",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Assert-ValidateOutputs.ps1",
+        "-ResultsRoot",
+        "tests/results",
+        "-RequireDeltaJson"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Validate: Verify Enforced Outputs",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Assert-ValidateOutputs.ps1",
+        "-ResultsRoot",
+        "tests/results",
+        "-RequireDeltaJson"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Step 1: Run Validate (enforced + open results)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-OneButtonValidate.ps1",
+        "-OpenResults"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Step 2: Inspect Results & Fix Issues",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "pwsh -NoLogo -NoProfile -File ./tools/Assert-ValidateOutputs.ps1 -ResultsRoot tests/results -RequireDeltaJson; ii (Resolve-Path 'tests/results'); Write-Host 'Inspect tests/results for fixture-summary.md, derived-env.json, and session-index.json before rerunning Step 1.'"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Step 3: Run Validate (notice + open results)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Validate: Run All (notice + open results)",
+        "Validate: Verify Notice Outputs"
+      ]
+    },
+    {
+      "label": "Step 4: Run PrePush Checks",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "pwsh -File ./tools/PrePush-Checks.ps1; if ($LASTEXITCODE -eq 0) { Write-Host 'PrePush checks passed (actionlint, YAML round-trip, watcher schema, ADR links).' } else { exit $LASTEXITCODE }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Bootstrap: Dev Tools (npm ci)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "ci"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Clean: Local Validate Artifacts",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "$ErrorActionPreference='Continue'; if (Test-Path 'tests/results') { Remove-Item -Recurse -Force 'tests/results' -ErrorAction SilentlyContinue }; Get-ChildItem -Force -File -Path . -Include 'fixture-validation.json','fixture-validation-prev.json','fixture-validation-delta.json','fixture-summary.md','derived-env.json' | ForEach-Object { Remove-Item -Force $_.FullName -ErrorAction SilentlyContinue }; Write-Host 'Clean complete.'"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Agent: Apply Safe Env Toggles",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Print-AgentHandoff.ps1",
+        "-ApplyToggles"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Agent: Apply Toggles + AutoTrim",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Print-AgentHandoff.ps1",
+        "-ApplyToggles",
+        "-AutoTrim"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Watchers: Ensure (DX)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev:watcher:ensure"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Watchers: Status (DX)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev:watcher:status"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Watchers: AutoTrim (DX)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev:watcher:autotrim"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "OneButton: Setup Branch (#88)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "$branch = git rev-parse --abbrev-ref HEAD; if ($branch -notmatch '^issue/88-') { git checkout -B 'issue/88-validate-automation' } else { Write-Host 'Already on issue/88 branch.' }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "OneButton: Push Branch",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "& { $ErrorActionPreference='Stop'; $branch = git rev-parse --abbrev-ref HEAD; $remote = git config --get remote.origin.url 2>$null; if (-not $remote) { Write-Host '::notice::No origin remote configured; skipping push.'; exit 0 }; git ls-remote --heads origin 2>$null; if ($LASTEXITCODE -ne 0) { Write-Host '::notice::Cannot reach origin; skipping push.'; exit 0 }; git rev-parse --abbrev-ref --symbolic-full-name 'HEAD@{upstream}' 2>$null; if ($LASTEXITCODE -eq 0) { git push } else { git push --set-upstream origin $branch } }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "OneButton: Create/Update PR (#88)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "& { $ErrorActionPreference='Stop'; $branch = git rev-parse --abbrev-ref HEAD; $gh = Get-Command gh -ErrorAction SilentlyContinue; if (-not $gh) { Write-Host '::notice::gh CLI not available; skipping PR step.'; exit 0 }; gh auth status 2>$null; if ($LASTEXITCODE -ne 0) { Write-Host '::notice::gh not authenticated; skipping PR step.'; exit 0 }; $title = 'Normalize workflows and local Validate mirrors (#88)'; $body = 'Automated workflow normalization and Validate task updates for #88.'; $existingJson = gh pr view --json number --head $branch 2>$null; if ($LASTEXITCODE -eq 0 -and $existingJson) { $pr = $existingJson | ConvertFrom-Json; gh pr edit $pr.number --title $title --body $body | Out-Host } else { gh pr create --base develop --head $branch --title $title --body $body | Out-Host } }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "GH_PROMPT_DISABLED": "1"
+        }
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "OneButton: Validate + Stage (#88)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-OneButtonValidate.ps1",
+        "-Stage"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "OneButton: Validate + Commit + Push + PR (#88)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "./tools/Run-OneButtonValidate.ps1",
+        "-Stage",
+        "-Commit",
+        "-Push",
+        "-CreatePR"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "teststandBase",
+      "type": "promptString",
+      "description": "Base VI path",
+      "default": "${workspaceFolder}/VI1.vi"
+    },
+    {
+      "id": "teststandHead",
+      "type": "promptString",
+      "description": "Head VI path",
+      "default": "${workspaceFolder}/VI2.vi"
+    },
+    {
+      "id": "teststandOutput",
+      "type": "promptString",
+      "description": "Output root directory",
+      "default": "tests/results/teststand-session"
     }
   ]
 }

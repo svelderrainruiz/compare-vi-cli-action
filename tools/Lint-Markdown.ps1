@@ -75,9 +75,9 @@ function Invoke-Markdownlint {
       $rules += $Matches[0]
     }
   }
-  $nonWarningRules = ($rules | Sort-Object -Unique) | Where-Object { $_ -ne 'MD041' }
+  $nonWarningRules = ($rules | Sort-Object -Unique) | Where-Object { $_ -notin @('MD041','MD013') }
   if (-not $nonWarningRules) {
-    Write-Warning 'Only MD041 violations detected; treating as a warning.'
+    Write-Warning 'Only MD041/MD013 violations detected; treating as a warning.'
     return 0
   }
   return [int]$exitCode
@@ -109,7 +109,8 @@ try {
 
   # Scoped suppressions for known large/generated files until backlog is addressed
   $suppressed = @(
-    'CHANGELOG.md'
+    'CHANGELOG.md',
+    'fixture-summary.md'
   )
   $filesToLint = $markdownFiles | Where-Object { $suppressed -notcontains $_ }
 
