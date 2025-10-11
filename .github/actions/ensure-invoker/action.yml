@@ -117,6 +117,19 @@ runs:
           exit 1
         }
 
+    - name: Invoker ping (Windows only)
+      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && steps.start.outputs.ready == 'true' }}
+      shell: pwsh
+      run: |
+        $args = @(
+          '-PipeName','${{ steps.compute.outputs.pipe_name }}',
+          '-ResultsDir','${{ steps.compute.outputs.results }}',
+          '-TimeoutSeconds','15',
+          '-Retries','5',
+          '-RetryDelaySeconds','2'
+        )
+        pwsh -File tools/RunnerInvoker/Wait-InvokerReady.ps1 @args
+
     - name: Stop invoker (Windows only)
       if: ${{ inputs.mode == 'stop' && runner.os == 'Windows' }}
       shell: pwsh
@@ -134,3 +147,4 @@ runs:
       if: ${{ runner.os != 'Windows' }}
       shell: bash
       run: echo ensure-invoker non-Windows runner, skipping
+

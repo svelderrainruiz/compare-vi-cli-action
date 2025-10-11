@@ -359,14 +359,15 @@ jobs:
       if: ${{ always() }}
       shell: pwsh
       run: |
-        $resDir = Join-Path 'tests/results' '${{ matrix.category }}'
+        $category = '${{ matrix.category }}'
+        $resDir = Join-Path 'tests/results' $category
         $sumPath = Join-Path $resDir 'pester-summary.json'
         if (Test-Path -LiteralPath $sumPath) {
           try {
             $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
             $tot = $s.totals
             $lines = @(
-              "### Pester Status (${ {matrix.category} })",
+              "### Pester Status ($category)",
               "- Result: $($s.result)",
               "- Tests: $($tot.tests)  Passed: $($tot.passed)  Failed: $($tot.failed)",
               if ($s.durationSeconds -ne $null) { "- Duration (s): $($s.durationSeconds)" } else { $null }
