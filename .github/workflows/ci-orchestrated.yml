@@ -53,21 +53,21 @@ jobs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Invoker (start)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
@@ -108,22 +108,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
-
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+
     - name: Install actionlint (retry)
       shell: bash
       run: |
@@ -209,6 +209,18 @@ jobs:
     # Run preflight for both strategies
     steps:
     - uses: actions/checkout@v5
+    - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
+    - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -216,18 +228,6 @@ jobs:
       if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
       run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
-    - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J1
-        results-dir: tests/results
-    - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J2
-        results-dir: tests/results
     - name: Verify Windows runner and idle LabVIEW (surface LVCompare notice)
       shell: pwsh
       run: |-
@@ -256,6 +256,18 @@ jobs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
     - uses: actions/checkout@v5
+    - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
+    - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -263,18 +275,6 @@ jobs:
       if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
       run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
-    - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J1
-        results-dir: tests/results
-    - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J2
-        results-dir: tests/results
     - name: Run interactivity probe
       id: out
       shell: pwsh
@@ -305,21 +305,21 @@ jobs:
       EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results/${{ matrix.category }}
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results/${{ matrix.category }}
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Append interactivity probe
       shell: pwsh
       run: pwsh -File tools/Write-InteractivityProbe.ps1
@@ -601,21 +601,21 @@ jobs:
       EMIT_LV_CLOSURE_CRUMBS: '1'
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: results/fixture-drift
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: results/fixture-drift
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: LabVIEW warmup (best-effort)
       if: runner.os == 'Windows'
       shell: pwsh
@@ -750,21 +750,21 @@ jobs:
     needs: [lint, pester-category, drift]
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
     - name: Summarize orchestrated run
       shell: pwsh
       run: |
@@ -988,22 +988,22 @@ jobs:
       TRACE_MATRIX_HTML: '1'
     steps:
     - uses: actions/checkout@v5
-    - name: Configure Git safe.directory (service)
-      shell: pwsh
-      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
-
     - name: Wire Probe (J1)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
         results-dir: tests/results
     - name: Wire Probe (J2)
-      if: ${{ vars.WIRE_PROBES != '0' }}
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
         results-dir: tests/results
+    - name: Configure Git safe.directory (service)
+      shell: pwsh
+      run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
+
     - name: Interactivity Probe (gate)
       id: ip
       shell: pwsh
