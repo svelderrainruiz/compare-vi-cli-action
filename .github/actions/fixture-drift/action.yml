@@ -173,6 +173,24 @@ runs:
         }
         "status=$status" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         if ($sumPath) { "summary_path=$sumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8 }
+        $searchBase = $null
+        if ($latest) {
+          try {
+            $resolvedLatest = (Resolve-Path -LiteralPath $latest.FullName -ErrorAction Stop).Path
+          } catch {
+            $resolvedLatest = $latest.FullName
+          }
+          $searchBase = $resolvedLatest
+        } elseif ($outDir) {
+          try {
+            $searchBase = (Resolve-Path -LiteralPath $outDir -ErrorAction Stop).Path
+          } catch {
+            $searchBase = $outDir
+          }
+        } else {
+          $searchBase = $root
+        }
+        if ($searchBase) { "results_dir=$searchBase" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8 }
         # Do not fail here to allow artifact upload and comment; a later step will enforce failure.
 
         # DEBUG: emit breadcrumbs to console and step summary to aid diagnosis when status is unknown or artifacts are missing
@@ -243,6 +261,20 @@ runs:
         if ($env:REPORT_DELAY_MS) { $lines += ("- Report delay (ms): {0}" -f $env:REPORT_DELAY_MS) }
         $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         } catch { Write-Host "[drift-debug] failed to emit debug breadcrumbs: $_" }
+
+    - name: Summarize compare outcome
+      if: always()
+      shell: pwsh
+      run: |
+        $base = '${{ steps.orchestrate.outputs.results_dir }}'
+        if (-not $base) { $base = 'results/fixture-drift' }
+        try { $resolved = (Resolve-Path -LiteralPath $base -ErrorAction Stop).Path } catch { $resolved = $base }
+        if (-not (Test-Path -LiteralPath $resolved)) {
+          Write-Host "::notice::Compare outcome directory missing: $resolved"
+          exit 0
+        }
+        $outJson = Join-Path $resolved 'compare-outcome.json'
+        pwsh -NoLogo -NoProfile -File "${{ github.workspace }}/tools/Parse-CompareExec.ps1" -SearchDir $resolved -OutJson $outJson
 
     - name: Upload drift artifacts (with retention)
       if: always() && inputs.upload-artifacts == 'true' && (inputs.only-upload-on-failure != 'true' || steps.orchestrate.outputs.status != 'ok') && inputs.retention-days != ''
