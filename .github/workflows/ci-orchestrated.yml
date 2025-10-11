@@ -268,7 +268,6 @@ jobs:
         results-dir: tests/results
     - name: Ensure Invoker (start)
       id: inv_start_matrix
-      continue-on-error: true
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
@@ -356,7 +355,7 @@ jobs:
           -IncludePatterns $inc
 
     - name: Summarize Pester results (job-level)
-      if: ${{ always() }}
+      if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $category = '${{ matrix.category }}'
