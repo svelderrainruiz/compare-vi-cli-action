@@ -897,6 +897,11 @@ jobs:
         $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
+    - name: Append re-run hint (gh)
+      if: ${{ always() }}
+      shell: pwsh
+      run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ inputs.include_integration || 'true' }}' -SampleId '${{ inputs.sample_id || '' }}'
   windows-single:
     if: ${{ (inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single') && needs.probe.outputs.ok == 'true' }}
     runs-on: [self-hosted, Windows, X64]
@@ -1175,3 +1180,8 @@ jobs:
         $cmd = "/run orchestrated strategy={0} include_integration={1} sample_id={2}" -f $strategy,$include,$sid
         $lines = @('### Re-run With Same Inputs','',"$ $cmd")
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
+    - name: Append re-run hint (gh; single)
+      if: ${{ always() }}
+      shell: pwsh
+      run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ inputs.include_integration || 'true' }}' -SampleId '${{ inputs.sample_id || '' }}'
