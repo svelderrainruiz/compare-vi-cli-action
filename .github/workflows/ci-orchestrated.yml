@@ -776,6 +776,29 @@ jobs:
         ) -join "`n"
         $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+    - name: Setup Node.js (derive env)
+      if: always()
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Derive environment snapshot (publish)
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm run --silent derive:env > derived-env.json
+        mkdir -p tests/results/_agent
+        cp derived-env.json tests/results/_agent/derived-env.json
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          {
+            echo '### Derived Environment';
+            echo '```json';
+            cat derived-env.json;
+            echo '```';
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
     - name: Append run links (publish)
       if: always()
       shell: pwsh
