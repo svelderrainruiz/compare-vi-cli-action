@@ -1,11 +1,14 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import * as fs from "fs";
 import { TextDecoder } from "util";
 
 const TASK_BUILD = "Build CompareVI CLI (Release)";
 const TASK_PARSE = "Parse CLI Compare Outcome (.NET)";
 const TASK_AUTO_PUSH = "Integration (Standing Priority): Auto Push + Start + Watch";
 const TASK_WATCH = "Integration (Standing Priority): Watch existing run";
+
+const utf8Decoder = new TextDecoder("utf-8");
 
 interface ArtifactDefinition {
     id: string;
@@ -70,6 +73,10 @@ class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactItem> {
         this.refresh();
     }
 
+    getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
+        return this.workspaceFolder;
+    }
+
     refresh(): void {
         this._onDidChangeTreeData.fire();
     }
@@ -123,6 +130,12 @@ class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactItem> {
     }
 }
 
+interface DiagnosticState {
+    lastOutcomeSignature?: string;
+}
+
+const diagnosticState: DiagnosticState = {};
+
 async function runTask(label: string) {
     const tasks = await vscode.tasks.fetchTasks();
     const task = tasks.find(t => t.name === label);
@@ -138,8 +151,39 @@ async function buildAndParse() {
     await runTask(TASK_PARSE);
 }
 
+function getConfiguration() {
+    return vscode.workspace.getConfiguration("comparevi");
+}
+
+function getTokenFallbackPath(): string | undefined {
+    const config = getConfiguration();
+    const defaultPath = process.platform === "win32" ? "C\\\\github_token.txt" : "";
+    const configured = config.get<string>("tokenFallbackPath", defaultPath);
+    if (!configured || !configured.trim()) {
+        return undefined;
+    }
+    return configured;
+}
+
+async function ensureAdminToken(): Promise<boolean> {
+    if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) {
+        return true;
+    }
+    const fallback = getTokenFallbackPath();
+    if (fallback && fs.existsSync(fallback)) {
+        return true;
+    }
+    const choice = await vscode.window.showWarningMessage(
+        "GH_TOKEN/GITHUB_TOKEN not detected. Standing priority automation may fail when pushing or dispatching. Continue anyway?",
+        { modal: true },
+        "Continue",
+        "Cancel"
+    );
+    return choice === "Continue";
+}
+
 async function pickStandingPriorityIssue(): Promise<string | undefined> {
-    const config = vscode.workspace.getConfiguration("comparevi");
+    const config = getConfiguration();
     const cached = config.get<string>("standingPriorityIssue");
     const items: vscode.QuickPickItem[] = [];
     if (cached) {
@@ -246,9 +290,8 @@ async function showArtifactSummary(
         return;
     }
     try {
-        const decoder = new TextDecoder("utf-8");
         const content = await vscode.workspace.fs.readFile(target.resourceUri);
-        const text = decoder.decode(content);
+        const text = utf8Decoder.decode(content);
         const panel = vscode.window.createWebviewPanel(
             "compareviArtifactSummary",
             `${target.definition.label} Summary`,
@@ -289,6 +332,73 @@ async function openArtifact(
     await vscode.window.showTextDocument(target.resourceUri, { preview: true });
 }
 
+function computeOutcomeSignature(cases: any[]): string {
+    return JSON.stringify(
+        cases.map(c => ({
+            id: c?.id,
+            status: c?.status,
+            exit: c?.exit,
+            diff: c?.diff
+        }))
+    );
+}
+
+async function evaluateOutcomeDiagnostics(
+    provider: ArtifactTreeProvider,
+    state: DiagnosticState
+) {
+    const folder = provider.getWorkspaceFolder();
+    if (!folder) {
+        return;
+    }
+    const outcomeUri = vscode.Uri.joinPath(
+        folder.uri,
+        "tests/results/compare-cli/compare-outcome.json"
+    );
+    let content: Uint8Array;
+    try {
+        content = await vscode.workspace.fs.readFile(outcomeUri);
+    } catch {
+        delete state.lastOutcomeSignature;
+        return;
+    }
+    const text = utf8Decoder.decode(content);
+    let data: any;
+    try {
+        data = JSON.parse(text);
+    } catch {
+        return;
+    }
+    if (!Array.isArray(data?.cases)) {
+        return;
+    }
+    const signature = computeOutcomeSignature(data.cases);
+    if (signature === state.lastOutcomeSignature) {
+        return;
+    }
+    state.lastOutcomeSignature = signature;
+    const problems = data.cases.filter((c: any) => {
+        const status = String(c?.status ?? "").toLowerCase();
+        const exit = Number(c?.exit ?? 0);
+        const diff = c?.diff;
+        const statusBad = status && status !== "passed" && status !== "success";
+        const exitBad = Number.isFinite(exit) && exit !== 0;
+        const diffBad = diff === true || diff === "true";
+        return statusBad || exitBad || diffBad;
+    });
+    if (problems.length > 0) {
+        vscode.window.showWarningMessage(
+            `CompareVI CLI outcome reports ${problems.length} non-passing case(s). Open the artifact summary for details.`,
+            "Show Summary",
+            "Dismiss"
+        ).then(selection => {
+            if (selection === "Show Summary") {
+                showArtifactSummary(provider);
+            }
+        });
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const artifactProvider = new ArtifactTreeProvider(workspaceFolder);
@@ -309,15 +419,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     const disposables: vscode.Disposable[] = [];
 
+    const refreshArtifacts = () => {
+        artifactProvider.refresh();
+        void evaluateOutcomeDiagnostics(artifactProvider, diagnosticState);
+    };
+
     if (workspaceFolder) {
         const pattern = new vscode.RelativePattern(
             workspaceFolder,
             "tests/results/**/*"
         );
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-        watcher.onDidChange(() => artifactProvider.refresh(), null, disposables);
-        watcher.onDidCreate(() => artifactProvider.refresh(), null, disposables);
-        watcher.onDidDelete(() => artifactProvider.refresh(), null, disposables);
+        watcher.onDidChange(refreshArtifacts, null, disposables);
+        watcher.onDidCreate(refreshArtifacts, null, disposables);
+        watcher.onDidDelete(refreshArtifacts, null, disposables);
         context.subscriptions.push(watcher);
     }
 
@@ -326,6 +441,7 @@ export function activate(context: vscode.ExtensionContext) {
             artifactProvider.setWorkspaceFolder(
                 vscode.workspace.workspaceFolders?.[0]
             );
+            void evaluateOutcomeDiagnostics(artifactProvider, diagnosticState);
         },
         undefined,
         context.subscriptions
@@ -356,6 +472,10 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!issue) {
                     return;
                 }
+                const tokenOk = await ensureAdminToken();
+                if (!tokenOk) {
+                    return;
+                }
                 await runTask(TASK_AUTO_PUSH);
             }
         ),
@@ -377,6 +497,9 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(...disposables);
+
+    void evaluateOutcomeDiagnostics(artifactProvider, diagnosticState);
 }
 
 export function deactivate() {}
+

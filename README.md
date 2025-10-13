@@ -260,3 +260,4 @@ For local development:
 The extension also contributes a **CompareVI Artifacts** tree in the Explorer view. It lists `tests/results/compare-cli/queue-summary.json`, `compare-outcome.json`, the session index, and phase manifest when available. Use the context menu (or the summary command) to view an HTML summary of JSON artifacts alongside the raw file.
 pm test exercises the registration smoke test via @vscode/test-electron.
 
+

@@ -63,6 +63,21 @@
           "group": "navigation@2"
         }
       ]
+    },
+    "configuration": {
+      "title": "CompareVI",
+      "properties": {
+        "comparevi.standingPriorityIssue": {
+          "type": "string",
+          "default": "",
+          "description": "Last used standing-priority issue number (auto-populated)."
+        },
+        "comparevi.tokenFallbackPath": {
+          "type": "string",
+          "default": "C:\\\\github_token.txt",
+          "description": "Fallback path for admin GitHub token when environment variables are not set."
+        }
+      }
     }
   },
   "scripts": {
