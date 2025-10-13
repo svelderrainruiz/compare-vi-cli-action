@@ -320,6 +320,58 @@ if ($ApplyToggles) {
 }
 
 Get-Content -LiteralPath $handoff
+
+try {
+  $repoRoot = (Resolve-Path '.').Path
+  $priorityScript = Join-Path $repoRoot 'tools' 'priority' 'sync-standing-priority.mjs'
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if ($nodeCmd -and (Test-Path -LiteralPath $priorityScript -PathType Leaf)) {
+    & $nodeCmd.Source $priorityScript | Out-Host
+  } else {
+    Write-Host '::notice::Standing priority sync skipped (node or script missing).'
+  }
+} catch {
+  Write-Warning ("Standing priority sync failed: {0}" -f $_.Exception.Message)
+}
+
+try {
+  $issueDir = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/issue'
+  if (Test-Path -LiteralPath $issueDir -PathType Container) {
+    $latestIssue = Get-ChildItem -LiteralPath $issueDir -Filter '*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latestIssue) {
+      $issueSnap = Get-Content -LiteralPath $latestIssue.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+      Write-Host ''
+      Write-Host '[Standing Priority]' -ForegroundColor Cyan
+      Write-Host ("  issue    : #{0}" -f $issueSnap.number)
+      Write-Host ("  title    : {0}" -f (Format-NullableValue $issueSnap.title))
+      Write-Host ("  state    : {0}" -f (Format-NullableValue $issueSnap.state))
+      Write-Host ("  updated  : {0}" -f (Format-NullableValue $issueSnap.updatedAt))
+      Write-Host ("  digest   : {0}" -f (Format-NullableValue $issueSnap.digest))
+
+      if ($env:GITHUB_STEP_SUMMARY) {
+        $priorityLines = @(
+          '### Standing Priority',
+          '',
+          ('- Issue: #{0} — {1}' -f $issueSnap.number, (Format-NullableValue $issueSnap.title)),
+          ('- State: {0}  Updated: {1}' -f (Format-NullableValue $issueSnap.state), (Format-NullableValue $issueSnap.updatedAt)),
+          ('- Digest: `{0}`' -f (Format-NullableValue $issueSnap.digest))
+        )
+        ($priorityLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      }
+
+      $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+      New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+      Copy-Item -LiteralPath $latestIssue.FullName -Destination (Join-Path $handoffDir 'issue-summary.json') -Force
+      $routerSrc = Join-Path $issueDir 'router.json'
+      if (Test-Path -LiteralPath $routerSrc -PathType Leaf) {
+        Copy-Item -LiteralPath $routerSrc -Destination (Join-Path $handoffDir 'issue-router.json') -Force
+      }
+    }
+  }
+} catch {
+  Write-Warning ("Failed to display standing priority summary: {0}" -f $_.Exception.Message)
+}
+
 Write-WatcherStatusSummary -ResultsRoot $ResultsRoot -RequestAutoTrim:$AutoTrim
 
 $hookSummaries = Write-HookSummaries -ResultsRoot $ResultsRoot
