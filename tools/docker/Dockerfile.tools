@@ -2,7 +2,7 @@
 # Unified tools image for non-LV checks and CLI build
 # Base: .NET SDK 8 (Debian), then add Node 20, Python 3 + ruamel.yaml, PowerShell 7, actionlint, jq
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0-bookworm AS base
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_MAJOR=20 \
@@ -48,4 +48,3 @@ WORKDIR /work
 RUN useradd -m -u 1000 dev || true
 USER 1000:1000
 CMD ["bash"]
-
