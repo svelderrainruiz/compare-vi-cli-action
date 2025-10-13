@@ -38,11 +38,16 @@
         "name": { "type": "string" },
         "os": { "type": "string" },
         "arch": { "type": "string" },
+        "environment": { "type": "string" },
         "job": { "type": "string" },
         "machine": { "type": "string" },
         "trackingId": { "type": "string" },
         "imageOS": { "type": "string" },
-        "imageVersion": { "type": "string" }
+        "imageVersion": { "type": "string" },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       },
       "additionalProperties": true
     }

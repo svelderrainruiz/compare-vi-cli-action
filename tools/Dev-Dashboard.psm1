@@ -311,6 +311,66 @@ function Get-PesterTelemetry {
   if ($summaryInfo.Error) { $errors += "pester-summary.json: $($summaryInfo.Error)" }
   if ($dispatcherInfo.Error) { $errors += "pester-dispatcher.log: $($dispatcherInfo.Error)" }
 
+  $sessionIndexPath = Join-Path $ResultsRoot 'session-index.json'
+  $sessionIndexInfo = Read-JsonFile -Path $sessionIndexPath
+  if ($sessionIndexInfo.Error) { $errors += "session-index.json: $($sessionIndexInfo.Error)" }
+  $sessionStatus = $null
+  $sessionIncludeIntegration = $null
+  $runnerInfo = $null
+  if ($sessionIndexInfo.Data) {
+    $sessionData = $sessionIndexInfo.Data
+    if ($sessionData.PSObject.Properties.Name -contains 'status') {
+      $sessionStatus = $sessionData.status
+    }
+    if ($sessionData.PSObject.Properties.Name -contains 'includeIntegration') {
+      try { $sessionIncludeIntegration = [bool]$sessionData.includeIntegration } catch { $sessionIncludeIntegration = $sessionData.includeIntegration }
+    }
+    $runContext = if ($sessionData.PSObject.Properties.Name -contains 'runContext') { $sessionData.runContext } else { $null }
+    if ($runContext) {
+      $runnerProps = [ordered]@{}
+      $nameProp = $runContext.PSObject.Properties['runner']
+      if ($nameProp -and $nameProp.Value) { $runnerProps['Name'] = $nameProp.Value }
+      $osProp = $runContext.PSObject.Properties['runnerOS']
+      $archProp = $runContext.PSObject.Properties['runnerArch']
+      if ($osProp -and $osProp.Value -and $archProp -and $archProp.Value) {
+        $runnerProps['OS'] = $osProp.Value
+        $runnerProps['Arch'] = $archProp.Value
+      } elseif ($osProp -and $osProp.Value) {
+        $runnerProps['OS'] = $osProp.Value
+      } elseif ($archProp -and $archProp.Value) {
+        $runnerProps['Arch'] = $archProp.Value
+      }
+      $envProp = $runContext.PSObject.Properties['runnerEnvironment']
+      if ($envProp -and $envProp.Value) { $runnerProps['Environment'] = $envProp.Value }
+      $machineProp = $runContext.PSObject.Properties['runnerMachine']
+      if ($machineProp -and $machineProp.Value) { $runnerProps['Machine'] = $machineProp.Value }
+      $imageOsProp = $runContext.PSObject.Properties['runnerImageOS']
+      $imageVersionProp = $runContext.PSObject.Properties['runnerImageVersion']
+      if ($imageOsProp -and $imageOsProp.Value) { $runnerProps['ImageOS'] = $imageOsProp.Value }
+      if ($imageVersionProp -and $imageVersionProp.Value) { $runnerProps['ImageVersion'] = $imageVersionProp.Value }
+      $labelsList = @()
+      if ($runContext.PSObject.Properties.Name -contains 'runnerLabels') {
+        $rawLabels = $runContext.runnerLabels
+        if ($null -ne $rawLabels) {
+          if ($rawLabels -is [System.Collections.IEnumerable] -and -not ($rawLabels -is [string])) {
+            foreach ($label in $rawLabels) {
+              if ($label -and "$label" -ne '') { $labelsList += "$label" }
+            }
+          } elseif ($rawLabels -and "$rawLabels" -ne '') {
+            $labelsList += "$rawLabels"
+          }
+        }
+      }
+      if ($labelsList.Count -gt 0) {
+        $unique = $labelsList | Where-Object { $_ -and $_ -ne '' } | Select-Object -Unique
+        if ($unique.Count -gt 0) { $runnerProps['Labels'] = $unique }
+      }
+      if ($runnerProps.Count -gt 0) {
+        $runnerInfo = [pscustomobject]$runnerProps
+      }
+    }
+  }
+
   return [pscustomobject][ordered]@{
     SummaryPath        = $summaryInfo.Path
     ResultsPath        = Resolve-PathSafe -Path $resultsPath
@@ -319,6 +379,10 @@ function Get-PesterTelemetry {
     FailedTests        = $failedTests
     DispatcherErrors   = $dispatcherErrors
     DispatcherWarnings = $dispatcherWarnings
+    SessionIndexPath   = $sessionIndexInfo.Path
+    SessionStatus      = $sessionStatus
+    SessionIncludeIntegration = $sessionIncludeIntegration
+    Runner             = $runnerInfo
     Errors             = $errors
   }
 }

@@ -746,6 +746,19 @@ function Write-SessionIndex {
       includeIntegration = [bool]$includeIntegrationBool
       files            = [ordered]@{}
     }
+    $runnerProfile = $null
+    try {
+      if (-not (Get-Command -Name Get-RunnerProfile -ErrorAction SilentlyContinue)) {
+        $repoRoot = Split-Path -Parent $PSCommandPath
+        $runnerModule = Join-Path $repoRoot 'tools/RunnerProfile.psm1'
+        if (Test-Path -LiteralPath $runnerModule -PathType Leaf) {
+          Import-Module $runnerModule -Force
+        }
+      }
+      if (Get-Command -Name Get-RunnerProfile -ErrorAction SilentlyContinue) {
+        $runnerProfile = Get-RunnerProfile
+      }
+    } catch {}
     $addIf = {
       param($name,$file)
       $p = Join-Path $ResultsDirectory $file
@@ -799,6 +812,37 @@ function Write-SessionIndex {
             if ($idx.files[$k]) { $present += (Join-Path $resRel $idx.files[$k]) }
           }
           foreach ($p in $present) { $lines += ("- {0}" -f $p) }
+          $runnerNameForSummary = if ($runnerProfile -and $runnerProfile.PSObject.Properties.Name -contains 'name' -and $runnerProfile.name) { $runnerProfile.name } else { $env:RUNNER_NAME }
+          $runnerOsForSummary = if ($runnerProfile -and $runnerProfile.PSObject.Properties.Name -contains 'os' -and $runnerProfile.os) { $runnerProfile.os } else { $env:RUNNER_OS }
+          $runnerArchForSummary = if ($runnerProfile -and $runnerProfile.PSObject.Properties.Name -contains 'arch' -and $runnerProfile.arch) { $runnerProfile.arch } else { $env:RUNNER_ARCH }
+          $runnerEnvSummary = if ($runnerProfile -and $runnerProfile.PSObject.Properties.Name -contains 'environment' -and $runnerProfile.environment) { $runnerProfile.environment } else { $env:RUNNER_ENVIRONMENT }
+          $runnerMachineSummary = if ($runnerProfile -and $runnerProfile.PSObject.Properties.Name -contains 'machine' -and $runnerProfile.machine) { $runnerProfile.machine } else { [System.Environment]::MachineName }
+          $runnerLabelsSummary = @()
+          try {
+            if ($runnerProfile -and $runnerProfile.PSObject.Properties.Name -contains 'labels') {
+              $runnerLabelsSummary = @($runnerProfile.labels | Where-Object { $_ -and $_ -ne '' })
+            } elseif (Get-Command -Name Get-RunnerLabels -ErrorAction SilentlyContinue) {
+              $runnerLabelsSummary = @(Get-RunnerLabels | Where-Object { $_ -and $_ -ne '' })
+            }
+          } catch {}
+          if ($runnerNameForSummary -or $runnerOsForSummary -or $runnerArchForSummary -or $runnerEnvSummary -or $runnerMachineSummary -or ($runnerLabelsSummary -and $runnerLabelsSummary.Count -gt 0)) {
+            $lines += ''
+            $lines += '### Runner'
+            $lines += ''
+            if ($runnerNameForSummary) { $lines += ("- Name: {0}" -f $runnerNameForSummary) }
+            if ($runnerOsForSummary -and $runnerArchForSummary) {
+              $lines += ("- OS/Arch: {0}/{1}" -f $runnerOsForSummary,$runnerArchForSummary)
+            } elseif ($runnerOsForSummary) {
+              $lines += ("- OS: {0}" -f $runnerOsForSummary)
+            } elseif ($runnerArchForSummary) {
+              $lines += ("- Arch: {0}" -f $runnerArchForSummary)
+            }
+            if ($runnerEnvSummary) { $lines += ("- Environment: {0}" -f $runnerEnvSummary) }
+            if ($runnerMachineSummary) { $lines += ("- Machine: {0}" -f $runnerMachineSummary) }
+            if ($runnerLabelsSummary -and $runnerLabelsSummary.Count -gt 0) {
+              $lines += ("- Labels: {0}" -f (($runnerLabelsSummary | Select-Object -Unique) -join ', '))
+            }
+          }
           $idx['stepSummary'] = ($lines -join "`n")
         }
       } catch {}
@@ -831,17 +875,56 @@ function Write-SessionIndex {
     } catch {}
     # Optional run context (CI / GitHub)
     try {
-      $idx['runContext'] = [ordered]@{
+      $runContext = [ordered]@{
         repository  = $env:GITHUB_REPOSITORY
         ref         = (if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF })
         commitSha   = $env:GITHUB_SHA
         workflow    = $env:GITHUB_WORKFLOW
         runId       = $env:GITHUB_RUN_ID
         runAttempt  = $env:GITHUB_RUN_ATTEMPT
-        job         = $env:GITHUB_JOB
-        runner      = $env:RUNNER_NAME
-        runnerOS    = $env:RUNNER_OS
       }
+      if ($env:GITHUB_JOB) { $runContext['job'] = $env:GITHUB_JOB }
+      if ($env:RUNNER_NAME) { $runContext['runner'] = $env:RUNNER_NAME }
+      if ($env:RUNNER_OS) { $runContext['runnerOS'] = $env:RUNNER_OS }
+      if ($env:RUNNER_ARCH) { $runContext['runnerArch'] = $env:RUNNER_ARCH }
+      if ($env:RUNNER_ENVIRONMENT) { $runContext['runnerEnvironment'] = $env:RUNNER_ENVIRONMENT }
+      $machineName = try { [System.Environment]::MachineName } catch { $null }
+      if ($machineName) { $runContext['runnerMachine'] = $machineName }
+      if ($env:RUNNER_TRACKING_ID) { $runContext['runnerTrackingId'] = $env:RUNNER_TRACKING_ID }
+      if ($env:ImageOS) { $runContext['runnerImageOS'] = $env:ImageOS }
+      if ($env:ImageVersion) { $runContext['runnerImageVersion'] = $env:ImageVersion }
+      if ($runnerProfile) {
+        $map = @{
+          name         = 'runner'
+          os           = 'runnerOS'
+          arch         = 'runnerArch'
+          environment  = 'runnerEnvironment'
+          machine      = 'runnerMachine'
+          trackingId   = 'runnerTrackingId'
+          imageOS      = 'runnerImageOS'
+          imageVersion = 'runnerImageVersion'
+        }
+        foreach ($entry in $map.GetEnumerator()) {
+          $source = $entry.Key
+          $target = $entry.Value
+          if ($runnerProfile.PSObject.Properties.Name -contains $source) {
+            $value = $runnerProfile.$source
+            if ($null -ne $value -and "$value" -ne '') {
+              $runContext[$target] = $value
+            }
+          }
+        }
+        if ($runnerProfile.PSObject.Properties.Name -contains 'labels') {
+          $labelValues = @($runnerProfile.labels | Where-Object { $_ -and $_ -ne '' })
+          if ($labelValues.Count -gt 0) { $runContext['runnerLabels'] = $labelValues }
+        }
+      } elseif (Get-Command -Name Get-RunnerLabels -ErrorAction SilentlyContinue) {
+        try {
+          $labelsFallback = @(Get-RunnerLabels | Where-Object { $_ -and $_ -ne '' })
+          if ($labelsFallback.Count -gt 0) { $runContext['runnerLabels'] = $labelsFallback }
+        } catch {}
+      }
+      $idx['runContext'] = $runContext
       # Optional well-known URLs for convenience (UI pages)
       if ($env:GITHUB_REPOSITORY) {
         $repoUrl = "https://github.com/$($env:GITHUB_REPOSITORY)"
@@ -890,7 +973,7 @@ function Write-SessionIndex {
           if ($lastStatus) { $handshakeLines += ("- Handshake Last Status: {0}" -f $lastStatus) }
           $firstTwo = @($markerRel | Select-Object -First 2)
           foreach ($m in $firstTwo) { $handshakeLines += ("- Marker: {0}" -f $m) }
-          if ($idx['stepSummary']) { $idx['stepSummary'] = $idx['stepSummary'] + "`n" + ($handshakeLines -join "`n") } else { $idx['stepSummary'] = ($handshakeLines -join "`n") }
+          if ($idx['stepSummary']) { $idx['stepSummary'] = $idx['stepSummary'] + "`n`n" + ($handshakeLines -join "`n") } else { $idx['stepSummary'] = ($handshakeLines -join "`n") }
         } catch {}
       }
     } catch {}
@@ -2404,4 +2487,3 @@ finally {
     if (-not $released) { Write-Warning "Failed to release session lock '$lockGroup'" }
   }
 }
-

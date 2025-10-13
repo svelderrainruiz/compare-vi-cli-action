@@ -12,7 +12,28 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
       GITHUB_RUN_ATTEMPT  = $env:GITHUB_RUN_ATTEMPT
       GITHUB_WORKFLOW     = $env:GITHUB_WORKFLOW
       GITHUB_SHA          = $env:GITHUB_SHA
+      RUNNER_NAME         = $env:RUNNER_NAME
+      RUNNER_OS           = $env:RUNNER_OS
+      RUNNER_ARCH         = $env:RUNNER_ARCH
+      RUNNER_LABELS       = $env:RUNNER_LABELS
+      RUNNER_ENVIRONMENT  = $env:RUNNER_ENVIRONMENT
+      RUNNER_TRACKING_ID  = $env:RUNNER_TRACKING_ID
+      GITHUB_JOB          = $env:GITHUB_JOB
+      ImageOS             = $env:ImageOS
+      ImageVersion        = $env:ImageVersion
     }
+  }
+
+  BeforeEach {
+    $env:RUNNER_NAME = 'test-runner'
+    $env:RUNNER_OS = 'Windows'
+    $env:RUNNER_ARCH = 'X64'
+    $env:GITHUB_JOB = 'unit-tests'
+    $env:RUNNER_ENVIRONMENT = 'self-hosted'
+    $env:RUNNER_TRACKING_ID = 'tracking-test'
+    $env:RUNNER_LABELS = 'self-hosted,windows,lvsuite'
+    $env:ImageOS = 'windows-server-2022'
+    $env:ImageVersion = '2025.10.0'
   }
 
   AfterAll {
@@ -41,6 +62,8 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
     $p.refName | Should -Be 'feature/fallback'
     $p.headRef | Should -Be 'feature/fallback'
     $p.baseRef | Should -Be ''
+    $p.runner.labels | Should -Contain 'self-hosted'
+    $p.runner.labels | Should -Contain 'windows'
   }
 
   It 'uses PR event payload head/base refs and prNumber (pull_request)' {

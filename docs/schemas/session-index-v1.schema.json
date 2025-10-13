@@ -64,7 +64,17 @@
         "runAttempt": { "type": ["string", "null"] },
         "job": { "type": ["string", "null"] },
         "runner": { "type": ["string", "null"] },
-        "runnerOS": { "type": ["string", "null"] }
+        "runnerOS": { "type": ["string", "null"] },
+        "runnerArch": { "type": ["string", "null"] },
+        "runnerEnvironment": { "type": ["string", "null"] },
+        "runnerMachine": { "type": ["string", "null"] },
+        "runnerTrackingId": { "type": ["string", "null"] },
+        "runnerImageOS": { "type": ["string", "null"] },
+        "runnerImageVersion": { "type": ["string", "null"] },
+        "runnerLabels": {
+          "type": ["array", "null"],
+          "items": { "type": "string" }
+        }
       }
     },
     "urls": {

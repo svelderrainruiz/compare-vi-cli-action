@@ -17,11 +17,17 @@
 [CmdletBinding()]
 param(
   [string]$ResultsDir = 'tests/results',
-  [string]$FileName = 'provenance.json',
-  [switch]$AppendStepSummary
+[string]$FileName = 'provenance.json',
+[switch]$AppendStepSummary
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$toolRoot = Split-Path -Parent $PSCommandPath
+$runnerModulePath = Join-Path $toolRoot 'RunnerProfile.psm1'
+if (Test-Path -LiteralPath $runnerModulePath -PathType Leaf) {
+  try { Import-Module $runnerModulePath -Force } catch { Write-Verbose "RunnerProfile module import failed: $_" }
+}
 
 if (-not (Test-Path -LiteralPath $ResultsDir -PathType Container)) {
   New-Item -ItemType Directory -Force -Path $ResultsDir | Out-Null
@@ -39,6 +45,14 @@ $repo       = $env:GITHUB_REPOSITORY
 $runId      = $env:GITHUB_RUN_ID
 $runAttempt = $env:GITHUB_RUN_ATTEMPT
 $workflow   = $env:GITHUB_WORKFLOW
+
+# Best-effort runner profile (includes labels when available)
+$runnerProfile = $null
+try {
+  if (Get-Command -Name Get-RunnerProfile -ErrorAction SilentlyContinue) {
+    $runnerProfile = Get-RunnerProfile
+  }
+} catch { }
 
 # Try to read PR number from event payload when available
 $prNumber = $null
@@ -80,6 +94,28 @@ $prov = [ordered]@{
     imageVersion  = $env:ImageVersion
   }
 }
+
+if ($runnerProfile) {
+  foreach ($property in @('name','os','arch','environment','machine','trackingId','imageOS','imageVersion')) {
+    if ($runnerProfile.PSObject.Properties.Name -contains $property) {
+      $value = $runnerProfile.$property
+      if ($null -ne $value -and "$value" -ne '') {
+        $prov.runner[$property] = $value
+      }
+    }
+  }
+  if ($runnerProfile.PSObject.Properties.Name -contains 'labels') {
+    $labels = $runnerProfile.labels
+    if ($labels -and $labels.Count -gt 0) {
+      $prov.runner['labels'] = @($labels | Where-Object { $_ -and $_ -ne '' })
+    }
+  }
+}
+
+if (-not $prov.runner.job -and $env:GITHUB_JOB) {
+  $prov.runner['job'] = $env:GITHUB_JOB
+}
+
 if ($prNumber) { $prov['prNumber'] = $prNumber }
 
 # Optional origin and inputs (populated by workflow env)

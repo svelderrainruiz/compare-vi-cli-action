@@ -16,6 +16,8 @@ Describe 'Dev Dashboard CLI' -Tag 'Unit' {
     $json.Group | Should -Be 'pester-selfhosted'
     $json.SessionLock.QueueWaitSeconds | Should -Be 30
     $json.PesterTelemetry.Totals.Failed | Should -Be 1
+    $json.PesterTelemetry.SessionStatus | Should -BeNullOrEmpty
+    $json.PesterTelemetry.Runner | Should -BeNullOrEmpty
     $json.Stakeholders.Channels | Should -Contain 'slack://#ci-selfhosted'
     $json.WatchTelemetry.Last.status | Should -Be 'FAIL'
     $json.WatchTelemetry.History.Count | Should -Be 2
