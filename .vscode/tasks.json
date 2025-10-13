@@ -23,6 +23,21 @@
       }
     },
     {
+      "label": "Handoff: Apply Toggles + Telemetry",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Print-AgentHandoff.ps1",
+        "-ApplyToggles",
+        "-AutoTrim"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
       "label": "Build Tools Image (Docker)",
       "type": "shell",
       "command": "pwsh",
@@ -58,6 +73,23 @@
         "reveal": "always",
         "panel": "dedicated"
       }
+    },
+    {
+      "label": "Run Non-LV Checks (Tools Image, strict)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-NonLVChecksInDocker.ps1",
+        "-ToolsImageTag",
+        "comparevi-tools:local",
+        "-UseToolsImage",
+        "-FailOnWorkflowDrift"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
     },
     {
       "label": "Parse CLI Compare Outcome (.NET)",
@@ -137,6 +169,33 @@
       }
     },
     {
+      "label": "Run Non-LV Checks (Docker, strict)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-NonLVChecksInDocker.ps1",
+        "-FailOnWorkflowDrift"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Run Validate Container (CLI smoke)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-ValidateContainer.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
       "label": "Run PrePush Checks",
       "type": "shell",
       "command": "pwsh",
@@ -205,6 +264,68 @@
       "options": { "cwd": "" },
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Standing Priority: Handoff Tests",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run","priority:handoff-tests"],
+      "options": { "cwd": "" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Dispatch Orchestrated (develop, include_integration=true)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Dispatch-WithSample.ps1",
+        "ci-orchestrated.yml",
+        "-Ref",
+        "develop",
+        "-IncludeIntegration",
+        "true"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Follow Orchestrated Run (Docker)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Follow-OrchestratedRun.ps1",
+        "-RunId",
+        "${input:runId}",
+        "-Watch"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Standing Priority (#127): Quick Local Queue",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Handoff: Apply Toggles + Telemetry",
+        "Build Tools Image (Docker)",
+        "Run Non-LV Checks (Tools Image, strict)",
+        "Run Pester Tests (Unit)"
+      ]
     }
  ]
+  ,
+  "inputs": [
+    {
+      "id": "runId",
+      "type": "promptString",
+      "description": "Enter GitHub workflow run id to follow",
+      "default": ""
+    }
+  ]
 }
