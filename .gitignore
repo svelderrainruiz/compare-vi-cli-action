@@ -79,3 +79,10 @@ src/**/bin/
 *.suo
 *.user
 /compare-vi-cli-action.sln
+
+# VS Code extension build artifacts
+/tools/vscode/comparevi-extension/node_modules/
+/tools/vscode/comparevi-extension/out/
+/tools/vscode/comparevi-extension/dist/
+
+tools/vscode/comparevi-extension/.vscode-test/
