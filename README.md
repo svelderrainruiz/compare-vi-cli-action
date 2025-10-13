@@ -245,17 +245,18 @@ should note affected jobs and link to supporting ADRs.
 
 #### VS Code extension (experimental)
 
-A thin VS Code extension lives in 	ools/vscode/comparevi-extension. It exposes commands that wrap the tasks above:
-- CompareVI: Build & Parse CLI
-- CompareVI: Start Standing Priority Run
-- CompareVI: Watch Standing Priority Run
+A thin VS Code extension lives in `tools/vscode/comparevi-extension`. It exposes commands that wrap the tasks above:
+- `CompareVI: Build & Parse CLI`
+- `CompareVI: Start Standing Priority Run`
+- `CompareVI: Watch Standing Priority Run`
+- `CompareVI: Open Artifact`
+- `CompareVI: Show Artifact Summary`
 
 For local development:
-1. Run 
-pm install inside 	ools/vscode/comparevi-extension.
-2. From VS Code, run Debug: Start Debugging on the extension to launch a dev host.
-3. Commands shell out to the tasks in .vscode/tasks.json, so behaviour stays aligned with local scripts/CI.
+1. Run `npm install` inside `tools/vscode/comparevi-extension`.
+2. From VS Code, run **Debug: Start Debugging** on the extension to launch a dev host.
+3. Commands shell out to the tasks in `.vscode/tasks.json`, so behaviour stays aligned with local scripts/CI. `npm run compile` builds TypeScript, and `npm test` exercises a smoke test via `@vscode/test-electron`.
 
-pm run compile builds TypeScript, and 
+The extension also contributes a **CompareVI Artifacts** tree in the Explorer view. It lists `tests/results/compare-cli/queue-summary.json`, `compare-outcome.json`, the session index, and phase manifest when available. Use the context menu (or the summary command) to view an HTML summary of JSON artifacts alongside the raw file.
 pm test exercises the registration smoke test via @vscode/test-electron.
 

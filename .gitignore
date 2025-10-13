@@ -85,3 +85,4 @@ src/**/bin/
 /tools/vscode/comparevi-extension/out/
 /tools/vscode/comparevi-extension/dist/
 
+tools/vscode/comparevi-extension/.vscode-test/

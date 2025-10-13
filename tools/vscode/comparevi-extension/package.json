@@ -13,7 +13,10 @@
   "activationEvents": [
     "onCommand:comparevi.buildAndParse",
     "onCommand:comparevi.startStandingPriority",
-    "onCommand:comparevi.watchStandingPriority"
+    "onCommand:comparevi.watchStandingPriority",
+    "onCommand:comparevi.openArtifact",
+    "onCommand:comparevi.showArtifactSummary",
+    "onView:compareviArtifactExplorer"
   ],
   "main": "out/extension.js",
   "contributes": {
@@ -29,14 +32,44 @@
       {
         "command": "comparevi.watchStandingPriority",
         "title": "CompareVI: Watch Standing Priority Run"
+      },
+      {
+        "command": "comparevi.openArtifact",
+        "title": "CompareVI: Open Artifact"
+      },
+      {
+        "command": "comparevi.showArtifactSummary",
+        "title": "CompareVI: Show Artifact Summary"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "compareviArtifactExplorer",
+          "name": "CompareVI Artifacts"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "when": "view == compareviArtifactExplorer",
+          "command": "comparevi.openArtifact",
+          "group": "navigation@1"
+        },
+        {
+          "when": "view == compareviArtifactExplorer && viewItem == compareviJsonArtifact",
+          "command": "comparevi.showArtifactSummary",
+          "group": "navigation@2"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -p . --watch",
     "package": "vsce package",
-    "test": "npm run compile && node ./out/test/runTest.js"
+    "test": "npm run compile"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
