@@ -30,14 +30,17 @@
 
 ## Execution Plan
 
-### Phase 1 – Stabilise the existing workflow
+### Phase 1 – Stabilise the existing workflow (in progress)
 
 - Update `.github/actions/ensure-invoker` with an opt-in `requireInvoker`
-  switch. Hosted preflight jobs call it with `requireInvoker:false` (no wrapper
+  switch. Hosted gate jobs call it with `requireInvoker:false` (no wrapper
   emission; pure health check).
 - Scope every Windows job to a unique results root. Example:
   `tests/results/dispatcher`, `tests/results/schema`, … This removes cross-job
   contamination.
+- Introduce a hosted Windows gate job (`hosted-gate`) that runs ahead of the
+  self-hosted matrix and prevents the invoker from launching when the hosted
+  environment fails basic health checks.
 - Gate all composite steps with platform checks (`if: runner.os == 'Windows'`)
   so Linux/macOS jobs never call LVCompare or invoker helpers.
 - Verify deterministic artifacts by re-running orchestrated single strategy

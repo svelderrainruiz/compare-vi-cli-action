@@ -138,12 +138,13 @@ jobs:
           $params += '-FailOnWorkflowDrift'
         }
         pwsh -File ./tools/Run-NonLVChecksInDocker.ps1 @params
-  preflight:
+  hosted-gate:
     runs-on: windows-latest
     timeout-minutes: 3
+    needs: [normalize]
     env:
       RESULTS_DIR: tests/results/preflight
-    # Run preflight for both strategies
+    # Hosted Windows health gate before self-hosted jobs
     steps:
     - uses: actions/checkout@v5
     - name: Wire Probe (J1)
@@ -172,23 +173,23 @@ jobs:
         Write-Host "Pwsh:   $($PSVersionTable.PSVersion)"
         $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
         if (-not (Test-Path -LiteralPath $cli)) {
-          Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
+        Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted gate)"
         } else { Write-Host "LVCompare present: $cli" }
         $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
         if ($lv) { $pids = ($lv | ForEach-Object Id); $msg = "::error::LabVIEW.exe is running (PID(s): {0})" -f ([string]::Join(",", $pids)); Write-Host $msg; exit 1 }
         Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
         if ($env:GITHUB_STEP_SUMMARY) {
-          $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
+          $note = @('Note:', '- This gate runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
           $note | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
-    # Hosted preflight is informational only; enforce LVCompare on self-hosted jobs.
+    # Hosted gate is informational only; enforce LVCompare on self-hosted jobs.
 
   probe:
     # Quick interactivity probe on self-hosted Windows to decide single vs fallback
     if: ${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 2
-    needs: [normalize, preflight]
+    needs: [normalize, hosted-gate]
     env:
       RESULTS_DIR: tests/results/probe
     outputs:
@@ -228,7 +229,7 @@ jobs:
     if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') || (inputs.strategy == 'single' && needs.probe.outputs.ok == 'false') }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
-    needs: [normalize, preflight, probe]
+    needs: [normalize, hosted-gate, probe]
     strategy:
       matrix:
         category: [dispatcher, fixtures, schema, comparevi, loop, psummary, workflow]
@@ -939,7 +940,7 @@ jobs:
     if: ${{ (inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single') && needs.probe.outputs.ok == 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 10
-    needs: [normalize, preflight, probe]
+    needs: [normalize, hosted-gate, probe]
     env:
       RESULTS_DIR: tests/results/single
       UNBLOCK_GUARD: '0'
