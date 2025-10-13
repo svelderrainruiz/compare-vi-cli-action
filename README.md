@@ -151,7 +151,7 @@ Keeping these green locally prevents surprises when Validate or the orchestrated
 - `npm run priority:bootstrap` — run hook preflight/parity (optional via `-- -VerboseHooks`) and refresh the standing-priority snapshot/router.
 - `npm run priority:handoff` — import the latest handoff summaries into the current PowerShell session (globals such as `$StandingPrioritySnapshot` and `$StandingPriorityRouter`).
 - `npm run priority:release` — simulate the release path from the router; add `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
- — simulates release prep using the current router; pass  to run  after the dry-run.
+- `npm run handoff:schema` — validate the stored hook handoff summary against `docs/schemas/handoff-hook-summary-v1.schema.json`.
 
 
 - `npm run hooks:plane` — prints the detected plane (for example `windows-pwsh`, `linux-wsl`, `github-ubuntu`) and the active enforcement mode.

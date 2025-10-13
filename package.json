@@ -40,7 +40,8 @@
     "priority:bootstrap": "pwsh -NoLogo -NoProfile -File tools/priority/bootstrap.ps1",
     "priority:handoff": "pwsh -NoLogo -NoProfile -File tools/priority/Import-HandoffState.ps1",
     "priority:release": "pwsh -NoLogo -NoProfile -File tools/priority/Simulate-Release.ps1",
-    "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\""
+    "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\"",
+    "handoff:schema": "ajv validate -s docs/schemas/handoff-hook-summary-v1.schema.json -d tests/results/_agent/handoff/hook-summary.json --spec=draft2020 -c ajv-formats"
   },
   "devDependencies": {
     "@types/argparse": "^2.0.16",
