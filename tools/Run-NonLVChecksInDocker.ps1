@@ -21,13 +21,16 @@
   Skip the docs link checker.
 .PARAMETER SkipWorkflow
   Skip the workflow drift check.
+.PARAMETER SkipDotnetCliBuild
+  Skip building the CompareVI .NET CLI inside the dotnet SDK container (outputs to dist/comparevi-cli by default).
 #>
 param(
   [switch]$SkipActionlint,
   [switch]$SkipMarkdown,
   [switch]$SkipDocs,
   [switch]$SkipWorkflow,
-  [switch]$FailOnWorkflowDrift
+  [switch]$FailOnWorkflowDrift,
+  [switch]$SkipDotnetCliBuild
 )
 
 Set-StrictMode -Version Latest
@@ -74,6 +77,16 @@ function Invoke-Container {
     Write-Host ("[docker] {0} OK" -f $labelText) -ForegroundColor Green
   }
   return $code
+}
+
+if (-not $SkipDotnetCliBuild) {
+  $cliOutput = 'dist/comparevi-cli'
+  if (Test-Path -LiteralPath $cliOutput) {
+    Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
+    -Arguments @('bash','-lc',"dotnet publish src/CompareVi.Tools.Cli -c Release -nologo -o $cliOutput") `
+    -Label 'dotnet-cli-build'
 }
 
 if (-not $SkipActionlint) {

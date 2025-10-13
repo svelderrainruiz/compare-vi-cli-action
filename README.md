@@ -141,7 +141,7 @@ Tips:
 | `pwsh -File tools/PrePush-Checks.ps1` / “Run PrePush Checks” | `tools/PrePush-Checks.ps1` | Validate: lint, compare-report manifest, rerun hint helper |
 | `pwsh ./Invoke-PesterTests.ps1` / “Run Pester Tests (Unit)” | `Invoke-PesterTests.ps1` | Validate: unit suites |
 | `pwsh ./Invoke-PesterTests.ps1 -IncludeIntegration true` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1` with integration flag | Validate: integration coverage leading into orchestrated phase |
-| “Run Non-LV Checks (Docker)” | `tools/Run-NonLVChecksInDocker.ps1` | Validate: Dockerized actionlint/markdownlint/docs drift |
+| “Run Non-LV Checks (Docker)” | `tools/Run-NonLVChecksInDocker.ps1` | Validate: Dockerized actionlint/markdownlint/docs drift (also builds CompareVI CLI to `dist/comparevi-cli`) |
 | “Integration (Standing Priority): Auto Push + Start + Watch” | `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` | ci-orchestrated: standing-priority dispatcher + watcher |
 
 These entry points exercise the same scripts CI relies on. Run them locally before pushing so Validate and ci-orchestrated stay green.
