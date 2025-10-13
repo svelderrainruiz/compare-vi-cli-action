@@ -465,7 +465,7 @@ jobs:
 
     - name: Prime actionlint binary
       shell: pwsh
-      run: pwsh -File tools/PrePush-Checks.ps1 -InstallIfMissing $true
+      run: ./tools/PrePush-Checks.ps1
 
     - name: Hooks plane info
       run: npm run hooks:plane
