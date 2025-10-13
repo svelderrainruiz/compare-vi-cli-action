@@ -129,9 +129,22 @@ Tips:
   - `Integration (Standing Priority): Watch existing run` attaches the Docker watcher when a run is already in flight.
   - `Run Non-LV Checks (Docker)` shells into `tools/Run-NonLVChecksInDocker.ps1` for actionlint/markdownlint/docs drift.
   - Recommended extensions (PowerShell, C#, GitHub Actions, markdownlint, Docker) are declared in `.vscode/extensions.json`.
+  - Local validation matrix (see below) keeps local runs aligned with CI stages.
 - The watcher prunes old run directories (`.tmp/watch-run`) automatically and warns if
   run/dispatcher status stalls longer than the configured window (default 10 minutes). When
   consecutive dispatcher logs hash to the same digest, it flags a possible repeated failure.
+
+#### Local validation matrix
+
+| Command / Run Task | Script invoked | Mirrors CI job(s) |
+| --- | --- | --- |
+| `pwsh -File tools/PrePush-Checks.ps1` / “Run PrePush Checks” | `tools/PrePush-Checks.ps1` | Validate: lint, compare-report manifest, rerun hint helper |
+| `pwsh ./Invoke-PesterTests.ps1` / “Run Pester Tests (Unit)” | `Invoke-PesterTests.ps1` | Validate: unit suites |
+| `pwsh ./Invoke-PesterTests.ps1 -IncludeIntegration true` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1` with integration flag | Validate: integration coverage leading into orchestrated phase |
+| “Run Non-LV Checks (Docker)” | `tools/Run-NonLVChecksInDocker.ps1` | Validate: Dockerized actionlint/markdownlint/docs drift |
+| “Integration (Standing Priority): Auto Push + Start + Watch” | `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` | ci-orchestrated: standing-priority dispatcher + watcher |
+
+These entry points exercise the same scripts CI relies on. Run them locally before pushing so Validate and ci-orchestrated stay green.
 
 #### Start integration (gated)
 
