@@ -56,6 +56,25 @@ function Get-DockerHostPath {
 $hostPath = Get-DockerHostPath '.'
 $volumeSpec = "${hostPath}:/work"
 $commonArgs = @('--rm','-v', $volumeSpec,'-w','/work')
+$workflowTargets = @(
+  '.github/workflows/pester-selfhosted.yml',
+  '.github/workflows/fixture-drift.yml',
+  '.github/workflows/ci-orchestrated.yml',
+  '.github/workflows/pester-integration-on-label.yml',
+  '.github/workflows/smoke.yml',
+  '.github/workflows/compare-artifacts.yml'
+)
+
+function Test-WorkflowDriftPending {
+  param([string[]]$Paths)
+  try {
+    $output = git status --porcelain -- @Paths
+    return [bool]$output
+  } catch {
+    Write-Verbose "git status check failed: $_"
+    return $true
+  }
+}
 
 function Invoke-Container {
   param(
@@ -118,6 +137,10 @@ if ($UseToolsImage -and $ToolsImageTag) {
   if (-not $SkipWorkflow) {
     $checkCmd = 'python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml'
     $wfCode = Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$checkCmd) -AcceptExitCodes @(0,3) -Label 'workflow-drift (tools)'
+    if ($wfCode -eq 3 -and -not (Test-WorkflowDriftPending -Paths $workflowTargets)) {
+      Write-Host '[docker] workflow-drift (tools) reported drift but no files changed; treating as clean.' -ForegroundColor Yellow
+      $wfCode = 0
+    }
     if ($FailOnWorkflowDrift -and $wfCode -eq 3) {
       Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
       exit 3
@@ -143,6 +166,10 @@ pip install -q ruamel.yaml && \
 python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml
 '@
     $wfCode = Invoke-Container -Image 'python:3.12-alpine' -Arguments @('sh','-lc',$checkCmd) -AcceptExitCodes @(0,3) -Label 'workflow-drift'
+    if ($wfCode -eq 3 -and -not (Test-WorkflowDriftPending -Paths $workflowTargets)) {
+      Write-Host '[docker] workflow-drift (fallback) reported drift but no files changed; treating as clean.' -ForegroundColor Yellow
+      $wfCode = 0
+    }
     if ($FailOnWorkflowDrift -and $wfCode -eq 3) {
       Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
       exit 3

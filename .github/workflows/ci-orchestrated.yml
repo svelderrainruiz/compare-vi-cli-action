@@ -177,7 +177,7 @@ jobs:
       run: |
         markdownlint "**/*.md" --ignore node_modules
       continue-on-error: true
-  hosted-gate:
+  preflight:
     runs-on: windows-latest
     timeout-minutes: 3
     needs: [normalize]
@@ -228,7 +228,7 @@ jobs:
     if: ${{ inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 2
-    needs: [normalize, hosted-gate]
+    needs: [normalize, preflight]
     env:
       RESULTS_DIR: tests/results/probe
     outputs:
@@ -268,7 +268,7 @@ jobs:
     if: ${{ inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '') || (inputs.strategy == 'single' && needs.probe.outputs.ok == 'false') }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 3
-    needs: [normalize, hosted-gate, probe]
+    needs: [normalize, preflight, probe]
     strategy:
       matrix:
         category: [dispatcher, fixtures, schema, comparevi, loop, psummary, workflow]
@@ -960,7 +960,7 @@ jobs:
     if: ${{ (inputs.strategy == 'single' || vars.ORCH_STRATEGY == 'single') && needs.probe.outputs.ok == 'true' }}
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 10
-    needs: [normalize, hosted-gate, probe]
+    needs: [normalize, preflight, probe]
     env:
       RESULTS_DIR: tests/results/single
       UNBLOCK_GUARD: '0'
@@ -1241,36 +1241,3 @@ jobs:
       if: ${{ always() }}
       shell: pwsh
       run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ inputs.include_integration || 'true' }}' -SampleId '${{ inputs.sample_id || '' }}'
-  preflight:
-    runs-on: windows-latest
-    timeout-minutes: 3
-    steps:
-    - uses: actions/checkout@v5
-    - name: Wire Probe (J1)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J1
-        results-dir: tests/results
-    - name: Wire Probe (J2)
-      if: '${{ vars.WIRE_PROBES != ''0'' }}'
-      uses: ./.github/actions/wire-probe
-      with:
-        phase: J2
-        results-dir: tests/results
-    - name: Verify Windows runner and idle LabVIEW (surface LVCompare notice)
-      shell: pwsh
-      run: |-
-        Write-Host "Runner: $([System.Environment]::OSVersion.VersionString)"
-        Write-Host "Pwsh:   $($PSVersionTable.PSVersion)"
-        $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-        if (-not (Test-Path -LiteralPath $cli)) {
-          Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
-        } else { Write-Host "LVCompare present: $cli" }
-        $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
-        if ($lv) { $pids = ($lv | ForEach-Object Id); $msg = "::error::LabVIEW.exe is running (PID(s): {0})" -f ([string]::Join(",", $pids)); Write-Host $msg; exit 1 }
-        Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
-        if ($env:GITHUB_STEP_SUMMARY) {
-          $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
-          $note | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-        }
