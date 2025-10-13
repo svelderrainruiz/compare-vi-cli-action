@@ -24,6 +24,65 @@ function Format-BoolLabel {
   return 'unknown'
 }
 
+function Write-HookSummaries {
+  param([string]$ResultsRoot)
+
+  $hooksDir = Join-Path $ResultsRoot '_hooks'
+  Write-Host ''
+  Write-Host '[Hook Summaries]' -ForegroundColor Cyan
+  if (-not (Test-Path -LiteralPath $hooksDir -PathType Container)) {
+    Write-Host '  (no hook summaries found)'
+    return @()
+  }
+
+  $files = Get-ChildItem -LiteralPath $hooksDir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+  if (-not $files) {
+    Write-Host '  (no hook summaries found)'
+    return @()
+  }
+
+  $latest = @{}
+  foreach ($file in $files) {
+    try {
+      $summary = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      continue
+    }
+    if (-not $summary) { continue }
+    $hookName = if ($summary.PSObject.Properties['hook']) { $summary.hook } else { [System.IO.Path]::GetFileNameWithoutExtension($file.Name) }
+    if (-not $hookName) { continue }
+    if (-not $latest.ContainsKey($hookName)) {
+      $latest[$hookName] = [ordered]@{
+        hook = $hookName
+        file = $file.FullName
+        status = $summary.status
+        exitCode = $summary.exitCode
+        timestamp = $summary.timestamp
+        plane = if ($summary.environment) { $summary.environment.plane } else { $null }
+        enforcement = if ($summary.environment) { $summary.environment.enforcement } else { $null }
+      }
+    }
+  }
+
+  if ($latest.Count -eq 0) {
+    Write-Host '  (no hook summaries found)'
+    return @()
+  }
+
+  foreach ($entry in ($latest.Keys | Sort-Object)) {
+    $info = $latest[$entry]
+    Write-Host ("  hook        : {0}" -f $info.hook)
+    Write-Host ("    status    : {0}" -f (Format-NullableValue $info.status))
+    Write-Host ("    exitCode  : {0}" -f (Format-NullableValue $info.exitCode))
+    Write-Host ("    plane     : {0}" -f (Format-NullableValue $info.plane))
+    Write-Host ("    enforce   : {0}" -f (Format-NullableValue $info.enforcement))
+    Write-Host ("    timestamp : {0}" -f (Format-NullableValue $info.timestamp))
+    Write-Host ("    file      : {0}" -f $info.file)
+  }
+
+  return ($latest.Values | Sort-Object hook)
+}
+
 function Write-WatcherStatusSummary {
   param(
     [string]$ResultsRoot,
@@ -262,6 +321,21 @@ if ($ApplyToggles) {
 
 Get-Content -LiteralPath $handoff
 Write-WatcherStatusSummary -ResultsRoot $ResultsRoot -RequestAutoTrim:$AutoTrim
+
+$hookSummaries = Write-HookSummaries -ResultsRoot $ResultsRoot
+if ($hookSummaries -and $hookSummaries.Count -gt 0) {
+  if ($env:GITHUB_STEP_SUMMARY) {
+    $hookSummaryLines = @('### Hook Summaries','','| hook | status | plane | enforcement | exit | timestamp |','| --- | --- | --- | --- | --- | --- |')
+    foreach ($hook in $hookSummaries) {
+      $hookSummaryLines += ('| {0} | {1} | {2} | {3} | {4} | {5} |' -f $hook.hook, (Format-NullableValue $hook.status), (Format-NullableValue $hook.plane), (Format-NullableValue $hook.enforcement), (Format-NullableValue $hook.exitCode), (Format-NullableValue $hook.timestamp))
+    }
+    ($hookSummaryLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+  }
+
+  $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+  New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+  ($hookSummaries | ConvertTo-Json -Depth 4) | Out-File -FilePath (Join-Path $handoffDir 'hook-summary.json') -Encoding utf8
+}
 
 if ($OpenDashboard) {
   $cli = Join-Path (Resolve-Path '.').Path 'tools/Dev-Dashboard.ps1'

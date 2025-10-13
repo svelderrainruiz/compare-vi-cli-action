@@ -94,6 +94,34 @@ $env:LV_HEAD_VI = 'VI2.vi'
 
 - CODEOWNERS: `@svelderrainruiz`
 
+## Git hooks & multi-plane validation
+
+- The repository pins `core.hooksPath=tools/hooks`. Hooks are implemented as a Node core (`tools/hooks/core/*.mjs`) with thin shell/PowerShell shims so Linux, Windows, and CI all execute the same logic.
+- Hook summaries are written to `tests/results/_hooks/<hook>.json` and include exit codes, truncated stdout/stderr, and notes (e.g., when PowerShell is unavailable on Linux).
+- Run hook logic manually before committing/pushing:
+
+  ```bash
+  npm run hooks:pre-commit
+  npm run hooks:pre-push
+  ```
+
+  Passing `HOOKS_PWSH=/path/to/pwsh` or `HOOKS_NODE=/path/to/node` overrides discovery if needed.
+
+- Additional helpers:
+
+  ```bash
+  npm run hooks:plane     # show detected plane + enforcement mode
+  npm run hooks:preflight # verify dependencies for the current plane
+  npm run hooks:multi     # run shell + PowerShell wrappers and diff JSON
+  npm run hooks:schema    # validate summaries against the v1 schema
+  ```
+
+- Control behaviour via `HOOKS_ENFORCE=fail|warn|off` (default: `fail` in CI, `warn` locally). Failures become warnings when enforcement is `warn`, and are suppressed entirely when set to `off`.
+
+- PowerShell-specific lint (inline-if, dot-sourcing, PSScriptAnalyzer) only runs when `pwsh` is available; otherwise the hook marks those steps as `skipped` and records a note in the summary.
+
+- The CI parity job ensures Windows and Linux shims stay in sync—if hook outputs drift, the workflow fails with a diff.
+
 ## Documentation Style
 
 Markdown lint configuration intentionally disables the MD013 (line length) rule globally.

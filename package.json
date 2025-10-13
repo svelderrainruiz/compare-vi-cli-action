@@ -26,7 +26,14 @@
     "dev:watcher:autotrim": "pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -AutoTrim",
     "ci:status": "pwsh -NoLogo -NoProfile -File tools/Follow-OrchestratedRun.ps1",
     "ci:watch": "pwsh -NoLogo -NoProfile -File tools/Follow-OrchestratedRun.ps1 -Watch",
-    "session-index:sample": "tsc -p tsconfig.json && node dist/src/session-index/cli.js --sample"
+    "session-index:sample": "tsc -p tsconfig.json && node dist/src/session-index/cli.js --sample",
+    "hooks:pre-commit": "node tools/hooks/core/pre-commit.mjs",
+    "hooks:pre-push": "node tools/hooks/core/pre-push.mjs",
+    "hooks:plane": "node tools/hooks/core/plane-info.mjs",
+    "hooks:preflight": "node tools/hooks/core/preflight.mjs",
+    "hooks:multi": "node tools/hooks/core/run-multi.mjs",
+    "hooks:schema": "node tools/hooks/core/validate-summaries.mjs",
+    "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\""
   },
   "devDependencies": {
     "@types/argparse": "^2.0.16",

@@ -129,6 +129,30 @@ npm run lint:md:changed
 Follow `AGENTS.md` for coding etiquette and keep CI deterministic. Large workflow updates
 should note affected jobs and link to supporting ADRs.
 
+### Local validation matrix
+
+Run the commands below (or invoke the matching VS Code task) before pushing. Each entry calls the same automation that our workflows execute, so local runs mirror CI behaviour.
+
+| Command / Run Task | Script invoked | Mirrors CI job(s) | Notes |
+| --- | --- | --- | --- |
+| `pwsh -File tools/PrePush-Checks.ps1` / “Run PrePush Checks” | `tools/PrePush-Checks.ps1` | `validate.yml › lint` | Runs actionlint, markdownlint, tracked-artifact guard, rerun-hint helper, watcher schema validation. |
+| `pwsh ./Invoke-PesterTests.ps1` / “Run Pester Tests (Unit)” | `Invoke-PesterTests.ps1` | Unit consumers in `validate.yml` | Fast feedback on unit suites before dispatching orchestrated runs. |
+| `pwsh ./Invoke-PesterTests.ps1 -IncludeIntegration true` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1 -IncludeIntegration true` | Integration phase in `ci-orchestrated.yml` and smoke stages in `validate.yml` | Requires LVCompare; runs the same categories the orchestrated pipeline executes. |
+| “Run Non-LV Checks (Tools Image)” | `tools/Run-NonLVChecksInDocker.ps1 -ToolsImageTag comparevi-tools:local -UseToolsImage` | `validate.yml › cli-smoke` non-LV preflight | Uses the consolidated tools image so actionlint/markdownlint/docs drift checks match the smoke job environment. |
+| “Run Non-LV Checks (Docker)” | `tools/Run-NonLVChecksInDocker.ps1` | `validate.yml › cli-smoke` fallback path | Falls back to per-tool containers when the unified image is unavailable. |
+| “Integration (Standing Priority): Auto Push + Start + Watch” | `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` | `ci-orchestrated.yml` standing-priority dispatcher + watcher | Pushes with the admin token, resolves issue [#127](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/127), dispatches, then streams logs via Docker watcher. |
+
+Keeping these green locally prevents surprises when Validate or the orchestrated pipeline runs in CI.
+
+#### Multi-plane hook helpers
+
+- `npm run hooks:plane` — prints the detected plane (for example `windows-pwsh`, `linux-wsl`, `github-ubuntu`) and the active enforcement mode.
+- `npm run hooks:preflight` — verifies Node/PowerShell availability for the current plane and warns if a dependency is missing.
+- `npm run hooks:multi` — runs both the shell and PowerShell wrappers, publishes labelled summaries (`tests/results/_hooks/pre-commit.shell.json`, etc.), and fails when the JSON differs.
+- `npm run hooks:schema` — validates all hook summaries against `docs/schemas/hooks-summary-v1.schema.json`.
+
+Tune behaviour with `HOOKS_ENFORCE=fail|warn|off` (default: `fail` in CI, `warn` locally). Use `HOOKS_PWSH` or `HOOKS_NODE` to point at custom executables when bouncing between planes.
+
 ## Support & feedback
 
 - File issues: <https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues>

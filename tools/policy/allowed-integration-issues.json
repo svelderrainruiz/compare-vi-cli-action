@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "issues": [
+    {
+      "number": 127,
+      "note": "Standing priority umbrella — multi-plane hooks rollout"
+    },
+    {
+      "number": 118,
+      "note": "Branch protection contract baseline"
+    }
+  ]
+}
