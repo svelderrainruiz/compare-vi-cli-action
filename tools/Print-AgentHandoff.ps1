@@ -407,6 +407,83 @@ try {
   Write-Warning ("Failed to load SemVer summary: {0}" -f $_.Exception.Message)
 }
 
+try {
+  $testSummaryPath = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff/test-summary.json'
+  if (Test-Path -LiteralPath $testSummaryPath -PathType Leaf) {
+    $testSummaryRaw = Get-Content -LiteralPath $testSummaryPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $testEntries = @()
+    $statusLabel = 'unknown'
+    $generatedAt = $null
+    $notes = @()
+    $total = 0
+
+    if ($testSummaryRaw -is [System.Array]) {
+      $testEntries = @($testSummaryRaw)
+      $total = $testEntries.Count
+      $statusLabel = if (@($testEntries | Where-Object { $_.exitCode -ne 0 }).Count -gt 0) { 'failed' } else { 'passed' }
+    } elseif ($testSummaryRaw -is [psobject]) {
+      $resultsProp = $testSummaryRaw.PSObject.Properties['results']
+      if ($resultsProp) {
+        $testEntries = @($resultsProp.Value)
+        $statusProp = $testSummaryRaw.PSObject.Properties['status']
+        $statusLabel = if ($statusProp) { $statusProp.Value } else { 'unknown' }
+        $generatedProp = $testSummaryRaw.PSObject.Properties['generatedAt']
+        if ($generatedProp) { $generatedAt = $generatedProp.Value }
+        $totalProp = $testSummaryRaw.PSObject.Properties['total']
+        $total = if ($totalProp) { $totalProp.Value } else { $testEntries.Count }
+        $notesProp = $testSummaryRaw.PSObject.Properties['notes']
+        if ($notesProp -and $notesProp.Value) { $notes = @($notesProp.Value) }
+      }
+    }
+
+    $failureEntries = @($testEntries | Where-Object { $_.exitCode -ne 0 })
+    $failureCount = $failureEntries.Count
+
+    Write-Host ''
+    Write-Host '[Test Results]' -ForegroundColor Cyan
+    Write-Host ("  status   : {0}" -f (Format-NullableValue $statusLabel))
+    Write-Host ("  total    : {0}" -f $total)
+    Write-Host ("  failures : {0}" -f $failureCount)
+    if ($generatedAt) {
+      Write-Host ("  generated: {0}" -f (Format-NullableValue $generatedAt))
+    }
+    if ($notes -and $notes.Count -gt 0) {
+      foreach ($note in $notes) {
+        Write-Host ("  note     : {0}" -f (Format-NullableValue $note))
+      }
+    }
+    foreach ($entry in $testEntries) {
+      Write-Host ("  {0} => exit {1}" -f ($entry.command ?? '(unknown)'), (Format-NullableValue $entry.exitCode))
+    }
+
+    if ($env:GITHUB_STEP_SUMMARY) {
+      $testLines = @(
+        '### Test Results',
+        '',
+        ('- Status: {0}' -f (Format-NullableValue $statusLabel)),
+        ('- Total: {0}  Failures: {1}' -f $total, $failureCount)
+      )
+      if ($generatedAt) {
+        $testLines += ('- Generated: {0}' -f (Format-NullableValue $generatedAt))
+      }
+      if ($notes -and $notes.Count -gt 0) {
+        foreach ($note in $notes) {
+          $testLines += ('  - Note: {0}' -f (Format-NullableValue $note))
+        }
+      }
+      $testLines += ''
+      $testLines += '| command | exit |'
+      $testLines += '| --- | --- |'
+      foreach ($entry in $testEntries) {
+        $testLines += ('| {0} | {1} |' -f ($entry.command ?? '(unknown)'), (Format-NullableValue $entry.exitCode))
+      }
+      ($testLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+  }
+} catch {
+  Write-Warning ("Failed to read test summary: {0}" -f $_.Exception.Message)
+}
+
 Write-WatcherStatusSummary -ResultsRoot $ResultsRoot -RequestAutoTrim:$AutoTrim
 
 $hookSummaries = Write-HookSummaries -ResultsRoot $ResultsRoot

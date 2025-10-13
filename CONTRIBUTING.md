@@ -100,6 +100,7 @@ $env:LV_HEAD_VI = 'VI2.vi'
 
 - `npm run priority:bootstrap` — detect the current plane, run hook preflight (and parity when `-- -VerboseHooks` is supplied), and refresh the standing-priority snapshot/router.
 - `npm run priority:handoff` — ingest the latest handoff artifacts (`issue-summary.json`, `issue-router.json`, hook and watcher summaries) into the session, hydrating `$StandingPrioritySnapshot`, `$StandingPriorityRouter`, etc.
+- `npm run priority:handoff-tests` — run the priority/hooks/semver checks and persist results to `tests/results/_agent/handoff/test-summary.json` for downstream agents.
 - `npm run priority:release` — simulate the release actions described by the router; pass `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
 - `npm run handoff:schema` — validate the hook handoff summary (`tests/results/_agent/handoff/hook-summary.json`) against `docs/schemas/handoff-hook-summary-v1.schema.json`.
 - `npm run handoff:release-schema` — validate the release summary (`tests/results/_agent/handoff/release-summary.json`) against `docs/schemas/handoff-release-v1.schema.json`.

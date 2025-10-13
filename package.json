@@ -39,6 +39,7 @@
     "priority:test": "node --test \"tools/priority/__tests__/*.mjs\"",
     "priority:bootstrap": "pwsh -NoLogo -NoProfile -File tools/priority/bootstrap.ps1",
     "priority:handoff": "pwsh -NoLogo -NoProfile -File tools/priority/Import-HandoffState.ps1",
+    "priority:handoff-tests": "pwsh -NoLogo -NoProfile -File tools/priority/Run-HandoffTests.ps1",
     "priority:release": "pwsh -NoLogo -NoProfile -File tools/priority/Simulate-Release.ps1",
     "semver:check": "node tools/priority/validate-semver.mjs",
     "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\"",

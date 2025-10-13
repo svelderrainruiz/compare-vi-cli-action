@@ -38,6 +38,7 @@ $issueRouter  = Read-HandoffJson -Name 'issue-router.json'
 $hookSummary  = Read-HandoffJson -Name 'hook-summary.json'
 $watcherTelemetry = Read-HandoffJson -Name 'watcher-telemetry.json'
 $releaseSummary = Read-HandoffJson -Name 'release-summary.json'
+$testSummary = Read-HandoffJson -Name 'test-summary.json'
 
 if ($issueSummary) {
   Write-Host '[handoff] Standing priority snapshot' -ForegroundColor Cyan
@@ -80,4 +81,50 @@ if ($releaseSummary) {
     }
   }
   Set-Variable -Name ReleaseHandoffSummary -Scope Global -Value $releaseSummary -Force
+}
+
+if ($testSummary) {
+  Write-Host '[handoff] Test results' -ForegroundColor Cyan
+  $entries = @()
+  $statusLabel = 'unknown'
+  $total = 0
+  $generatedAt = $null
+  $notes = @()
+
+  if ($testSummary -is [System.Array]) {
+    $entries = @($testSummary)
+    $total = $entries.Count
+    $statusLabel = if (@($entries | Where-Object { $_.exitCode -ne 0 }).Count -gt 0) { 'failed' } else { 'passed' }
+  } elseif ($testSummary -is [psobject]) {
+    $resultsProp = $testSummary.PSObject.Properties['results']
+    if ($resultsProp) {
+      $entries = @($resultsProp.Value)
+      $statusProp = $testSummary.PSObject.Properties['status']
+      $statusLabel = if ($statusProp) { $statusProp.Value } else { 'unknown' }
+      $totalProp = $testSummary.PSObject.Properties['total']
+      $total = if ($totalProp) { $totalProp.Value } else { $entries.Count }
+      $generatedProp = $testSummary.PSObject.Properties['generatedAt']
+      if ($generatedProp) { $generatedAt = $generatedProp.Value }
+      $notesProp = $testSummary.PSObject.Properties['notes']
+      if ($notesProp -and $notesProp.Value) { $notes = @($notesProp.Value) }
+    }
+  }
+
+  $failureEntries = @($entries | Where-Object { $_.exitCode -ne 0 })
+  $failureCount = $failureEntries.Count
+  Write-Host ("  status   : {0}" -f (Format-NullableValue $statusLabel))
+  Write-Host ("  total    : {0}" -f $total)
+  Write-Host ("  failures : {0}" -f $failureCount)
+  if ($generatedAt) {
+    Write-Host ("  generated: {0}" -f (Format-NullableValue $generatedAt))
+  }
+  if ($notes -and $notes.Count -gt 0) {
+    foreach ($note in $notes) {
+      Write-Host ("  note     : {0}" -f (Format-NullableValue $note))
+    }
+  }
+  foreach ($entry in $entries) {
+    Write-Host ("  {0} => exit {1}" -f ($entry.command ?? '(unknown)'), (Format-NullableValue $entry.exitCode))
+  }
+  Set-Variable -Name TestHandoffSummary -Scope Global -Value $testSummary -Force
 }
