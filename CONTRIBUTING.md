@@ -96,6 +96,14 @@ $env:LV_HEAD_VI = 'VI2.vi'
 
 ## Git hooks & multi-plane validation
 
+## Standing priority workflow
+
+- `npm run priority:bootstrap` — detect the current plane, run hook preflight (and parity when `-- -VerboseHooks` is supplied), and refresh the standing-priority snapshot/router.
+- `npm run priority:handoff` — ingest the latest handoff artifacts (`issue-summary.json`, `issue-router.json`, hook and watcher summaries) into the session, hydrating `$StandingPrioritySnapshot`, `$StandingPriorityRouter`, etc.
+- `npm run priority:release` — simulate the release actions described by the router; pass `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
+
+These helpers make the sandbox feel pseudo-persistent: each agent self-injects the previous session’s state before starting work and leaves updated artifacts when finishing.
+
 - The repository pins `core.hooksPath=tools/hooks`. Hooks are implemented as a Node core (`tools/hooks/core/*.mjs`) with thin shell/PowerShell shims so Linux, Windows, and CI all execute the same logic.
 - Hook summaries are written to `tests/results/_hooks/<hook>.json` and include exit codes, truncated stdout/stderr, and notes (e.g., when PowerShell is unavailable on Linux).
 - Run hook logic manually before committing/pushing:

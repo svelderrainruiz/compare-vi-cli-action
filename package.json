@@ -37,6 +37,9 @@
     "priority:schema": "ajv validate -s docs/schemas/standing-priority-issue-v1.schema.json -d tests/results/_agent/issue/*.json --spec=draft2020 -c ajv-formats",
     "priority:show": "node -e \"console.log(require('fs').readFileSync('tests/results/_agent/issue/router.json','utf8'))\"",
     "priority:test": "node --test \"tools/priority/__tests__/*.mjs\"",
+    "priority:bootstrap": "pwsh -NoLogo -NoProfile -File tools/priority/bootstrap.ps1",
+    "priority:handoff": "pwsh -NoLogo -NoProfile -File tools/priority/Import-HandoffState.ps1",
+    "priority:release": "pwsh -NoLogo -NoProfile -File tools/priority/Simulate-Release.ps1",
     "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\""
   },
   "devDependencies": {

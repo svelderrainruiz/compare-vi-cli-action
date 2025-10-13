@@ -146,6 +146,14 @@ Keeping these green locally prevents surprises when Validate or the orchestrated
 
 #### Multi-plane hook helpers
 
+#### Standing priority helpers
+
+- `npm run priority:bootstrap` — run hook preflight/parity (optional via `-- -VerboseHooks`) and refresh the standing-priority snapshot/router.
+- `npm run priority:handoff` — import the latest handoff summaries into the current PowerShell session (globals such as `$StandingPrioritySnapshot` and `$StandingPriorityRouter`).
+- `npm run priority:release` — simulate the release path from the router; add `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
+ — simulates release prep using the current router; pass  to run  after the dry-run.
+
+
 - `npm run hooks:plane` — prints the detected plane (for example `windows-pwsh`, `linux-wsl`, `github-ubuntu`) and the active enforcement mode.
 - `npm run hooks:preflight` — verifies Node/PowerShell availability for the current plane and warns if a dependency is missing.
 - `npm run hooks:multi` — runs both the shell and PowerShell wrappers, publishes labelled summaries (`tests/results/_hooks/pre-commit.shell.json`, etc.), and fails when the JSON differs.
