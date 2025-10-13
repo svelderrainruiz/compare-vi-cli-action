@@ -482,12 +482,12 @@ jobs:
         name: hook-parity-${{ matrix.os }}
         path: tests/results/_hooks/*.json
 
-      - name: Reset staged files
-        if: always()
-        shell: bash
-        run: |
-          git reset --hard
-          rm -rf tmp/hooks
+    - name: Reset staged files
+      if: always()
+      shell: bash
+      run: |
+        git reset --hard
+        rm -rf tmp/hooks
 
   semver:
     needs: lint
