@@ -60,13 +60,13 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -112,6 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RESULTS_DIR: tests/results/lint
+      ACTIONLINT_VERSION: '${{ vars.ACTIONLINT_VERSION || ''1.7.7'' }}'
     steps:
     - uses: actions/checkout@v5
     - name: Wire Probe (J1)
@@ -119,13 +120,29 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
+    - name: Install actionlint (retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./bin
+        ver="${ACTIONLINT_VERSION:-1.7.7}"
+        for i in 1 2 3; do
+          if curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- "$ver" ./bin; then
+            break
+          else
+            echo "retry $i"; sleep 2
+          fi
+        done
+    - name: Run actionlint
+      run: |
+        ./bin/actionlint -color
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -138,6 +155,28 @@ jobs:
           $params += '-FailOnWorkflowDrift'
         }
         pwsh -File ./tools/Run-NonLVChecksInDocker.ps1 @params
+    - name: Setup Node with cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+    - name: Install markdownlint-cli (retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for i in 1 2 3; do
+          if npm install -g markdownlint-cli; then
+            break
+          else
+            npm cache clean --force || true
+            echo "retry $i"
+            sleep 2
+          fi
+        done
+    - name: Run markdownlint (non-blocking)
+      run: |
+        markdownlint "**/*.md" --ignore node_modules
+      continue-on-error: true
   hosted-gate:
     runs-on: windows-latest
     timeout-minutes: 3
@@ -152,13 +191,13 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -173,13 +212,13 @@ jobs:
         Write-Host "Pwsh:   $($PSVersionTable.PSVersion)"
         $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
         if (-not (Test-Path -LiteralPath $cli)) {
-        Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted gate)"
+          Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
         } else { Write-Host "LVCompare present: $cli" }
         $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
         if ($lv) { $pids = ($lv | ForEach-Object Id); $msg = "::error::LabVIEW.exe is running (PID(s): {0})" -f ([string]::Join(",", $pids)); Write-Host $msg; exit 1 }
         Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
         if ($env:GITHUB_STEP_SUMMARY) {
-          $note = @('Note:', '- This gate runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
+          $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
           $note | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
     # Hosted gate is informational only; enforce LVCompare on self-hosted jobs.
@@ -201,13 +240,13 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -257,13 +296,13 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results/${{ matrix.category }}
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results/${{ matrix.category }}
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -422,11 +461,11 @@ jobs:
       with:
         name: orchestrated-pester-results-${{ matrix.category }}
         path: |
-         ${{ env.RESULTS_DIR }}/**/*.xml
-         ${{ env.RESULTS_DIR }}/**/*.txt
-         ${{ env.RESULTS_DIR }}/pester-summary.json
-         ${{ env.RESULTS_DIR }}/pester-failures.json
-         ${{ env.RESULTS_DIR }}/session-index.json
+          ${{ env.RESULTS_DIR }}/**/*.xml
+          ${{ env.RESULTS_DIR }}/**/*.txt
+          ${{ env.RESULTS_DIR }}/pester-summary.json
+          ${{ env.RESULTS_DIR }}/pester-failures.json
+          ${{ env.RESULTS_DIR }}/session-index.json
 
     - name: Upload invoker boot log (category)
       if: always() && hashFiles(format('{0}/_invoker/boot.log', env.RESULTS_DIR)) != ''
@@ -554,13 +593,13 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: results/fixture-drift
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: results/fixture-drift
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -944,13 +983,13 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: J1
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Wire Probe (J2)
       if: '${{ vars.WIRE_PROBES != ''0'' }}'
       uses: ./.github/actions/wire-probe
       with:
         phase: J2
-        results-dir: ${{ env.RESULTS_DIR }}
+        results-dir: tests/results
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -1202,3 +1241,36 @@ jobs:
       if: ${{ always() }}
       shell: pwsh
       run: pwsh -File tools/Write-RerunHint.ps1 -Workflow 'ci-orchestrated.yml' -IncludeIntegration '${{ inputs.include_integration || 'true' }}' -SampleId '${{ inputs.sample_id || '' }}'
+  preflight:
+    runs-on: windows-latest
+    timeout-minutes: 3
+    steps:
+    - uses: actions/checkout@v5
+    - name: Wire Probe (J1)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J1
+        results-dir: tests/results
+    - name: Wire Probe (J2)
+      if: '${{ vars.WIRE_PROBES != ''0'' }}'
+      uses: ./.github/actions/wire-probe
+      with:
+        phase: J2
+        results-dir: tests/results
+    - name: Verify Windows runner and idle LabVIEW (surface LVCompare notice)
+      shell: pwsh
+      run: |-
+        Write-Host "Runner: $([System.Environment]::OSVersion.VersionString)"
+        Write-Host "Pwsh:   $($PSVersionTable.PSVersion)"
+        $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+        if (-not (Test-Path -LiteralPath $cli)) {
+          Write-Host "::notice::LVCompare.exe not found at canonical path: $cli (hosted preflight)"
+        } else { Write-Host "LVCompare present: $cli" }
+        $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
+        if ($lv) { $pids = ($lv | ForEach-Object Id); $msg = "::error::LabVIEW.exe is running (PID(s): {0})" -f ([string]::Join(",", $pids)); Write-Host $msg; exit 1 }
+        Write-Host 'Preflight OK: Windows runner healthy; LabVIEW not running.'
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
+          $note | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
