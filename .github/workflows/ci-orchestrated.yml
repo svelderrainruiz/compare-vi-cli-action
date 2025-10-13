@@ -523,16 +523,16 @@ jobs:
       with:
         name: dev-dashboard-${{ matrix.category }}
         path: |
-          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.html
-          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.json
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.html
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.json
         if-no-files-found: warn
 
     - name: Append dev dashboard summary (matrix)
       if: always()
       shell: pwsh
       run: |
-        $html = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.html'
-        $json = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.json'
+        $html = Join-Path "${{ env.RESULTS_DIR }}/dev-dashboard" 'dashboard.html'
+        $json = Join-Path "${{ env.RESULTS_DIR }}/dev-dashboard" 'dashboard.json'
         if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
           $lines = @(
             "### Dev Dashboard (${{ matrix.category }})",
@@ -995,7 +995,6 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-       & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
@@ -1030,7 +1029,6 @@ jobs:
         $lines = @('### Post-Invoker/Warmup Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-       & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-warmup'
         & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'post-warmup'
 
     - name: Wire Probe (T1)
