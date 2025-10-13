@@ -1,0 +1,49 @@
+{
+  "name": "comparevi-extension",
+  "displayName": "CompareVI Workflows",
+  "description": "Convenience commands for building the CompareVI CLI and driving standing-priority workflows.",
+  "version": "0.1.0",
+  "publisher": "labview-ci-cd",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:comparevi.buildAndParse",
+    "onCommand:comparevi.startStandingPriority",
+    "onCommand:comparevi.watchStandingPriority"
+  ],
+  "main": "out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "comparevi.buildAndParse",
+        "title": "CompareVI: Build & Parse CLI"
+      },
+      {
+        "command": "comparevi.startStandingPriority",
+        "title": "CompareVI: Start Standing Priority Run"
+      },
+      {
+        "command": "comparevi.watchStandingPriority",
+        "title": "CompareVI: Watch Standing Priority Run"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "package": "vsce package",
+    "test": "npm run compile && node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.0.0"
+  }
+}

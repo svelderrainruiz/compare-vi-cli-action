@@ -242,3 +242,20 @@ should note affected jobs and link to supporting ADRs.
 - File issues: <https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues>
 - Contact NI for LabVIEW licensing questions.
 - For agent coordination, follow the steps in `AGENT_HANDOFF.txt`.
+
+#### VS Code extension (experimental)
+
+A thin VS Code extension lives in 	ools/vscode/comparevi-extension. It exposes commands that wrap the tasks above:
+- CompareVI: Build & Parse CLI
+- CompareVI: Start Standing Priority Run
+- CompareVI: Watch Standing Priority Run
+
+For local development:
+1. Run 
+pm install inside 	ools/vscode/comparevi-extension.
+2. From VS Code, run Debug: Start Debugging on the extension to launch a dev host.
+3. Commands shell out to the tasks in .vscode/tasks.json, so behaviour stays aligned with local scripts/CI.
+
+pm run compile builds TypeScript, and 
+pm test exercises the registration smoke test via @vscode/test-electron.
+
