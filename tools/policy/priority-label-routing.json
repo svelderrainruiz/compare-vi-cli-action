@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "labels": [
+    {
+      "name": "documentation",
+      "actions": [
+        { "key": "docs:lint", "priority": 20, "scripts": ["npm run lint:md:changed"] }
+      ]
+    },
+    {
+      "name": "docs",
+      "actions": [
+        { "key": "docs:lint", "priority": 20, "scripts": ["npm run lint:md:changed"] }
+      ]
+    },
+    {
+      "name": "ci",
+      "actions": [
+        { "key": "ci:parity", "priority": 30, "scripts": ["npm run hooks:multi", "npm run hooks:schema"] }
+      ]
+    },
+    {
+      "name": "release",
+      "actions": [
+        { "key": "release:prep", "priority": 40, "scripts": ["pwsh -File tools/Branch-Orchestrator.ps1 -DryRun"] }
+      ]
+    }
+  ]
+}
+

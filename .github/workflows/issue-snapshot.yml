@@ -1,0 +1,31 @@
+name: Standing Priority — Snapshot on Issue Events
+
+on:
+  issues:
+    types: [edited, labeled, unlabeled, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Sync standing-priority snapshot
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          npm ci --ignore-scripts
+          npm run priority:sync || true
+      - name: Upload snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: standing-priority-snapshot-${{ github.run_id }}
+          path: |
+            tests/results/_agent/issue/*.json
+            tests/results/_agent/issue/*.digest
+
