@@ -69,6 +69,16 @@ $prov = [ordered]@{
   headRef             = $headRef
   baseRef             = $baseRef
   headSha             = $headSha
+  runner              = [ordered]@{
+    name          = $env:RUNNER_NAME
+    os            = $env:RUNNER_OS
+    arch          = $env:RUNNER_ARCH
+    job           = $env:GITHUB_JOB
+    machine       = [System.Environment]::MachineName
+    trackingId    = $env:RUNNER_TRACKING_ID
+    imageOS       = $env:ImageOS
+    imageVersion  = $env:ImageVersion
+  }
 }
 if ($prNumber) { $prov['prNumber'] = $prNumber }
 
@@ -98,4 +108,3 @@ if ($AppendStepSummary -and $env:GITHUB_STEP_SUMMARY) {
 }
 
 Write-Host ("Provenance written: {0}" -f $outPath)
-

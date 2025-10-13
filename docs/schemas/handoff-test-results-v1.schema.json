@@ -86,6 +86,18 @@
         },
         "additionalProperties": false
       }
+    },
+    "runner": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "job": { "type": "string" },
+        "imageOS": { "type": "string" },
+        "imageVersion": { "type": "string" }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

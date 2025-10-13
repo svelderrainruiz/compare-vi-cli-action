@@ -103,6 +103,14 @@ $summary = [ordered]@{
   total        = $results.Count
   failureCount = $failureCount
   results      = $results
+  runner       = [ordered]@{
+    name        = $env:RUNNER_NAME
+    os          = $env:RUNNER_OS
+    arch        = $env:RUNNER_ARCH
+    job         = $env:GITHUB_JOB
+    imageOS     = $env:ImageOS
+    imageVersion= $env:ImageVersion
+  }
 }
 
 if (-not $npmPath) {

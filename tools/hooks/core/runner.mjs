@@ -107,6 +107,11 @@ export class HookRunner {
       plane: this.plane,
       enforcement: this.enforcement,
       githubActions: process.env.GITHUB_ACTIONS === 'true',
+      runnerName: process.env.RUNNER_NAME || null,
+      runnerOS: process.env.RUNNER_OS || null,
+      runnerArch: process.env.RUNNER_ARCH || null,
+      runnerTrackingId: process.env.RUNNER_TRACKING_ID || null,
+      job: process.env.GITHUB_JOB || null,
     };
 
     this.resultsDir = path.join(this.repoRoot, 'tests', 'results', '_hooks');
