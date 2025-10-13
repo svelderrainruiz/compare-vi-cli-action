@@ -47,7 +47,7 @@ function Get-DockerHostPath {
   $resolved = (Resolve-Path -LiteralPath $Path).Path
   if ($IsWindows) {
     $drive = $resolved.Substring(0,1).ToLowerInvariant()
-    $rest = $resolved.Substring(2).Replace('\','/')
+    $rest = $resolved.Substring(2).Replace('\','/').TrimStart('/')
     return "/$drive/$rest"
   }
   return $resolved
