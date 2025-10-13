@@ -93,9 +93,27 @@ runs:
             Write-Host "Started invoker attempt #$i pid=$($p.Id) pipe=$pipe"
             "[$ts] attempt#$i spawn pid=$($p.Id) pipe=$pipe" | Out-File -FilePath $boot -Append -Encoding utf8
           } catch {
+            # Fallback: create a small wrapper script that sets env vars inline, then starts the invoker
             $err = $_.Exception.Message
-            Write-Host "::warning::Failed to spawn invoker on attempt #$i: ${err}"
-            "[$ts] attempt#$i spawn error: $err" | Out-File -FilePath $boot -Append -Encoding utf8
+            Write-Host "::warning::Failed to spawn invoker on attempt #$i (env injection): ${err}"
+            try {
+              $wrapper = Join-Path $env:RUNNER_TEMP ("invoker-wrapper-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
+              $lines = @()
+              foreach ($pair in $envMap.GetEnumerator()) {
+                $val = ($pair.Value -replace "'", "''")
+                $lines += ("$env:{0} = '{1}'" -f $pair.Key, $val)
+              }
+              $startPath = Join-Path $wd 'tools/RunnerInvoker/Start-RunnerInvoker.ps1'
+              $lines += ("& '{0}' -PipeName '{1}' -SentinelPath '{2}' -ResultsDir '{3}'" -f $startPath, $pipe, $sent, $results)
+              ($lines -join "`n") | Out-File -FilePath $wrapper -Encoding utf8
+              $p = Start-Process -FilePath $psExe -ArgumentList @('-NoLogo','-NoProfile','-File', $wrapper) -WindowStyle Hidden -PassThru -WorkingDirectory $wd
+              Write-Host "Started invoker (fallback) attempt #$i pid=$($p.Id) pipe=$pipe"
+              "[$ts] attempt#$i spawn (fallback) pid=$($p.Id) pipe=$pipe" | Out-File -FilePath $boot -Append -Encoding utf8
+            } catch {
+              $err = $_.Exception.Message
+              Write-Host "::warning::Fallback spawn failed on attempt #$i: ${err}"
+              "[$ts] attempt#$i spawn error: $err" | Out-File -FilePath $boot -Append -Encoding utf8
+            }
           }
           $sw = [Diagnostics.Stopwatch]::StartNew()
           while ($sw.Elapsed.TotalSeconds -lt $to) { if (Test-Path -LiteralPath $ready) { $ok = $true; break }; Start-Sleep -Milliseconds 300 }
@@ -147,4 +165,3 @@ runs:
       if: ${{ runner.os != 'Windows' }}
       shell: bash
       run: echo ensure-invoker non-Windows runner, skipping
-
