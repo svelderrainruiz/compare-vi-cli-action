@@ -258,6 +258,13 @@ For local development:
 3. Commands shell out to the tasks in `.vscode/tasks.json`, so behaviour stays aligned with local scripts/CI. `npm run compile` builds TypeScript, and `npm test` exercises a smoke test via `@vscode/test-electron`.
 
 The extension also contributes a **CompareVI Artifacts** tree in the Explorer view. It lists `tests/results/compare-cli/queue-summary.json`, `compare-outcome.json`, the session index, and phase manifest when available. Use the context menu (or the summary command) to view an HTML summary of JSON artifacts alongside the raw file.
+
+Packaging notes:
+
+1. Development: run `npm install` then press `F5` (Debug: Start Debugging) from VS Code to side-load the extension.
+2. Compilation: run `npm run compile` prior to packaging.
+3. Optional VSIX: install `vsce` locally and run `npx vsce package` inside `tools/vscode/comparevi-extension`; install the resulting VSIX via “Extensions: Install from VSIX...” if you prefer a self-contained bundle instead of running the debug host.
 pm test exercises the registration smoke test via @vscode/test-electron.
+
 
 
