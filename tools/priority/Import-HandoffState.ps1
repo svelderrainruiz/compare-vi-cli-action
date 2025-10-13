@@ -7,6 +7,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Format-NullableValue {
+  param($Value)
+  if ($null -eq $Value) { return 'n/a' }
+  if ($Value -is [string] -and [string]::IsNullOrWhiteSpace($Value)) { return 'n/a' }
+  return $Value
+}
+
+function Format-BoolLabel {
+  param([object]$Value)
+  if ($Value -eq $true) { return 'true' }
+  if ($Value -eq $false) { return 'false' }
+  return 'unknown'
+}
+
 function Read-HandoffJson {
   param([string]$Name)
   $path = Join-Path $HandoffDir $Name
@@ -23,6 +37,7 @@ $issueSummary = Read-HandoffJson -Name 'issue-summary.json'
 $issueRouter  = Read-HandoffJson -Name 'issue-router.json'
 $hookSummary  = Read-HandoffJson -Name 'hook-summary.json'
 $watcherTelemetry = Read-HandoffJson -Name 'watcher-telemetry.json'
+$releaseSummary = Read-HandoffJson -Name 'release-summary.json'
 
 if ($issueSummary) {
   Write-Host '[handoff] Standing priority snapshot' -ForegroundColor Cyan
@@ -53,4 +68,16 @@ if ($hookSummary) {
 if ($watcherTelemetry) {
   Write-Host '[handoff] Watcher telemetry available' -ForegroundColor Cyan
   Set-Variable -Name WatcherHandoffTelemetry -Scope Global -Value $watcherTelemetry -Force
+}
+
+if ($releaseSummary) {
+  Write-Host '[handoff] SemVer status' -ForegroundColor Cyan
+  Write-Host ("  version : {0}" -f (Format-NullableValue $releaseSummary.version))
+  Write-Host ("  valid   : {0}" -f (Format-BoolLabel $releaseSummary.valid))
+  if ($releaseSummary.issues) {
+    foreach ($issue in $releaseSummary.issues) {
+      Write-Host ("    issue : {0}" -f $issue)
+    }
+  }
+  Set-Variable -Name ReleaseHandoffSummary -Scope Global -Value $releaseSummary -Force
 }

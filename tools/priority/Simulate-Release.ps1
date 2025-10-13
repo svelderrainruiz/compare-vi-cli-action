@@ -29,8 +29,65 @@ function Invoke-Npm {
   }
 }
 
+function Invoke-SemVerCheck {
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCmd) {
+    throw 'node not found; cannot run SemVer check.'
+  }
+  $scriptPath = Join-Path (Resolve-Path '.').Path 'tools/priority/validate-semver.mjs'
+  if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+    throw "SemVer script not found at $scriptPath"
+  }
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $nodeCmd.Source
+  $psi.ArgumentList.Add($scriptPath)
+  $psi.WorkingDirectory = (Resolve-Path '.').Path
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $stdout = $proc.StandardOutput.ReadToEnd()
+  $stderr = $proc.StandardError.ReadToEnd()
+  $proc.WaitForExit()
+  if ($stderr) { Write-Warning $stderr.TrimEnd() }
+  $result = $null
+  if ($stdout) {
+    try { $result = $stdout.Trim() | ConvertFrom-Json -ErrorAction Stop } catch {}
+  }
+  return [pscustomobject]@{
+    ExitCode = $proc.ExitCode
+    Result = $result
+    Raw = $stdout.Trim()
+  }
+}
+
+function Write-ReleaseSummary {
+  param([pscustomobject]$SemVer)
+  $handoffDir = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff'
+  New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+  $r = $SemVer?.Result
+  $summary = [ordered]@{
+    schema = 'agent-handoff/release-v1'
+    version = $r?.version ?? '(unknown)'
+    valid = [bool]($r?.valid)
+    issues = $r?.issues ?? @()
+    checkedAt = $r?.checkedAt ?? (Get-Date).ToString('o')
+  }
+  ($summary | ConvertTo-Json -Depth 4) | Out-File -FilePath (Join-Path $handoffDir 'release-summary.json') -Encoding utf8
+  return $summary
+}
+
 Write-Host '[release] Refreshing standing priority snapshot…'
 Invoke-Npm -Script 'priority:sync'
+
+Write-Host '[release] Validating SemVer version…'
+$semverOutcome = Invoke-SemVerCheck
+$releaseSummary = Write-ReleaseSummary -SemVer $semverOutcome
+Write-Host ('[release] Version: {0} (valid: {1})' -f $releaseSummary.version, $releaseSummary.valid)
+if (-not $releaseSummary.valid) {
+  foreach ($issue in $releaseSummary.issues) { Write-Warning $issue }
+  throw "SemVer validation failed for version $($releaseSummary.version)"
+}
 
 $routerPath = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/issue/router.json'
 if (-not (Test-Path -LiteralPath $routerPath -PathType Leaf)) {

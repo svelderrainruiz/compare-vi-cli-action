@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/handoff-release-v1.schema.json",
+  "title": "Agent Handoff Release Summary",
+  "type": "object",
+  "required": [
+    "schema",
+    "version",
+    "valid",
+    "checkedAt"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent-handoff/release-v1"
+    },
+    "version": {
+      "type": "string"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

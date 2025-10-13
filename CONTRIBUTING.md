@@ -102,6 +102,8 @@ $env:LV_HEAD_VI = 'VI2.vi'
 - `npm run priority:handoff` — ingest the latest handoff artifacts (`issue-summary.json`, `issue-router.json`, hook and watcher summaries) into the session, hydrating `$StandingPrioritySnapshot`, `$StandingPriorityRouter`, etc.
 - `npm run priority:release` — simulate the release actions described by the router; pass `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
 - `npm run handoff:schema` — validate the hook handoff summary (`tests/results/_agent/handoff/hook-summary.json`) against `docs/schemas/handoff-hook-summary-v1.schema.json`.
+- `npm run handoff:release-schema` — validate the release summary (`tests/results/_agent/handoff/release-summary.json`) against `docs/schemas/handoff-release-v1.schema.json`.
+- `npm run semver:check` — assert the current `package.json` version complies with SemVer 2.0 via `tools/priority/validate-semver.mjs`.
 
 These helpers make the sandbox feel pseudo-persistent: each agent self-injects the previous session’s state before starting work and leaves updated artifacts when finishing.
 

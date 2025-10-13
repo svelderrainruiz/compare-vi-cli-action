@@ -489,6 +489,19 @@ jobs:
           git reset --hard
           rm -rf tmp/hooks
 
+  semver:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies (no scripts)
+        run: npm ci --ignore-scripts
+      - name: SemVer check
+        run: npm run semver:check
+
   issue-snapshot:
     needs: lint
     runs-on: ubuntu-latest

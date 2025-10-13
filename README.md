@@ -152,6 +152,8 @@ Keeping these green locally prevents surprises when Validate or the orchestrated
 - `npm run priority:handoff` — import the latest handoff summaries into the current PowerShell session (globals such as `$StandingPrioritySnapshot` and `$StandingPriorityRouter`).
 - `npm run priority:release` — simulate the release path from the router; add `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
 - `npm run handoff:schema` — validate the stored hook handoff summary against `docs/schemas/handoff-hook-summary-v1.schema.json`.
+- `npm run handoff:release-schema` — validate the release summary (`tests/results/_agent/handoff/release-summary.json`) against `docs/schemas/handoff-release-v1.schema.json`.
+- `npm run semver:check` — run the SemVer validator (`tools/priority/validate-semver.mjs`) against the current package version.
 
 
 - `npm run hooks:plane` — prints the detected plane (for example `windows-pwsh`, `linux-wsl`, `github-ubuntu`) and the active enforcement mode.

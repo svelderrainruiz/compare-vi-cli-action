@@ -36,6 +36,74 @@ function Invoke-Npm {
   }
 }
 
+function Invoke-SemVerCheck {
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCmd) {
+    Write-Warning 'node not found; skipping semver check.'
+    return $null
+  }
+
+  $scriptPath = Join-Path (Resolve-Path '.').Path 'tools/priority/validate-semver.mjs'
+  if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+    Write-Warning "SemVer script not found at $scriptPath"
+    return $null
+  }
+
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $nodeCmd.Source
+  $psi.ArgumentList.Add($scriptPath)
+  $psi.WorkingDirectory = (Resolve-Path '.').Path
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $stdout = $proc.StandardOutput.ReadToEnd()
+  $stderr = $proc.StandardError.ReadToEnd()
+  $proc.WaitForExit()
+
+  if ($stderr) { Write-Warning $stderr.TrimEnd() }
+
+  $json = $null
+  if ($stdout) { $json = $stdout.Trim() }
+
+  $result = $null
+  if ($json) {
+    try { $result = $json | ConvertFrom-Json -ErrorAction Stop } catch { Write-Warning 'Failed to parse semver JSON output.' }
+  }
+
+  return [pscustomobject]@{
+    ExitCode = $proc.ExitCode
+    Raw = $json
+    Result = $result
+  }
+}
+
+function Write-ReleaseSummary {
+  param([pscustomobject]$SemVerResult)
+
+  $handoffDir = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff'
+  New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+
+  $result = $SemVerResult?.Result
+  $summary = [ordered]@{
+    schema   = 'agent-handoff/release-v1'
+    version  = $result?.version ?? '(unknown)'
+    valid    = [bool]($result?.valid)
+    issues   = @()
+    checkedAt = $result?.checkedAt ?? (Get-Date).ToString('o')
+  }
+
+  if ($result?.issues) {
+    $summary.issues = @($result.issues)
+  }
+
+  $summaryPath = Join-Path $handoffDir 'release-summary.json'
+  ($summary | ConvertTo-Json -Depth 4) | Out-File -FilePath $summaryPath -Encoding utf8
+
+  return $summary
+}
+
 Write-Host '[bootstrap] Detecting hook plane…'
 Invoke-Npm -Script 'hooks:plane' -AllowFailure
 
@@ -54,6 +122,27 @@ if (-not $PreflightOnly) {
   Invoke-Npm -Script 'priority:sync' -AllowFailure:$true
   Write-Host '[bootstrap] Showing router plan…'
   Invoke-Npm -Script 'priority:show' -AllowFailure:$true
+
+  Write-Host '[bootstrap] Validating SemVer version…'
+  $semverOutcome = Invoke-SemVerCheck
+  if ($semverOutcome -and $semverOutcome.Result) {
+    Write-Host ('[bootstrap] Version: {0} (valid: {1})' -f $semverOutcome.Result.version, $semverOutcome.Result.valid)
+    $summary = Write-ReleaseSummary -SemVerResult $semverOutcome
+    if (-not $semverOutcome.Result.valid) {
+      foreach ($issue in $summary.issues) { Write-Warning $issue }
+    }
+  } else {
+    Write-Warning '[bootstrap] SemVer check skipped; writing placeholder summary.'
+    $placeholder = [pscustomobject]@{
+      Result = [pscustomobject]@{
+        version = '(unknown)'
+        valid = $false
+        issues = @('SemVer check skipped during bootstrap')
+        checkedAt = (Get-Date).ToString('o')
+      }
+    }
+    Write-ReleaseSummary -SemVerResult $placeholder | Out-Null
+  }
 }
 
 Write-Host '[bootstrap] Bootstrapping complete.'

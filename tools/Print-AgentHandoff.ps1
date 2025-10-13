@@ -372,6 +372,41 @@ try {
   Write-Warning ("Failed to display standing priority summary: {0}" -f $_.Exception.Message)
 }
 
+try {
+  $releasePath = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff/release-summary.json'
+  if (Test-Path -LiteralPath $releasePath -PathType Leaf) {
+    $release = Get-Content -LiteralPath $releasePath -Raw | ConvertFrom-Json -ErrorAction Stop
+    Write-Host ''
+    Write-Host '[SemVer Status]' -ForegroundColor Cyan
+    Write-Host ("  version : {0}" -f (Format-NullableValue $release.version))
+    Write-Host ("  valid   : {0}" -f (Format-BoolLabel $release.valid))
+    if ($release.issues) {
+      foreach ($issue in $release.issues) {
+        Write-Host ("    issue : {0}" -f $issue)
+      }
+    }
+    $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+    New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+    Copy-Item -LiteralPath $releasePath -Destination (Join-Path $handoffDir 'release-summary.json') -Force
+    if ($env:GITHUB_STEP_SUMMARY) {
+      $releaseLines = @(
+        '### SemVer Status',
+        '',
+        ('- Version: {0}' -f (Format-NullableValue $release.version)),
+        ('- Valid: {0}' -f (Format-BoolLabel $release.valid))
+      )
+      if ($release.issues -and $release.issues.Count -gt 0) {
+        foreach ($issue in $release.issues) {
+          $releaseLines += ('  - {0}' -f $issue)
+        }
+      }
+      ($releaseLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+  }
+} catch {
+  Write-Warning ("Failed to load SemVer summary: {0}" -f $_.Exception.Message)
+}
+
 Write-WatcherStatusSummary -ResultsRoot $ResultsRoot -RequestAutoTrim:$AutoTrim
 
 $hookSummaries = Write-HookSummaries -ResultsRoot $ResultsRoot
