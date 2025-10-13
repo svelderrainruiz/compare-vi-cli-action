@@ -228,7 +228,12 @@ jobs:
       CLEAN_AFTER: '0'
       SCAN_ARTIFACTS: '1'
       UNBLOCK_GUARD: '0'
-      LV_SUPPRESS_UI: '0'
+      # Recommended LabVIEW environment toggles for headless invocations
+      LV_SUPPRESS_UI: '1'
+      LV_NO_ACTIVATE: '1'
+      LV_CURSOR_RESTORE: '1'
+      LV_IDLE_WAIT_SECONDS: '2'
+      LV_IDLE_MAX_WAIT_SECONDS: '5'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
       EMIT_LV_CLOSURE_CRUMBS: '1'
@@ -273,9 +278,29 @@ jobs:
         mode: start
         results-dir: tests/results
         category: ${{ matrix.category }}
-        timeout-seconds: '60'
-        retries: '3'
+        # Give the invoker more time and an extra retry while diagnosing READY
+        timeout-seconds: '120'
+        retries: '4'
         retry-delay-seconds: '7'
+
+    - name: Debug invoker markers
+      if: always()
+      shell: pwsh
+      run: |
+        $dir  = "tests/results/${{ matrix.category }}/_invoker"
+        if (Test-Path -LiteralPath $dir -PathType Container) {
+          Write-Host "Invoker marker directory: $dir"
+          try { Get-ChildItem -LiteralPath $dir | Format-Table -AutoSize | Out-String | Write-Host } catch {}
+          $boot = Join-Path $dir 'boot.log'
+          if (Test-Path -LiteralPath $boot -PathType Leaf) {
+            Write-Host '--- boot.log ---'
+            Get-Content -LiteralPath $boot -Raw | Write-Host
+          } else {
+            Write-Host 'boot.log not found.'
+          }
+        } else {
+          Write-Host '::notice::Invoker marker directory missing.'
+        }
 
     - name: LabVIEW warmup (preflight; leave LVCompare running)
       if: runner.os == 'Windows'
