@@ -30,7 +30,9 @@ param(
   [switch]$SkipDocs,
   [switch]$SkipWorkflow,
   [switch]$FailOnWorkflowDrift,
-  [switch]$SkipDotnetCliBuild
+  [switch]$SkipDotnetCliBuild,
+  [string]$ToolsImageTag,
+  [switch]$UseToolsImage
 )
 
 Set-StrictMode -Version Latest
@@ -79,51 +81,66 @@ function Invoke-Container {
   return $code
 }
 
+# Build CLI via tools image or plain SDK
 if (-not $SkipDotnetCliBuild) {
   $cliOutput = 'dist/comparevi-cli'
   if (Test-Path -LiteralPath $cliOutput) {
     Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
   }
-  Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
-    -Arguments @('bash','-lc',"dotnet publish src/CompareVi.Tools.Cli -c Release -nologo -o $cliOutput") `
-    -Label 'dotnet-cli-build'
+  if ($UseToolsImage -and $ToolsImageTag) {
+    Invoke-Container -Image $ToolsImageTag `
+      -Arguments @('bash','-lc',"dotnet publish src/CompareVi.Tools.Cli -c Release -nologo -o $cliOutput") `
+      -Label 'dotnet-cli-build (tools)'
+  } else {
+    Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
+      -Arguments @('bash','-lc',"dotnet publish src/CompareVi.Tools.Cli -c Release -nologo -o $cliOutput") `
+      -Label 'dotnet-cli-build'
+  }
 }
 
-if (-not $SkipActionlint) {
-  Invoke-Container -Image 'rhysd/actionlint:1.7.7' `
-    -Arguments @('-color') `
-    -Label 'actionlint'
-}
-
-if (-not $SkipMarkdown) {
-  $cmd = @'
+if ($UseToolsImage -and $ToolsImageTag) {
+  if (-not $SkipActionlint) {
+    Invoke-Container -Image $ToolsImageTag -Arguments @('actionlint','-color') -Label 'actionlint (tools)'
+  }
+  if (-not $SkipMarkdown) {
+    $cmd = 'markdownlint "**/*.md" --config .markdownlint.jsonc --ignore node_modules --ignore bin --ignore vendor'
+    Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$cmd) -AcceptExitCodes @(0,1) -Label 'markdownlint (tools)'
+  }
+  if (-not $SkipDocs) {
+    Invoke-Container -Image $ToolsImageTag -Arguments @('pwsh','-NoLogo','-NoProfile','-File','tools/Check-DocsLinks.ps1','-Path','docs') -Label 'docs-links (tools)'
+  }
+  if (-not $SkipWorkflow) {
+    $checkCmd = 'python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/ci-orchestrated-v2.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml'
+    $wfCode = Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$checkCmd) -AcceptExitCodes @(0,3) -Label 'workflow-drift (tools)'
+    if ($FailOnWorkflowDrift -and $wfCode -eq 3) {
+      Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
+      exit 3
+    }
+  }
+} else {
+  if (-not $SkipActionlint) {
+    Invoke-Container -Image 'rhysd/actionlint:1.7.7' -Arguments @('-color') -Label 'actionlint'
+  }
+  if (-not $SkipMarkdown) {
+    $cmd = @'
 npm install -g markdownlint-cli && \
 markdownlint "**/*.md" --config .markdownlint.jsonc --ignore node_modules --ignore bin --ignore vendor
 '@
-  Invoke-Container -Image 'node:20-alpine' `
-    -Arguments @('sh','-lc',$cmd) `
-    -AcceptExitCodes @(0,1) `
-    -Label 'markdownlint'
-}
-
-if (-not $SkipDocs) {
-  Invoke-Container -Image 'mcr.microsoft.com/powershell:7.4-debian-12' `
-    -Arguments @('pwsh','-NoLogo','-NoProfile','-File','tools/Check-DocsLinks.ps1','-Path','docs') `
-    -Label 'docs-links'
-}
-
-if (-not $SkipWorkflow) {
-  $checkCmd = @'
+    Invoke-Container -Image 'node:20-alpine' -Arguments @('sh','-lc',$cmd) -AcceptExitCodes @(0,1) -Label 'markdownlint'
+  }
+  if (-not $SkipDocs) {
+    Invoke-Container -Image 'mcr.microsoft.com/powershell:7.4-debian-12' -Arguments @('pwsh','-NoLogo','-NoProfile','-File','tools/Check-DocsLinks.ps1','-Path','docs') -Label 'docs-links'
+  }
+  if (-not $SkipWorkflow) {
+    $checkCmd = @'
 pip install -q ruamel.yaml && \
 python tools/workflows/update_workflows.py --check .github/workflows/pester-selfhosted.yml .github/workflows/fixture-drift.yml .github/workflows/ci-orchestrated.yml .github/workflows/ci-orchestrated-v2.yml .github/workflows/pester-integration-on-label.yml .github/workflows/smoke.yml .github/workflows/compare-artifacts.yml
 '@
-  $wfCode = Invoke-Container -Image 'python:3.12-alpine' `
-    -Arguments @('sh','-lc',$checkCmd) `
-    -AcceptExitCodes @(0,3) `
-    -Label 'workflow-drift'
-  if ($FailOnWorkflowDrift -and $wfCode -eq 3) {
-    Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
-    exit 3
+    $wfCode = Invoke-Container -Image 'python:3.12-alpine' -Arguments @('sh','-lc',$checkCmd) -AcceptExitCodes @(0,3) -Label 'workflow-drift'
+    if ($FailOnWorkflowDrift -and $wfCode -eq 3) {
+      Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
+      exit 3
+    }
   }
 }
 

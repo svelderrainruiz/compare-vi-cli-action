@@ -23,6 +23,43 @@
       }
     },
     {
+      "label": "Build Tools Image (Docker)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Build-ToolsImage.ps1",
+        "-Tag",
+        "comparevi-tools:local"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Run Non-LV Checks (Tools Image)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-NonLVChecksInDocker.ps1",
+        "-ToolsImageTag",
+        "comparevi-tools:local",
+        "-UseToolsImage"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
       "label": "Parse CLI Compare Outcome (.NET)",
       "type": "process",
       "command": "dotnet",
