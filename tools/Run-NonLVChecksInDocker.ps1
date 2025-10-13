@@ -84,16 +84,18 @@ function Invoke-Container {
 # Build CLI via tools image or plain SDK
 if (-not $SkipDotnetCliBuild) {
   $cliOutput = 'dist/comparevi-cli'
+  $projectPath = 'src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj'
   if (Test-Path -LiteralPath $cliOutput) {
     Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
   }
+  $publishCommand = "dotnet publish $projectPath -c Release -nologo -o $cliOutput"
   if ($UseToolsImage -and $ToolsImageTag) {
     Invoke-Container -Image $ToolsImageTag `
-      -Arguments @('bash','-lc',"dotnet publish src/CompareVi.Tools.Cli -c Release -nologo -o $cliOutput") `
+      -Arguments @('bash','-lc',$publishCommand) `
       -Label 'dotnet-cli-build (tools)'
   } else {
     Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
-      -Arguments @('bash','-lc',"dotnet publish src/CompareVi.Tools.Cli -c Release -nologo -o $cliOutput") `
+      -Arguments @('bash','-lc',$publishCommand) `
       -Label 'dotnet-cli-build'
   }
 }
