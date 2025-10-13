@@ -482,12 +482,38 @@ jobs:
         name: hook-parity-${{ matrix.os }}
         path: tests/results/_hooks/*.json
 
-    - name: Reset staged files
-      if: always()
-      shell: bash
-      run: |
-        git reset --hard
-        rm -rf tmp/hooks
+      - name: Reset staged files
+        if: always()
+        shell: bash
+        run: |
+          git reset --hard
+          rm -rf tmp/hooks
+
+  issue-snapshot:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Sync standing-priority snapshot
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          npm run priority:sync || true
+      - name: Validate snapshot schema (best-effort)
+        continue-on-error: true
+        run: |
+          npm run priority:schema
+      - name: Upload issue snapshot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: standing-priority-snapshot
+          path: |
+            tests/results/_agent/issue/*.json
+            tests/results/_agent/issue/*.digest
 
   session-index:
     runs-on: ubuntu-latest

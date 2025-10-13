@@ -1504,5 +1504,25 @@
       "description": "Output root directory",
       "default": "tests/results/teststand-session"
     }
-  ]
+  
+    ,
+    {
+      "label": "Standing Priority: Refresh Snapshot",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run","priority:sync"],
+      "options": { "cwd": "" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Standing Priority: Show Router",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run","priority:show"],
+      "options": { "cwd": "" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    }
+ ]
 }

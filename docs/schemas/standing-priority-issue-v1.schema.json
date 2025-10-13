@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/standing-priority-issue-v1.schema.json",
+  "title": "Standing Priority Issue Snapshot",
+  "type": "object",
+  "required": ["schema","number","title","state","digest"],
+  "properties": {
+    "schema": { "type": "string", "const": "standing-priority/issue@v1" },
+    "number": { "type": "integer" },
+    "title": { "type": ["string","null"] },
+    "state": { "type": ["string","null"] },
+    "updatedAt": { "type": ["string","null"], "format": "date-time" },
+    "url": { "type": ["string","null"], "format": "uri" },
+    "labels": { "type": "array", "items": { "type": "string" } },
+    "assignees": { "type": "array", "items": { "type": "string" } },
+    "milestone": { "type": ["string","null"] },
+    "commentCount": { "type": ["integer","null"] },
+    "bodyDigest": { "type": ["string","null"] },
+    "digest": { "type": "string" }
+  },
+  "additionalProperties": true
+}
+
