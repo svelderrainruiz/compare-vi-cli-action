@@ -46,10 +46,12 @@
 - Verify deterministic artifacts by re-running orchestrated single strategy
   with identical inputs (`ts-<timestamp>-*`) and comparing provenance hashes.
 
-### Phase 2 – Introduce the .NET CLI shim
+### Phase 2 – Introduce the .NET CLI shim (started)
 
 - Land the shared CLI (`CompareVI.Cli.dll`) that wraps LVCompare and telemetry
-  emission. Expose a single entry point we can call from PowerShell.
+  emission. Expose a single entry point we can call from PowerShell (interim
+  wrapper `tools/Invoke-CompareCli.ps1` already bridges to Pester while the
+  .NET CLI is being built).
 - Refactor Pester helper scripts to invoke the CLI instead of spawning
   LabVIEW/LVCompare directly. Retain Windows-specific fallbacks while the CLI
   develops parity.

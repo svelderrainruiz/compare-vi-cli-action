@@ -235,6 +235,7 @@ jobs:
         category: [dispatcher, fixtures, schema, comparevi, loop, psummary, workflow]
       max-parallel: 1
     env:
+      RESULTS_ROOT: tests/results
       RESULTS_DIR: ${{ format('tests/results/{0}', matrix.category) }}
       DETECT_LEAKS: '1'
       CLEAN_AFTER: '0'
@@ -356,64 +357,44 @@ jobs:
         clean-labview-before: 'false'
         clean-after: 'false'
         track-artifacts: 'true'
-    - name: Define category patterns
-      id: cats
-      shell: pwsh
-      run: |
-        $cat='${{ matrix.category }}'
-        switch ($cat) {
-          'dispatcher' { $inc = @('Invoke-PesterTests*.ps1','PesterAvailability.Tests.ps1','NestedDispatcher*.Tests.ps1') }
-          'fixtures'   { $inc = @('Fixtures.*.ps1','FixtureValidation*.ps1','FixtureSummary*.ps1','ViBinaryHandling.Tests.ps1','FixtureValidationDiff.Tests.ps1') }
-          'schema'     { $inc = @('Schema.*.ps1','SchemaLite*.ps1') }
-          'comparevi'  { $inc = @('CompareVI*.ps1','CanonicalCli.Tests.ps1','Args.Tokenization.Tests.ps1') }
-          'loop'       { $inc = @('CompareLoop*.ps1','Run-AutonomousIntegrationLoop*.ps1','LoopMetrics.Tests.ps1','Integration-ControlLoop*.ps1','IntegrationControlLoop*.ps1') }
-          'psummary'   { $inc = @('PesterSummary*.ps1','Write-PesterSummaryToStepSummary*.ps1','AggregationHints*.ps1') }
-          'workflow'   { $inc = @('Workflow*.ps1','On-FixtureValidationFail.Tests.ps1','Watch.FlakyRecovery.Tests.ps1','FunctionShadowing*.ps1','FunctionProxy.Tests.ps1','RunSummary.Tool*.ps1','Action.CompositeOutputs.Tests.ps1','Binding.MinRepro.Tests.ps1','ArtifactTracking*.ps1','Guard.*.Tests.ps1') }
-          default      { $inc = @('*.ps1') }
-        }
-        "include=$($inc -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
     - name: Wire Probe (T1)
       uses: ./.github/actions/wire-probe
       with:
         phase: T1
         results-dir: ${{ env.RESULTS_DIR }}
-    - name: Run Pester tests via local dispatcher (category)
+    - name: Run Compare CLI (category)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
-        $inc = @()
-        if ('${{ steps.cats.outputs.include }}') { $inc = '${{ steps.cats.outputs.include }}'.Split(',') | Where-Object { $_ } }
-        $resDir = '${{ env.RESULTS_DIR }}'
-        ./Invoke-PesterTests.ps1 `
-          -TestsPath tests `
+        pwsh -File tools/Invoke-CompareCli.ps1 `
+          -Category '${{ matrix.category }}' `
           -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
-          -ResultsPath $resDir `
-          -EmitFailuresJsonAlways `
-          -IncludePatterns $inc
+          -ResultsRoot '${{ env.RESULTS_ROOT }}'
 
-    - name: Summarize Pester results (job-level)
+    - name: Summarize CLI output
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $category = '${{ matrix.category }}'
-        $resDir = "${{ env.RESULTS_DIR }}"
-        $sumPath = Join-Path $resDir 'pester-summary.json'
-        if (Test-Path -LiteralPath $sumPath) {
-          try {
-            $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
-            $tot = $s.totals
-            $lines = @(
-              "### Pester Status ($category)",
-              "- Result: $($s.result)",
-              "- Tests: $($tot.tests)  Passed: $($tot.passed)  Failed: $($tot.failed)",
-              if ($s.durationSeconds -ne $null) { "- Duration (s): $($s.durationSeconds)" } else { $null }
-            ) | Where-Object { $_ }
-            ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          } catch {
-            "Pester summary parse failed: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        $cliPath = Join-Path '${{ env.RESULTS_DIR }}' 'cli-run.json'
+        if (-not (Test-Path -LiteralPath $cliPath -PathType Leaf)) {
+          "Compare CLI summary not found for category '$category'." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          return
+        }
+        try {
+          $cli = Get-Content -LiteralPath $cliPath -Raw | ConvertFrom-Json -ErrorAction Stop
+          $lines = @(
+            "### Compare CLI Status ($category)",
+            "- Status: $($cli.status)",
+            "- Exit Code: $($cli.exitCode)"
+          )
+          if ($cli.summary) {
+            $lines += ("- Tests: {0}  Passed: {1}  Failed: {2}  Errors: {3}" -f $cli.summary.total,$cli.summary.passed,$cli.summary.failed,$cli.summary.errors)
+            if ($cli.summary.duration_s) { $lines += ("- Duration (s): {0}" -f $cli.summary.duration_s) }
           }
-        } else {
-          "No pester-summary.json found for category '${{ matrix.category }}'" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        } catch {
+          "Compare CLI summary parse failed: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
 
     - name: Ensure session index (fallback)
