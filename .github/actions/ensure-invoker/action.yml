@@ -101,7 +101,7 @@ runs:
               $lines = @()
               foreach ($pair in $envMap.GetEnumerator()) {
                 $val = ($pair.Value -replace "'", "''")
-                $lines += ("$env:{0} = '{1}'" -f $pair.Key, $val)
+                $lines += ("Set-Item -Path 'Env:{0}' -Value '{1}'" -f $pair.Key, $val)
               }
               $startPath = Join-Path $wd 'tools/RunnerInvoker/Start-RunnerInvoker.ps1'
               $lines += ("& '{0}' -PipeName '{1}' -SentinelPath '{2}' -ResultsDir '{3}'" -f $startPath, $pipe, $sent, $results)
