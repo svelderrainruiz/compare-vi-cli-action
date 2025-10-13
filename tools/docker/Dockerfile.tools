@@ -26,8 +26,8 @@ RUN apt-get update \
  && npm install -g markdownlint-cli2@0.12.1
 
 # Python ruamel.yaml for workflow drift checks
-RUN python3 -m pip install --no-cache-dir --upgrade pip \
-    && python3 -m pip install --no-cache-dir ruamel.yaml
+RUN python3 -m pip install --break-system-packages --no-cache-dir --upgrade pip \
+    && python3 -m pip install --break-system-packages --no-cache-dir ruamel.yaml
 
 # Install actionlint (pinned)
 RUN set -eux; \
