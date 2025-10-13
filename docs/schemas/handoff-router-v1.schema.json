@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/handoff-router-v1.schema.json",
+  "title": "Agent Handoff Router Plan",
+  "type": "object",
+  "required": [
+    "schema",
+    "issue",
+    "actions"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent/priority-router@v1"
+    },
+    "issue": {
+      "type": "integer"
+    },
+    "updatedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "priority"],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "scripts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rationale": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

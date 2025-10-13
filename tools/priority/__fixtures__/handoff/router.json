@@ -1,0 +1,31 @@
+{
+  "schema": "agent/priority-router@v1",
+  "issue": 127,
+  "updatedAt": "2025-10-13T16:11:40.911Z",
+  "actions": [
+    {
+      "key": "hooks:pre-commit",
+      "priority": 10,
+      "scripts": ["npm run hooks:pre-commit"],
+      "rationale": "baseline hook gate"
+    },
+    {
+      "key": "hooks:multi",
+      "priority": 11,
+      "scripts": ["npm run hooks:multi", "npm run hooks:schema"],
+      "rationale": "ensure parity across planes"
+    },
+    {
+      "key": "docs:lint",
+      "priority": 20,
+      "scripts": ["npm run lint:md:changed"],
+      "rationale": "docs label present"
+    },
+    {
+      "key": "ci:parity",
+      "priority": 30,
+      "scripts": ["npm run hooks:multi"],
+      "rationale": "ci label present"
+    }
+  ]
+}

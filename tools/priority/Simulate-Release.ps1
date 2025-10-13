@@ -73,7 +73,18 @@ function Write-ReleaseSummary {
     issues = $r?.issues ?? @()
     checkedAt = $r?.checkedAt ?? (Get-Date).ToString('o')
   }
-  ($summary | ConvertTo-Json -Depth 4) | Out-File -FilePath (Join-Path $handoffDir 'release-summary.json') -Encoding utf8
+  $summaryPath = Join-Path $handoffDir 'release-summary.json'
+  $previous = $null
+  if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+    try { $previous = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -ErrorAction Stop } catch {}
+  }
+  ($summary | ConvertTo-Json -Depth 4) | Out-File -FilePath $summaryPath -Encoding utf8
+  if ($previous) {
+    $changed = ($previous.version -ne $summary.version) -or ($previous.valid -ne $summary.valid)
+    if ($changed) {
+      Write-Host ("[release] SemVer state changed {0}/{1} -> {2}/{3}" -f $previous.version,$previous.valid,$summary.version,$summary.valid) -ForegroundColor Cyan
+    }
+  }
   return $summary
 }
 
