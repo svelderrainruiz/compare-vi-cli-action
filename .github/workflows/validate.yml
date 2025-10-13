@@ -463,6 +463,10 @@ jobs:
         PS
         git add tmp/hooks/sample.ps1
 
+    - name: Prime actionlint binary
+      shell: pwsh
+      run: pwsh -File tools/PrePush-Checks.ps1 -InstallIfMissing $true
+
     - name: Hooks plane info
       run: npm run hooks:plane
 
