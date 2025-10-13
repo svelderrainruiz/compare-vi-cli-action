@@ -11,6 +11,10 @@ inputs:
   category:
     description: Optional category subfolder appended to results-dir
     required: false
+  require-invoker:
+    description: When false, skip spawning the invoker even on Windows
+    required: false
+    default: 'true'
   timeout-seconds:
     description: Wait time for ready/stop markers
     required: false
@@ -54,7 +58,7 @@ runs:
 
     - name: Start invoker (Windows only)
       id: start
-      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' }}
+      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && inputs.require-invoker != 'false' }}
       shell: pwsh
       run: |
         $results = '${{ steps.compute.outputs.results }}'
@@ -136,7 +140,7 @@ runs:
         }
 
     - name: Invoker ping (Windows only)
-      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && steps.start.outputs.ready == 'true' }}
+      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && inputs.require-invoker != 'false' && steps.start.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $args = @(
@@ -149,7 +153,7 @@ runs:
         pwsh -File tools/RunnerInvoker/Wait-InvokerReady.ps1 @args
 
     - name: Stop invoker (Windows only)
-      if: ${{ inputs.mode == 'stop' && runner.os == 'Windows' }}
+      if: ${{ inputs.mode == 'stop' && runner.os == 'Windows' && inputs.require-invoker != 'false' }}
       shell: pwsh
       run: |
         $results = '${{ steps.compute.outputs.results }}'

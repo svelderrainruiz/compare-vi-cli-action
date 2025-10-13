@@ -2,7 +2,9 @@
 # Traceability Matrix Guide
 
 Maps Pester test files to requirements (`docs/requirements/**.md`) and ADRs (`docs/adr/**`).
-Outputs JSON and optional HTML under `tests/results/_trace/`.
+Outputs JSON and optional HTML under `<ResultsRoot>/_trace/`
+(`tests/results/_trace/` for the default root, or `tests/results/single/_trace/`
+when the single-strategy job is active).
 
 ## Annotating tests
 
@@ -41,9 +43,9 @@ Environment shortcuts:
 
 ## Outputs
 
-- `tests/results/_trace/trace-matrix.json` (schema `trace-matrix/v1`)
+- `<ResultsRoot>/_trace/trace-matrix.json` (schema `trace-matrix/v1`)
   - Covers summaries, per-test entries, uncovered requirements/ADRs.
-- `tests/results/_trace/trace-matrix.html`
+- `<ResultsRoot>/_trace/trace-matrix.html`
   - Human-readable tables with status chips and links to docs/results.
 
 ## Validation
