@@ -85,18 +85,22 @@ function Invoke-Container {
 if (-not $SkipDotnetCliBuild) {
   $cliOutput = 'dist/comparevi-cli'
   $projectPath = 'src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj'
-  if (Test-Path -LiteralPath $cliOutput) {
-    Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
-  }
-  $publishCommand = "dotnet publish $projectPath -c Release -nologo -o $cliOutput"
-  if ($UseToolsImage -and $ToolsImageTag) {
-    Invoke-Container -Image $ToolsImageTag `
-      -Arguments @('bash','-lc',$publishCommand) `
-      -Label 'dotnet-cli-build (tools)'
+  if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) {
+    Write-Host ("[docker] CompareVI CLI project not found at {0}; skipping build." -f $projectPath) -ForegroundColor Yellow
   } else {
-    Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
-      -Arguments @('bash','-lc',$publishCommand) `
-      -Label 'dotnet-cli-build'
+    if (Test-Path -LiteralPath $cliOutput) {
+      Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $publishCommand = "dotnet publish $projectPath -c Release -nologo -o $cliOutput"
+    if ($UseToolsImage -and $ToolsImageTag) {
+      Invoke-Container -Image $ToolsImageTag `
+        -Arguments @('bash','-lc',$publishCommand) `
+        -Label 'dotnet-cli-build (tools)'
+    } else {
+      Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
+        -Arguments @('bash','-lc',$publishCommand) `
+        -Label 'dotnet-cli-build'
+    }
   }
 }
 
