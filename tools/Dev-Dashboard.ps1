@@ -702,7 +702,11 @@ function ConvertTo-HtmlReport {
         if ($artifactsReportSize -ne $null) { $rows += "<dt>CLI Report Size</dt><dd>$(& $encode $artifactsReportSize) bytes</dd>" }
         if ($artifactsImageCount -ne $null) {
           $imgText = "$artifactsImageCount"
-          if ($artifactsExportDir) { $imgText = "$artifactsImageCount (export: $artifactsExportDir)" }
+          if ($artifactsExportDir) {
+            $imgText = "$artifactsImageCount (export: $artifactsExportDir)"
+          } elseif ($compareReportPathValue) {
+            $imgText = "$artifactsImageCount (report: $compareReportPathValue)"
+          }
           $rows += "<dt>CLI Images</dt><dd>$(& $encode $imgText)</dd>"
         } elseif ($artifactsExportDir) {
           $rows += "<dt>CLI Image Export</dt><dd>$(& $encode $artifactsExportDir)</dd>"

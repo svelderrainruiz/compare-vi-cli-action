@@ -13,28 +13,38 @@
   - CompareVI module: exported `Resolve-Cli`; normalized canonical path; filtered Pester ForEach artefacts in
     arg tokenization; relaxed flag validation (only `-lvpath` must carry a value).
   - Child-process snapshot writes to `tests/results/_agent/` and uses safer variable names.
+  - New provider-agnostic LabVIEW CLI layer (`tools/LabVIEWCli.psm1`) with LabVIEWCLI provider registration and wrappers
+    for CloseLabVIEW, CreateComparisonReport, RunVI, RunVIAnalyzer, RunUnitTests, MassCompile, and ExecuteBuildSpec.
+  - `tools/Invoke-LVCompare.ps1` now calls the shared CLI abstraction; legacy inline LabVIEWCLI spawn removed.
 
 ## Status & Known Gaps
-1) SCC modal (Error 1025/0x401 in NI_SCC_ConnSrv) — mitigated via hint; still avoid by setting Source Control to `<None>` in
+1) SCC modal (Error 1025/0x401 in NI_SCC_ConnSrv) - mitigated via hint; still avoid by setting Source Control to `<None>` in
    LabVIEW Options on the runner.
-2) CLI-only path — verified: `tools/Invoke-LVCompare.ps1` with `LVCI_COMPARE_POLICY=cli-only` generates `cli-report.html` and
-   assets. Warmup can be skipped; `Detect-RogueLV.ps1` is not used.
-3) Tests — remaining hotspots:
+2) CLI abstraction - only the LabVIEWCLI provider is active. Confirm `Resolve-LabVIEWCliPath` succeeds before invoking wrappers
+   and set `LVCLI_PROVIDER=gcli` once the alternate provider lands.
+3) CLI-only compare remains valid: `tools/Invoke-LVCompare.ps1` with `LVCI_COMPARE_POLICY=cli-only` generates `cli-report.html`.
+   Warmup can be skipped; `Detect-RogueLV.ps1` is not used.
+4) Tests - remaining hotspots:
    a. `CompareVI.Flags.Combinations` one case (mix with `-lvpath`). Either simplify quoting in the test or extend tokenization
       to accept that mixed form. Module already validates only `-lvpath` pairing.
    b. `ChildProcs.Schema` depth exceeded on JSON parse. Flatten `cmd` to a single string and keep depth ≤ 6; re-run.
    c. `tools/Dev-Dashboard.ps1` `$imgText` default for HTML path.
    d. `Invoke-PesterTests.ErrorHandling` adjust regex/assert to escape the file path in the crumb message.
-4) Docs/PRs — Once CLI-only validations are green, refresh #127 notes and release screenshots. Confirm branch protection
+5) Docs/PRs - Once CLI-only validations are green, refresh #127 notes and release screenshots. Confirm branch protection
    (`Validate` required on `develop`).
 
 ## Suggested Next Actions
 1) Run CLI-only compare and inspect outputs:
    - `pwsh -Command "$env:LVCI_COMPARE_POLICY='cli-only'"`
    - `pwsh -File tools/Invoke-LVCompare.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputDir tests/results/cli-only -RenderReport -JsonLogPath tests/results/cli-only/events.ndjson -LeakCheck -Summary`
-2) Verify SCC hint propagation (regression): `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`.
-3) Stabilize failing tests in order: flags mix case → child-procs JSON → dashboard default → dispatcher error-handling.
-4) Optional full sweep (time-boxed):
+2) Smoke test new CLI wrappers (Preview mode first, then live if LabVIEW CLI exists):
+   - `Import-Module ./tools/LabVIEWCli.psm1`
+   - `Invoke-LVRunVI -ViPath VI1.vi -Arguments 1,2 -ShowFrontPanel -Preview`
+   - `Invoke-LVMassCompile -DirectoryToCompile VI1.vi -Preview`
+   - `Invoke-LVExecuteBuildSpec -ProjectPath path.lvproj -BuildSpecName "My Build" -Preview`
+3) Verify SCC hint propagation (regression): `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`.
+4) Stabilize failing tests in order: flags mix case → child-procs JSON → dashboard default → dispatcher error-handling.
+5) Optional full sweep (time-boxed):
    - `pwsh -File Invoke-PesterTests.ps1 -IncludeIntegration false`
    - or `Invoke-Pester -Path tests -TagFilter Unit,Integration -ExcludeTag Policy -CI`
 
@@ -54,11 +64,12 @@
 ## First Actions for the Next Agent
 1. Execute `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` (no edits; prints header + watcher status).
 2. Ensure LabVIEW Source Control is `<None>` on the runner (to avoid the SCC modal in non-interactive sessions).
-3. Run the CLI-only compare (above) and open `tests/results/cli-only/cli-report.html`.
-4. Triage the remaining test hotspots (see Status & Known Gaps) and keep changes scoped; reference `#127` in commits/PRs.
+3. Confirm LabVIEW CLI binary availability (`Import-Module ./tools/LabVIEWCli.psm1; (Get-LVProviders | Select-Object -ExpandProperty Name)`).
+4. Run the CLI-only compare (above) and open `tests/results/cli-only/cli-report.html`.
+5. Triage the remaining test hotspots (see Status & Known Gaps) and keep changes scoped; reference `#127` in commits/PRs.
 
 ## Notes for Next Agent
 - HTML report emits data attributes (`data-cli-*`, `data-base-path`, `data-head-path`).
 - `tests/CompareReport.CliMetadata.Tests.ps1` assumes `Render-CompareReport.ps1` resolves from repo root.
-- SCC modal string: “Error 1025 … NI_SCC_ConnSrv … SCC_Provider_Startup.vi.ProxyCaller” — now surfaced as a hint in logs.
+- SCC modal string: "Error 1025 . NI_SCC_ConnSrv . SCC_Provider_Startup.vi.ProxyCaller" - now surfaced as a hint in logs.
 

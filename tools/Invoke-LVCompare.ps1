@@ -83,6 +83,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force } catch {}
+try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'LabVIEWCli.psm1') -Force } catch {}
 
 function Write-JsonEvent {
   param([string]$Type,[hashtable]$Data)
@@ -101,16 +102,6 @@ function Write-JsonEvent {
 }
 
 function New-DirIfMissing([string]$Path) { if (-not (Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null } }
-
-function Set-DefaultLabVIEWCliPath {
-  if ($env:LABVIEW_CLI_PATH -or $env:LABVIEWCLI_PATH -or $env:LABVIEW_CLI) { return }
-  if ([Environment]::Is64BitOperatingSystem) {
-    $candidate64 = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
-    if (Test-Path -LiteralPath $candidate64 -PathType Leaf) { $env:LABVIEW_CLI_PATH = $candidate64; return }
-  }
-  $candidateDefault = 'C:\Program Files\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
-  if (Test-Path -LiteralPath $candidateDefault -PathType Leaf) { $env:LABVIEW_CLI_PATH = $candidateDefault }
-}
 
 function Get-FileProductVersion([string]$Path) {
   if (-not $Path) { return $null }
@@ -263,68 +254,60 @@ function Invoke-LabVIEWCLICompare {
     [switch]$RenderReport
   )
 
-  Set-DefaultLabVIEWCliPath
-  $cliPath = $null
-  $cliCandidates = @($env:LABVIEW_CLI_PATH, $env:LABVIEWCLI_PATH, $env:LABVIEW_CLI)
-  foreach ($c in $cliCandidates) { if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { $cliPath = (Resolve-Path -LiteralPath $c).Path; break } }
-  if (-not $cliPath) { throw 'LabVIEW CLI path not resolved; set LABVIEW_CLI_PATH or install LabVIEWCLI.exe.' }
-
   New-DirIfMissing -Path $OutDir
-  $reportPath = Join-Path $OutDir 'cli-report.html'
+  $reportPath = $null
+  if ($RenderReport.IsPresent) {
+    $reportPath = Join-Path $OutDir 'cli-report.html'
+  }
+
   $stdoutPath = Join-Path $OutDir 'lvcli-stdout.txt'
   $stderrPath = Join-Path $OutDir 'lvcli-stderr.txt'
   $capPath    = Join-Path $OutDir 'lvcompare-capture.json'
 
-  $psi = [System.Diagnostics.ProcessStartInfo]::new()
-  $psi.FileName = $cliPath
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $psi.CreateNoWindow = $true
-
-  $psi.ArgumentList.Clear()
-  $psi.ArgumentList.Add('-OperationName') | Out-Null
-  $psi.ArgumentList.Add('CreateComparisonReport') | Out-Null
-  $psi.ArgumentList.Add('-vi1') | Out-Null; $psi.ArgumentList.Add($Base) | Out-Null
-  $psi.ArgumentList.Add('-vi2') | Out-Null; $psi.ArgumentList.Add($Head) | Out-Null
-  if ($RenderReport.IsPresent) {
-    $psi.ArgumentList.Add('-reportType') | Out-Null; $psi.ArgumentList.Add('HTMLSingleFile') | Out-Null
-    $psi.ArgumentList.Add('-reportPath') | Out-Null; $psi.ArgumentList.Add($reportPath) | Out-Null
+  $invokeParams = @{
+    BaseVi = (Resolve-Path -LiteralPath $Base).Path
+    HeadVi = (Resolve-Path -LiteralPath $Head).Path
+  }
+  if ($reportPath) {
+    $invokeParams.ReportPath = $reportPath
+    $invokeParams.ReportType = 'HTMLSingleFile'
   }
 
-  $cmdTokens = @($cliPath) + @($psi.ArgumentList)
-  $commandDisplay = ($cmdTokens -join ' ')
+  $cliResult = Invoke-LVCreateComparisonReport @invokeParams
 
-  $sw = [System.Diagnostics.Stopwatch]::StartNew()
-  $proc = [System.Diagnostics.Process]::Start($psi)
-  $stdout = $proc.StandardOutput.ReadToEnd()
-  $stderr = $proc.StandardError.ReadToEnd()
-  $proc.WaitForExit()
-  $sw.Stop()
-  $exit = [int]$proc.ExitCode
-
-  Set-Content -LiteralPath $stdoutPath -Value $stdout -Encoding utf8
-  Set-Content -LiteralPath $stderrPath -Value $stderr -Encoding utf8
+  Set-Content -LiteralPath $stdoutPath -Value ($cliResult.stdout ?? '') -Encoding utf8
+  Set-Content -LiteralPath $stderrPath -Value ($cliResult.stderr ?? '') -Encoding utf8
 
   $envBlockOrdered = [ordered]@{
     compareMode   = $env:LVCI_COMPARE_MODE
     comparePolicy = $env:LVCI_COMPARE_POLICY
   }
+
+  $cliPath = $cliResult.cliPath
   $cliInfoOrdered = [ordered]@{ path = $cliPath }
   $cliVer = Get-FileProductVersion -Path $cliPath
   if ($cliVer) { $cliInfoOrdered.version = $cliVer }
-  if ($RenderReport.IsPresent) { $cliInfoOrdered.reportPath = $reportPath }
-  $cliMeta = Get-LabVIEWCliOutputMetadata -StdOut $stdout -StdErr $stderr
-  if ($cliMeta) {
-    if ($cliMeta.PSObject.Properties.Name -contains 'reportType' -and $cliMeta.reportType) { $cliInfoOrdered.reportType = $cliMeta.reportType }
-    if ($cliMeta.PSObject.Properties.Name -contains 'reportPath' -and $cliMeta.reportPath) { $cliInfoOrdered.reportPath = $cliMeta.reportPath }
-    if ($cliMeta.PSObject.Properties.Name -contains 'status' -and $cliMeta.status) { $cliInfoOrdered.status = $cliMeta.status }
-    if ($cliMeta.PSObject.Properties.Name -contains 'message' -and $cliMeta.message) { $cliInfoOrdered.message = $cliMeta.message }
+  if ($reportPath) { $cliInfoOrdered.reportPath = $reportPath }
+  if ($cliResult.normalizedParams -and $cliResult.normalizedParams.PSObject.Properties.Name -contains 'reportPath' -and $cliResult.normalizedParams.reportPath) {
+    $cliInfoOrdered.reportPath = $cliResult.normalizedParams.reportPath
   }
+  if ($cliResult.normalizedParams -and $cliResult.normalizedParams.PSObject.Properties.Name -contains 'reportType' -and $cliResult.normalizedParams.reportType) {
+    $cliInfoOrdered.reportType = $cliResult.normalizedParams.reportType
+  }
+
+  $cliMeta = Get-LabVIEWCliOutputMetadata -StdOut $cliResult.stdout -StdErr $cliResult.stderr
+  if ($cliMeta) {
+    foreach ($name in @('reportType','reportPath','status','message')) {
+      if ($cliMeta.PSObject.Properties.Name -contains $name -and $cliMeta.$name) {
+        $cliInfoOrdered[$name] = $cliMeta.$name
+      }
+    }
+  }
+
   $artifactPath = $null
   if ($cliInfoOrdered.Contains('reportPath') -and $cliInfoOrdered['reportPath']) {
     $artifactPath = $cliInfoOrdered['reportPath']
-  } elseif ($RenderReport.IsPresent -and (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+  } elseif ($reportPath -and (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
     $artifactPath = $reportPath
   }
   if ($artifactPath) {
@@ -333,6 +316,7 @@ function Invoke-LabVIEWCLICompare {
       if ($artifacts) { $cliInfoOrdered.artifacts = $artifacts }
     } catch {}
   }
+
   $cliInfoObject = [pscustomobject]$cliInfoOrdered
   $envBlockOrdered.cli = $cliInfoObject
   $envBlock = [pscustomobject]$envBlockOrdered
@@ -342,20 +326,26 @@ function Invoke-LabVIEWCLICompare {
     timestamp = ([DateTime]::UtcNow.ToString('o'))
     base      = (Resolve-Path -LiteralPath $Base).Path
     head      = (Resolve-Path -LiteralPath $Head).Path
-    cliPath   = $cliPath
-    args      = @($psi.ArgumentList | ForEach-Object { [string]$_ })
-    exitCode  = $exit
-    seconds   = [Math]::Round($sw.Elapsed.TotalSeconds, 6)
-    stdoutLen = $stdout.Length
-    stderrLen = $stderr.Length
-    command   = $commandDisplay
+    cliPath   = $cliResult.cliPath
+    args      = @($cliResult.args)
+    exitCode  = [int]$cliResult.exitCode
+    seconds   = [Math]::Round([double]$cliResult.elapsedSeconds, 6)
+    stdoutLen = ($cliResult.stdout ?? '').Length
+    stderrLen = ($cliResult.stderr ?? '').Length
+    command   = $cliResult.command
     stdout    = $null
     stderr    = $null
   }
   $capture | Add-Member -NotePropertyName environment -NotePropertyValue $envBlock -Force
   $capture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $capPath -Encoding utf8
 
-  return [pscustomobject]@{ ExitCode=$exit; Seconds=[double]$capture.seconds; CapturePath=$capPath; ReportPath=$reportPath; Command=$commandDisplay }
+  return [pscustomobject]@{
+    ExitCode   = [int]$cliResult.exitCode
+    Seconds    = [double]$cliResult.elapsedSeconds
+    CapturePath= $capPath
+    ReportPath = if ($reportPath) { $reportPath } else { $cliInfoOrdered['reportPath'] }
+    Command    = $cliResult.command
+  }
 }
 
 $repoRoot = (Resolve-Path '.').Path

@@ -75,4 +75,25 @@ function Resolve-LVComparePath {
   return $null
 }
 
+function Resolve-LabVIEWCliPath {
+  if (-not $IsWindows) { return $null }
+  $envCandidates = @(
+    $env:LABVIEWCLI_PATH,
+    $env:LABVIEW_CLI_PATH
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+  foreach ($candidate in $envCandidates) {
+    try {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    } catch {}
+  }
+  $candidates = @(
+    "$env:ProgramFiles\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe",
+    "$env:ProgramFiles(x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe"
+  )
+  foreach ($c in $candidates) {
+    if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { return $c }
+  }
+  return $null
+}
+
 Export-ModuleMember -Function *

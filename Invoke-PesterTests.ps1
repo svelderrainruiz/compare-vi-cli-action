@@ -549,6 +549,22 @@ if ($__SingleInvokerRequested -eq '1') {
   $script:UseSingleInvoker = $true
   Write-Host "Single-invoker mode: step-based outer loop will run via scripts/Pester-Invoker.psm1" -ForegroundColor Yellow
 }
+elseif ($localDispatcherMode) {
+  # Local dispatcher implies non-CI, prefer single-invoker to avoid Start-Job fan-out
+  try {
+    $modPath = Join-Path $PSScriptRoot 'scripts/Pester-Invoker.psm1'
+    if (-not (Test-Path -LiteralPath $modPath -PathType Leaf)) { $modPath = Join-Path $PSScriptRoot 'Pester-Invoker.psm1' }
+    if (Test-Path -LiteralPath $modPath -PathType Leaf) {
+      Import-Module $modPath -Force
+      $script:UseSingleInvoker = $true
+      Write-Host "::notice::Local dispatcher forcing single-invoker (avoids Start-Job)" -ForegroundColor DarkGray
+    } else {
+      Write-Host "::notice::Local dispatcher requested single-invoker, but module not found; continuing normal path" -ForegroundColor DarkYellow
+    }
+  } catch {
+    Write-Host "::notice::Local dispatcher single-invoker import failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+  }
+}
 if (-not (Test-Path Variable:\script:UseSingleInvoker)) {
   $script:UseSingleInvoker = $false
 } elseif (-not $script:UseSingleInvoker) {
@@ -1386,12 +1402,55 @@ try {
 if (-not $script:UseSingleInvoker) {
   if ($script:stuckGuardEnabled) { _Write-HeartbeatLine 'start' }
   if ($effectiveTimeoutSeconds -gt 0) {
-    Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
-    $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
-    $partialLogPath = Join-Path $resultsDir 'pester-partial.log'
-    $lastWriteLen = 0
-    $lastHeartbeat = Get-Date
-    while ($true) {
+    if ($localDispatcherMode) {
+      Write-Host "::notice::Local dispatcher bypassing Start-Job timeout guard; running inline" -ForegroundColor DarkGray
+      try {
+        $rawOutput = & {
+          $InformationPreference = 'Continue'
+          Invoke-Pester -Configuration $conf *>&1
+        }
+        $testEndTime = Get-Date
+        $testDuration = $testEndTime - $testStartTime
+        foreach ($entry in $rawOutput) {
+          if ($entry -is [string]) {
+            $capturedOutputLines += $entry
+            if ($LiveOutput) { Write-Host $entry }
+          } elseif ($null -ne $entry -and ($entry.PSObject.Properties.Name -contains 'Tests') -and -not $result) {
+            $result = $entry
+          } elseif ($entry -isnot [string]) {
+            $textEntry = ($entry | Out-String)
+            $capturedOutputLines += $textEntry
+            if ($LiveOutput -and $textEntry) { Write-Host $textEntry }
+          }
+        }
+        if (-not $result) {
+          $maybe = $rawOutput | Where-Object { $_ -isnot [string] -and ($_.PSObject.Properties.Name -contains 'Tests') }
+          if ($maybe) { $result = $maybe[-1] }
+        }
+      } catch {
+        if ($script:stuckGuardEnabled) { _Write-HeartbeatLine 'error'; _Write-HeartbeatLine 'stop' }
+        Write-Error "Pester execution failed (inline local-bypass): $_"
+        try {
+          if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
+          $placeholder = @(
+            '<?xml version="1.0" encoding="utf-8"?>',
+            '<test-results name="placeholder" total="0" errors="1" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0">',
+            '  <environment nunit-version="3.0" />',
+            '  <culture-info />',
+            '</test-results>'
+          ) -join [Environment]::NewLine
+          Set-Content -LiteralPath $absoluteResultPath -Value $placeholder -Encoding UTF8
+        } catch { Write-Warning "Failed to write placeholder XML: $_" }
+        exit 1
+      }
+    } else {
+      Write-Host "Executing with timeout guard: $effectiveTimeoutSeconds second(s)" -ForegroundColor Yellow
+      if ($localDispatcherMode) { Write-Host "::warning::Local dispatcher unexpected: entering Start-Job path" -ForegroundColor Yellow }
+      $job = Start-Job -ScriptBlock { param($c) Invoke-Pester -Configuration $c } -ArgumentList ($conf)
+      $partialLogPath = Join-Path $resultsDir 'pester-partial.log'
+      $lastWriteLen = 0
+      $lastHeartbeat = Get-Date
+      while ($true) {
       if ($job.State -eq 'Completed') { break }
       if ($job.State -eq 'Failed') { break }
       $elapsed = (Get-Date) - $testStartTime
@@ -1425,18 +1484,19 @@ if (-not $script:UseSingleInvoker) {
         break
       }
       Start-Sleep -Seconds 5
-    }
-    if (-not $timedOut) {
-      try { $result = Receive-Job -Job $job -ErrorAction Stop } catch { Write-Error "Failed to retrieve Pester job result: $_" }
-    }
-    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
-    $testEndTime = Get-Date
-    $testDuration = $testEndTime - $testStartTime
-    if ($script:stuckGuardEnabled) {
-      if ($timedOut) {
-        _Write-HeartbeatLine 'timeout'
-      } else {
-        _Write-HeartbeatLine 'stop'
+      }
+      if (-not $timedOut) {
+        try { $result = Receive-Job -Job $job -ErrorAction Stop } catch { Write-Error "Failed to retrieve Pester job result: $_" }
+      }
+      Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+      $testEndTime = Get-Date
+      $testDuration = $testEndTime - $testStartTime
+      if ($script:stuckGuardEnabled) {
+        if ($timedOut) {
+          _Write-HeartbeatLine 'timeout'
+        } else {
+          _Write-HeartbeatLine 'stop'
+        }
       }
     }
   } else {

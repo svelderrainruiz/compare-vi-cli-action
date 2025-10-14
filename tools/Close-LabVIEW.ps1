@@ -1,74 +1,81 @@
-<# 
+<#
 .SYNOPSIS
-  Gracefully closes a running LabVIEW instance using g-cli.
+  Gracefully closes a running LabVIEW instance using the provider-agnostic CLI abstraction.
 
 .DESCRIPTION
-  Invokes g-cli's QuitLabVIEW command for the requested LabVIEW version
-  and bitness. Defaults are sourced from environment variables when the
-  parameters are not provided explicitly.
+  Routes the CloseLabVIEW operation through tools/LabVIEWCli.psm1, which selects an available provider
+  (LabVIEWCLI.exe today, g-cli in the future) and normalises arguments. Optional parameters mirror
+  historic behaviour and map onto canonical parameters.
+
+.PARAMETER LabVIEWExePath
+  Explicit LabVIEW executable path. When omitted, environment variables and canonical install
+  locations are used to derive the path.
 
 .PARAMETER MinimumSupportedLVVersion
-  LabVIEW version to target (for example: 2025, 2023Q3). Falls back to the
-  first populated value among LOOP_LABVIEW_VERSION, LABVIEW_VERSION,
-  MINIMUM_SUPPORTED_LV_VERSION and defaults to 2025 when none are provided.
+  LabVIEW version to target when the executable path is derived automatically.
 
 .PARAMETER SupportedBitness
-  Bitness of the LabVIEW instance (32 or 64). Defaults to the first populated
-  value among LOOP_LABVIEW_BITNESS, LABVIEW_BITNESS, MINIMUM_SUPPORTED_LV_BITNESS,
-  finally 64 if none are provided.
+  LabVIEW bitness (32 or 64) used when deriving the executable path.
+
+.PARAMETER LabVIEWCliPath
+  Optional override of the LabVIEWCLI.exe path (sets LABVIEWCLI_PATH for the duration of the call).
+
+.PARAMETER Provider
+  Explicit provider name to use (defaults to 'auto').
+
+.PARAMETER Preview
+  When set, shows the resolved provider and command without executing it.
 #>
 [CmdletBinding()]
 param(
+  [string]$LabVIEWExePath,
   [string]$MinimumSupportedLVVersion,
   [ValidateSet('32','64')]
-  [string]$SupportedBitness
+  [string]$SupportedBitness,
+  [string]$LabVIEWCliPath,
+  [string]$Provider = 'auto',
+  [switch]$Preview
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$defaultLabVIEWVersion = '2025'
-$defaultLabVIEWBitness = '64'
+Import-Module (Join-Path $PSScriptRoot 'LabVIEWCli.psm1') -Force
 
-if (-not $MinimumSupportedLVVersion) {
-  $MinimumSupportedLVVersion = @(
-    $env:LOOP_LABVIEW_VERSION,
-    $env:LABVIEW_VERSION,
-    $env:MINIMUM_SUPPORTED_LV_VERSION
-  ) | Where-Object { $_ } | Select-Object -First 1
-  if (-not $MinimumSupportedLVVersion) {
-    $MinimumSupportedLVVersion = $defaultLabVIEWVersion
-  }
+$params = @{}
+if ($PSBoundParameters.ContainsKey('LabVIEWExePath')) { $params.labviewPath = $LabVIEWExePath }
+if ($PSBoundParameters.ContainsKey('MinimumSupportedLVVersion')) { $params.labviewVersion = $MinimumSupportedLVVersion }
+if ($PSBoundParameters.ContainsKey('SupportedBitness')) { $params.labviewBitness = $SupportedBitness }
+
+$previousCliPath = $null
+$cliPathOverride = $false
+if ($PSBoundParameters.ContainsKey('LabVIEWCliPath') -and $LabVIEWCliPath) {
+  $previousCliPath = [System.Environment]::GetEnvironmentVariable('LABVIEWCLI_PATH')
+  [System.Environment]::SetEnvironmentVariable('LABVIEWCLI_PATH', $LabVIEWCliPath)
+  $cliPathOverride = $true
 }
-
-if (-not $SupportedBitness) {
-  $SupportedBitness = @(
-    $env:LOOP_LABVIEW_BITNESS,
-    $env:LABVIEW_BITNESS,
-    $env:MINIMUM_SUPPORTED_LV_BITNESS
-  ) | Where-Object { $_ } | Select-Object -First 1
-  if (-not $SupportedBitness) { $SupportedBitness = $defaultLabVIEWBitness }
-}
-
-if (-not (Get-Command -Name 'g-cli' -ErrorAction SilentlyContinue)) {
-  Write-Warning 'Close-LabVIEW.ps1 skipped: g-cli executable not found on PATH.'
-  return
-}
-
-$arguments = @('--lv-ver', $MinimumSupportedLVVersion)
-if ($SupportedBitness) { $arguments += @('--arch', $SupportedBitness) }
-$arguments += 'QuitLabVIEW'
-
-Write-Host ("[Close-LabVIEW] Invoking g-cli for LabVIEW {0} ({1}-bit)" -f $MinimumSupportedLVVersion, $SupportedBitness) -ForegroundColor DarkGray
 
 try {
-  & 'g-cli' @arguments
-  $code = $LASTEXITCODE
-  if ($code -ne 0) {
-    throw "g-cli exited with code $code"
+  $result = Invoke-LVOperation -Operation 'CloseLabVIEW' -Params $params -Provider $Provider -Preview:$Preview
+  if ($Preview) {
+    return $result
+  }
+  Write-Host ("[Close-LabVIEW] Provider: {0}" -f $result.provider) -ForegroundColor DarkGray
+  Write-Host ("[Close-LabVIEW] Command : {0}" -f $result.command) -ForegroundColor DarkGray
+  if ($result.exitCode -ne 0) {
+    throw "Provider '$($result.provider)' exited with code $($result.exitCode)."
   }
   Write-Host "[Close-LabVIEW] LabVIEW shutdown command completed successfully." -ForegroundColor DarkGreen
 } catch {
-  Write-Error ("Close-LabVIEW.ps1 failed: {0}" -f $_.Exception.Message)
+  $message = $_.Exception.Message
+  if ($message -match 'executable not found' -or $message -match 'No registered provider') {
+    Write-Warning $message
+    return
+  }
+  Write-Error ("Close-LabVIEW.ps1 failed: {0}" -f $message)
   exit 1
+} finally {
+  if ($cliPathOverride) {
+    [System.Environment]::SetEnvironmentVariable('LABVIEWCLI_PATH', $previousCliPath)
+  }
 }

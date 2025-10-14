@@ -66,7 +66,7 @@ Describe 'LVCompare flags (knowledgebase combinations)' -Tag 'Unit' {
     $tokens = @($exec.args)
     ($tokens -contains '-lvpath') | Should -BeTrue
     $idx = [array]::IndexOf($tokens,'-lvpath')
-    $idx | Should -BeGreaterThanOrEqual 0
+    $idx | Should -BeGreaterOrEqual 0
     $tokens[$idx+1] | Should -Be $lv
   }
 }

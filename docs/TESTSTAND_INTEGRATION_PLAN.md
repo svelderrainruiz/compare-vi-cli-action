@@ -28,7 +28,7 @@ This produces:
 - `compare/lvcompare-capture.json`, `compare/compare-events.ndjson`, `compare-report.html`
 - `session-index.json` summarising the run
 
-> **Note**: `-CloseLabVIEW` / `-CloseLVCompare` now queue post-run cleanup requests. The helpers do not invoke the close scripts inline; instead `tools/Post-Run-Cleanup.ps1` consumes the requests after `Invoke-PesterTests.ps1` completes, guaranteeing a single g-cli invocation per job.
+> **Note**: `-CloseLabVIEW` / `-CloseLVCompare` now queue post-run cleanup requests. The helpers do not invoke the close scripts inline; instead `tools/Post-Run-Cleanup.ps1` consumes the requests after `Invoke-PesterTests.ps1` completes, guaranteeing a single LabVIEWCLI invocation per job.
 
 ### 1.3 Harmonise outputs with dispatcher expectations
 

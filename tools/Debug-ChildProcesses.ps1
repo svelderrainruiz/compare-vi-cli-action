@@ -9,14 +9,23 @@
 [CmdletBinding()]
 param(
   [string]$ResultsDir = 'tests/results',
-  [string[]]$Names = @('pwsh','conhost','LabVIEW','LVCompare','g-cli','VIPM'),
+  [string[]]$Names = @('pwsh','conhost','LabVIEW','LVCompare','LabVIEWCLI','g-cli','VIPM'),
   [switch]$AppendStepSummary
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Get-CommandLine([int]$ProcId){
-  try { ($ci = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $ProcId) -ErrorAction SilentlyContinue); return ($ci.CommandLine) } catch { return $null }
+  try {
+    $ci = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $ProcId) -ErrorAction SilentlyContinue
+    if (-not $ci) { return $null }
+    $value = $ci.CommandLine
+    if ($null -eq $value) { return $null }
+    if ($value -is [System.Array]) { $value = ($value -join ' ') }
+    $text = [string]$value
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    return $text.Trim()
+  } catch { return $null }
 }
 
 $repoRoot = (Resolve-Path '.').Path
@@ -43,6 +52,11 @@ foreach ($name in $Names) {
         # Fallback via CIM (in case of session/bitness differences)
         $procs = @(Get-CimInstance Win32_Process -Filter "Name='VIPM.exe'" -ErrorAction SilentlyContinue)
       }
+    } elseif ($name -ieq 'LabVIEWCLI') {
+      $procs = @(Get-Process -Name 'LabVIEWCLI' -ErrorAction SilentlyContinue)
+      if (-not $procs -or $procs.Count -eq 0) {
+        $procs = @(Get-CimInstance Win32_Process -Filter "Name='LabVIEWCLI.exe'" -ErrorAction SilentlyContinue)
+      }
     } else {
       $procs = @(Get-Process -Name $name -ErrorAction SilentlyContinue)
     }
@@ -53,7 +67,13 @@ foreach ($name in $Names) {
     $title = $null
     try { $title = $p.MainWindowTitle } catch {}
     $procId = try { [int]$p.Id } catch { try { [int]$p.ProcessId } catch { $null } }
-    $cmd = if ($procId) { Get-CommandLine -ProcId $procId } else { $null }
+    $cmd = $null
+    if ($procId) {
+      $cmd = Get-CommandLine -ProcId $procId
+      if ($cmd -and $cmd.Length -gt 2048) {
+        $cmd = $cmd.Substring(0, 2048) + ' ...'
+      }
+    }
     $ws = 0L; $pm = 0L
     try { $ws = [int64]$p.WorkingSet64 } catch {}
     try { $pm = [int64]$p.PagedMemorySize64 } catch {}
