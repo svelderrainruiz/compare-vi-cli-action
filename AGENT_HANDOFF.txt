@@ -1,45 +1,40 @@
 # Agent Handoff – Compare VI CLI Action
 
 ## Context Snapshot
-- Branch: `issue/88-dev-dashboard-phase2` (tracking #88 and PR #100)
-- Primary focus: live watcher tooling, busy-loop detection, lint strategy hardening
-- Latest changes (not yet committed in this session):
-  - Docs refreshed (`README.md`, `docs/DEV_DASHBOARD_PLAN.md`) with watcher heartbeat/trim notes plus lint roadmap.
-  - `tools/Dev-WatcherManager.ps1` + `tools/follow-pester-artifacts.mjs` now emit both status and heartbeat JSON (`watcher-self.json`) with freshness checks; unit suites exist (`tests/Watcher.Live.Tests.ps1`, `tests/Watcher.BusyLoop.Tests.ps1`, `tests/DevWatcherManager.Tests.ps1`).
-  - Markdown lint tooling staged (`.markdownlint.jsonc`, `.markdownlintignore`, `tools/Lint-Markdown.ps1`, npm scripts) alongside workflow updates; lint script is wired into `npm run lint:md(:changed)`.
+- Branch: `issue/127-remove-develop-two-green` (tied to #127, PR #132)
+- Primary focus: REST watcher telemetry + CLI validation (already merged as PR #131) and removal of the obsolete `develop-two-green` workflow.
+- Latest change staged: deleted `.github/workflows/develop-two-green.yml`.
 
 ## Status & Known Gaps
-1. **Watcher behaviour**
-   - Initial status often reports `busy-watch` / `busy-suspect` until Pester emits `[It ...]` lines (documented).
-   - Heartbeat now writes `watcher-self.json` with timestamps/metrics; `verifiedProcess` degrades when the heartbeat goes stale. Manual trim via `npm run dev:watcher:trim` is available but not automated yet.
-   - `npm run dev:watcher:stop` clears PID/status/heartbeat files; status + heartbeat JSON now surface `heartbeatFresh`, `heartbeatReason`, and `needsTrim` hints.
-2. **Lint backlog**
-   - `npm run lint:md:changed` now targets PR deltas and CI uses it for blocking checks; full sweeps stay notice-only.
-   - Legacy docs still trip MD013/MD012/MD041 (line length + blank lines). Capture backlog in follow-up issue or staged fixes.
-3. **Automation**
-   - Use `tools/Print-AgentHandoff.ps1 -ApplyToggles` to surface watcher telemetry automatically during hand-offs. It prints a concise summary and writes `tests/results/_agent/handoff/watcher-telemetry.json`.
-   - Add `-AutoTrim` (or set `HANDOFF_AUTOTRIM=1`) to trim oversized watcher logs when `needsTrim=true` and cooldown permits.
+1. **Branch protection**
+   - `develop` still lists `Workflows Lint` as a required status even though the workflow was retired. Update branch protection so only `Validate` is required:
+     ```bash
+     gh api repos/LabVIEW-Community-CI-CD/compare-vi-cli-action/branches/develop/protection \
+       -X PUT \
+       -F required_status_checks.strict=true \
+       -F required_status_checks.checks[][context]=Validate
+     ```
+
+2. **CLI & watcher telemetry (from PR #131)**
+   - `npm run cli:validate` builds/validates `comparevi-cli`; lint job now publishes `watcher-rest.json`.
+   - `tools/Update-SessionIndexWatcher.ps1` merges watcher output into `session-index.json` (`watchers.rest` node). Ensure any downstream tools expecting `session-index` ingest the new field.
+
+3. **Open PRs**
+   - #131: feat: add REST watcher telemetry ⇒ waiting on Validate; branch protection update above removes redundant `Workflows Lint`.
+   - #132: chore: remove develop-two-green workflow ⇒ this branch; lint/validate pending after branch protection fix.
 
 ## Suggested Next Actions
-1. Standardize on `tools/Print-AgentHandoff.ps1 -ApplyToggles (-AutoTrim)` in automation to surface `heartbeatFresh`, `heartbeatReason`, and `needsTrim` without extra commands.
-2. Keep auto-trim event-driven (only when `needsTrim=true`) with a 900s cooldown; revisit thresholds after telemetry review.
-3. Triage markdown backlog: capture MD013/MD012 hot spots, decide whether to patch docs or stage suppression for generated blocks.
-4. After code changes, rerun:
-   ```powershell
-   Import-Module Pester
-   Invoke-Pester tests/Watcher.Live.Tests.ps1, tests/Watcher.BusyLoop.Tests.ps1, tests/DevWatcherManager.Tests.ps1
-   npm run lint:md:changed
-   ```
+1. Run the branch protection update command to drop `Workflows Lint`.
+2. Re-run CI on PRs #131 and #132 once protection updates propagate; merge when Validate passes.
+3. Confirm session index uploads include `watchers.rest` and document schema changes in release notes.
+4. After merging, update any SLO/automation docs referencing `develop-two-green`.
 
 ## Useful Commands
-- Start persistent watcher: `npm run dev:watcher:ensure`
-- Check status JSON: `npm run dev:watcher:status`
-- Stop watcher/clear status: `npm run dev:watcher:stop`
-- Trim watcher logs: `npm run dev:watcher:trim`
-- Auto-trim and print summary: `pwsh -File tools/Print-AgentHandoff.ps1 -AutoTrim`
-- Fail-fast during repro: `npm run watch:pester:fast:exit` (hang & busy detection)
+- Update protection: see command above.
+- Validate CLI locally: `npm run cli:validate` (requires `dotnet publish` output).
+- Watch REST output: `npm run ci:watch:rest -- --run-id <id> --out tests/results/<job>/watcher-rest.json`.
+- Merge watcher data manually (if needed): `pwsh -File tools/Update-SessionIndexWatcher.ps1 -ResultsDir <dir> -WatcherJson <dir>/watcher-rest.json`.
 
 ## Notes for Next Agent
-- If the watcher status reads `busy-suspect` immediately after ensure, that's expected warm-up; re-check once tests are running.
-- `dev:watcher:status` now reports `needsTrim`; run `npm run dev:watcher:trim` or rely on `Print-AgentHandoff.ps1 -AutoTrim` when set to keep logs manageable.
-- When documenting future changes, keep README's "Known gaps" section in sync.
+- Expect PR #131 to satisfy the only required check (`Validate`) once protection is updated; `Workflows Lint` should disappear from required contexts.
+- After deleting `develop-two-green`, ensure no other workflow or doc references it (quick check already done via `git grep`).

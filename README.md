@@ -307,3 +307,39 @@ Packaging notes:
 3. Optional VSIX: install `vsce` locally and run `npx vsce package` inside `tools/vscode/comparevi-extension`; install the resulting VSIX via “Extensions: Install from VSIX...” if you prefer a self-contained bundle instead of running the debug host.
 pm test exercises the registration smoke test via @vscode/test-electron.
 
+
+## Documentation Manifest
+
+- Canonical manifest: `docs/documentation-manifest.json`
+  - Groups every tracked Markdown file into authoritative, draft, reference, or generated sets.
+  - Patterns are evaluated relative to the repository root.
+- Validate updates before committing: `npm run docs:manifest:validate`
+- Promote drafts by migrating files from `issues-drafts/` into the `docs/` tree and updating the manifest entry status.
+
+
+## CLI Distribution
+
+The repository ships a cross-platform CLI (comparevi-cli) used by workflows and local tools. Use the
+publish helper to build per-RID archives and checksums for distribution.
+
+- Build artifacts
+  - `npm run publish:cli` (or `pwsh -File tools/Publish-Cli.ps1`)
+  - Produces framework-dependent and self-contained archives under `artifacts/cli/`:
+    - Windows: `.zip` files
+    - Linux/macOS: `.tar.gz` files
+  - A consolidated `SHA256SUMS.txt` is emitted alongside the archives.
+
+- Verify checksums
+  - PowerShell: `Get-FileHash -Algorithm SHA256 artifacts/cli/<file> | Format-List`
+  - Bash: `sha256sum artifacts/cli/<file>`
+
+- Extract and run
+  - Windows: unzip and run `comparevi-cli.exe`
+  - Linux/macOS: `tar -xzf <file>.tar.gz`; then run `./comparevi-cli`
+    - Note: when archives are created on Windows runners, execute bits may not be preserved in tarballs. If the binary
+      isn't executable after extract, run `chmod +x ./comparevi-cli`.
+
+- Quick smoke
+  - `./comparevi-cli version`
+  - `./comparevi-cli tokenize --input 'foo -x=1 "bar baz"'`
+  - `./comparevi-cli procs`

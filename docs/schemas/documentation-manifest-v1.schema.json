@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://labview-community-ci-cd.github.io/schemas/documentation-manifest-v1.schema.json",
+  "title": "Documentation Manifest Schema",
+  "description": "Defines the structure for tracking documentation coverage across the repository.",
+  "type": "object",
+  "required": ["schema", "version", "entries"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema reference for tooling."
+    },
+    "schema": {
+      "type": "string",
+      "const": "documentation-manifest-v1"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the manifest definition."
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp for the latest manifest update."
+    },
+    "entries": {
+      "type": "array",
+      "description": "Categorised documentation groups with include/exclude patterns.",
+      "items": {
+        "type": "object",
+        "required": ["name", "category", "status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable label for the documentation set."
+          },
+          "category": {
+            "type": "string",
+            "description": "High-level grouping (e.g. root, docs, drafts, generated)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "authoritative",
+              "reference",
+              "draft",
+              "archive",
+              "generated"
+            ],
+            "description": "Lifecycle classification for the documentation set."
+          },
+          "description": {
+            "type": "string",
+            "description": "Context or usage guidance for this documentation set."
+          },
+          "include": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "description": "Glob pattern (POSIX style) for files to include."
+            }
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "description": "Explicit repository-relative path to a documentation file."
+            }
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Glob pattern for files to exclude from this set."
+            }
+          }
+        },
+        "additionalProperties": false,
+        "anyOf": [
+          { "required": ["include"] },
+          { "required": ["files"] }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

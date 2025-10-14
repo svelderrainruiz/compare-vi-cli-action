@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      cli_version: ${{ steps.meta.outputs.cli_version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -43,3 +45,167 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compute CLI version
+        id: meta
+        shell: pwsh
+        run: |
+          [xml]$xml = Get-Content -Raw Directory.Build.props
+          $ver = $xml.Project.PropertyGroup.Version
+          if (-not $ver) { $ver = '0.0.0' }
+          "cli_version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish CLI artifacts
+        shell: pwsh
+        run: pwsh -File tools/Publish-Cli.ps1
+
+      - name: Upload workflow artifact (CLI)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-artifacts
+          path: |
+            artifacts/cli/*.zip
+            artifacts/cli/*.tar.gz
+            artifacts/cli/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/cli/*.zip
+            artifacts/cli/*.tar.gz
+            artifacts/cli/SHA256SUMS.txt
+
+  validate-cli-artifacts:
+    runs-on: ${{ matrix.os }}
+    needs: release
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-artifacts
+          path: cli-dl
+
+      - name: Extract artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = '${{ needs.release.outputs.cli_version }}'
+          $zip = Get-ChildItem -Recurse -Path cli-dl -Filter "comparevi-cli-v$($v)-win-x64-selfcontained.zip" | Select-Object -First 1
+          if (-not $zip) { throw "Artifact not found for Windows" }
+          Expand-Archive -Path $zip.FullName -DestinationPath cli-out
+          Get-ChildItem cli-out | Out-Host
+
+      - name: Verify checksum (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = '${{ needs.release.outputs.cli_version }}'
+          $zip = Get-ChildItem -Recurse -Path cli-dl -Filter "comparevi-cli-v$($v)-win-x64-selfcontained.zip" | Select-Object -First 1
+          if (-not $zip) { throw "Artifact not found for Windows" }
+          $sumPath = Join-Path 'cli-dl' 'SHA256SUMS.txt'
+          if (-not (Test-Path $sumPath)) { throw "Missing SHA256SUMS.txt" }
+          $entries = @()
+          foreach ($line in Get-Content $sumPath) {
+            if ($line -match '^([0-9a-fA-F]{64})\s+(.+)$') {
+              $entries += [pscustomobject]@{ Hash = $matches[1].ToLower(); Path = $matches[2].Trim(); Name = (Split-Path -Leaf $matches[2].Trim()) }
+            }
+          }
+          if (-not $entries) { throw "No checksums parsed" }
+          $expected = ($entries | Where-Object { $_.Name -eq $zip.Name } | Select-Object -First 1)
+          if (-not $expected) { throw "No checksum entry found for $($zip.Name)" }
+          $actual = (Get-FileHash -Algorithm SHA256 $zip.FullName).Hash.ToLower()
+          if ($actual -ne $expected.Hash) { throw "SHA256 mismatch for $($zip.Name). expected=$($expected.Hash) actual=$actual" }
+          Write-Host "Checksum OK for $($zip.Name)"
+
+      - name: Extract artifact (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          v='${{ needs.release.outputs.cli_version }}'
+          tarball=$(ls -1 cli-dl/comparevi-cli-v${v}-linux-x64-selfcontained.tar.gz)
+          mkdir -p cli-out
+          tar -xzf "$tarball" -C cli-out
+          ls -la cli-out
+
+      - name: Verify checksum (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          v='${{ needs.release.outputs.cli_version }}'
+          file="comparevi-cli-v${v}-linux-x64-selfcontained.tar.gz"
+          tarball="cli-dl/${file}"
+          [ -f "$tarball" ]
+          expected=$(awk -v file="$file" '$2 ~ file {print tolower($1)}' cli-dl/SHA256SUMS.txt)
+          [ -n "$expected" ]
+          actual=$(sha256sum "$tarball" | awk '{print tolower($1)}')
+          if [ "$actual" != "$expected" ]; then
+            echo "Checksum mismatch for $file: expected=$expected actual=$actual"
+            exit 1
+          fi
+          echo "Checksum OK for $file"
+
+      - name: Extract artifact (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          v='${{ needs.release.outputs.cli_version }}'
+          tarball=$(ls -1 cli-dl/comparevi-cli-v${v}-osx-x64-selfcontained.tar.gz)
+          mkdir -p cli-out
+          tar -xzf "$tarball" -C cli-out
+          ls -la cli-out
+
+      - name: Verify checksum (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          v='${{ needs.release.outputs.cli_version }}'
+          file="comparevi-cli-v${v}-osx-x64-selfcontained.tar.gz"
+          tarball="cli-dl/${file}"
+          [ -f "$tarball" ]
+          expected=$(awk -v file="$file" '$2 ~ file {print tolower($1)}' cli-dl/SHA256SUMS.txt)
+          [ -n "$expected" ]
+          actual=$(shasum -a 256 "$tarball" | awk '{print tolower($1)}')
+          if [ "$actual" != "$expected" ]; then
+            echo "Checksum mismatch for $file: expected=$expected actual=$actual"
+            exit 1
+          fi
+          echo "Checksum OK for $file"
+
+      - name: Smoke run (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'cli-out/comparevi-cli.exe'
+          $v = & $exe version | ConvertFrom-Json
+          if ($v.name -ne 'comparevi-cli') { throw "Unexpected name: $($v.name)" }
+          $tok = & $exe tokenize --input 'foo -x=1 "bar baz"' | ConvertFrom-Json
+          if (-not ($tok.normalized -contains '-x' -and $tok.normalized -contains '1')) { throw 'Tokenize validation failed' }
+          & $exe procs | Out-Null
+
+      - name: Smoke run (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="cli-out/comparevi-cli"
+          # Ensure executable (tarballs from Windows builds may need this)
+          chmod +x "$bin" || true
+          ver_json=$("$bin" version)
+          node -e "const o=JSON.parse(process.argv[1]); if(o.name!=='comparevi-cli') {throw new Error('bad name') }" "$ver_json"
+          tok_json=$("$bin" tokenize --input 'foo -x=1 "bar baz"')
+          node -e "const o=JSON.parse(process.argv[1]); if(!o.normalized.includes('-x')||!o.normalized.includes('1')) throw new Error('bad tokenize')" "$tok_json"
+          "$bin" procs >/dev/null
