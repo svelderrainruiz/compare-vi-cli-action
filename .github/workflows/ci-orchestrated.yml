@@ -154,7 +154,47 @@ jobs:
         if ('${{ github.ref_name }}' -eq 'main' -or '${{ github.base_ref }}' -eq 'main') {
           $params += '-FailOnWorkflowDrift'
         }
+        $params += '-SkipDotnetCliBuild'
         pwsh -File ./tools/Run-NonLVChecksInDocker.ps1 @params
+    - name: Publish comparevi-cli (SDK container)
+      if: ${{ hashFiles('src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj') != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker run --rm -v "${PWD}:/work" -w /work mcr.microsoft.com/dotnet/sdk:8.0 \
+          bash -lc 'dotnet publish src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj -c Release -nologo -o dist/comparevi-cli -p:InformationalVersion="${GITHUB_SHA:-local}"'
+    - name: Compute comparevi-cli checksums
+      if: ${{ hashFiles('dist/comparevi-cli/**') != '' }}
+      shell: pwsh
+      run: |
+        $dir = 'dist/comparevi-cli'
+        $outDir = 'tests/results/_cli'
+        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+        $files = Get-ChildItem -LiteralPath $dir -File -Recurse
+        $list = @()
+        foreach($f in $files){
+          $sha = pwsh -File tools/Get-FileSha256.ps1 -Path $f.FullName
+          $list += [pscustomobject]@{ path = (Resolve-Path $f.FullName).Path; sha256 = $sha; bytes = $f.Length }
+        }
+        $meta = [pscustomobject]@{
+          gitSha = '${{ github.sha }}'
+          branch = '${{ github.ref_name }}'
+          files  = $list
+        }
+        $json = $meta | ConvertTo-Json -Depth 6
+        $json | Out-File -FilePath (Join-Path $outDir 'meta.json') -Encoding utf8
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### comparevi-cli artifact','',"- Files: $($files.Count)")
+          $first = $list | Select-Object -First 1
+          if ($first) { $lines += ("- First file: {0} (sha256={1})" -f $first.path,$first.sha256) }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+    - name: Upload comparevi-cli artifact
+      if: ${{ hashFiles('dist/comparevi-cli/**') != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: comparevi-cli-${{ runner.os }}
+        path: dist/comparevi-cli/**/*
     - name: Setup Node with cache
       uses: actions/setup-node@v4
       with:

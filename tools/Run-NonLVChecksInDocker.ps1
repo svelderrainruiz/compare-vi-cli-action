@@ -56,6 +56,11 @@ function Get-DockerHostPath {
 $hostPath = Get-DockerHostPath '.'
 $volumeSpec = "${hostPath}:/work"
 $commonArgs = @('--rm','-v', $volumeSpec,'-w','/work')
+# Forward git SHA when available for traceability
+$buildSha = $null
+try { $buildSha = (git rev-parse HEAD).Trim() } catch { $buildSha = $null }
+if (-not $buildSha) { $buildSha = $env:GITHUB_SHA }
+if ($buildSha) { $commonArgs += @('-e', "BUILD_GIT_SHA=$buildSha") }
 $workflowTargets = @(
   '.github/workflows/pester-selfhosted.yml',
   '.github/workflows/fixture-drift.yml',
@@ -110,16 +115,20 @@ if (-not $SkipDotnetCliBuild) {
     if (Test-Path -LiteralPath $cliOutput) {
       Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
     }
-    $publishCommand = "dotnet publish $projectPath -c Release -nologo -o $cliOutput"
-    if ($UseToolsImage -and $ToolsImageTag) {
-      Invoke-Container -Image $ToolsImageTag `
-        -Arguments @('bash','-lc',$publishCommand) `
-        -Label 'dotnet-cli-build (tools)'
-    } else {
-      Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
-        -Arguments @('bash','-lc',$publishCommand) `
-        -Label 'dotnet-cli-build'
-    }
+    $publishCommand = @'
+rm -rf src/CompareVi.Shared/obj src/CompareVi.Tools.Cli/obj || true
+if [ -n "$BUILD_GIT_SHA" ]; then
+  IV="0.1.0+${BUILD_GIT_SHA}"
+else
+  IV="0.1.0+local"
+fi
+'@
+    $pubLine = 'dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:BaseIntermediateOutputPath=/tmp/obj/ -p:IntermediateOutputPath=/tmp/obj/ -p:InformationalVersion="$IV"'
+    $publishCommand = $publishCommand + "`n" + $pubLine
+    # Build with official .NET SDK container to avoid file-permission quirks in tools image
+    Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
+      -Arguments @('bash','-lc',$publishCommand) `
+      -Label 'dotnet-cli-build (sdk)'
   }
 }
 

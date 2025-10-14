@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <Company>LabVIEW Community CI/CD</Company>
+    <Authors>LabVIEW Community CI/CD</Authors>
+    <RepositoryUrl>https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0+local</InformationalVersion>
+  </PropertyGroup>
+</Project>
+
