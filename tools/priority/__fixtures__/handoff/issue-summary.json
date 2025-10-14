@@ -1,0 +1,14 @@
+{
+  "schema": "standing-priority/issue@v1",
+  "number": 127,
+  "title": "Standing priority: consolidate CLI tooling and traceability roadmap",
+  "state": "open",
+  "updatedAt": "2025-10-13T16:11:40.911Z",
+  "url": "https://github.com/example/repo/issues/127",
+  "labels": ["ci", "docs"],
+  "assignees": ["alice", "bob"],
+  "milestone": null,
+  "commentCount": 4,
+  "bodyDigest": "6d8bf00c00f8b67e2d4c74a86d6c6a02ef5d829da25fb71ae94e3d5dfb5a02b1",
+  "digest": "e71f4e9fa9fd91523fd4d39131e8c5834d1b03ef95ba3b6b8d8f6dfdeedc3a4f"
+}

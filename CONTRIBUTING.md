@@ -94,6 +94,46 @@ $env:LV_HEAD_VI = 'VI2.vi'
 
 - CODEOWNERS: `@svelderrainruiz`
 
+## Git hooks & multi-plane validation
+
+## Standing priority workflow
+
+- `npm run priority:bootstrap` — detect the current plane, run hook preflight (and parity when `-- -VerboseHooks` is supplied), and refresh the standing-priority snapshot/router.
+- `npm run priority:handoff` — ingest the latest handoff artifacts (`issue-summary.json`, `issue-router.json`, hook and watcher summaries) into the session, hydrating `$StandingPrioritySnapshot`, `$StandingPriorityRouter`, etc.
+- `npm run priority:handoff-tests` — run the priority/hooks/semver checks and persist results to `tests/results/_agent/handoff/test-summary.json` for downstream agents.
+- `npm run priority:release` — simulate the release actions described by the router; pass `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
+- `npm run handoff:schema` — validate the hook handoff summary (`tests/results/_agent/handoff/hook-summary.json`) against `docs/schemas/handoff-hook-summary-v1.schema.json`.
+- `npm run handoff:release-schema` — validate the release summary (`tests/results/_agent/handoff/release-summary.json`) against `docs/schemas/handoff-release-v1.schema.json`.
+- `npm run semver:check` — assert the current `package.json` version complies with SemVer 2.0 via `tools/priority/validate-semver.mjs`.
+
+These helpers make the sandbox feel pseudo-persistent: each agent self-injects the previous session’s state before starting work and leaves updated artifacts when finishing.
+
+- The repository pins `core.hooksPath=tools/hooks`. Hooks are implemented as a Node core (`tools/hooks/core/*.mjs`) with thin shell/PowerShell shims so Linux, Windows, and CI all execute the same logic.
+- Hook summaries are written to `tests/results/_hooks/<hook>.json` and include exit codes, truncated stdout/stderr, and notes (e.g., when PowerShell is unavailable on Linux).
+- Run hook logic manually before committing/pushing:
+
+  ```bash
+  npm run hooks:pre-commit
+  npm run hooks:pre-push
+  ```
+
+  Passing `HOOKS_PWSH=/path/to/pwsh` or `HOOKS_NODE=/path/to/node` overrides discovery if needed.
+
+- Additional helpers:
+
+  ```bash
+  npm run hooks:plane     # show detected plane + enforcement mode
+  npm run hooks:preflight # verify dependencies for the current plane
+  npm run hooks:multi     # run shell + PowerShell wrappers and diff JSON
+  npm run hooks:schema    # validate summaries against the v1 schema
+  ```
+
+- Control behaviour via `HOOKS_ENFORCE=fail|warn|off` (default: `fail` in CI, `warn` locally). Failures become warnings when enforcement is `warn`, and are suppressed entirely when set to `off`.
+
+- PowerShell-specific lint (inline-if, dot-sourcing, PSScriptAnalyzer) only runs when `pwsh` is available; otherwise the hook marks those steps as `skipped` and records a note in the summary.
+
+- The CI parity job ensures Windows and Linux shims stay in sync—if hook outputs drift, the workflow fails with a diff.
+
 ## Documentation Style
 
 Markdown lint configuration intentionally disables the MD013 (line length) rule globally.

@@ -1,0 +1,97 @@
+{
+  "name": "comparevi-extension",
+  "displayName": "CompareVI Workflows",
+  "description": "Convenience commands for building the CompareVI CLI and driving standing-priority workflows.",
+  "version": "0.1.0",
+  "publisher": "labview-ci-cd",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:comparevi.buildAndParse",
+    "onCommand:comparevi.startStandingPriority",
+    "onCommand:comparevi.watchStandingPriority",
+    "onCommand:comparevi.openArtifact",
+    "onCommand:comparevi.showArtifactSummary",
+    "onView:compareviArtifactExplorer"
+  ],
+  "main": "out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "comparevi.buildAndParse",
+        "title": "CompareVI: Build & Parse CLI"
+      },
+      {
+        "command": "comparevi.startStandingPriority",
+        "title": "CompareVI: Start Standing Priority Run"
+      },
+      {
+        "command": "comparevi.watchStandingPriority",
+        "title": "CompareVI: Watch Standing Priority Run"
+      },
+      {
+        "command": "comparevi.openArtifact",
+        "title": "CompareVI: Open Artifact"
+      },
+      {
+        "command": "comparevi.showArtifactSummary",
+        "title": "CompareVI: Show Artifact Summary"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "compareviArtifactExplorer",
+          "name": "CompareVI Artifacts"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "when": "view == compareviArtifactExplorer",
+          "command": "comparevi.openArtifact",
+          "group": "navigation@1"
+        },
+        {
+          "when": "view == compareviArtifactExplorer && viewItem == compareviJsonArtifact",
+          "command": "comparevi.showArtifactSummary",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CompareVI",
+      "properties": {
+        "comparevi.standingPriorityIssue": {
+          "type": "string",
+          "default": "",
+          "description": "Last used standing-priority issue number (auto-populated)."
+        },
+        "comparevi.tokenFallbackPath": {
+          "type": "string",
+          "default": "C:\\\\github_token.txt",
+          "description": "Fallback path for admin GitHub token when environment variables are not set."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "package": "vsce package",
+    "test": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.0.0"
+  }
+}

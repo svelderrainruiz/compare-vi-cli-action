@@ -31,8 +31,26 @@
     "origin_author": { "type": "string" },
     "sample_id": { "type": "string" },
     "include_integration": { "type": "string" },
-    "strategy": { "type": "string" }
+    "strategy": { "type": "string" },
+    "runner": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "environment": { "type": "string" },
+        "job": { "type": "string" },
+        "machine": { "type": "string" },
+        "trackingId": { "type": "string" },
+        "imageOS": { "type": "string" },
+        "imageVersion": { "type": "string" },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }
-

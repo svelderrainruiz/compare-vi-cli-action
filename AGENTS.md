@@ -156,6 +156,9 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
       emits a compact JSON block to `tests/results/_agent/handoff/watcher-telemetry.json`.
     - When `-AutoTrim` (or `HANDOFF_AUTOTRIM=1`) is set, trims oversized watcher logs if eligible
       and appends notes to the GitHub Step Summary when available.
+- Capture quick regression coverage with `npm run priority:handoff-tests`; the script runs
+  `priority:test`, `hooks:test`, and `semver:check`, then writes `tests/results/_agent/handoff/test-summary.json`
+  so subsequent agents (or CI summaries) can replay the outcomes.
 
 ## Fast path for issue #88
 

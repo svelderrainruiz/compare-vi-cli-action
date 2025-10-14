@@ -131,6 +131,43 @@ function Write-TerminalReport {
     Write-Host "Commit: $shortCommit"
   }
   if ($Snapshot.ResultsRoot) { Write-Host "Results: $($Snapshot.ResultsRoot)" }
+  $sessionStatus = $Snapshot.PesterTelemetry.SessionStatus
+  $sessionInclude = $Snapshot.PesterTelemetry.SessionIncludeIntegration
+  if ($sessionStatus -or $sessionInclude -ne $null) {
+    $statusText = if ($sessionStatus) { $sessionStatus } else { 'unknown' }
+    if ($sessionInclude -ne $null) {
+      $statusText = "$statusText (include_integration=$sessionInclude)"
+    }
+    Write-Host "Session: $statusText"
+  }
+  $runnerInfo = $Snapshot.PesterTelemetry.Runner
+  if ($runnerInfo) {
+    $runnerName = if ($runnerInfo.PSObject.Properties.Name -contains 'Name') { $runnerInfo.Name } else { $null }
+    $runnerOs = if ($runnerInfo.PSObject.Properties.Name -contains 'OS') { $runnerInfo.OS } else { $null }
+    $runnerArch = if ($runnerInfo.PSObject.Properties.Name -contains 'Arch') { $runnerInfo.Arch } else { $null }
+    $runnerEnv = if ($runnerInfo.PSObject.Properties.Name -contains 'Environment') { $runnerInfo.Environment } else { $null }
+    $runnerMachine = if ($runnerInfo.PSObject.Properties.Name -contains 'Machine') { $runnerInfo.Machine } else { $null }
+    $descriptor = if ($runnerName) { $runnerName } else { '(unknown)' }
+    $details = @()
+    if ($runnerOs -and $runnerArch) { $details += "$runnerOs/$runnerArch" }
+    elseif ($runnerOs) { $details += $runnerOs }
+    elseif ($runnerArch) { $details += $runnerArch }
+    if ($runnerEnv) { $details += "env:$runnerEnv" }
+    if ($runnerMachine) { $details += "host:$runnerMachine" }
+    if ($details.Count -gt 0) { $descriptor = "$descriptor [" + ($details -join '; ') + "]" }
+    Write-Host "Runner: $descriptor"
+    if ($runnerInfo.PSObject.Properties.Name -contains 'Labels') {
+      $labels = $runnerInfo.Labels
+      if ($labels -is [System.Collections.IEnumerable] -and -not ($labels -is [string])) {
+        $labelText = ($labels | Where-Object { $_ -and $_ -ne '' } | Select-Object -Unique) -join ', '
+      } else {
+        $labelText = "$labels"
+      }
+      if ($labelText) {
+        Write-Host "  Labels : $labelText"
+      }
+    }
+  }
   Write-Host ''
 
   $session = $Snapshot.SessionLock
@@ -346,6 +383,57 @@ function ConvertTo-HtmlReport {
   if ($Snapshot.Commit) {
     $shortCommit = $Snapshot.Commit.Substring(0, [Math]::Min(7, $Snapshot.Commit.Length))
   }
+  $sessionStatusValue = if ($pester.PSObject.Properties.Name -contains 'SessionStatus') { $pester.SessionStatus } else { $null }
+  $sessionIncludeRaw = if ($pester.PSObject.Properties.Name -contains 'SessionIncludeIntegration') { $pester.SessionIncludeIntegration } else { $null }
+  $sessionIncludeDisplay = ''
+  if ($sessionIncludeRaw -ne $null) {
+    try { $sessionIncludeDisplay = ([bool]$sessionIncludeRaw) } catch { $sessionIncludeDisplay = $sessionIncludeRaw }
+  }
+  $sessionIndexPathValue = if ($pester.PSObject.Properties.Name -contains 'SessionIndexPath') { $pester.SessionIndexPath } else { $null }
+  $runner = if ($pester.PSObject.Properties.Name -contains 'Runner') { $pester.Runner } else { $null }
+  $runnerNameValue = $null
+  $runnerOsValue = $null
+  $runnerArchValue = $null
+  $runnerEnvValue = $null
+  $runnerMachineValue = $null
+  $runnerImageOsValue = $null
+  $runnerImageVerValue = $null
+  $runnerLabelsDisplay = ''
+  $runnerOsArchDisplay = ''
+  $runnerImageDisplay = ''
+  if ($runner) {
+    if ($runner.PSObject.Properties.Name -contains 'Name') { $runnerNameValue = $runner.Name }
+    if ($runner.PSObject.Properties.Name -contains 'OS') { $runnerOsValue = $runner.OS }
+    if ($runner.PSObject.Properties.Name -contains 'Arch') { $runnerArchValue = $runner.Arch }
+    if ($runner.PSObject.Properties.Name -contains 'Environment') { $runnerEnvValue = $runner.Environment }
+    if ($runner.PSObject.Properties.Name -contains 'Machine') { $runnerMachineValue = $runner.Machine }
+    if ($runner.PSObject.Properties.Name -contains 'ImageOS') { $runnerImageOsValue = $runner.ImageOS }
+    if ($runner.PSObject.Properties.Name -contains 'ImageVersion') { $runnerImageVerValue = $runner.ImageVersion }
+    if ($runner.PSObject.Properties.Name -contains 'Labels') {
+      $labelsValue = $runner.Labels
+      if ($null -ne $labelsValue) {
+        if ($labelsValue -is [System.Collections.IEnumerable] -and -not ($labelsValue -is [string])) {
+          $runnerLabelsDisplay = ($labelsValue | Where-Object { $_ -and $_ -ne '' } | Select-Object -Unique) -join ', '
+        } elseif ($labelsValue -and "$labelsValue" -ne '') {
+          $runnerLabelsDisplay = "$labelsValue"
+        }
+      }
+    }
+    if ($runnerOsValue -and $runnerArchValue) {
+      $runnerOsArchDisplay = "$runnerOsValue/$runnerArchValue"
+    } elseif ($runnerOsValue) {
+      $runnerOsArchDisplay = "$runnerOsValue"
+    } elseif ($runnerArchValue) {
+      $runnerOsArchDisplay = "$runnerArchValue"
+    }
+    if ($runnerImageOsValue -and $runnerImageVerValue) {
+      $runnerImageDisplay = "$runnerImageOsValue ($runnerImageVerValue)"
+    } elseif ($runnerImageOsValue) {
+      $runnerImageDisplay = "$runnerImageOsValue"
+    } elseif ($runnerImageVerValue) {
+      $runnerImageDisplay = "$runnerImageVerValue"
+    }
+  }
 
   $failedTestsHtml = if ($pester.FailedTests.Count -gt 0) {
     $rows = foreach ($test in $pester.FailedTests) {
@@ -417,6 +505,31 @@ function ConvertTo-HtmlReport {
     <div><strong>Branch</strong>: $(& $encode $Snapshot.Branch)</div>
     <div><strong>Commit</strong>: $(& $encode $shortCommit)</div>
   </div>
+
+  <section>
+    <h2>Session</h2>
+    <dl>
+      <dt>Status</dt><dd>$(& $encode $sessionStatusValue)</dd>
+      <dt>Include Integration</dt><dd>$(& $encode $sessionIncludeDisplay)</dd>
+      @(if ($sessionIndexPathValue) { "<dt>Index Path</dt><dd>$(& $encode $sessionIndexPathValue)</dd>" })
+    </dl>
+  </section>
+
+  <section>
+    <h2>Runner</h2>
+    @(if ($runner) {
+        "<dl>" +
+        @(if ($runnerNameValue) { "<dt>Name</dt><dd>$(& $encode $runnerNameValue)</dd>" }) +
+        @(if ($runnerOsArchDisplay) { "<dt>OS/Arch</dt><dd>$(& $encode $runnerOsArchDisplay)</dd>" }) +
+        @(if ($runnerEnvValue) { "<dt>Environment</dt><dd>$(& $encode $runnerEnvValue)</dd>" }) +
+        @(if ($runnerMachineValue) { "<dt>Machine</dt><dd>$(& $encode $runnerMachineValue)</dd>" }) +
+        @(if ($runnerImageDisplay) { "<dt>Image</dt><dd>$(& $encode $runnerImageDisplay)</dd>" }) +
+        @(if ($runnerLabelsDisplay) { "<dt>Labels</dt><dd>$(& $encode $runnerLabelsDisplay)</dd>" }) +
+        "</dl>"
+      } else {
+        '<p>No runner metadata available.</p>'
+      })
+  </section>
 
   <section>
     <h2>Session Lock</h2>

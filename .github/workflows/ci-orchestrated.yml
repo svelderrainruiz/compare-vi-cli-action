@@ -49,6 +49,8 @@ concurrency:
 jobs:
   normalize:
     runs-on: ubuntu-latest
+    env:
+      RESULTS_DIR: tests/results/normalize
     outputs:
       include_integration: ${{ steps.b.outputs.normalized }}
     steps:
@@ -72,7 +74,7 @@ jobs:
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Ensure Invoker (start)
       uses: ./.github/actions/ensure-invoker
       with:
@@ -80,6 +82,8 @@ jobs:
         timeout-seconds: '60'
         retries: '1'
         retry-delay-seconds: '0'
+        results-dir: ${{ env.RESULTS_DIR }}
+        require-invoker: 'false'
     - name: Normalize include_integration
       id: b
       uses: ./.github/actions/bool-normalize
@@ -97,15 +101,18 @@ jobs:
         EV_INCLUDE_INTEGRATION: ${{ inputs.include_integration || 'true' }}
         EV_STRATEGY: ${{ inputs.strategy || 'matrix' }}
       run: |
-        pwsh -NoLogo -NoProfile -File tools/Write-RunProvenance.ps1 -ResultsDir 'tests/results' -AppendStepSummary
+        pwsh -NoLogo -NoProfile -File tools/Write-RunProvenance.ps1 -ResultsDir '${{ env.RESULTS_DIR }}' -AppendStepSummary
     - name: Upload run provenance
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: orchestrated-provenance
-        path: tests/results/provenance.json
+        path: ${{ env.RESULTS_DIR }}/provenance.json
   lint:
     runs-on: ubuntu-latest
+    env:
+      RESULTS_DIR: tests/results/lint
+      ACTIONLINT_VERSION: '${{ vars.ACTIONLINT_VERSION || ''1.7.7'' }}'
     steps:
     - uses: actions/checkout@v5
     - name: Wire Probe (J1)
@@ -120,6 +127,22 @@ jobs:
       with:
         phase: J2
         results-dir: tests/results
+    - name: Install actionlint (retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./bin
+        ver="${ACTIONLINT_VERSION:-1.7.7}"
+        for i in 1 2 3; do
+          if curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- "$ver" ./bin; then
+            break
+          else
+            echo "retry $i"; sleep 2
+          fi
+        done
+    - name: Run actionlint
+      run: |
+        ./bin/actionlint -color
     - name: Configure Git safe.directory (service)
       shell: pwsh
       run: git config --global --add safe.directory $env:GITHUB_WORKSPACE
@@ -131,11 +154,76 @@ jobs:
         if ('${{ github.ref_name }}' -eq 'main' -or '${{ github.base_ref }}' -eq 'main') {
           $params += '-FailOnWorkflowDrift'
         }
+        $params += '-SkipDotnetCliBuild'
         pwsh -File ./tools/Run-NonLVChecksInDocker.ps1 @params
+    - name: Publish comparevi-cli (SDK container)
+      if: ${{ hashFiles('src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj') != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker run --rm -v "${PWD}:/work" -w /work mcr.microsoft.com/dotnet/sdk:8.0 \
+          bash -lc 'dotnet publish src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj -c Release -nologo -o dist/comparevi-cli -p:InformationalVersion="${GITHUB_SHA:-local}"'
+    - name: Compute comparevi-cli checksums
+      if: ${{ hashFiles('dist/comparevi-cli/**') != '' }}
+      shell: pwsh
+      run: |
+        $dir = 'dist/comparevi-cli'
+        $outDir = 'tests/results/_cli'
+        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+        $files = Get-ChildItem -LiteralPath $dir -File -Recurse
+        $list = @()
+        foreach($f in $files){
+          $sha = pwsh -File tools/Get-FileSha256.ps1 -Path $f.FullName
+          $list += [pscustomobject]@{ path = (Resolve-Path $f.FullName).Path; sha256 = $sha; bytes = $f.Length }
+        }
+        $meta = [pscustomobject]@{
+          gitSha = '${{ github.sha }}'
+          branch = '${{ github.ref_name }}'
+          files  = $list
+        }
+        $json = $meta | ConvertTo-Json -Depth 6
+        $json | Out-File -FilePath (Join-Path $outDir 'meta.json') -Encoding utf8
+        if ($env:GITHUB_STEP_SUMMARY) {
+          $lines = @('### comparevi-cli artifact','',"- Files: $($files.Count)")
+          $first = $list | Select-Object -First 1
+          if ($first) { $lines += ("- First file: {0} (sha256={1})" -f $first.path,$first.sha256) }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        }
+    - name: Upload comparevi-cli artifact
+      if: ${{ hashFiles('dist/comparevi-cli/**') != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: comparevi-cli-${{ runner.os }}
+        path: dist/comparevi-cli/**/*
+    - name: Setup Node with cache
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+    - name: Install markdownlint-cli (retry)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for i in 1 2 3; do
+          if npm install -g markdownlint-cli; then
+            break
+          else
+            npm cache clean --force || true
+            echo "retry $i"
+            sleep 2
+          fi
+        done
+    - name: Run markdownlint (non-blocking)
+      run: |
+        markdownlint "**/*.md" --ignore node_modules
+      continue-on-error: true
   preflight:
     runs-on: windows-latest
     timeout-minutes: 3
-    # Run preflight for both strategies
+    needs: [normalize]
+    env:
+      RESULTS_DIR: tests/results/preflight
+    # Hosted Windows health gate before self-hosted jobs
     steps:
     - uses: actions/checkout@v5
     - name: Wire Probe (J1)
@@ -173,7 +261,7 @@ jobs:
           $note = @('Note:', '- This preflight runs on hosted Windows (windows-latest); LVCompare presence is not required here.', '- Self-hosted Windows steps later in this workflow enforce LVCompare at the canonical path.') -join "`n"
           $note | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
-    # Hosted preflight is informational only; enforce LVCompare on self-hosted jobs.
+    # Hosted gate is informational only; enforce LVCompare on self-hosted jobs.
 
   probe:
     # Quick interactivity probe on self-hosted Windows to decide single vs fallback
@@ -181,6 +269,8 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 2
     needs: [normalize, preflight]
+    env:
+      RESULTS_DIR: tests/results/probe
     outputs:
       ok: ${{ steps.out.outputs.ok }}
     steps:
@@ -203,7 +293,7 @@ jobs:
     - name: Runner health (notice-only, self-hosted)
       if: ${{ vars.RUNNER_HEALTH != '0' }}
       shell: pwsh
-      run: pwsh -File tools/Collect-RunnerHealth.ps1 -AppendSummary -EmitJson
+      run: pwsh -File tools/Collect-RunnerHealth.ps1 -ResultsDir '${{ env.RESULTS_DIR }}' -AppendSummary -EmitJson
     - name: Run interactivity probe
       id: out
       shell: pwsh
@@ -224,11 +314,18 @@ jobs:
         category: [dispatcher, fixtures, schema, comparevi, loop, psummary, workflow]
       max-parallel: 1
     env:
+      RESULTS_ROOT: tests/results
+      RESULTS_DIR: ${{ format('tests/results/{0}', matrix.category) }}
       DETECT_LEAKS: '1'
       CLEAN_AFTER: '0'
       SCAN_ARTIFACTS: '1'
       UNBLOCK_GUARD: '0'
-      LV_SUPPRESS_UI: '0'
+      # Recommended LabVIEW environment toggles for headless invocations
+      LV_SUPPRESS_UI: '1'
+      LV_NO_ACTIVATE: '1'
+      LV_CURSOR_RESTORE: '1'
+      LV_IDLE_WAIT_SECONDS: '2'
+      LV_IDLE_MAX_WAIT_SECONDS: '5'
       WATCH_CONSOLE: '1'
       LABVIEW_EXE: C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe
       EMIT_LV_CLOSURE_CRUMBS: '1'
@@ -259,23 +356,43 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Ensure Invoker (start)
       id: inv_start_matrix
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
         category: ${{ matrix.category }}
-        timeout-seconds: '60'
-        retries: '3'
+        # Give the invoker more time and an extra retry while diagnosing READY
+        timeout-seconds: '120'
+        retries: '4'
         retry-delay-seconds: '7'
+
+    - name: Debug invoker markers
+      if: always()
+      shell: pwsh
+      run: |
+        $dir  = "${{ env.RESULTS_DIR }}/_invoker"
+        if (Test-Path -LiteralPath $dir -PathType Container) {
+          Write-Host "Invoker marker directory: $dir"
+          try { Get-ChildItem -LiteralPath $dir | Format-Table -AutoSize | Out-String | Write-Host } catch {}
+          $boot = Join-Path $dir 'boot.log'
+          if (Test-Path -LiteralPath $boot -PathType Leaf) {
+            Write-Host '--- boot.log ---'
+            Get-Content -LiteralPath $boot -Raw | Write-Host
+          } else {
+            Write-Host 'boot.log not found.'
+          }
+        } else {
+          Write-Host '::notice::Invoker marker directory missing.'
+        }
 
     - name: LabVIEW warmup (preflight; leave LVCompare running)
       if: runner.os == 'Windows'
@@ -291,7 +408,7 @@ jobs:
         $lines = @('### Post-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-invoker'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'post-invoker'
     - name: Prepare fixture copies (base/head)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       id: fixtures
@@ -319,81 +436,61 @@ jobs:
         clean-labview-before: 'false'
         clean-after: 'false'
         track-artifacts: 'true'
-    - name: Define category patterns
-      id: cats
-      shell: pwsh
-      run: |
-        $cat='${{ matrix.category }}'
-        switch ($cat) {
-          'dispatcher' { $inc = @('Invoke-PesterTests*.ps1','PesterAvailability.Tests.ps1','NestedDispatcher*.Tests.ps1') }
-          'fixtures'   { $inc = @('Fixtures.*.ps1','FixtureValidation*.ps1','FixtureSummary*.ps1','ViBinaryHandling.Tests.ps1','FixtureValidationDiff.Tests.ps1') }
-          'schema'     { $inc = @('Schema.*.ps1','SchemaLite*.ps1') }
-          'comparevi'  { $inc = @('CompareVI*.ps1','CanonicalCli.Tests.ps1','Args.Tokenization.Tests.ps1') }
-          'loop'       { $inc = @('CompareLoop*.ps1','Run-AutonomousIntegrationLoop*.ps1','LoopMetrics.Tests.ps1','Integration-ControlLoop*.ps1','IntegrationControlLoop*.ps1') }
-          'psummary'   { $inc = @('PesterSummary*.ps1','Write-PesterSummaryToStepSummary*.ps1','AggregationHints*.ps1') }
-          'workflow'   { $inc = @('Workflow*.ps1','On-FixtureValidationFail.Tests.ps1','Watch.FlakyRecovery.Tests.ps1','FunctionShadowing*.ps1','FunctionProxy.Tests.ps1','RunSummary.Tool*.ps1','Action.CompositeOutputs.Tests.ps1','Binding.MinRepro.Tests.ps1','ArtifactTracking*.ps1','Guard.*.Tests.ps1') }
-          default      { $inc = @('*.ps1') }
-        }
-        "include=$($inc -join ',')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
     - name: Wire Probe (T1)
       uses: ./.github/actions/wire-probe
       with:
         phase: T1
-        results-dir: tests/results/${{ matrix.category }}
-    - name: Run Pester tests via local dispatcher (category)
+        results-dir: ${{ env.RESULTS_DIR }}
+    - name: Run Compare CLI (category)
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
-        $inc = @()
-        if ('${{ steps.cats.outputs.include }}') { $inc = '${{ steps.cats.outputs.include }}'.Split(',') | Where-Object { $_ } }
-        $resDir = Join-Path 'tests/results' '${{ matrix.category }}'
-        ./Invoke-PesterTests.ps1 `
-          -TestsPath tests `
+        pwsh -File tools/Invoke-CompareCli.ps1 `
+          -Category '${{ matrix.category }}' `
           -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
-          -ResultsPath $resDir `
-          -EmitFailuresJsonAlways `
-          -IncludePatterns $inc
+          -ResultsRoot '${{ env.RESULTS_ROOT }}'
 
-    - name: Summarize Pester results (job-level)
+    - name: Summarize CLI output
       if: ${{ steps.inv_start_matrix.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $category = '${{ matrix.category }}'
-        $resDir = Join-Path 'tests/results' $category
-        $sumPath = Join-Path $resDir 'pester-summary.json'
-        if (Test-Path -LiteralPath $sumPath) {
-          try {
-            $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
-            $tot = $s.totals
-            $lines = @(
-              "### Pester Status ($category)",
-              "- Result: $($s.result)",
-              "- Tests: $($tot.tests)  Passed: $($tot.passed)  Failed: $($tot.failed)",
-              if ($s.durationSeconds -ne $null) { "- Duration (s): $($s.durationSeconds)" } else { $null }
-            ) | Where-Object { $_ }
-            ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          } catch {
-            "Pester summary parse failed: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        $cliPath = Join-Path '${{ env.RESULTS_DIR }}' 'cli-run.json'
+        if (-not (Test-Path -LiteralPath $cliPath -PathType Leaf)) {
+          "Compare CLI summary not found for category '$category'." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          return
+        }
+        try {
+          $cli = Get-Content -LiteralPath $cliPath -Raw | ConvertFrom-Json -ErrorAction Stop
+          $lines = @(
+            "### Compare CLI Status ($category)",
+            "- Status: $($cli.status)",
+            "- Exit Code: $($cli.exitCode)"
+          )
+          if ($cli.summary) {
+            $lines += ("- Tests: {0}  Passed: {1}  Failed: {2}  Errors: {3}" -f $cli.summary.total,$cli.summary.passed,$cli.summary.failed,$cli.summary.errors)
+            if ($cli.summary.duration_s) { $lines += ("- Duration (s): {0}" -f $cli.summary.duration_s) }
           }
-        } else {
-          "No pester-summary.json found for category '${{ matrix.category }}'" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+        } catch {
+          "Compare CLI summary parse failed: $_" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
 
     - name: Ensure session index (fallback)
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -SummaryJson 'pester-summary.json'
+      run: pwsh -File tools/Ensure-SessionIndex.ps1 -ResultsDir "${{ env.RESULTS_DIR }}" -SummaryJson 'pester-summary.json'
 
     - name: Wire Session Index (S1)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-session-index
       with:
-        results-dir: tests/results/${{ matrix.category }}
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Session index post
       if: always()
       uses: ./.github/actions/session-index-post
       with:
-        results-dir: tests/results/${{ matrix.category }}
+        results-dir: ${{ env.RESULTS_DIR }}
         validate-schema: true
         upload: true
         artifact-name: session-index-${{ matrix.category }}
@@ -404,29 +501,29 @@ jobs:
       with:
         name: orchestrated-pester-results-${{ matrix.category }}
         path: |
-          tests/results/${{ matrix.category }}/**/*.xml
-          tests/results/${{ matrix.category }}/**/*.txt
-          tests/results/${{ matrix.category }}/pester-summary.json
-          tests/results/${{ matrix.category }}/pester-failures.json
-          tests/results/${{ matrix.category }}/session-index.json
+          ${{ env.RESULTS_DIR }}/**/*.xml
+          ${{ env.RESULTS_DIR }}/**/*.txt
+          ${{ env.RESULTS_DIR }}/pester-summary.json
+          ${{ env.RESULTS_DIR }}/pester-failures.json
+          ${{ env.RESULTS_DIR }}/session-index.json
 
     - name: Upload invoker boot log (category)
-      if: always() && hashFiles(format('tests/results/{0}/_invoker/boot.log', matrix.category)) != ''
+      if: always() && hashFiles(format('{0}/_invoker/boot.log', env.RESULTS_DIR)) != ''
       uses: actions/upload-artifact@v4
       with:
         name: invoker-boot-${{ matrix.category }}
-        path: tests/results/${{ matrix.category }}/_invoker/boot.log
+        path: ${{ env.RESULTS_DIR }}/_invoker/boot.log
 
     - name: Wire Guard (pre)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-pre
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
       with:
-        snapshot-path: tests/results/${{ matrix.category }}/runner-unblock-snapshot.json
+        snapshot-path: ${{ env.RESULTS_DIR }}/runner-unblock-snapshot.json
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
         process-names: LabVIEW,LVCompare
 
@@ -434,25 +531,25 @@ jobs:
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-post
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Ensure Invoker (stop)
       if: always()
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
         category: ${{ matrix.category }}
     - name: Emit LV closure telemetry (category post-stop)
       if: always()
       shell: pwsh
       run: |
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-stop
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Append determinism summary
       if: always()
       shell: pwsh
@@ -467,19 +564,19 @@ jobs:
       if: always()
       shell: pwsh
       run: |
-        $paths = @('tests/results/${{ matrix.category }}/pester-summary.json','tests/results/${{ matrix.category }}/pester-results.xml','tests/results/${{ matrix.category }}/pester-failures.json','tests/results/${{ matrix.category }}/session-index.json')
+        $paths = @('${{ env.RESULTS_DIR }}/pester-summary.json','${{ env.RESULTS_DIR }}/pester-results.xml','${{ env.RESULTS_DIR }}/pester-failures.json','${{ env.RESULTS_DIR }}/session-index.json')
         $pathsList = $paths -join ';'
         pwsh -File tools/Write-ArtifactMap.ps1 -PathsList $pathsList -Title 'Artifacts'
 
     - name: Append top failures
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "tests/results/${{ matrix.category }}" -Top 5
+      run: pwsh -File tools/Write-PesterTopFailures.ps1 -ResultsDir "${{ env.RESULTS_DIR }}" -Top 5
 
     - name: Generate dev dashboard (matrix)
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot "tests/results/${{ matrix.category }}" -OutputRoot "tests/results/${{ matrix.category }}/dev-dashboard"
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot "${{ env.RESULTS_DIR }}" -OutputRoot "${{ env.RESULTS_DIR }}/dev-dashboard"
 
     - name: Upload dev dashboard (matrix)
       if: always()
@@ -487,16 +584,16 @@ jobs:
       with:
         name: dev-dashboard-${{ matrix.category }}
         path: |
-          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.html
-          tests/results/${{ matrix.category }}/dev-dashboard/dashboard.json
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.html
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.json
         if-no-files-found: warn
 
     - name: Append dev dashboard summary (matrix)
       if: always()
       shell: pwsh
       run: |
-        $html = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.html'
-        $json = Join-Path "tests/results/${{ matrix.category }}/dev-dashboard" 'dashboard.json'
+        $html = Join-Path "${{ env.RESULTS_DIR }}/dev-dashboard" 'dashboard.html'
+        $json = Join-Path "${{ env.RESULTS_DIR }}/dev-dashboard" 'dashboard.json'
         if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
           $lines = @(
             "### Dev Dashboard (${{ matrix.category }})",
@@ -518,6 +615,7 @@ jobs:
     timeout-minutes: 3
     needs: [pester-category]
     env:
+      RESULTS_DIR: results/fixture-drift
       INVOKER_REQUIRED: '1'
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'
@@ -556,17 +654,18 @@ jobs:
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Ensure Invoker (start)
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Wire Probe (C1)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-probe
       with:
         phase: C1
-        results-dir: results/fixture-drift
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Fixture Drift Orchestrator
       uses: ./.github/actions/fixture-drift
       with:
@@ -580,17 +679,17 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: C2
-        results-dir: results/fixture-drift
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Wire Session Index (S1)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-session-index
       with:
-        results-dir: results/fixture-drift
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Session index post (best-effort)
       if: always()
       uses: ./.github/actions/session-index-post
       with:
-        results-dir: results/fixture-drift
+        results-dir: ${{ env.RESULTS_DIR }}
         validate-schema: true
         upload: true
         artifact-name: fixture-drift-session-index
@@ -598,7 +697,7 @@ jobs:
     - name: Generate dev dashboard (drift)
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'fixture-drift' -ResultsRoot 'results/fixture-drift' -OutputRoot 'results/fixture-drift/dev-dashboard'
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'fixture-drift' -ResultsRoot '${{ env.RESULTS_DIR }}' -OutputRoot '${{ env.RESULTS_DIR }}/dev-dashboard'
 
     - name: Upload dev dashboard (drift)
       if: always()
@@ -606,16 +705,16 @@ jobs:
       with:
         name: dev-dashboard-drift
         path: |
-          results/fixture-drift/dev-dashboard/dashboard.html
-          results/fixture-drift/dev-dashboard/dashboard.json
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.html
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.json
         if-no-files-found: warn
 
     - name: Append dev dashboard summary (drift)
       if: always()
       shell: pwsh
       run: |
-        $html = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.html'
-        $json = Join-Path 'results/fixture-drift/dev-dashboard' 'dashboard.json'
+        $html = Join-Path '${{ env.RESULTS_DIR }}/dev-dashboard' 'dashboard.html'
+        $json = Join-Path '${{ env.RESULTS_DIR }}/dev-dashboard' 'dashboard.json'
         if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
           $lines = @(
             '### Dev Dashboard (drift)',
@@ -630,25 +729,25 @@ jobs:
       if: always()
       shell: pwsh
       run: |
-        pwsh -File tools/Parse-CompareExec.ps1 -SearchDir 'results/fixture-drift' -OutJson 'results/fixture-drift/compare-outcome.json'
+        pwsh -File tools/Parse-CompareExec.ps1 -SearchDir '${{ env.RESULTS_DIR }}' -OutJson '${{ env.RESULTS_DIR }}/compare-outcome.json'
 
     - name: Upload compare outcome (drift)
-      if: always() && hashFiles('results/fixture-drift/compare-outcome.json') != ''
+      if: always() && hashFiles(format('{0}/compare-outcome.json', env.RESULTS_DIR)) != ''
       uses: actions/upload-artifact@v4
       with:
         name: compare-outcome-drift
-        path: results/fixture-drift/compare-outcome.json
+        path: ${{ env.RESULTS_DIR }}/compare-outcome.json
 
     - name: Wire Guard (pre)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-pre
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Runner Unblock Guard
       if: always()
       uses: ./.github/actions/runner-unblock-guard
       with:
-        snapshot-path: results/fixture-drift/runner-unblock-snapshot.json
+        snapshot-path: ${{ env.RESULTS_DIR }}/runner-unblock-snapshot.json
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
         process-names: LabVIEW,LVCompare
 
@@ -656,23 +755,24 @@ jobs:
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-guard-post
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Ensure Invoker (stop)
       if: always()
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Emit LV closure telemetry (drift post-stop)
       if: always()
       shell: pwsh
       run: |
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-stop
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
   publish:
     if: ${{ always() && (inputs.strategy == 'matrix' || vars.ORCH_STRATEGY == 'matrix' || (inputs.strategy == '' && vars.ORCH_STRATEGY == '')) && needs.pester-category.result != 'skipped' }}
     runs-on: ubuntu-latest
@@ -902,6 +1002,7 @@ jobs:
     timeout-minutes: 10
     needs: [normalize, preflight, probe]
     env:
+      RESULTS_DIR: tests/results/single
       UNBLOCK_GUARD: '0'
       LV_SUPPRESS_UI: '0'
       CLEAN_LABVIEW: '0'
@@ -955,13 +1056,13 @@ jobs:
         $lines = @('### Pre-Invoker Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'pre-invoker'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'pre-invoker'
 
     - name: Wire Invoker (start)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-start
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Ensure Invoker (start)
       if: ${{ steps.ip.outputs.ok == 'true' }}
       id: inv_start_single
@@ -969,7 +1070,7 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: start
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
         timeout-seconds: '60'
         retries: '1'
         retry-delay-seconds: '0'
@@ -989,13 +1090,13 @@ jobs:
         $lines = @('### Post-Invoker/Warmup Process Snapshot','')
         foreach ($p in $procs) { $lines += ('- {0} (PID {1}) {2}' -f $p.Name,$p.Id,$p.MainWindowTitle) }
         if ($env:GITHUB_STEP_SUMMARY) { $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-warmup'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'post-warmup'
 
     - name: Wire Probe (T1)
       uses: ./.github/actions/wire-probe
       with:
         phase: T1
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Pester categories (serial, deterministic)
       if: ${{ steps.ip.outputs.ok == 'true' && steps.inv_start_single.outputs.ready == 'true' }}
       shell: pwsh
@@ -1011,7 +1112,7 @@ jobs:
           @{ name='workflow';   inc=@('Workflow*.ps1','On-FixtureValidationFail.Tests.ps1','Watch.FlakyRecovery.Tests.ps1','FunctionShadowing*.ps1','FunctionProxy.Tests.ps1','RunSummary.Tool*.ps1','Action.CompositeOutputs.Tests.ps1','Binding.MinRepro.Tests.ps1','ArtifactTracking*.ps1','Guard.*.Tests.ps1') }
         )
         foreach ($c in $cats) {
-          $resDir = Join-Path 'tests/results' $c.name
+          $resDir = Join-Path '${{ env.RESULTS_DIR }}' $c.name
           $inc = @($c.inc)
           ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
         }
@@ -1022,7 +1123,7 @@ jobs:
       run: |
         $builder = Join-Path $PWD 'tools/Traceability-Matrix.ps1'
         if (Test-Path -LiteralPath $builder) {
-          & $builder -TestsPath 'tests' -ResultsRoot 'tests/results' -RenderHtml -RunId '${{ github.run_id }}'
+          & $builder -TestsPath 'tests' -ResultsRoot '${{ env.RESULTS_DIR }}' -RenderHtml -RunId '${{ github.run_id }}'
         } else {
           Write-Warning "[TraceMatrix] Builder script not found at $builder"
         }
@@ -1042,27 +1143,28 @@ jobs:
       uses: ./.github/actions/ensure-invoker
       with:
         mode: stop
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Emit LV closure telemetry (single post-stop)
       if: always()
       shell: pwsh
       run: |
-        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir 'tests/results' -Phase 'post-stop'
+        & (Join-Path $PWD 'tools/Emit-LVClosureCrumb.ps1') -ResultsDir '${{ env.RESULTS_DIR }}' -Phase 'post-stop'
 
     - name: Wire Invoker (stop)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-invoker-stop
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Wire Session Index (S1)
       if: ${{ vars.WIRE_PROBES != '0' }}
       uses: ./.github/actions/wire-session-index
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Session index post (single)
       if: always()
       uses: ./.github/actions/session-index-post
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
         validate-schema: true
         upload: true
         artifact-name: orchestrated-single-session-index
@@ -1071,16 +1173,16 @@ jobs:
       if: always()
       uses: ./.github/actions/runner-unblock-guard
       with:
-        snapshot-path: tests/results/runner-unblock-snapshot.json
+        snapshot-path: ${{ env.RESULTS_DIR }}/runner-unblock-snapshot.json
         cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
         process-names: conhost,pwsh,LabVIEW,LVCompare
 
     - name: Upload invoker boot log (single)
-      if: always() && hashFiles('tests/results/_invoker/boot.log') != ''
+      if: always() && hashFiles(format('{0}/_invoker/boot.log', env.RESULTS_DIR)) != ''
       uses: actions/upload-artifact@v4
       with:
         name: invoker-boot-single
-        path: tests/results/_invoker/boot.log
+        path: ${{ env.RESULTS_DIR }}/_invoker/boot.log
 
     - name: Append final summary (single)
       if: always()
@@ -1094,7 +1196,7 @@ jobs:
     - name: Generate dev dashboard (single)
       if: always()
       shell: pwsh
-      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot 'tests/results' -OutputRoot 'tests/results/dev-dashboard'
+      run: pwsh -File tools/Invoke-DevDashboard.ps1 -Group 'pester-selfhosted' -ResultsRoot '${{ env.RESULTS_DIR }}' -OutputRoot '${{ env.RESULTS_DIR }}/dev-dashboard'
 
     - name: Upload dev dashboard (single)
       if: always()
@@ -1102,8 +1204,8 @@ jobs:
       with:
         name: dev-dashboard-single
         path: |
-          tests/results/dev-dashboard/dashboard.html
-          tests/results/dev-dashboard/dashboard.json
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.html
+          ${{ env.RESULTS_DIR }}/dev-dashboard/dashboard.json
         if-no-files-found: warn
 
     - name: Upload traceability matrix (single)
@@ -1112,15 +1214,15 @@ jobs:
       with:
         name: traceability-matrix-single
         path: |
-          tests/results/_trace/trace-matrix.json
-          tests/results/_trace/trace-matrix.html
+          ${{ env.RESULTS_DIR }}/_trace/trace-matrix.json
+          ${{ env.RESULTS_DIR }}/_trace/trace-matrix.html
         if-no-files-found: warn
     - name: Append dev dashboard summary (single)
       if: always()
       shell: pwsh
       run: |
-        $html = Join-Path 'tests/results/dev-dashboard' 'dashboard.html'
-        $json = Join-Path 'tests/results/dev-dashboard' 'dashboard.json'
+        $html = Join-Path '${{ env.RESULTS_DIR }}/dev-dashboard' 'dashboard.html'
+        $json = Join-Path '${{ env.RESULTS_DIR }}/dev-dashboard' 'dashboard.json'
         if ($env:GITHUB_STEP_SUMMARY -and (Test-Path $html)) {
           $lines = @(
             '### Dev Dashboard (single)',
@@ -1136,12 +1238,12 @@ jobs:
       uses: ./.github/actions/wire-probe
       with:
         phase: P1
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
     - name: Agent wait summary (single)
       if: always()
       uses: ./.github/actions/agent-wait-post
       with:
-        results-dir: tests/results
+        results-dir: ${{ env.RESULTS_DIR }}
         fail-on-outside: 'false'
         upload-artifact: 'false'
 

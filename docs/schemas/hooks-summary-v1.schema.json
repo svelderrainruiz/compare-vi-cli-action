@@ -1,0 +1,84 @@
+{
+  "": "https://json-schema.org/draft/2020-12/schema",
+  "": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/hooks-summary-v1.schema.json",
+  "title": "CompareVI Hook Summary",
+  "type": "object",
+  "required": [
+    "schema",
+    "hook",
+    "timestamp",
+    "status",
+    "exitCode",
+    "steps",
+    "environment"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "comparevi/hooks-summary@v1"
+    },
+    "hook": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repoRoot": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "warn", "failed"]
+    },
+    "exitCode": {
+      "type": "integer"
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "exitCode", "durationMs", "stdout", "stderr"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "warn", "failed", "skipped"]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warn", "error"]
+          },
+          "exitCode": { "type": "integer" },
+          "durationMs": { "type": "number" },
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "note": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["platform", "nodeVersion", "plane", "enforcement"],
+      "properties": {
+        "platform": { "type": "string" },
+        "nodeVersion": { "type": "string" },
+        "pwshPath": { "type": ["string", "null"] },
+        "plane": { "type": "string" },
+        "enforcement": {
+          "type": "string",
+          "enum": ["fail", "warn", "off"]
+        },
+        "githubActions": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

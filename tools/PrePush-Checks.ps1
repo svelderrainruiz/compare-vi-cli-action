@@ -63,7 +63,7 @@ function Invoke-Actionlint([string]$repoRoot){
   $exe = Get-ActionlintPath -repoRoot $repoRoot
   if (-not $exe) {
     if ($InstallIfMissing) {
-      Install-Actionlint -repoRoot $repoRoot -version $ActionlintVersion
+      Install-Actionlint -repoRoot $repoRoot -version $ActionlintVersion | Out-Null
       $exe = Get-ActionlintPath -repoRoot $repoRoot
     }
   }
@@ -79,7 +79,7 @@ function Invoke-Actionlint([string]$repoRoot){
   Push-Location $repoRoot
   try {
     & $exe -color
-    return $LASTEXITCODE
+    return [int]$LASTEXITCODE
   } finally {
     Pop-Location | Out-Null
   }

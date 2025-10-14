@@ -182,7 +182,6 @@ jobs:
           .github/workflows/pester-selfhosted.yml \
           .github/workflows/fixture-drift.yml \
           .github/workflows/ci-orchestrated.yml \
-          .github/workflows/ci-orchestrated-v2.yml \
           .github/workflows/pester-integration-on-label.yml \
           .github/workflows/smoke.yml \
           .github/workflows/compare-artifacts.yml
@@ -197,7 +196,6 @@ jobs:
           .github/workflows/pester-selfhosted.yml \
           .github/workflows/fixture-drift.yml \
           .github/workflows/ci-orchestrated.yml \
-          .github/workflows/ci-orchestrated-v2.yml \
           .github/workflows/pester-integration-on-label.yml \
           .github/workflows/smoke.yml \
           .github/workflows/compare-artifacts.yml
@@ -426,6 +424,111 @@ jobs:
         results-dir: tests/results
         fail-on-outside: 'false'
         upload-artifact: 'false'
+
+  hook-parity:
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v5
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies (no scripts)
+      run: npm ci --ignore-scripts
+
+    - name: Clean hook results directory
+      shell: bash
+      run: |
+        rm -rf tests/results/_hooks
+        mkdir -p tests/results/_hooks
+
+    - name: Prepare staged fixture
+      shell: bash
+      run: |
+        rm -rf tmp/hooks
+        mkdir -p tmp/hooks
+        cat <<'PS' > tmp/hooks/sample.ps1
+        function Invoke-HookSample {
+          param()
+          Write-Output 'hook parity sample'
+        }
+        Invoke-HookSample
+        PS
+        git add tmp/hooks/sample.ps1
+
+    - name: Prime actionlint binary
+      shell: pwsh
+      run: ./tools/PrePush-Checks.ps1
+
+    - name: Hooks plane info
+      run: npm run hooks:plane
+
+    - name: Hooks preflight
+      run: npm run hooks:preflight
+
+    - name: Run multi-plane hook diff
+      run: npm run hooks:multi
+
+    - name: Validate hook summary schema
+      run: npm run hooks:schema
+
+    - name: Upload hook parity summaries
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: hook-parity-${{ matrix.os }}
+        path: tests/results/_hooks/*.json
+
+    - name: Reset staged files
+      if: always()
+      shell: bash
+      run: |
+        git reset --hard
+        rm -rf tmp/hooks
+
+  semver:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies (no scripts)
+        run: npm ci --ignore-scripts
+      - name: SemVer check
+        run: npm run semver:check
+
+  issue-snapshot:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Sync standing-priority snapshot
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          npm run priority:sync || true
+      - name: Validate snapshot schema (best-effort)
+        continue-on-error: true
+        run: |
+          npm run priority:schema
+      - name: Upload issue snapshot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: standing-priority-snapshot
+          path: |
+            tests/results/_agent/issue/*.json
+            tests/results/_agent/issue/*.digest
 
   session-index:
     runs-on: ubuntu-latest

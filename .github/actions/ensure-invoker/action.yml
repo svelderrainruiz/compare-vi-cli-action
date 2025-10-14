@@ -11,6 +11,10 @@ inputs:
   category:
     description: Optional category subfolder appended to results-dir
     required: false
+  require-invoker:
+    description: When false, skip spawning the invoker even on Windows
+    required: false
+    default: 'true'
   timeout-seconds:
     description: Wait time for ready/stop markers
     required: false
@@ -54,7 +58,7 @@ runs:
 
     - name: Start invoker (Windows only)
       id: start
-      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' }}
+      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && inputs.require-invoker != 'false' }}
       shell: pwsh
       run: |
         $results = '${{ steps.compute.outputs.results }}'
@@ -93,9 +97,27 @@ runs:
             Write-Host "Started invoker attempt #$i pid=$($p.Id) pipe=$pipe"
             "[$ts] attempt#$i spawn pid=$($p.Id) pipe=$pipe" | Out-File -FilePath $boot -Append -Encoding utf8
           } catch {
+            # Fallback: create a small wrapper script that sets env vars inline, then starts the invoker
             $err = $_.Exception.Message
-            Write-Host "::warning::Failed to spawn invoker on attempt #$i: ${err}"
-            "[$ts] attempt#$i spawn error: $err" | Out-File -FilePath $boot -Append -Encoding utf8
+            Write-Host "::warning::Failed to spawn invoker on attempt #$i (env injection): $err"
+            try {
+              $wrapper = Join-Path $env:RUNNER_TEMP ("invoker-wrapper-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
+              $lines = @()
+              foreach ($pair in $envMap.GetEnumerator()) {
+                $val = ($pair.Value -replace "'", "''")
+                $lines += ("Set-Item -Path 'Env:{0}' -Value '{1}'" -f $pair.Key, $val)
+              }
+              $startPath = Join-Path $wd 'tools/RunnerInvoker/Start-RunnerInvoker.ps1'
+              $lines += ("& '{0}' -PipeName '{1}' -SentinelPath '{2}' -ResultsDir '{3}'" -f $startPath, $pipe, $sent, $results)
+              ($lines -join "`n") | Out-File -FilePath $wrapper -Encoding utf8
+              $p = Start-Process -FilePath $psExe -ArgumentList @('-NoLogo','-NoProfile','-File', $wrapper) -WindowStyle Hidden -PassThru -WorkingDirectory $wd
+              Write-Host "Started invoker (fallback) attempt #$i pid=$($p.Id) pipe=$pipe"
+              "[$ts] attempt#$i spawn (fallback) pid=$($p.Id) pipe=$pipe" | Out-File -FilePath $boot -Append -Encoding utf8
+            } catch {
+              $err = $_.Exception.Message
+              Write-Host "::warning::Fallback spawn failed on attempt #$i: $err"
+              "[$ts] attempt#$i spawn error: $err" | Out-File -FilePath $boot -Append -Encoding utf8
+            }
           }
           $sw = [Diagnostics.Stopwatch]::StartNew()
           while ($sw.Elapsed.TotalSeconds -lt $to) { if (Test-Path -LiteralPath $ready) { $ok = $true; break }; Start-Sleep -Milliseconds 300 }
@@ -111,14 +133,14 @@ runs:
           "reason=ready"| Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         } else {
           "[$(Get-Date -Format o)] all attempts exhausted; lastError=$err" | Out-File -FilePath $boot -Append -Encoding utf8
-          Write-Host "::error::Invoker not ready after ${to} s (attempts=$attempts). LastError=${err}"
+          Write-Host "::error::Invoker not ready after ${to} s (attempts=$attempts). LastError=$err"
           "ready=false"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "reason=timeout"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           exit 1
         }
 
     - name: Invoker ping (Windows only)
-      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && steps.start.outputs.ready == 'true' }}
+      if: ${{ inputs.mode == 'start' && runner.os == 'Windows' && inputs.require-invoker != 'false' && steps.start.outputs.ready == 'true' }}
       shell: pwsh
       run: |
         $args = @(
@@ -131,7 +153,7 @@ runs:
         pwsh -File tools/RunnerInvoker/Wait-InvokerReady.ps1 @args
 
     - name: Stop invoker (Windows only)
-      if: ${{ inputs.mode == 'stop' && runner.os == 'Windows' }}
+      if: ${{ inputs.mode == 'stop' && runner.os == 'Windows' && inputs.require-invoker != 'false' }}
       shell: pwsh
       run: |
         $results = '${{ steps.compute.outputs.results }}'
@@ -147,4 +169,3 @@ runs:
       if: ${{ runner.os != 'Windows' }}
       shell: bash
       run: echo ensure-invoker non-Windows runner, skipping
-

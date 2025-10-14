@@ -25,6 +25,8 @@ Describe 'Dev Dashboard loaders' -Tag 'Unit' {
     $telemetry.Totals.Failed | Should -Be 1
     $telemetry.DispatcherErrors.Count | Should -BeGreaterThan 0
     $telemetry.FailedTests.Name | Should -Contain 'Queue timeout'
+    $telemetry.PSObject.Properties.Name | Should -Contain 'Runner'
+    $telemetry.Runner | Should -Be $null
   }
 
   It 'loads Agent-Wait telemetry' {

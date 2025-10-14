@@ -28,6 +28,14 @@ Describe 'Write-SessionIndexSummary' -Tag 'Unit' {
       errors = 0
       skipped = 0
       duration_s = 12.34
+      runContext = [ordered]@{
+        runner = 'test-runner'
+        runnerOS = 'Windows'
+        runnerArch = 'X64'
+        runnerEnvironment = 'self-hosted'
+        runnerMachine = 'runner-host'
+        runnerLabels = @('self-hosted','windows','lvsuite')
+      }
     } | ConvertTo-Json
     Set-Content -LiteralPath (Join-Path $script:resultsDir 'session-index.json') -Value $json -Encoding utf8
 
@@ -39,6 +47,10 @@ Describe 'Write-SessionIndexSummary' -Tag 'Unit' {
     $content | Should -Match '- Status: ok'
     $content | Should -Match '- Total: 5'
     $content | Should -Match '- Duration \(s\): 12\.34'
+    $content | Should -Match '### Runner'
+    $content | Should -Match '- Name: test-runner'
+    $content | Should -Match '- OS/Arch: Windows/X64'
+    $content | Should -Match 'Labels: self-hosted, windows, lvsuite'
   }
 
   It 'handles missing optional properties without throwing' {

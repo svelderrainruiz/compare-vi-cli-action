@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+# Unified tools image for non-LV checks and CLI build
+# Base: .NET SDK 8 (Debian), then add Node + markdownlint-cli2, Python 3 + ruamel.yaml, PowerShell 7, actionlint, jq
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    ACTIONLINT_VERSION=1.7.7
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    curl ca-certificates gnupg apt-transport-https \
+    python3 python3-pip jq \
+    nodejs npm \
+ && rm -rf /var/lib/apt/lists/* \
+ && ln -s /usr/bin/python3 /usr/local/bin/python
+
+# Install PowerShell 7 (Microsoft repo)
+RUN set -eux; \
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/microsoft.gpg >/dev/null; \
+    echo "deb [arch=amd64] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/microsoft-prod.list; \
+    apt-get update && apt-get install -y --no-install-recommends powershell && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g markdownlint-cli2@0.12.1 markdownlint-cli@0.31.1
+
+# Python ruamel.yaml for workflow drift checks
+RUN python3 -m pip install --break-system-packages --no-cache-dir --upgrade pip \
+    && python3 -m pip install --break-system-packages --no-cache-dir ruamel.yaml
+
+# Install actionlint (pinned)
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) ACTION_ARCH=linux_amd64 ;; \
+      aarch64) ACTION_ARCH=linux_arm64 ;; \
+      *) echo "Unsupported arch: $arch"; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_${ACTION_ARCH}.tar.gz"; \
+    tar -C /usr/local/bin -xzf /tmp/actionlint.tar.gz actionlint; \
+    rm -f /tmp/actionlint.tar.gz; \
+    actionlint -version
+
+WORKDIR /work
+RUN useradd -m -u 1000 dev || true
+USER 1000:1000
+CMD ["bash"]

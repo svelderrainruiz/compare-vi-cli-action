@@ -13,7 +13,6 @@ $workflowFiles = @(
   '.github/workflows/pester-selfhosted.yml',
   '.github/workflows/fixture-drift.yml',
   '.github/workflows/ci-orchestrated.yml',
-  '.github/workflows/ci-orchestrated-v2.yml',
   '.github/workflows/pester-integration-on-label.yml',
   '.github/workflows/smoke.yml',
   '.github/workflows/compare-artifacts.yml'

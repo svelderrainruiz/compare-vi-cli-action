@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/handoff-hook-summary-v1.schema.json",
+  "title": "Agent Handoff Hook Summary",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "hook",
+      "file",
+      "status"
+    ],
+    "properties": {
+      "hook": {
+        "type": "string"
+      },
+      "file": {
+        "type": "string"
+      },
+      "status": {
+        "type": ["string", "null"],
+        "enum": ["ok", "failed", "warn", null]
+      },
+      "exitCode": {
+        "type": ["integer", "null"]
+      },
+      "timestamp": {
+        "type": ["string", "null"],
+        "format": "date-time"
+      },
+      "plane": {
+        "type": ["string", "null"]
+      },
+      "enforcement": {
+        "type": ["string", "null"],
+        "enum": ["fail", "warn", "off", null]
+      }
+    },
+    "additionalProperties": true
+  }
+}

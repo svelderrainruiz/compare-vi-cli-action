@@ -24,6 +24,65 @@ function Format-BoolLabel {
   return 'unknown'
 }
 
+function Write-HookSummaries {
+  param([string]$ResultsRoot)
+
+  $hooksDir = Join-Path $ResultsRoot '_hooks'
+  Write-Host ''
+  Write-Host '[Hook Summaries]' -ForegroundColor Cyan
+  if (-not (Test-Path -LiteralPath $hooksDir -PathType Container)) {
+    Write-Host '  (no hook summaries found)'
+    return @()
+  }
+
+  $files = Get-ChildItem -LiteralPath $hooksDir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+  if (-not $files) {
+    Write-Host '  (no hook summaries found)'
+    return @()
+  }
+
+  $latest = @{}
+  foreach ($file in $files) {
+    try {
+      $summary = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      continue
+    }
+    if (-not $summary) { continue }
+    $hookName = if ($summary.PSObject.Properties['hook']) { $summary.hook } else { [System.IO.Path]::GetFileNameWithoutExtension($file.Name) }
+    if (-not $hookName) { continue }
+    if (-not $latest.ContainsKey($hookName)) {
+      $latest[$hookName] = [ordered]@{
+        hook = $hookName
+        file = $file.FullName
+        status = $summary.status
+        exitCode = $summary.exitCode
+        timestamp = $summary.timestamp
+        plane = if ($summary.environment) { $summary.environment.plane } else { $null }
+        enforcement = if ($summary.environment) { $summary.environment.enforcement } else { $null }
+      }
+    }
+  }
+
+  if ($latest.Count -eq 0) {
+    Write-Host '  (no hook summaries found)'
+    return @()
+  }
+
+  foreach ($entry in ($latest.Keys | Sort-Object)) {
+    $info = $latest[$entry]
+    Write-Host ("  hook        : {0}" -f $info.hook)
+    Write-Host ("    status    : {0}" -f (Format-NullableValue $info.status))
+    Write-Host ("    exitCode  : {0}" -f (Format-NullableValue $info.exitCode))
+    Write-Host ("    plane     : {0}" -f (Format-NullableValue $info.plane))
+    Write-Host ("    enforce   : {0}" -f (Format-NullableValue $info.enforcement))
+    Write-Host ("    timestamp : {0}" -f (Format-NullableValue $info.timestamp))
+    Write-Host ("    file      : {0}" -f $info.file)
+  }
+
+  return ($latest.Values | Sort-Object hook)
+}
+
 function Write-WatcherStatusSummary {
   param(
     [string]$ResultsRoot,
@@ -261,7 +320,186 @@ if ($ApplyToggles) {
 }
 
 Get-Content -LiteralPath $handoff
+
+try {
+  $repoRoot = (Resolve-Path '.').Path
+  $priorityScript = Join-Path $repoRoot 'tools' 'priority' 'sync-standing-priority.mjs'
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if ($nodeCmd -and (Test-Path -LiteralPath $priorityScript -PathType Leaf)) {
+    & $nodeCmd.Source $priorityScript | Out-Host
+  } else {
+    Write-Host '::notice::Standing priority sync skipped (node or script missing).'
+  }
+} catch {
+  Write-Warning ("Standing priority sync failed: {0}" -f $_.Exception.Message)
+}
+
+try {
+  $issueDir = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/issue'
+  if (Test-Path -LiteralPath $issueDir -PathType Container) {
+    $latestIssue = Get-ChildItem -LiteralPath $issueDir -Filter '*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latestIssue) {
+      $issueSnap = Get-Content -LiteralPath $latestIssue.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+      Write-Host ''
+      Write-Host '[Standing Priority]' -ForegroundColor Cyan
+      Write-Host ("  issue    : #{0}" -f $issueSnap.number)
+      Write-Host ("  title    : {0}" -f (Format-NullableValue $issueSnap.title))
+      Write-Host ("  state    : {0}" -f (Format-NullableValue $issueSnap.state))
+      Write-Host ("  updated  : {0}" -f (Format-NullableValue $issueSnap.updatedAt))
+      Write-Host ("  digest   : {0}" -f (Format-NullableValue $issueSnap.digest))
+
+      if ($env:GITHUB_STEP_SUMMARY) {
+        $priorityLines = @(
+          '### Standing Priority',
+          '',
+          ('- Issue: #{0} — {1}' -f $issueSnap.number, (Format-NullableValue $issueSnap.title)),
+          ('- State: {0}  Updated: {1}' -f (Format-NullableValue $issueSnap.state), (Format-NullableValue $issueSnap.updatedAt)),
+          ('- Digest: `{0}`' -f (Format-NullableValue $issueSnap.digest))
+        )
+        ($priorityLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      }
+
+      $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+      New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+      Copy-Item -LiteralPath $latestIssue.FullName -Destination (Join-Path $handoffDir 'issue-summary.json') -Force
+      $routerSrc = Join-Path $issueDir 'router.json'
+      if (Test-Path -LiteralPath $routerSrc -PathType Leaf) {
+        Copy-Item -LiteralPath $routerSrc -Destination (Join-Path $handoffDir 'issue-router.json') -Force
+      }
+    }
+  }
+} catch {
+  Write-Warning ("Failed to display standing priority summary: {0}" -f $_.Exception.Message)
+}
+
+try {
+  $releasePath = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff/release-summary.json'
+  if (Test-Path -LiteralPath $releasePath -PathType Leaf) {
+    $release = Get-Content -LiteralPath $releasePath -Raw | ConvertFrom-Json -ErrorAction Stop
+    Write-Host ''
+    Write-Host '[SemVer Status]' -ForegroundColor Cyan
+    Write-Host ("  version : {0}" -f (Format-NullableValue $release.version))
+    Write-Host ("  valid   : {0}" -f (Format-BoolLabel $release.valid))
+    if ($release.issues) {
+      foreach ($issue in $release.issues) {
+        Write-Host ("    issue : {0}" -f $issue)
+      }
+    }
+    $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+    New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+    Copy-Item -LiteralPath $releasePath -Destination (Join-Path $handoffDir 'release-summary.json') -Force
+    if ($env:GITHUB_STEP_SUMMARY) {
+      $releaseLines = @(
+        '### SemVer Status',
+        '',
+        ('- Version: {0}' -f (Format-NullableValue $release.version)),
+        ('- Valid: {0}' -f (Format-BoolLabel $release.valid))
+      )
+      if ($release.issues -and $release.issues.Count -gt 0) {
+        foreach ($issue in $release.issues) {
+          $releaseLines += ('  - {0}' -f $issue)
+        }
+      }
+      ($releaseLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+  }
+} catch {
+  Write-Warning ("Failed to load SemVer summary: {0}" -f $_.Exception.Message)
+}
+
+try {
+  $testSummaryPath = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff/test-summary.json'
+  if (Test-Path -LiteralPath $testSummaryPath -PathType Leaf) {
+    $testSummaryRaw = Get-Content -LiteralPath $testSummaryPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $testEntries = @()
+    $statusLabel = 'unknown'
+    $generatedAt = $null
+    $notes = @()
+    $total = 0
+
+    if ($testSummaryRaw -is [System.Array]) {
+      $testEntries = @($testSummaryRaw)
+      $total = $testEntries.Count
+      $statusLabel = if (@($testEntries | Where-Object { $_.exitCode -ne 0 }).Count -gt 0) { 'failed' } else { 'passed' }
+    } elseif ($testSummaryRaw -is [psobject]) {
+      $resultsProp = $testSummaryRaw.PSObject.Properties['results']
+      if ($resultsProp) {
+        $testEntries = @($resultsProp.Value)
+        $statusProp = $testSummaryRaw.PSObject.Properties['status']
+        $statusLabel = if ($statusProp) { $statusProp.Value } else { 'unknown' }
+        $generatedProp = $testSummaryRaw.PSObject.Properties['generatedAt']
+        if ($generatedProp) { $generatedAt = $generatedProp.Value }
+        $totalProp = $testSummaryRaw.PSObject.Properties['total']
+        $total = if ($totalProp) { $totalProp.Value } else { $testEntries.Count }
+        $notesProp = $testSummaryRaw.PSObject.Properties['notes']
+        if ($notesProp -and $notesProp.Value) { $notes = @($notesProp.Value) }
+      }
+    }
+
+    $failureEntries = @($testEntries | Where-Object { $_.exitCode -ne 0 })
+    $failureCount = $failureEntries.Count
+
+    Write-Host ''
+    Write-Host '[Test Results]' -ForegroundColor Cyan
+    Write-Host ("  status   : {0}" -f (Format-NullableValue $statusLabel))
+    Write-Host ("  total    : {0}" -f $total)
+    Write-Host ("  failures : {0}" -f $failureCount)
+    if ($generatedAt) {
+      Write-Host ("  generated: {0}" -f (Format-NullableValue $generatedAt))
+    }
+    if ($notes -and $notes.Count -gt 0) {
+      foreach ($note in $notes) {
+        Write-Host ("  note     : {0}" -f (Format-NullableValue $note))
+      }
+    }
+    foreach ($entry in $testEntries) {
+      Write-Host ("  {0} => exit {1}" -f ($entry.command ?? '(unknown)'), (Format-NullableValue $entry.exitCode))
+    }
+
+    if ($env:GITHUB_STEP_SUMMARY) {
+      $testLines = @(
+        '### Test Results',
+        '',
+        ('- Status: {0}' -f (Format-NullableValue $statusLabel)),
+        ('- Total: {0}  Failures: {1}' -f $total, $failureCount)
+      )
+      if ($generatedAt) {
+        $testLines += ('- Generated: {0}' -f (Format-NullableValue $generatedAt))
+      }
+      if ($notes -and $notes.Count -gt 0) {
+        foreach ($note in $notes) {
+          $testLines += ('  - Note: {0}' -f (Format-NullableValue $note))
+        }
+      }
+      $testLines += ''
+      $testLines += '| command | exit |'
+      $testLines += '| --- | --- |'
+      foreach ($entry in $testEntries) {
+        $testLines += ('| {0} | {1} |' -f ($entry.command ?? '(unknown)'), (Format-NullableValue $entry.exitCode))
+      }
+      ($testLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+  }
+} catch {
+  Write-Warning ("Failed to read test summary: {0}" -f $_.Exception.Message)
+}
+
 Write-WatcherStatusSummary -ResultsRoot $ResultsRoot -RequestAutoTrim:$AutoTrim
+
+$hookSummaries = Write-HookSummaries -ResultsRoot $ResultsRoot
+if ($hookSummaries -and $hookSummaries.Count -gt 0) {
+  if ($env:GITHUB_STEP_SUMMARY) {
+    $hookSummaryLines = @('### Hook Summaries','','| hook | status | plane | enforcement | exit | timestamp |','| --- | --- | --- | --- | --- | --- |')
+    foreach ($hook in $hookSummaries) {
+      $hookSummaryLines += ('| {0} | {1} | {2} | {3} | {4} | {5} |' -f $hook.hook, (Format-NullableValue $hook.status), (Format-NullableValue $hook.plane), (Format-NullableValue $hook.enforcement), (Format-NullableValue $hook.exitCode), (Format-NullableValue $hook.timestamp))
+    }
+    ($hookSummaryLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+  }
+
+  $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+  New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+  ($hookSummaries | ConvertTo-Json -Depth 4) | Out-File -FilePath (Join-Path $handoffDir 'hook-summary.json') -Encoding utf8
+}
 
 if ($OpenDashboard) {
   $cli = Join-Path (Resolve-Path '.').Path 'tools/Dev-Dashboard.ps1'

@@ -1,0 +1,36 @@
+{
+  "schema": "agent-handoff/test-results@v1",
+  "generatedAt": "2025-10-13T12:30:00.000Z",
+  "status": "passed",
+  "total": 3,
+  "failureCount": 0,
+  "results": [
+    {
+      "command": "npm run priority:test",
+      "exitCode": 0,
+      "stdout": "priority tests ok",
+      "stderr": "",
+      "startedAt": "2025-10-13T12:20:00.000Z",
+      "completedAt": "2025-10-13T12:20:30.000Z",
+      "durationMs": 30000
+    },
+    {
+      "command": "npm run hooks:test",
+      "exitCode": 0,
+      "stdout": "hooks tests ok",
+      "stderr": "",
+      "startedAt": "2025-10-13T12:21:00.000Z",
+      "completedAt": "2025-10-13T12:21:20.000Z",
+      "durationMs": 20000
+    },
+    {
+      "command": "npm run semver:check",
+      "exitCode": 0,
+      "stdout": "{\"version\":\"0.5.0\",\"valid\":true}",
+      "stderr": "",
+      "startedAt": "2025-10-13T12:22:00.000Z",
+      "completedAt": "2025-10-13T12:22:05.000Z",
+      "durationMs": 5000
+    }
+  ]
+}
