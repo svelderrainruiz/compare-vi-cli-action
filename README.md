@@ -80,6 +80,21 @@ Use `LVCI_COMPARE_POLICY` to direct how automation chooses between LVCompare and
 - `cli-only` – require CLI success; do not fall back.
 - `lv-only` – enforce LVCompare only.
 
+CLI-only quick start (64-bit Windows):
+
+- On self-hosted runners with LabVIEW CLI installed, automation defaults the CLI path to
+  `C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe` when no
+  overrides are set.
+- To force CLI-only compare end-to-end (no LVCompare invocation):
+  - Set `LVCI_COMPARE_MODE=labview-cli` and `LVCI_COMPARE_POLICY=cli-only`.
+  - Run either wrapper:
+    - Harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -RenderReport`
+    - Wrapper: `pwsh -File tools/Invoke-LVCompare.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -RenderReport`
+- The capture (`lvcompare-capture.json`) includes an `environment.cli` block detailing the CLI
+  path, version, parsed report type/path, status, and the final CLI message, alongside the command
+  and arguments used for the `CreateComparisonReport` operation. When `-RenderReport` is set, the
+  single-file HTML report is written alongside the capture.
+
 ## Monitoring & telemetry
 
 ### Dev dashboard

@@ -1,0 +1,31 @@
+{
+  "$ref": "#/definitions/cli-procs",
+  "definitions": {
+    "cli-procs": {
+      "type": "object",
+      "properties": {
+        "labviewPids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "lvcomparePids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/cli-procs/properties/labviewPids/items"
+          }
+        }
+      },
+      "required": [
+        "labviewPids",
+        "lvcomparePids"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Output emitted by comparevi-cli procs.",
+  "$id": "urn:compare-vi-cli-action:schema:cli-procs"
+}

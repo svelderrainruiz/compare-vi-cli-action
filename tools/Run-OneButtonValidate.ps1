@@ -92,8 +92,8 @@ if ($Stage -or $Commit -or $Push -or $CreatePR) {
   Invoke-Step -Name 'Workflow drift (stage)' -Action { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Check-WorkflowDrift.ps1','-AutoFix','-Stage') -FailureMessage 'Workflow drift stage failed.' }
 }
 
-if ($Commit) {
-  Invoke-Step -Name 'Workflow drift commit' -Action { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Check-WorkflowDrift.ps1','-AutoFix','-Stage','-CommitMessage','Normalize: ci-orchestrated via ruamel (#88)') -FailureMessage 'Workflow drift commit failed.' }
+  if ($Commit) {
+    Invoke-Step -Name 'Workflow drift commit' -Action { Invoke-CommandWithExit -Command 'pwsh' -Arguments @('-NoLogo','-NoProfile','-File','./tools/Check-WorkflowDrift.ps1','-AutoFix','-Stage','-CommitMessage','Normalize: ci-orchestrated via ruamel (#127)') -FailureMessage 'Workflow drift commit failed.' }
 }
 
 if ($Stage -or $Commit) {
@@ -123,8 +123,8 @@ if ($Push) {
   }
 }
 
-if ($CreatePR) {
-  Invoke-Step -Name 'Create/Update PR (#88)' -Action {
+  if ($CreatePR) {
+    Invoke-Step -Name 'Create/Update PR (#127)' -Action {
     $branch = git rev-parse --abbrev-ref HEAD
     $gh = Get-Command gh -ErrorAction SilentlyContinue
     if (-not $gh) {
@@ -136,8 +136,8 @@ if ($CreatePR) {
       Write-Host '::notice::gh not authenticated; skipping PR step.'
       return
     }
-    $title = 'Normalize workflows and local Validate mirrors (#88)'
-    $body = 'Automated workflow normalization and Validate task updates for #88.'
+      $title = 'Normalize workflows and local Validate mirrors (#127)'
+      $body = 'Automated workflow normalization and Validate task updates for #127.'
     $existingJson = gh pr view --json number --head $branch 2>$null
     if ($LASTEXITCODE -eq 0 -and $existingJson) {
       $pr = $existingJson | ConvertFrom-Json

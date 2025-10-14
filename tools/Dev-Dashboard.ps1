@@ -61,6 +61,85 @@ function Get-PropertyValue {
   return $Object.$Property
 }
 
+function Get-CompareOutcomeTelemetry {
+  param([string]$ResultsRoot)
+
+  if (-not $ResultsRoot) { return $null }
+  $resolved = $null
+  try {
+    $resolved = (Resolve-Path -LiteralPath $ResultsRoot -ErrorAction Stop).Path
+  } catch {
+    return $null
+  }
+
+  $outcome = Get-ChildItem -Path $resolved -Filter 'compare-outcome.json' -Recurse -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if ($outcome) {
+    try {
+      $data = Get-Content -LiteralPath $outcome.FullName -Raw | ConvertFrom-Json -Depth 8
+      return [pscustomobject][ordered]@{
+        Source      = if ($data.source) { $data.source } else { 'compare-outcome' }
+        JsonPath    = $outcome.FullName
+        CapturePath = if ($data.captureJson) { $data.captureJson } else { $data.file }
+        ReportPath  = if ($data.reportPath) { $data.reportPath } else { $null }
+        ExitCode    = if ($data.exitCode -ne $null) { [int]$data.exitCode } else { $null }
+        Diff        = if ($data.diff -ne $null) { [bool]$data.diff } else { $null }
+        DurationMs  = if ($data.durationMs -ne $null) { [double]$data.durationMs } else { $null }
+        CliPath     = if ($data.cliPath) { $data.cliPath } else { $null }
+        Command     = if ($data.command) { $data.command } else { $null }
+        CliArtifacts= if ($data.cliArtifacts) { $data.cliArtifacts } else { $null }
+      }
+    } catch {}
+  }
+
+  $capture = Get-ChildItem -Path $resolved -Filter 'lvcompare-capture.json' -Recurse -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if (-not $capture) { return $null }
+
+  try {
+    $cap = Get-Content -LiteralPath $capture.FullName -Raw | ConvertFrom-Json -Depth 6
+    $exitCode = if ($cap.exitCode -ne $null) { [int]$cap.exitCode } else { $null }
+    $diff = if ($exitCode -ne $null) { $exitCode -eq 1 } else { $null }
+    $durationMs = $null
+    if ($cap.seconds -ne $null) { $durationMs = [math]::Round([double]$cap.seconds * 1000, 3) }
+    $cliPath = if ($cap.cliPath) { [string]$cap.cliPath } else { $null }
+    $command = if ($cap.command) { [string]$cap.command } else { $null }
+
+    $artifacts = $null
+    if ($cap.environment -and $cap.environment.cli -and $cap.environment.cli.PSObject.Properties.Name -contains 'artifacts') {
+      $artifacts = $cap.environment.cli.artifacts
+    }
+
+    $reportPath = $null
+    if ($cap.environment -and $cap.environment.cli -and $cap.environment.cli.PSObject.Properties.Name -contains 'reportPath') {
+      $reportPath = $cap.environment.cli.reportPath
+    }
+    if (-not $reportPath) {
+      $compareHtml = Join-Path (Split-Path -Parent $capture.FullName) 'compare-report.html'
+      if (Test-Path -LiteralPath $compareHtml) { $reportPath = $compareHtml }
+      $cliHtml = Join-Path (Split-Path -Parent $capture.FullName) 'cli-report.html'
+      if (Test-Path -LiteralPath $cliHtml) { $reportPath = $cliHtml }
+    }
+
+    return [pscustomobject][ordered]@{
+      Source       = 'capture'
+      JsonPath     = $null
+      CapturePath  = $capture.FullName
+      ReportPath   = $reportPath
+      ExitCode     = $exitCode
+      Diff         = $diff
+      DurationMs   = $durationMs
+      CliPath      = $cliPath
+      Command      = $command
+      CliArtifacts = $artifacts
+    }
+  } catch {
+    return $null
+  }
+}
+
 function Get-DashboardSnapshot {
   param(
     [string]$GroupName,
@@ -85,6 +164,7 @@ function Get-DashboardSnapshot {
   }
   $labview = Get-LabVIEWSnapshot -SnapshotPath $labviewSnapshotPath
   $actions = Get-ActionItems -SessionLock $session -PesterTelemetry $pester -AgentWait $agentWait -Stakeholder $stakeholders -WatchTelemetry $watch -LabVIEWSnapshot $labview
+  $compareOutcome = Get-CompareOutcomeTelemetry -ResultsRoot $ResultsDir
 
   $branch = Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD')
   $commit = Invoke-Git -Arguments @('rev-parse', 'HEAD')
@@ -107,6 +187,7 @@ function Get-DashboardSnapshot {
     Stakeholders     = $stakeholders
     WatchTelemetry   = $watch
     LabVIEWSnapshot  = $labview
+    CompareOutcome   = $compareOutcome
     ActionItems      = $actions
   }
 }
@@ -218,6 +299,32 @@ function Write-TerminalReport {
     foreach ($test in $failedTests) {
       Write-Host "    - $($test.Name) ($($test.Result))"
     }
+  }
+  Write-Host ''
+
+  $compare = $Snapshot.CompareOutcome
+  Write-Host "Compare Outcome"
+  if ($compare) {
+    if ($compare.ExitCode -ne $null) { Write-Host "  ExitCode : $($compare.ExitCode)" }
+    if ($compare.Diff -ne $null) { Write-Host "  Diff     : $($compare.Diff)" }
+    if ($compare.DurationMs -ne $null) { Write-Host "  Duration : $([math]::Round($compare.DurationMs,1)) ms" }
+    if ($compare.CliPath) { Write-Host "  CLI Path : $($compare.CliPath)" }
+    if ($compare.ReportPath) { Write-Host "  Report   : $($compare.ReportPath)" }
+    if ($compare.CliArtifacts) {
+      $cliArtifacts = $compare.CliArtifacts
+      if ($cliArtifacts.PSObject.Properties.Name -contains 'reportSizeBytes' -and $cliArtifacts.reportSizeBytes -ne $null) {
+        Write-Host "  CLI Report Size : $($cliArtifacts.reportSizeBytes) bytes"
+      }
+      if ($cliArtifacts.PSObject.Properties.Name -contains 'imageCount' -and $cliArtifacts.imageCount -ne $null) {
+        $imgLine = "  CLI Images      : $($cliArtifacts.imageCount)"
+        if ($cliArtifacts.PSObject.Properties.Name -contains 'exportDir' -and $cliArtifacts.exportDir) {
+          $imgLine += " (export: $($cliArtifacts.exportDir))"
+        }
+        Write-Host $imgLine
+      }
+    }
+  } else {
+    Write-Host "  Status   : no compare telemetry"
   }
   Write-Host ''
 
@@ -379,6 +486,33 @@ function ConvertTo-HtmlReport {
   $stakeChannelsDisplay = [string]::Join(', ', $stakeChannels)
   $labview = $Snapshot.LabVIEWSnapshot
   $items = $Snapshot.ActionItems
+  $compare = $Snapshot.CompareOutcome
+  $compareArtifacts = $null
+  if ($compare -and $compare.PSObject.Properties.Name -contains 'CliArtifacts' -and $compare.CliArtifacts) {
+    $compareArtifacts = $compare.CliArtifacts
+  }
+  $compareExitValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'ExitCode') { $compare.ExitCode } else { $null }
+  $compareDiffValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'Diff') { $compare.Diff } else { $null }
+  $compareDurationValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'DurationMs') { $compare.DurationMs } else { $null }
+  $compareCliPathValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'CliPath') { $compare.CliPath } else { $null }
+  $compareCommandValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'Command') { $compare.Command } else { $null }
+  $compareReportPathValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'ReportPath') { $compare.ReportPath } else { $null }
+  $compareCapturePathValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'CapturePath') { $compare.CapturePath } else { $null }
+  $compareJsonPathValue = if ($compare -and $compare.PSObject.Properties.Name -contains 'JsonPath') { $compare.JsonPath } else { $null }
+  $artifactsReportSize = $null
+  $artifactsImageCount = $null
+  $artifactsExportDir = $null
+  if ($compareArtifacts) {
+    if ($compareArtifacts -is [System.Collections.IDictionary]) {
+      if ($compareArtifacts.Contains('reportSizeBytes')) { $artifactsReportSize = $compareArtifacts['reportSizeBytes'] }
+      if ($compareArtifacts.Contains('imageCount')) { $artifactsImageCount = $compareArtifacts['imageCount'] }
+      if ($compareArtifacts.Contains('exportDir')) { $artifactsExportDir = $compareArtifacts['exportDir'] }
+    } else {
+      if ($compareArtifacts.PSObject.Properties.Name -contains 'reportSizeBytes') { $artifactsReportSize = $compareArtifacts.reportSizeBytes }
+      if ($compareArtifacts.PSObject.Properties.Name -contains 'imageCount') { $artifactsImageCount = $compareArtifacts.imageCount }
+      if ($compareArtifacts.PSObject.Properties.Name -contains 'exportDir') { $artifactsExportDir = $compareArtifacts.exportDir }
+    }
+  }
   $shortCommit = ''
   if ($Snapshot.Commit) {
     $shortCommit = $Snapshot.Commit.Substring(0, [Math]::Min(7, $Snapshot.Commit.Length))
@@ -552,6 +686,33 @@ function ConvertTo-HtmlReport {
     </dl>
     <h3>Failed Tests</h3>
     $failedTestsHtml
+  </section>
+
+  <section>
+    <h2>Compare Outcome</h2>
+    @(if ($compare) {
+        $rows = @()
+        if ($compareExitValue -ne $null) { $rows += "<dt>Exit Code</dt><dd>$(& $encode $compareExitValue)</dd>" }
+        if ($compareDiffValue -ne $null) { $rows += "<dt>Diff</dt><dd>$(& $encode $compareDiffValue)</dd>" }
+        if ($compareDurationValue -ne $null) { $rows += "<dt>Duration</dt><dd>$(& $encode ([math]::Round($compareDurationValue,1))) ms</dd>" }
+        if ($compareCliPathValue) { $rows += "<dt>CLI Path</dt><dd>$(& $encode $compareCliPathValue)</dd>" }
+        if ($compareCommandValue) { $rows += "<dt>Command</dt><dd>$(& $encode $compareCommandValue)</dd>" }
+        if ($compareReportPathValue) { $rows += "<dt>Report</dt><dd>$(& $encode $compareReportPathValue)</dd>" }
+        elseif ($compareCapturePathValue) { $rows += "<dt>Capture</dt><dd>$(& $encode $compareCapturePathValue)</dd>" }
+        if ($artifactsReportSize -ne $null) { $rows += "<dt>CLI Report Size</dt><dd>$(& $encode $artifactsReportSize) bytes</dd>" }
+        if ($artifactsImageCount -ne $null) {
+          $imgText = "$artifactsImageCount"
+          if ($artifactsExportDir) { $imgText = "$artifactsImageCount (export: $artifactsExportDir)" }
+          $rows += "<dt>CLI Images</dt><dd>$(& $encode $imgText)</dd>"
+        } elseif ($artifactsExportDir) {
+          $rows += "<dt>CLI Image Export</dt><dd>$(& $encode $artifactsExportDir)</dd>"
+        }
+        if ($compareJsonPathValue) { $rows += "<dt>Outcome JSON</dt><dd>$(& $encode $compareJsonPathValue)</dd>" }
+        if ($rows.Count -eq 0) { $rows += '<dt>Status</dt><dd>Available</dd>' }
+        "<dl>$([string]::Join('', $rows))</dl>"
+      } else {
+        '<p>No compare artifacts.</p>'
+      })
   </section>
 
   <section>

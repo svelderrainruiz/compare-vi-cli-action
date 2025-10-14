@@ -102,8 +102,261 @@ function Write-JsonEvent {
 
 function New-DirIfMissing([string]$Path) { if (-not (Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null } }
 
+function Set-DefaultLabVIEWCliPath {
+  if ($env:LABVIEW_CLI_PATH -or $env:LABVIEWCLI_PATH -or $env:LABVIEW_CLI) { return }
+  if ([Environment]::Is64BitOperatingSystem) {
+    $candidate64 = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
+    if (Test-Path -LiteralPath $candidate64 -PathType Leaf) { $env:LABVIEW_CLI_PATH = $candidate64; return }
+  }
+  $candidateDefault = 'C:\Program Files\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
+  if (Test-Path -LiteralPath $candidateDefault -PathType Leaf) { $env:LABVIEW_CLI_PATH = $candidateDefault }
+}
+
+function Get-FileProductVersion([string]$Path) {
+  if (-not $Path) { return $null }
+  try {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    return ([System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)).ProductVersion
+  } catch { return $null }
+}
+
+function Get-CliReportFileExtension {
+  param([string]$MimeType)
+  if (-not $MimeType) { return 'bin' }
+  switch -Regex ($MimeType) {
+    '^image/png' { return 'png' }
+    '^image/jpeg' { return 'jpg' }
+    '^image/gif' { return 'gif' }
+    '^image/bmp' { return 'bmp' }
+    default { return 'bin' }
+  }
+}
+
+function Get-CliReportArtifacts {
+  param(
+    [Parameter(Mandatory)][string]$ReportPath,
+    [Parameter(Mandatory)][string]$OutputDir
+  )
+
+  if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) { return $null }
+
+  try { $html = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop } catch { return $null }
+
+  $artifactInfo = [ordered]@{}
+  try {
+    $item = Get-Item -LiteralPath $ReportPath -ErrorAction Stop
+    if ($item -and $item.Length -ge 0) { $artifactInfo.reportSizeBytes = [long]$item.Length }
+  } catch {}
+
+  $imageMatches = @()
+  try {
+    $pattern = '<img\b[^>]*\bsrc\s*=\s*"([^"]+)"'
+    $imageMatches = [regex]::Matches($html, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  } catch { $imageMatches = @() }
+
+  if ($imageMatches.Count -eq 0) {
+    if ($artifactInfo.Count -gt 0) { return [pscustomobject]$artifactInfo }
+    return $null
+  }
+
+  $images = @()
+  $exportDir = Join-Path $OutputDir 'cli-images'
+  $exportDirResolved = $null
+  try {
+    New-Item -ItemType Directory -Force -Path $exportDir | Out-Null
+    $exportDirResolved = (Resolve-Path -LiteralPath $exportDir -ErrorAction Stop).Path
+  } catch { $exportDirResolved = $exportDir }
+
+  for ($idx = 0; $idx -lt $imageMatches.Count; $idx++) {
+    $srcValue = $imageMatches[$idx].Groups[1].Value
+    $entry = [ordered]@{ index = $idx; dataLength = $srcValue.Length }
+
+    $mime = $null
+    $base64Data = $null
+    if ($srcValue -match '^data:(?<mime>[^;]+);base64,(?<data>.+)$') {
+      $mime = $Matches['mime']
+      $base64Data = $Matches['data']
+      $entry.mimeType = $mime
+    } else {
+      $entry.source = $srcValue
+    }
+
+    if ($base64Data) {
+      try {
+        $clean = $base64Data -replace '\s', ''
+        $bytes = [System.Convert]::FromBase64String($clean)
+        if ($bytes) {
+          $entry.byteLength = $bytes.Length
+          $ext = Get-CliReportFileExtension -MimeType $mime
+          $fileName = 'cli-image-{0:D2}.{1}' -f $idx, $ext
+          $filePath = Join-Path $exportDir $fileName
+          [System.IO.File]::WriteAllBytes($filePath, $bytes)
+          try { $entry.savedPath = (Resolve-Path -LiteralPath $filePath -ErrorAction Stop).Path } catch { $entry.savedPath = $filePath }
+        }
+      } catch {
+        $entry.decodeError = $_.Exception.Message
+      }
+    }
+
+    $images += [pscustomobject]$entry
+  }
+
+  if ($images.Count -gt 0) {
+    $artifactInfo.imageCount = $images.Count
+    $artifactInfo.images = $images
+    if ($exportDirResolved) { $artifactInfo.exportDir = $exportDirResolved }
+  }
+
+  if ($artifactInfo.Count -gt 0) { return [pscustomobject]$artifactInfo }
+  return $null
+}
+
+function Get-LabVIEWCliOutputMetadata {
+  param(
+    [string]$StdOut,
+    [string]$StdErr
+  )
+
+  $meta = [ordered]@{}
+  $regexOptions = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+
+  if (-not [string]::IsNullOrWhiteSpace($StdOut)) {
+    $reportMatch = [System.Text.RegularExpressions.Regex]::Match($StdOut, 'Report\s+Type\s*[:=]\s*(?<val>[^\r\n]+)', $regexOptions)
+    if ($reportMatch.Success) { $meta.reportType = $reportMatch.Groups['val'].Value.Trim() }
+
+    $reportPathMatch = [System.Text.RegularExpressions.Regex]::Match($StdOut, 'Report\s+(?:can\s+be\s+found|saved)\s+(?:at|to)\s+(?<val>[^\r\n]+)', $regexOptions)
+    if ($reportPathMatch.Success) { $meta.reportPath = $reportPathMatch.Groups['val'].Value.Trim().Trim('"') }
+
+    $statusMatch = [System.Text.RegularExpressions.Regex]::Match($StdOut, '(?:Comparison\s+Status|Status|Result)\s*[:=]\s*(?<val>[^\r\n]+)', $regexOptions)
+    if ($statusMatch.Success) { $meta.status = $statusMatch.Groups['val'].Value.Trim() }
+
+    $lines = @($StdOut -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($lines.Count -gt 0) {
+      $lastLine = $lines[-1]
+      if ($lastLine) { $meta.message = $lastLine }
+    }
+  }
+
+  if (-not $meta.Contains('message') -and -not [string]::IsNullOrWhiteSpace($StdErr)) {
+    $errLines = @($StdErr -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($errLines.Count -gt 0) { $meta['message'] = $errLines[-1] }
+  }
+
+  if ($meta.Contains('message')) {
+    $messageValue = $meta['message']
+    if ($messageValue -and $messageValue.Length -gt 512) { $meta['message'] = $messageValue.Substring(0,512) }
+  }
+
+  if ($meta.Count -gt 0) { return [pscustomobject]$meta }
+  return $null
+}
+
+function Invoke-LabVIEWCLICompare {
+  param(
+    [Parameter(Mandatory)][string]$Base,
+    [Parameter(Mandatory)][string]$Head,
+    [Parameter(Mandatory)][string]$OutDir,
+    [switch]$RenderReport
+  )
+
+  Set-DefaultLabVIEWCliPath
+  $cliPath = $null
+  $cliCandidates = @($env:LABVIEW_CLI_PATH, $env:LABVIEWCLI_PATH, $env:LABVIEW_CLI)
+  foreach ($c in $cliCandidates) { if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { $cliPath = (Resolve-Path -LiteralPath $c).Path; break } }
+  if (-not $cliPath) { throw 'LabVIEW CLI path not resolved; set LABVIEW_CLI_PATH or install LabVIEWCLI.exe.' }
+
+  New-DirIfMissing -Path $OutDir
+  $reportPath = Join-Path $OutDir 'cli-report.html'
+  $stdoutPath = Join-Path $OutDir 'lvcli-stdout.txt'
+  $stderrPath = Join-Path $OutDir 'lvcli-stderr.txt'
+  $capPath    = Join-Path $OutDir 'lvcompare-capture.json'
+
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $cliPath
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.CreateNoWindow = $true
+
+  $psi.ArgumentList.Clear()
+  $psi.ArgumentList.Add('-OperationName') | Out-Null
+  $psi.ArgumentList.Add('CreateComparisonReport') | Out-Null
+  $psi.ArgumentList.Add('-vi1') | Out-Null; $psi.ArgumentList.Add($Base) | Out-Null
+  $psi.ArgumentList.Add('-vi2') | Out-Null; $psi.ArgumentList.Add($Head) | Out-Null
+  if ($RenderReport.IsPresent) {
+    $psi.ArgumentList.Add('-reportType') | Out-Null; $psi.ArgumentList.Add('HTMLSingleFile') | Out-Null
+    $psi.ArgumentList.Add('-reportPath') | Out-Null; $psi.ArgumentList.Add($reportPath) | Out-Null
+  }
+
+  $cmdTokens = @($cliPath) + @($psi.ArgumentList)
+  $commandDisplay = ($cmdTokens -join ' ')
+
+  $sw = [System.Diagnostics.Stopwatch]::StartNew()
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $stdout = $proc.StandardOutput.ReadToEnd()
+  $stderr = $proc.StandardError.ReadToEnd()
+  $proc.WaitForExit()
+  $sw.Stop()
+  $exit = [int]$proc.ExitCode
+
+  Set-Content -LiteralPath $stdoutPath -Value $stdout -Encoding utf8
+  Set-Content -LiteralPath $stderrPath -Value $stderr -Encoding utf8
+
+  $envBlockOrdered = [ordered]@{
+    compareMode   = $env:LVCI_COMPARE_MODE
+    comparePolicy = $env:LVCI_COMPARE_POLICY
+  }
+  $cliInfoOrdered = [ordered]@{ path = $cliPath }
+  $cliVer = Get-FileProductVersion -Path $cliPath
+  if ($cliVer) { $cliInfoOrdered.version = $cliVer }
+  if ($RenderReport.IsPresent) { $cliInfoOrdered.reportPath = $reportPath }
+  $cliMeta = Get-LabVIEWCliOutputMetadata -StdOut $stdout -StdErr $stderr
+  if ($cliMeta) {
+    if ($cliMeta.PSObject.Properties.Name -contains 'reportType' -and $cliMeta.reportType) { $cliInfoOrdered.reportType = $cliMeta.reportType }
+    if ($cliMeta.PSObject.Properties.Name -contains 'reportPath' -and $cliMeta.reportPath) { $cliInfoOrdered.reportPath = $cliMeta.reportPath }
+    if ($cliMeta.PSObject.Properties.Name -contains 'status' -and $cliMeta.status) { $cliInfoOrdered.status = $cliMeta.status }
+    if ($cliMeta.PSObject.Properties.Name -contains 'message' -and $cliMeta.message) { $cliInfoOrdered.message = $cliMeta.message }
+  }
+  $artifactPath = $null
+  if ($cliInfoOrdered.Contains('reportPath') -and $cliInfoOrdered['reportPath']) {
+    $artifactPath = $cliInfoOrdered['reportPath']
+  } elseif ($RenderReport.IsPresent -and (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+    $artifactPath = $reportPath
+  }
+  if ($artifactPath) {
+    try {
+      $artifacts = Get-CliReportArtifacts -ReportPath $artifactPath -OutputDir $OutDir
+      if ($artifacts) { $cliInfoOrdered.artifacts = $artifacts }
+    } catch {}
+  }
+  $cliInfoObject = [pscustomobject]$cliInfoOrdered
+  $envBlockOrdered.cli = $cliInfoObject
+  $envBlock = [pscustomobject]$envBlockOrdered
+
+  $capture = [pscustomobject]@{
+    schema    = 'lvcompare-capture-v1'
+    timestamp = ([DateTime]::UtcNow.ToString('o'))
+    base      = (Resolve-Path -LiteralPath $Base).Path
+    head      = (Resolve-Path -LiteralPath $Head).Path
+    cliPath   = $cliPath
+    args      = @($psi.ArgumentList | ForEach-Object { [string]$_ })
+    exitCode  = $exit
+    seconds   = [Math]::Round($sw.Elapsed.TotalSeconds, 6)
+    stdoutLen = $stdout.Length
+    stderrLen = $stderr.Length
+    command   = $commandDisplay
+    stdout    = $null
+    stderr    = $null
+  }
+  $capture | Add-Member -NotePropertyName environment -NotePropertyValue $envBlock -Force
+  $capture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $capPath -Encoding utf8
+
+  return [pscustomobject]@{ ExitCode=$exit; Seconds=[double]$capture.seconds; CapturePath=$capPath; ReportPath=$reportPath; Command=$commandDisplay }
+}
+
 $repoRoot = (Resolve-Path '.').Path
 New-DirIfMissing -Path $OutputDir
+Set-DefaultLabVIEWCliPath
 
 # Resolve LabVIEW path (prefer explicit/env LABVIEW_PATH; fallback to 2025 canonical by bitness)
 if (-not $LabVIEWExePath) {
@@ -141,32 +394,44 @@ Write-JsonEvent 'plan' @{
   report    = $RenderReport.IsPresent
 }
 
-# Invoke the repository capture script in-process
-if ($CaptureScriptPath) {
-  $captureScript = $CaptureScriptPath
-} else {
-  $captureScript = Join-Path $repoRoot 'scripts' 'Capture-LVCompare.ps1'
-}
-if (-not (Test-Path -LiteralPath $captureScript -PathType Leaf)) { throw "Capture-LVCompare.ps1 not found at $captureScript" }
+ # Decide execution path based on compare policy/mode
+ $policy = $env:LVCI_COMPARE_POLICY
+ $mode   = $env:LVCI_COMPARE_MODE
+ $didCli = $false
+ if (($policy -eq 'cli-only') -or ($mode -eq 'labview-cli' -and $policy -ne 'lv-only')) {
+   try {
+     $cliRes = Invoke-LabVIEWCLICompare -Base $BaseVi -Head $HeadVi -OutDir $OutputDir -RenderReport:$RenderReport.IsPresent
+     Write-JsonEvent 'result' @{ exitCode=$cliRes.ExitCode; seconds=$cliRes.Seconds; command=$cliRes.Command; report=(Test-Path $cliRes.ReportPath) }
+     $didCli = $true
+   } catch {
+     Write-JsonEvent 'error' @{ stage='cli-capture'; message=$_.Exception.Message }
+     if ($policy -eq 'cli-only') { throw }
+   }
+ }
 
-try {
-  $captureParams = @{
-    Base         = $BaseVi
-    Head         = $HeadVi
-    LvArgs       = $effectiveFlags
-    RenderReport = $RenderReport.IsPresent
-    OutputDir    = $OutputDir
-    Quiet        = $Quiet.IsPresent
+ if (-not $didCli) {
+   # Fallback to LVCompare capture path
+   if ($CaptureScriptPath) { $captureScript = $CaptureScriptPath } else { $captureScript = Join-Path $repoRoot 'scripts' 'Capture-LVCompare.ps1' }
+  if (-not (Test-Path -LiteralPath $captureScript -PathType Leaf)) { throw "Capture-LVCompare.ps1 not found at $captureScript" }
+  try {
+    $captureParams = @{
+      Base         = $BaseVi
+      Head         = $HeadVi
+      LvArgs       = $effectiveFlags
+      RenderReport = $RenderReport.IsPresent
+      OutputDir    = $OutputDir
+      Quiet        = $Quiet.IsPresent
+    }
+    if (-not $LVComparePath) { try { $LVComparePath = Resolve-LVComparePath } catch {} }
+    if ($LVComparePath) { $captureParams.LvComparePath = $LVComparePath }
+    & $captureScript @captureParams
+  } catch {
+    Write-JsonEvent 'error' @{ stage='capture'; message=$_.Exception.Message }
+    Write-Warning ("Invoke-LVCompare: capture failure -> {0}" -f $_.Exception.Message)
+    if ($_.InvocationInfo) { Write-Warning $_.InvocationInfo.PositionMessage }
+    throw
   }
-  if (-not $LVComparePath) {
-    try { $LVComparePath = Resolve-LVComparePath } catch {}
-  }
-  if ($LVComparePath) { $captureParams.LvComparePath = $LVComparePath }
-  & $captureScript @captureParams
-} catch {
-  Write-JsonEvent 'error' @{ stage='capture'; message=$_.Exception.Message }
-  throw
-}
+ }
 
 # Read capture JSON to surface exit code and command
 $capPath = Join-Path $OutputDir 'lvcompare-capture.json'
@@ -213,3 +478,4 @@ if ($Summary) {
 }
 
 exit $exitCode
+

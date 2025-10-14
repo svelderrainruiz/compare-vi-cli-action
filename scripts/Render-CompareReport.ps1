@@ -12,6 +12,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function HtmlEncode {
+  param([object]$Value)
+  if ($null -eq $Value) { return '' }
+  return [System.Net.WebUtility]::HtmlEncode([string]$Value)
+}
+
 # Import shared tokenization pattern
 Import-Module (Join-Path $PSScriptRoot 'ArgTokenization.psm1') -Force
 
@@ -46,6 +52,42 @@ try {
     }
   }
 } catch { Write-Host "[report] warn: failed to load exec json: $_" -ForegroundColor DarkYellow }
+
+$cliInfo = [ordered]@{
+  Path = if ($CliPath) { [string]$CliPath } else { $null }
+  ReportType = $null
+  ReportPath = $null
+  Status = $null
+  Message = $null
+  Mode = $null
+  Policy = $null
+}
+
+if ($execObj) {
+  if ($execObj.cliPath) { $cliInfo.Path = [string]$execObj.cliPath }
+  if ($execObj.PSObject.Properties.Name -contains 'environment') {
+    $envBlock = $execObj.environment
+    if ($envBlock) {
+      if ($envBlock.PSObject.Properties.Name -contains 'compareMode' -and $envBlock.compareMode) { $cliInfo.Mode = [string]$envBlock.compareMode }
+      if ($envBlock.PSObject.Properties.Name -contains 'comparePolicy' -and $envBlock.comparePolicy) { $cliInfo.Policy = [string]$envBlock.comparePolicy }
+      if ($envBlock.PSObject.Properties.Name -contains 'cli') {
+        $cliBlock = $envBlock.cli
+        if ($cliBlock) {
+          if ($cliBlock.PSObject.Properties.Name -contains 'path' -and $cliBlock.path) { $cliInfo.Path = [string]$cliBlock.path }
+          if ($cliBlock.PSObject.Properties.Name -contains 'reportType' -and $cliBlock.reportType) { $cliInfo.ReportType = [string]$cliBlock.reportType }
+          if ($cliBlock.PSObject.Properties.Name -contains 'reportPath' -and $cliBlock.reportPath) { $cliInfo.ReportPath = [string]$cliBlock.reportPath }
+          if ($cliBlock.PSObject.Properties.Name -contains 'status' -and $cliBlock.status) { $cliInfo.Status = [string]$cliBlock.status }
+          if ($cliBlock.PSObject.Properties.Name -contains 'message' -and $cliBlock.message) { $cliInfo.Message = [string]$cliBlock.message }
+          if ($cliBlock.PSObject.Properties.Name -contains 'artifacts' -and $cliBlock.artifacts) { $cliInfo.Artifacts = $cliBlock.artifacts }
+        }
+      }
+    }
+  }
+}
+
+if (-not $cliInfo.Mode -and $env:LVCI_COMPARE_MODE) { $cliInfo.Mode = $env:LVCI_COMPARE_MODE }
+if (-not $cliInfo.Policy -and $env:LVCI_COMPARE_POLICY) { $cliInfo.Policy = $env:LVCI_COMPARE_POLICY }
+if ($cliInfo.Path -and -not $CliPath) { $CliPath = $cliInfo.Path }
 
 function Get-BaseHeadFromCommand([string]$cmd) {
   # Tokenize respecting quotes: match quoted strings (preserving quotes) or non-space sequences
@@ -357,6 +399,102 @@ try {
 
 $statusBadgesHtml = ('<div class="badges"><span class="badge {0}">{1}</span><span class="badge {2}">{3}</span><span class="badge {4}">{5}</span><span class="badge {6}">{7}</span></div>' -f $cliClass,$cliText,$contentClass,$contentText,$anomalyClass,$anomalyText,$liveClass,$liveText)
 
+$cliSummaryLines = @()
+if ($cliInfo.Path) {
+  $encPath = HtmlEncode($cliInfo.Path)
+  $cliSummaryLines += ('<div class="key">CLI Path</div><div class="value"><span id="clip_cli" data-cli-path="{0}">{0}</span> <button class="btn" onclick="copyText(''clip_cli'')">Copy</button></div>' -f $encPath)
+}
+if ($cliInfo.ReportType) {
+  $cliSummaryLines += ('<div class="key">CLI Report Type</div><div class="value" data-cli-report-type="{0}">{0}</div>' -f (HtmlEncode($cliInfo.ReportType)))
+}
+if ($cliInfo.ReportPath) {
+  $encReport = HtmlEncode($cliInfo.ReportPath)
+  $cliSummaryLines += ('<div class="key">CLI Report Path</div><div class="value"><span id="clip_cli_report" data-cli-report-path="{0}">{0}</span> <button class="btn" onclick="copyText(''clip_cli_report'')">Copy</button></div>' -f $encReport)
+}
+if ($cliInfo.Status) {
+  $cliSummaryLines += ('<div class="key">CLI Status</div><div class="value" data-cli-status="{0}">{0}</div>' -f (HtmlEncode($cliInfo.Status)))
+}
+if ($cliInfo.Message) {
+  $cliSummaryLines += ('<div class="key">CLI Message</div><div class="value" data-cli-message="{0}">{0}</div>' -f (HtmlEncode($cliInfo.Message)))
+}
+$modeVal = if ($cliInfo.Mode) { $cliInfo.Mode } else { $null }
+$policyVal = if ($cliInfo.Policy) { $cliInfo.Policy } else { $null }
+$artifactsVal = $null
+if ($cliInfo -is [System.Collections.IDictionary]) {
+  if ($cliInfo.Contains('Artifacts') -and $cliInfo['Artifacts']) { $artifactsVal = $cliInfo['Artifacts'] }
+  elseif ($cliInfo.Contains('artifacts') -and $cliInfo['artifacts']) { $artifactsVal = $cliInfo['artifacts'] }
+} elseif ($cliInfo.PSObject.Properties.Name -contains 'Artifacts' -and $cliInfo.Artifacts) {
+  $artifactsVal = $cliInfo.Artifacts
+} elseif ($cliInfo.PSObject.Properties.Name -contains 'artifacts' -and $cliInfo.artifacts) {
+  $artifactsVal = $cliInfo.artifacts
+}
+if ($modeVal -or $policyVal) {
+  $modeDisplay = if ($modeVal) { $modeVal } else { '-' }
+  $policyDisplay = if ($policyVal) { $policyVal } else { '-' }
+  $modeSegment = if ($modeVal) { $modeVal } else { '' }
+  $policySegment = if ($policyVal) { $policyVal } else { '' }
+  $policyData = HtmlEncode(($modeSegment + '|' + $policySegment))
+  $cliSummaryLines += ('<div class="key">Compare Mode / Policy</div><div class="value" data-cli-policy="{0}">{1}</div>' -f $policyData, (HtmlEncode("$modeDisplay / $policyDisplay")))
+}
+if ($artifactsVal) {
+  $reportSizeBytes = if ($artifactsVal -is [System.Collections.IDictionary]) { $artifactsVal['reportSizeBytes'] } elseif ($artifactsVal.PSObject.Properties.Name -contains 'reportSizeBytes') { $artifactsVal.reportSizeBytes } else { $null }
+  if ($reportSizeBytes -ne $null) {
+    $reportSizeEnc = HtmlEncode($reportSizeBytes)
+    $cliSummaryLines += ('<div class="key">CLI Report Size</div><div class="value" data-cli-report-size="{0}">{0} bytes</div>' -f $reportSizeEnc)
+  }
+  $imageCountVal = if ($artifactsVal -is [System.Collections.IDictionary]) { $artifactsVal['imageCount'] } elseif ($artifactsVal.PSObject.Properties.Name -contains 'imageCount') { $artifactsVal.imageCount } else { $null }
+  if ($imageCountVal -ne $null) {
+    $cliSummaryLines += ('<div class="key">CLI Images</div><div class="value" data-cli-image-count="{0}">{0}</div>' -f (HtmlEncode($imageCountVal)))
+  }
+  $exportDirVal = if ($artifactsVal -is [System.Collections.IDictionary]) { $artifactsVal['exportDir'] } elseif ($artifactsVal.PSObject.Properties.Name -contains 'exportDir') { $artifactsVal.exportDir } else { $null }
+  if ($exportDirVal) {
+    $exportEnc = HtmlEncode($exportDirVal)
+    $cliSummaryLines += ('<div class="key">CLI Image Export</div><div class="value" data-cli-image-export="{0}"><span id="clip_cli_image_export">{0}</span> <button class="btn" onclick="copyText(''clip_cli_image_export'')">Copy</button></div>' -f $exportEnc)
+  }
+  $imagesVal = if ($artifactsVal -is [System.Collections.IDictionary]) { $artifactsVal['images'] } elseif ($artifactsVal.PSObject.Properties.Name -contains 'images') { $artifactsVal.images } else { $null }
+  if ($imagesVal) {
+    $imageIndex = 0
+foreach ($image in $imagesVal) {
+      if (-not $image) { continue }
+      $idxValue = if ($image -is [System.Collections.IDictionary]) { $image['index'] } elseif ($image.PSObject.Properties.Name -contains 'index') { $image.index } else { $imageIndex }
+      $idxEnc = HtmlEncode($idxValue)
+      $mimeValue = if ($image -is [System.Collections.IDictionary]) { $image['mimeType'] } elseif ($image.PSObject.Properties.Name -contains 'mimeType') { $image.mimeType } else { $null }
+      $byteLengthValue = if ($image -is [System.Collections.IDictionary]) { $image['byteLength'] } elseif ($image.PSObject.Properties.Name -contains 'byteLength') { $image.byteLength } else { $null }
+      $dataLengthValue = if ($image -is [System.Collections.IDictionary]) { $image['dataLength'] } elseif ($image.PSObject.Properties.Name -contains 'dataLength') { $image.dataLength } else { $null }
+      $savedPathValue = if ($image -is [System.Collections.IDictionary]) { $image['savedPath'] } elseif ($image.PSObject.Properties.Name -contains 'savedPath') { $image.savedPath } else { $null }
+      $valueParts = @()
+      if ($mimeValue) { $valueParts += [string]$mimeValue }
+      if ($byteLengthValue -ne $null) { $valueParts += ("{0} bytes" -f $byteLengthValue) }
+      if ($valueParts.Count -eq 0 -and $dataLengthValue -ne $null) { $valueParts += ("data length {0}" -f $dataLengthValue) }
+      $displayText = if ($savedPathValue) { [string]$savedPathValue } elseif ($valueParts.Count -gt 0) { [string]::Join(' · ', $valueParts) } else { 'Image' }
+      $displayEnc = HtmlEncode($displayText)
+      $attrList = @("data-cli-image-index=""{0}""" -f $idxEnc)
+      if ($savedPathValue) { $attrList += ("data-cli-image-path=""{0}""" -f (HtmlEncode($savedPathValue))) }
+      if ($byteLengthValue -ne $null) { $attrList += ("data-cli-image-bytes=""{0}""" -f (HtmlEncode($byteLengthValue))) }
+      if ($mimeValue) { $attrList += ("data-cli-image-mime=""{0}""" -f (HtmlEncode($mimeValue))) }
+      $attrString = if ($attrList.Count -gt 0) { ' ' + ([string]::Join(' ', $attrList)) } else { '' }
+      $copyId = 'clip_cli_image_' + $idxValue
+      $buttonHtml = ''
+      if ($savedPathValue) { $buttonHtml = (' <button class="btn" onclick="copyText(''{0}'')">Copy</button>' -f $copyId) }
+      $cliSummaryLines += ('<div class="key">CLI Image {0}</div><div class="value"{1}><span id="{2}">{3}</span>{4}</div>' -f $idxEnc, $attrString, $copyId, $displayEnc, $buttonHtml)
+      $imageIndex++
+    }
+  }
+}
+
+$summaryKvRows = @()
+$summaryKvRows += ('<div class="key">Generated</div><div class="value">{0}</div>' -f (HtmlEncode($now)))
+$summaryKvRows += ('<div class="key">Source</div><div class="value">{0}</div>' -f (HtmlEncode($source)))
+$summaryKvRows += ('<div class="key">Exit code</div><div class="value">{0}</div>' -f (HtmlEncode("$ExitCode ($exitText)")))
+$summaryKvRows += ('<div class="key">Diff</div><div class="value">{0}</div>' -f (HtmlEncode($Diff)))
+if ($headChanges -ne $null) { $summaryKvRows += ('<div class="key">Head Changes</div><div class="value">{0}</div>' -f (HtmlEncode($headChanges))) }
+if ($baseChanges -ne $null) { $summaryKvRows += ('<div class="key">Base Changes</div><div class="value">{0}</div>' -f (HtmlEncode($baseChanges))) }
+$summaryKvRows += ('<div class="key">Duration (s)</div><div class="value">{0}</div>' -f (HtmlEncode(([string]::Format('{0:F3}', $DurationSeconds)))))
+if ($cliSummaryLines.Count -gt 0) { $summaryKvRows += $cliSummaryLines }
+$summaryKvRows += ('<div class="key">Base</div><div class="value"><span id="clip_base" data-base-path="{0}">{0}</span> <button class="btn" onclick="copyText(''clip_base'')">Copy</button></div>' -f (HtmlEncode($Base)))
+$summaryKvRows += ('<div class="key">Head</div><div class="value"><span id="clip_head" data-head-path="{0}">{0}</span> <button class="btn" onclick="copyText(''clip_head'')">Copy</button></div>' -f (HtmlEncode($Head)))
+$summaryKvHtml = [string]::Join("`n      ", $summaryKvRows)
+
 # Top navigation
 $navHtml = @"
 <div class=\"nav\">
@@ -408,16 +546,7 @@ function copyText(id){
   <div class="section">
     <h2 id="summary">Summary</h2>
     <div class="kv">
-      <div class="key">Generated</div><div class="value">$now</div>
-      <div class="key">Source</div><div class="value">$source</div>
-      <div class="key">Exit code</div><div class="value">$ExitCode ($exitText)</div>
-      <div class="key">Diff</div><div class="value">$Diff</div>
-      $(if ($headChanges -ne $null) { '<div class="key">Head Changes</div><div class="value">' + $headChanges + '</div>' } else { '' })
-      $(if ($baseChanges -ne $null) { '<div class="key">Base Changes</div><div class="value">' + $baseChanges + '</div>' } else { '' })
-  <div class="key">CLI Path</div><div class="value"><span id="clip_cli">$CliPath</span> <button class="btn" onclick="copyText('clip_cli')">Copy</button></div>
-  <div class="key">Duration (s)</div><div class="value">$([string]::Format('{0:F3}', $DurationSeconds))</div>
-      <div class="key">Base</div><div class="value"><span id="clip_base">$Base</span> <button class="btn" onclick="copyText('clip_base')">Copy</button></div>
-      <div class="key">Head</div><div class="value"><span id="clip_head">$Head</span> <button class="btn" onclick="copyText('clip_head')">Copy</button></div>
+      $summaryKvHtml
     </div>
   </div>
   $contentCheckHtml

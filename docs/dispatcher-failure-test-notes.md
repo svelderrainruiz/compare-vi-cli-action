@@ -20,5 +20,5 @@ Two guard scenarios to test the dispatcher results directory checks.
 ## Assertions
 
 - Capture stdout/stderr and verify terminating error text.
-- Validate guard crumb schema (`dispatcher-results-guard/v1`).
+- Validate guard crumb schema (`docs/schema/generated/dispatcher-results-guard.schema.json`).
 - Ensure no `pester-results.xml` or `pester-summary.json` are written in the blocked path.

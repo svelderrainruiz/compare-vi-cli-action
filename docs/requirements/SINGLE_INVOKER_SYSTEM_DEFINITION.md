@@ -17,6 +17,6 @@ System-level behaviour for the step-based Pester invoker module.
 
 ## Acceptance checks
 
-- Crumb schema validated against `docs/schemas/pester-invoker-event.schema.json` (when added).
+- Crumb schema validated against `docs/schema/generated/pester-invoker-event.schema.json`.
 - Artefacts created/cleaned per file without cross-run leakage.
 - Compatible with watcher/delta tooling.

@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-  One-button end-to-end CI trigger and artifact post-processing for #88.
+  One-button end-to-end CI trigger and artifact post-processing for #127.
 
 .DESCRIPTION
   - Dispatches Validate and CI Orchestrated (strategy=single, include_integration=true)
@@ -177,6 +177,18 @@ function Write-LocalSummary {
       if ($data.command) {
         $cmd=[string]$data.command; if ($cmd.Length -gt 240) { $cmd = $cmd.Substring(0,240)+'…' }
         $lines += ('- Command: {0}' -f $cmd)
+      }
+      if ($data.cliArtifacts) {
+        if ($data.cliArtifacts.reportSizeBytes -ne $null) {
+          $lines += ('- CLI Report Size: {0} bytes' -f $data.cliArtifacts.reportSizeBytes)
+        }
+        if ($data.cliArtifacts.imageCount -ne $null) {
+          if ($data.cliArtifacts.exportDir) {
+            $lines += ('- CLI Images: {0} (export: {1})' -f $data.cliArtifacts.imageCount, $data.cliArtifacts.exportDir)
+          } else {
+            $lines += ('- CLI Images: {0}' -f $data.cliArtifacts.imageCount)
+          }
+        }
       }
     } catch {}
   }

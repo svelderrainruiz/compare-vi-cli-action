@@ -1,40 +1,46 @@
-# Agent Handoff – Compare VI CLI Action
+# Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Branch: `issue/127-remove-develop-two-green` (tied to #127, PR #132)
-- Primary focus: REST watcher telemetry + CLI validation (already merged as PR #131) and removal of the obsolete `develop-two-green` workflow.
-- Latest change staged: deleted `.github/workflows/develop-two-green.yml`.
+- Standing priority: issue #127 (per `AGENTS.md` update)
+- Current branch: `develop` (CLI enrichment work staged locally; no branch-specific PR yet)
+- Recent focus: CLI-only execution path, capture schema enrichment, HTML execution-context updates, and new Pester coverage for CLI metadata.
+- Latest changes staged: updated CLI metadata parsing/rendering, README/ENVIRONMENT docs, and new test `tests/CompareReport.CliMetadata.Tests.ps1`.
 
 ## Status & Known Gaps
-1. **Branch protection**
-   - `develop` still lists `Workflows Lint` as a required status even though the workflow was retired. Update branch protection so only `Validate` is required:
-     ```bash
-     gh api repos/LabVIEW-Community-CI-CD/compare-vi-cli-action/branches/develop/protection \
-       -X PUT \
-       -F required_status_checks.strict=true \
-       -F required_status_checks.checks[][context]=Validate
-     ```
+1. **CLI metadata enrichment**
+   - `scripts/Capture-LVCompare.ps1`, `tools/Invoke-LVCompare.ps1`, and `tools/TestStand-CompareHarness.ps1` now parse CLI stdout/stderr for `reportType`, `reportPath`, `status`, and `message`, then surface them in the HTML report.
+   - Embedded CLI report artefacts are decoded into `cli-images/`, and the summary KV block exposes image counts, sizes, and export paths for downstream tooling.
+   - Need a targeted integration run (CLI-only) to capture real output and confirm the HTML shows the new fields on self-hosted runners.
 
-2. **CLI & watcher telemetry (from PR #131)**
-   - `npm run cli:validate` builds/validates `comparevi-cli`; lint job now publishes `watcher-rest.json`.
-   - `tools/Update-SessionIndexWatcher.ps1` merges watcher output into `session-index.json` (`watchers.rest` node). Ensure any downstream tools expecting `session-index` ingest the new field.
+2. **Automation tests**
+   - Added `tests/CompareReport.CliMetadata.Tests.ps1` to assert the new data attributes. Ensure it is included in CI (currently only local run). Hook into appropriate Pester suite if we start grouping HTML tests.
 
-3. **Open PRs**
-   - #131: feat: add REST watcher telemetry ⇒ waiting on Validate; branch protection update above removes redundant `Workflows Lint`.
-   - #132: chore: remove develop-two-green workflow ⇒ this branch; lint/validate pending after branch protection fix.
+3. **Docs refresh**
+   - README/ENVIRONMENT mention CLI-only defaults, but release notes / issue #127 comment thread still reference older telemetry focus. Update once validation is complete.
+
+4. **Branch protection cleanup (carry-over)**
+   - `develop` may still list `Workflows Lint` as required. Confirm and flip to only `Validate` if that hasn�t been done yet.
 
 ## Suggested Next Actions
-1. Run the branch protection update command to drop `Workflows Lint`.
-2. Re-run CI on PRs #131 and #132 once protection updates propagate; merge when Validate passes.
-3. Confirm session index uploads include `watchers.rest` and document schema changes in release notes.
-4. After merging, update any SLO/automation docs referencing `develop-two-green`.
+1. Run a CLI-only harness pass on a self-hosted runner with full LabVIEW CLI installed; verify `environment.cli.*` and HTML summary render as expected (`tests/results/teststand-cli-sanity`).
+2. Execute `Invoke-Pester tests/CompareReport.CliMetadata.Tests.ps1` (or `Invoke-Pester -Tag Unit`) to make sure the new test passes in your environment and wire it into any CI job if missing.
+3. If the HTML looks good, update issue #127 / release notes with validation screenshots and note the new data attributes.
+4. Double-check branch protection (`Validate` only). If still stale, run the gh command below.
 
 ## Useful Commands
-- Update protection: see command above.
-- Validate CLI locally: `npm run cli:validate` (requires `dotnet publish` output).
-- Watch REST output: `npm run ci:watch:rest -- --run-id <id> --out tests/results/<job>/watcher-rest.json`.
-- Merge watcher data manually (if needed): `pwsh -File tools/Update-SessionIndexWatcher.ps1 -ResultsDir <dir> -WatcherJson <dir>/watcher-rest.json`.
+- CLI-only harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputRoot tests/results/teststand-cli -RenderReport`
+- Schema check: `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/lvcompare-capture.schema.json --data tests/results/teststand-cli/compare/lvcompare-capture.json`
+- HTML unit test: `Invoke-Pester tests/CompareReport.CliMetadata.Tests.ps1`
+- Update protection (if needed):
+  ```bash
+  gh api repos/LabVIEW-Community-CI-CD/compare-vi-cli-action/branches/develop/protection \
+    -X PUT \
+    -F required_status_checks.strict=true \
+    -F required_status_checks.checks[][context]=Validate
+  ```
 
 ## Notes for Next Agent
-- Expect PR #131 to satisfy the only required check (`Validate`) once protection is updated; `Workflows Lint` should disappear from required contexts.
-- After deleting `develop-two-green`, ensure no other workflow or doc references it (quick check already done via `git grep`).
+- HTML summary now emits data attributes (`data-cli-*`, `data-base-path`, `data-head-path`). Use these when adding UI tests.
+- `tests/CompareReport.CliMetadata.Tests.ps1` assumes `Render-CompareReport.ps1` resolves via relative path from repo root; adjust `$PSScriptRoot` if you move the test.
+- If you observe CLI runs without reportType/status, capture stdout and share so we can expand the regexes.
+

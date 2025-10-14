@@ -10,7 +10,7 @@
     "schema:validate": "tsc -p tsconfig.cli.json && node dist/tools/schemas/validate-json.js",
     "schema:watcher:validate": "npm run schema:validate -- --schema docs/schema/watcher-telemetry.v1.schema.json --data tests/results/_agent/handoff/watcher-telemetry.json --optional",
     "generate:outputs": "node dist/generate-action-outputs.js",
-    "schemas:generate": "tsc -p tsconfig.json && node dist/schemas/generate-schemas.js",
+    "schemas:generate": "tsc -p tsconfig.cli.json && node dist/tools/schemas/generate-schemas.js",
     "cli:validate": "tsc -p tsconfig.cli.json && node dist/tools/cli/validate-cli.js",
     "ci:watch:rest": "tsc -p tsconfig.cli.json && node dist/tools/watchers/orchestrated-watch.js",
     "tests:discover": "tsc -p tsconfig.json && node dist/test-discovery.js --tests tests --out tests/results/_agent/test-manifest.json",

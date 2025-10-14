@@ -1,0 +1,216 @@
+{
+  "$ref": "#/definitions/lvcompare-capture",
+  "definitions": {
+    "lvcompare-capture": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "lvcompare-capture-v1"
+        },
+        "timestamp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1
+        },
+        "head": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cliPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exitCode": {
+          "type": "number"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "stdoutLen": {
+          "type": "number"
+        },
+        "stderrLen": {
+          "type": "number"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stdout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stderr": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "environment": {
+          "type": "object",
+          "properties": {
+            "lvcompareVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "labviewVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bitness": {
+              "type": "string",
+              "enum": [
+                "x86",
+                "x64"
+              ]
+            },
+            "osVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "arch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "compareMode": {
+              "type": "string",
+              "minLength": 1
+            },
+            "comparePolicy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cli": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reportType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reportPath": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "artifacts": {
+                  "type": "object",
+                  "properties": {
+                    "reportSizeBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "imageCount": {
+                      "$ref": "#/definitions/lvcompare-capture/properties/environment/properties/cli/properties/artifacts/properties/reportSizeBytes"
+                    },
+                    "exportDir": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "images": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "$ref": "#/definitions/lvcompare-capture/properties/environment/properties/cli/properties/artifacts/properties/reportSizeBytes"
+                          },
+                          "mimeType": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "dataLength": {
+                            "$ref": "#/definitions/lvcompare-capture/properties/environment/properties/cli/properties/artifacts/properties/reportSizeBytes"
+                          },
+                          "byteLength": {
+                            "$ref": "#/definitions/lvcompare-capture/properties/environment/properties/cli/properties/artifacts/properties/reportSizeBytes"
+                          },
+                          "savedPath": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "source": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "decodeError": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": false
+            },
+            "runner": {
+              "type": "object",
+              "properties": {
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "identityHash": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "schema",
+        "timestamp",
+        "base",
+        "head",
+        "cliPath",
+        "args",
+        "exitCode",
+        "seconds",
+        "stdoutLen",
+        "stderrLen",
+        "command"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Result capture emitted by the LVCompare driver.",
+  "$id": "urn:compare-vi-cli-action:schema:lvcompare-capture"
+}

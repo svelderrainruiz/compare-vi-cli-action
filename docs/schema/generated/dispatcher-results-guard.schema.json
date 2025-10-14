@@ -1,0 +1,36 @@
+{
+  "$ref": "#/definitions/dispatcher-results-guard",
+  "definitions": {
+    "dispatcher-results-guard": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "dispatcher-results-guard/v1"
+        },
+        "at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema",
+        "at",
+        "path",
+        "message"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Guard crumb emitted when Invoke-PesterTests detects an invalid results directory.",
+  "$id": "urn:compare-vi-cli-action:schema:dispatcher-results-guard"
+}

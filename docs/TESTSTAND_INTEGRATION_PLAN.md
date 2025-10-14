@@ -57,7 +57,7 @@ Before enabling the harness end-to-end, codify the updated acceptance criteria i
 
 - Dispatcher runs now emit a dedicated “Selected Tests” block and always append the `/run orchestrated … include_integration=false` hint when integration is disabled. The helpers live in `Invoke-PesterTests.ps1` and are exercised by `tests/Invoke-PesterTests.Summary.Tests.ps1`.
 - When `IncludeIntegration=false`, the dispatcher exports `LVCI_FORBID_COMPARE=1` and `scripts/CompareVI.psm1` blocks LVCompare with a summary notice. This codifies the existing operator expectation that we do not launch LVCompare outside integration runs.
-- `tools/RunnerInvoker/RunnerInvoker.psm1` records an invoker `runId` in `tests/results/_invoker/current-run.json`, request logs, and single-compare state to keep telemetry correlated. The schema is tracked at `docs/schema/generated/pester-invoker-current-run.schema.json`, with coverage in the RunnerInvoker unit suites.
+- `tools/RunnerInvoker/RunnerInvoker.psm1` records an invoker `runId` in `tests/results/_invoker/current-run.json`, request logs, and single-compare state to keep telemetry correlated. The schema for `current-run.json` lives at `docs/schema/generated/pester-invoker-current-run.schema.json`; add validation coverage in the RunnerInvoker unit suites to keep it exercised.
 - Close helpers execute solely via `tools/Post-Run-Cleanup.ps1`, which reads request crumbs under `tests/results/_agent/post/requests` (populated by the TestStand harness, integration loop, etc.) and uses `tools/Once-Guard.psm1` to ensure each action runs once per job.
 
 ## 2. GitHub Actions alignment
@@ -86,7 +86,7 @@ Before enabling the harness end-to-end, codify the updated acceptance criteria i
 
 - Create a quick-start doc (`docs/TESTSTAND_QUICKSTART.md`) derived from the steps above.
 - Update `AGENT_HANDOFF.txt` guidance to mention the harness mode and how to toggle it.
-- Track remaining tasks in issue **#88** (or a linked issue) for visibility: wiring unit tests, user documentation, workflow feature flag toggles.
+- Track remaining tasks in issue **#127** (or a linked issue) for visibility: wiring unit tests, user documentation, workflow feature flag toggles.
 
 ## 4. Open questions
 

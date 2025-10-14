@@ -7,17 +7,17 @@ This document summarizes the expectations for automation agents working in the
 
 ## Primary directive
 
-- Issue **#88** is the standing priority. Treat progress on #88 as the top objective for edits,
+- Issue **#127** is the standing priority. Treat progress on #127 as the top objective for edits,
   CI runs, and PRs.
 - The human operator is signed in with an admin GitHub token; assume privileged operations
   (labels, reruns, merges) are allowed when safe.
 - Default behaviour:
   - Operate inside this repository unless the human asks otherwise.
   - Keep workflows deterministic and green.
-  - Reference `#88` in commit and PR descriptions.
+  - Reference `#127` in commit and PR descriptions.
 - First actions in a session:
-  1. Pull #88 details (tasks, acceptance, linked PRs).
-  2. Create or sync a working branch (`issue/88-<slug>`), push minimal changes, dispatch CI.
+  1. Pull #127 details (tasks, acceptance, linked PRs).
+  2. Create or sync a working branch (`issue/127-<slug>`), push minimal changes, dispatch CI.
   3. Open or update the PR, apply required labels, monitor to green, merge when acceptance is met.
 
 ## Repository layout
@@ -66,7 +66,7 @@ This document summarizes the expectations for automation agents working in the
 
 ## Commits & PRs
 
-- Keep commits focused; include `#88` in subjects.
+- Keep commits focused; include `#127` in subjects.
 - PRs should describe rationale, list affected workflows, and link to artifacts.
 - Ensure CI is green (lint + Pester). Verify no lingering processes on self-hosted runners.
 
@@ -88,7 +88,7 @@ This document summarizes the expectations for automation agents working in the
   - Warns on inline `-f` and dot-sourcing.
   - Blocks on analyzer errors.
 - `tools/hooks/commit-msg.sample`
-  - Enforces subject ≤100 characters and issue reference (e.g., `(#88)`) unless `WIP`.
+  - Enforces subject ≤100 characters and issue reference (e.g., `(#127)`) unless `WIP`.
 
 ## Required checks (develop/main)
 
@@ -160,7 +160,7 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
   `priority:test`, `hooks:test`, and `semver:check`, then writes `tests/results/_agent/handoff/test-summary.json`
   so subsequent agents (or CI summaries) can replay the outcomes.
 
-## Fast path for issue #88
+## Fast path for issue #127
 
 - PR comment dispatch: `/run orchestrated single include_integration=true sample_id=<id>`
 - CLI dispatch: `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -IncludeIntegration true`
