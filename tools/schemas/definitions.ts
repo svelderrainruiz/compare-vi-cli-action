@@ -4,6 +4,8 @@ const isoString = z.string().min(1);
 const optionalIsoString = isoString.optional();
 const nonNegativeInteger = z.number().int().min(0);
 
+const hexSha256 = z.string().regex(/^[A-Fa-f0-9]{64}$/);
+
 const agentRunContext = z
   .object({
     sha: z.string().nullish(),
@@ -282,6 +284,61 @@ const invokerCurrentRunSchema = z.object({
   startedAt: isoString,
 });
 
+export const cliVersionSchema = z
+  .object({
+    name: z.string().min(1),
+    assemblyVersion: z.string().min(1),
+    informationalVersion: z.string().min(1),
+    framework: z.string().min(1),
+    os: z.string().min(1),
+  })
+  .passthrough();
+
+export const cliTokenizeSchema = z.object({
+  raw: z.array(z.string()),
+  normalized: z.array(z.string()),
+});
+
+export const cliProcsSchema = z.object({
+  labviewPids: z.array(nonNegativeInteger),
+  lvcomparePids: z.array(nonNegativeInteger),
+});
+
+const cliArtifactFileSchema = z.object({
+  path: z.string().min(1),
+  sha256: hexSha256,
+  bytes: nonNegativeInteger,
+});
+
+export const cliArtifactMetaSchema = z.object({
+  gitSha: z.string().min(1).optional(),
+  branch: z.string().min(1).optional(),
+  generatedAt: isoString.optional(),
+  files: z.array(cliArtifactFileSchema).min(1),
+});
+
+export const watcherRestSchema = z.object({
+  schema: z.literal('ci-watch/rest-v1'),
+  repo: z.string().min(1),
+  runId: nonNegativeInteger.min(1),
+  branch: z.string().optional(),
+  headSha: z.string().optional(),
+  status: z.string().optional(),
+  conclusion: z.string().optional(),
+  htmlUrl: z.string().optional(),
+  displayTitle: z.string().optional(),
+  polledAtUtc: isoString,
+  jobs: z.array(
+    z.object({
+      id: nonNegativeInteger.min(1),
+      name: z.string().min(1),
+      status: z.string().min(1),
+      conclusion: z.string().nullable().optional(),
+      htmlUrl: z.string().nullable().optional(),
+    }),
+  ),
+});
+
 export const schemas = [
   {
     id: 'agent-wait-marker',
@@ -336,6 +393,36 @@ export const schemas = [
     fileName: 'teststand-compare-session.schema.json',
     description: 'Session index emitted by tools/TestStand-CompareHarness.ps1.',
     schema: testStandCompareSessionSchema,
+  },
+  {
+    id: 'cli-version',
+    fileName: 'cli-version.schema.json',
+    description: 'Output emitted by comparevi-cli version.',
+    schema: cliVersionSchema,
+  },
+  {
+    id: 'cli-tokenize',
+    fileName: 'cli-tokenize.schema.json',
+    description: 'Output emitted by comparevi-cli tokenize.',
+    schema: cliTokenizeSchema,
+  },
+  {
+    id: 'cli-procs',
+    fileName: 'cli-procs.schema.json',
+    description: 'Output emitted by comparevi-cli procs.',
+    schema: cliProcsSchema,
+  },
+  {
+    id: 'cli-artifact-meta',
+    fileName: 'cli-artifact-meta.schema.json',
+    description: 'Metadata describing published comparevi-cli artifacts.',
+    schema: cliArtifactMetaSchema,
+  },
+  {
+    id: 'watcher-rest',
+    fileName: 'watcher-rest.schema.json',
+    description: 'Summary produced by the REST watcher for GitHub Actions runs.',
+    schema: watcherRestSchema,
   },
   {
     id: 'pester-invoker-event',

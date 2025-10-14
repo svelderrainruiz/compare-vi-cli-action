@@ -161,8 +161,24 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        docker run --rm -v "${PWD}:/work" -w /work mcr.microsoft.com/dotnet/sdk:8.0 \
-          bash -lc 'dotnet publish src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj -c Release -nologo -o dist/comparevi-cli -p:InformationalVersion="${GITHUB_SHA:-local}"'
+        SHA="${GITHUB_SHA:-local}"
+        docker run --rm -v "${PWD}:/work" -w /work -e BUILD_SHA="$SHA" mcr.microsoft.com/dotnet/sdk:8.0 bash -lc '
+          set -euo pipefail
+          export DOTNET_CLI_HOME=/tmp/dotnet
+          rm -rf dist/comparevi-cli src/CompareVi.Tools.Cli/obj src/CompareVi.Shared/obj || true
+          IV="${BUILD_SHA:-local}"
+          dotnet publish src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj -c Release -nologo -o dist/comparevi-cli -p:UseAppHost=false -p:InformationalVersion="$IV"
+        '
+    - name: Validate comparevi-cli outputs
+      if: ${{ hashFiles('dist/comparevi-cli/comparevi-cli.dll') != '' }}
+      run: npm run cli:validate
+    - name: Watch run (REST sanity)
+      if: ${{ hashFiles('dist/tools/watchers/orchestrated-watch.js') != '' }}
+      run: node dist/tools/watchers/orchestrated-watch.js --run-id ${{ github.run_id }} --poll-ms 1000 --out "${{ env.RESULTS_DIR }}/watcher-rest.json"
+    - name: Merge REST watcher into session index
+      if: ${{ hashFiles(format('{0}/watcher-rest.json', env.RESULTS_DIR)) != '' }}
+      shell: pwsh
+      run: pwsh -File tools/Update-SessionIndexWatcher.ps1 -ResultsDir "${{ env.RESULTS_DIR }}" -WatcherJson "${{ env.RESULTS_DIR }}/watcher-rest.json"
     - name: Compute comparevi-cli checksums
       if: ${{ hashFiles('dist/comparevi-cli/**') != '' }}
       shell: pwsh
@@ -179,6 +195,7 @@ jobs:
         $meta = [pscustomobject]@{
           gitSha = '${{ github.sha }}'
           branch = '${{ github.ref_name }}'
+          generatedAt = (Get-Date).ToString('o')
           files  = $list
         }
         $json = $meta | ConvertTo-Json -Depth 6
@@ -200,6 +217,8 @@ jobs:
       with:
         node-version: "20"
         cache: "npm"
+    - name: Install CLI validation deps
+      run: npm ci
     - name: Install markdownlint-cli (retry)
       shell: bash
       run: |

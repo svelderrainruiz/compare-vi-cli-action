@@ -153,6 +153,23 @@
       }
     },
     {
+      "label": "CI Watch (REST)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "ci:watch:rest",
+        "--",
+        "--run-id",
+        "${input:runId}"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
       "label": "Run Non-LV Checks (Docker)",
       "type": "shell",
       "command": "pwsh",

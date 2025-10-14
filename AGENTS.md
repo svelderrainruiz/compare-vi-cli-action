@@ -178,6 +178,16 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
 - Summaries include a copy/pastable `gh workflow run` command.
 - Comment snippets documented in `.github/PR_COMMENT_SNIPPETS.md`.
 
+## Watching orchestrated runs
+
+- Prefer the REST watcher when monitoring workflows: `npm run ci:watch:rest -- --run-id <id>` streams job status and exits non-zero if
+  the run fails. Passing `--branch <name>` auto-selects the latest run. The VS Code task “CI Watch (REST)” prompts for a run id.
+- Use the Docker watcher (`tools/Watch-InDocker.ps1`) when you need dispatcher logs or artifact download mirrors. Both watchers honor
+  `GH_TOKEN`/`GITHUB_TOKEN` and fall back to `C:\github_token.txt` on Windows.
+- Keep watcher summaries in `tests/results/_agent/` up to date so downstream agents inherit telemetry context.
+- `tools/Update-SessionIndexWatcher.ps1` merges `watcher-rest.json` into `session-index.json`, exposing the REST watcher status under
+  the `watchers.rest` node. Run it after the watcher step if you update the workflow or run the watcher manually.
+
 ## LVCompare observability
 
 - Notices are written to `tests/results/_lvcompare_notice/notice-*.json` (phases: pre-launch,

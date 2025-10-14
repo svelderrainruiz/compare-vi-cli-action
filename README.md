@@ -130,6 +130,10 @@ Tips:
   - `Run Non-LV Checks (Docker)` shells into `tools/Run-NonLVChecksInDocker.ps1` for actionlint/markdownlint/docs drift.
   - Recommended extensions (PowerShell, C#, GitHub Actions, markdownlint, Docker) are declared in `.vscode/extensions.json`.
   - Local validation matrix (see below) keeps local runs aligned with CI stages.
+- Prefer the REST watcher for GitHub status: `npm run ci:watch:rest -- --run-id <id>` streams job conclusions without relying on the
+  `gh` CLI. Passing `--branch <name>` auto-selects the latest run. A VS Code task named “CI Watch (REST)” prompts for the run id.
+- The REST watcher writes `watcher-rest.json` into the job’s results directory; `tools/Update-SessionIndexWatcher.ps1` merges the data
+  into `session-index.json` so CI telemetry reflects the final GitHub status alongside Pester results.
 - The watcher prunes old run directories (`.tmp/watch-run`) automatically and warns if
   run/dispatcher status stalls longer than the configured window (default 10 minutes). When
   consecutive dispatcher logs hash to the same digest, it flags a possible repeated failure.
@@ -302,6 +306,4 @@ Packaging notes:
 2. Compilation: run `npm run compile` prior to packaging.
 3. Optional VSIX: install `vsce` locally and run `npx vsce package` inside `tools/vscode/comparevi-extension`; install the resulting VSIX via “Extensions: Install from VSIX...” if you prefer a self-contained bundle instead of running the debug host.
 pm test exercises the registration smoke test via @vscode/test-electron.
-
-
 

@@ -87,6 +87,44 @@
         "pullRequest": { "type": ["string", "null"], "format": "uri" }
       }
     },
+    "watchers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "repo", "runId", "polledAtUtc", "jobs"],
+          "properties": {
+            "schema": { "const": "ci-watch/rest-v1" },
+            "repo": { "type": "string" },
+            "runId": { "type": "integer", "minimum": 1 },
+            "branch": { "type": ["string", "null"] },
+            "headSha": { "type": ["string", "null"] },
+            "status": { "type": ["string", "null"] },
+            "conclusion": { "type": ["string", "null"] },
+            "htmlUrl": { "type": ["string", "null"], "format": "uri" },
+            "displayTitle": { "type": ["string", "null"] },
+            "polledAtUtc": { "type": "string", "format": "date-time" },
+            "jobs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "name", "status"],
+                "properties": {
+                  "id": { "type": "integer", "minimum": 1 },
+                  "name": { "type": "string" },
+                  "status": { "type": "string" },
+                  "conclusion": { "type": ["string", "null"] },
+                  "htmlUrl": { "type": ["string", "null"], "format": "uri" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "stepSummary": { "type": "string" },
     "branchProtection": {
       "type": "object",

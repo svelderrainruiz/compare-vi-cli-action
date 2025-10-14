@@ -123,7 +123,7 @@ else
   IV="0.1.0+local"
 fi
 '@
-    $pubLine = 'dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:BaseIntermediateOutputPath=/tmp/obj/ -p:IntermediateOutputPath=/tmp/obj/ -p:InformationalVersion="$IV"'
+    $pubLine = 'dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:InformationalVersion="$IV"'
     $publishCommand = $publishCommand + "`n" + $pubLine
     # Build with official .NET SDK container to avoid file-permission quirks in tools image
     Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
