@@ -70,6 +70,8 @@ $capPath = Join-Path $paths.compareDir 'lvcompare-capture.json'
 $reportPath = Join-Path $paths.compareDir 'compare-report.html'
 $cap = $null
 $err = $null
+$closeLVCompareScript = Join-Path $repo 'tools' 'Close-LVCompare.ps1'
+$closeLabVIEWScript = Join-Path $repo 'tools' 'Close-LabVIEW.ps1'
 
 try {
   # 1) Warmup LabVIEW runtime
@@ -95,17 +97,15 @@ try {
   if ($LVComparePath) { $invokeParams.LVComparePath = $LVComparePath }
   & $invoke @invokeParams | Out-Null
   if (Test-Path -LiteralPath $capPath) { $cap = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json }
-
-  # 3) Optional closes
-  if ($CloseLVCompare) {
-    $closeLVCompare = Join-Path $repo 'tools' 'Close-LVCompare.ps1'
-    if (Test-Path -LiteralPath $closeLVCompare) { try { & $closeLVCompare | Out-Null } catch {} }
-  }
-  if ($CloseLabVIEW) {
-    $closeLabVIEW = Join-Path $repo 'tools' 'Close-LabVIEW.ps1'
-    if (Test-Path -LiteralPath $closeLabVIEW) { try { & $closeLabVIEW -MinimumSupportedLVVersion '2025' -SupportedBitness '64' | Out-Null } catch {} }
-  }
 } catch { $err = $_.Exception.Message }
+finally {
+  if ($CloseLVCompare -and (Test-Path -LiteralPath $closeLVCompareScript)) {
+    try { & $closeLVCompareScript | Out-Null } catch {}
+  }
+  if ($CloseLabVIEW -and (Test-Path -LiteralPath $closeLabVIEWScript)) {
+    try { & $closeLabVIEWScript -MinimumSupportedLVVersion '2025' -SupportedBitness '64' | Out-Null } catch {}
+  }
+}
 
 # 4) Session index (always write)
 $index = [ordered]@{
@@ -123,6 +123,8 @@ New-Dir $OutputRoot
 $index | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $indexPath -Encoding utf8
 
 $exitCode = if ($cap) { [int]$cap.exitCode } else { 1 }
-Write-Host ("TestStand Compare Harness result: exit={0} diff={1} capture={2}" -f ($index.outcome.exitCode), ($index.outcome.diff), $capPath) -ForegroundColor Yellow
+$diffDisplay = if ($index.outcome) { $index.outcome.diff } else { 'unknown' }
+$exitDisplay = if ($index.outcome) { $index.outcome.exitCode } else { 'n/a' }
+Write-Host ("TestStand Compare Harness result: exit={0} diff={1} capture={2}" -f $exitDisplay, $diffDisplay, $capPath) -ForegroundColor Yellow
 
 exit $exitCode

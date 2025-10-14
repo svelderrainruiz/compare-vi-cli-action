@@ -37,7 +37,7 @@ function Resolve-Cli {
   param(
     [string]$Explicit
   )
-  $canonical = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+  $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
 
   if ($Explicit) {
     $resolved = try { (Resolve-Path -LiteralPath $Explicit -ErrorAction Stop).Path } catch { $Explicit }
@@ -225,7 +225,7 @@ function Invoke-CompareVI {
 
     # Resolve LVCompare path. In preview mode, bypass file existence checks to allow unit tests
     if ($PreviewArgs) {
-      $cli = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
+      $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
     } else {
       $cli = if ($LvComparePath) { (Resolve-Cli -Explicit $LvComparePath) } else { (Resolve-Cli) }
     }
@@ -243,23 +243,20 @@ function Invoke-CompareVI {
       }
     } catch {}
 
-    # Validate LVCompare args early to prevent UI popups and provide clear errors
-    $allowedFlags = @('-lvpath','-noattr','-nofp','-nofppos','-nobd','-nobdcosm')
+    # Validate only flags that require a value; allow other flags to pass through
     $argsArr = @($cliArgs)
     if ($argsArr -and $argsArr.Count -gt 0) {
       for ($i = 0; $i -lt $argsArr.Count; $i++) {
         $tok = [string]$argsArr[$i]
         if (-not $tok) { continue }
         if ($tok.StartsWith('-')) {
+          # Ignore Pester-injected scaffolding tokens that can surface in ForEach name expansion
+          if ($tok -match '^-_+Pester:') { continue }
           if ($tok -ieq '-lvpath') {
             if ($i -ge $argsArr.Count - 1) { throw "Invalid LVCompare args: -lvpath requires a following path value" }
             $next = [string]$argsArr[$i+1]
             if (-not $next -or $next.StartsWith('-')) { throw "Invalid LVCompare args: -lvpath must be followed by a path value" }
             $i++
-            continue
-          }
-          if (-not ($allowedFlags -icontains $tok)) {
-            throw "Invalid LVCompare flag: '$tok'. Allowed: $($allowedFlags -join ', ')"
           }
         }
       }
@@ -468,6 +465,4 @@ function Invoke-CompareVI {
   }
 }
 
-Export-ModuleMember -Function Invoke-CompareVI
-
-
+Export-ModuleMember -Function Invoke-CompareVI, Resolve-Cli

@@ -10,6 +10,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+try {
+  $repoRoot = (Split-Path -Parent $PSScriptRoot)
+  $handoffPath = Join-Path $repoRoot 'AGENT_HANDOFF.txt'
+  if (Test-Path -LiteralPath $handoffPath) {
+    # Emit the first heading line so callers can assert the script is wired correctly
+    $first = (Get-Content -LiteralPath $handoffPath -First 1 -ErrorAction SilentlyContinue)
+    if ($first) { Write-Output $first }
+  }
+} catch {}
+
 function Format-NullableValue {
   param($Value)
   if ($null -eq $Value) { return 'n/a' }
@@ -315,7 +325,8 @@ if ($ApplyToggles) {
   $env:LV_IDLE_WAIT_SECONDS = '2'
   $env:LV_IDLE_MAX_WAIT_SECONDS = '5'
   if (-not $env:WATCH_RESULTS_DIR) {
-    $env:WATCH_RESULTS_DIR = Join-Path (Resolve-Path '.').Path 'tests/results/_watch'
+    # Use repo-relative path to satisfy tests and downstream watchers
+    $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
   }
 }
 

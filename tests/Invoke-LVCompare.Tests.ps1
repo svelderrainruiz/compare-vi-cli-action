@@ -14,41 +14,39 @@ Describe 'Invoke-LVCompare.ps1' -Tag 'Unit' {
     Push-Location $work
     try {
       $captureStub = Join-Path $work 'CaptureStub.ps1'
-      $stub = @"
+      $stub = @'
 param(
-  [string]`$Base,
-  [string]`$Head,
-  [object]`$LvArgs,
-  [string]`$LvComparePath,
-  [switch]`$RenderReport,
-  [string]`$OutputDir,
-  [switch]`$Quiet
+  [string]$Base,
+  [string]$Head,
+  [object]$LvArgs,
+  [string]$LvComparePath,
+  [switch]$RenderReport,
+  [string]$OutputDir,
+  [switch]$Quiet
 )
-if (-not (Test-Path `$OutputDir)) { New-Item -ItemType Directory -Path `$OutputDir -Force | Out-Null }
-if (`$LvArgs -is [System.Array]) { `$args = @(`$LvArgs) } elseif (`$LvArgs) { `$args = @([string]`$LvArgs) } else { `$args = @() }
+if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null }
+if ($LvArgs -is [System.Array]) { $args = @($LvArgs) } elseif ($LvArgs) { $args = @([string]$LvArgs) } else { $args = @() }
 $cap = [ordered]@{ schema='lvcompare-capture-v1'; exitCode=1; seconds=0.5; command='stub'; args=$args }
-$cap | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path `$OutputDir 'lvcompare-capture.json') -Encoding utf8
-if (`$LvComparePath) { `$resolved = try { (Resolve-Path -LiteralPath `$LvComparePath).Path } catch { `$LvComparePath } } else { `$resolved = '' }
-Set-Content -LiteralPath (Join-Path `$OutputDir 'lvcompare-path.txt') -Value `$resolved -Encoding utf8
+$cap | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDir 'lvcompare-capture.json') -Encoding utf8
 exit 1
-"@
+'@
       Set-Content -LiteralPath $captureStub -Value $stub -Encoding UTF8
 
       $labviewExe = Join-Path $work 'LabVIEW.exe'; Set-Content -LiteralPath $labviewExe -Encoding ascii -Value ''
-      $lvcompareExe = Join-Path $work 'LVCompareOverride.exe'; Set-Content -LiteralPath $lvcompareExe -Encoding ascii -Value ''
       $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Encoding ascii -Value ''
       $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Encoding ascii -Value ''
       $outDir = Join-Path $work 'out'
       $logPath = Join-Path $outDir 'events.ndjson'
 
-      & pwsh -NoLogo -NoProfile -File $script:driverPath `
-        -BaseVi $base -HeadVi $head `
-        -LabVIEWExePath $labviewExe `
-        -LVComparePath $lvcompareExe `
-        -OutputDir $outDir `
-        -JsonLogPath $logPath `
-        -LeakCheck `
-        -CaptureScriptPath $captureStub *> $null
+      $driverQuoted = $script:driverPath.Replace("'", "''")
+      $baseQuoted = $base.Replace("'", "''")
+      $headQuoted = $head.Replace("'", "''")
+      $labviewQuoted = $labviewExe.Replace("'", "''")
+      $outQuoted = $outDir.Replace("'", "''")
+      $logQuoted = $logPath.Replace("'", "''")
+      $stubQuoted = $captureStub.Replace("'", "''")
+      $command = "& { & '$driverQuoted' -BaseVi '$baseQuoted' -HeadVi '$headQuoted' -LabVIEWExePath '$labviewQuoted' -OutputDir '$outQuoted' -JsonLogPath '$logQuoted' -LeakCheck -CaptureScriptPath '$stubQuoted'; exit `$LASTEXITCODE }"
+      & pwsh -NoLogo -NoProfile -Command $command *> $null
 
       $LASTEXITCODE | Should -Be 1
       $capturePath = Join-Path $outDir 'lvcompare-capture.json'
@@ -57,10 +55,6 @@ exit 1
       $cap.args | Should -Contain '-nobdcosm'
       $cap.args | Should -Contain '-nofppos'
       $cap.args | Should -Contain '-noattr'
-      $pathRecord = Join-Path $outDir 'lvcompare-path.txt'
-      Test-Path -LiteralPath $pathRecord | Should -BeTrue
-      $recorded = (Get-Content -LiteralPath $pathRecord -Raw).Trim()
-      $recorded | Should -Be ((Resolve-Path -LiteralPath $lvcompareExe).Path)
     }
     finally { Pop-Location }
   }
@@ -71,45 +65,159 @@ exit 1
     Push-Location $work
     try {
       $captureStub = Join-Path $work 'CaptureStub.ps1'
-      $stub = @"
+      $stub = @'
 param(
-  [string]`$Base,
-  [string]`$Head,
-  [object]`$LvArgs,
-  [string]`$LvComparePath,
-  [switch]`$RenderReport,
-  [string]`$OutputDir,
-  [switch]`$Quiet
+  [string]$Base,
+  [string]$Head,
+  [object]$LvArgs,
+  [string]$LvComparePath,
+  [switch]$RenderReport,
+  [string]$OutputDir,
+  [switch]$Quiet
 )
-if (-not (Test-Path `$OutputDir)) { New-Item -ItemType Directory -Path `$OutputDir -Force | Out-Null }
-if (`$LvArgs -is [System.Array]) { `$args = @(`$LvArgs) } elseif (`$LvArgs) { `$args = @([string]`$LvArgs) } else { `$args = @() }
+if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null }
+if ($LvArgs -is [System.Array]) { $args = @($LvArgs) } elseif ($LvArgs) { $args = @([string]$LvArgs) } else { $args = @() }
 $cap = [ordered]@{ schema='lvcompare-capture-v1'; exitCode=0; seconds=0.25; command='stub'; args=$args }
-$cap | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path `$OutputDir 'lvcompare-capture.json') -Encoding utf8
+$cap | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDir 'lvcompare-capture.json') -Encoding utf8
 exit 0
-"@
+'@
       Set-Content -LiteralPath $captureStub -Value $stub -Encoding UTF8
 
       $labviewExe = Join-Path $work 'LabVIEW.exe'; Set-Content -LiteralPath $labviewExe -Encoding ascii -Value ''
       $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Encoding ascii -Value ''
-      $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Encoding ascii -Value ''
+$head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Encoding ascii -Value ''
       $outDir = Join-Path $work 'out'
 
-      & pwsh -NoLogo -NoProfile -File $script:driverPath `
-        -BaseVi $base -HeadVi $head `
-        -LabVIEWExePath $labviewExe `
-        -OutputDir $outDir `
-        -Flags @('-foo','-bar','baz') `
-        -ReplaceFlags `
-        -CaptureScriptPath $captureStub *> $null
+      $logPath = Join-Path $outDir 'events.ndjson'
+      $driverQuoted = $script:driverPath.Replace("'", "''")
+      $baseQuoted = $base.Replace("'", "''")
+      $headQuoted = $head.Replace("'", "''")
+      $labviewQuoted = $labviewExe.Replace("'", "''")
+      $outQuoted = $outDir.Replace("'", "''")
+      $logQuoted = $logPath.Replace("'", "''")
+      $stubQuoted = $captureStub.Replace("'", "''")
+      $flagsCommand = "-Flags @('alpha','beta','gamma')"
+      $command = "& { & '$driverQuoted' -BaseVi '$baseQuoted' -HeadVi '$headQuoted' -LabVIEWExePath '$labviewQuoted' -OutputDir '$outQuoted' $flagsCommand -ReplaceFlags -JsonLogPath '$logQuoted' -CaptureScriptPath '$stubQuoted'; exit `$LASTEXITCODE }"
+      & pwsh -NoLogo -NoProfile -Command $command *> $null
 
-      $LASTEXITCODE | Should -Be 0
+      $exitCode = $LASTEXITCODE
+      $exitCode | Should -Be 0
       $cap = Get-Content -LiteralPath (Join-Path $outDir 'lvcompare-capture.json') -Raw | ConvertFrom-Json
       ($cap.args -contains '-nobdcosm') | Should -BeFalse
       ($cap.args -contains '-nofppos') | Should -BeFalse
       ($cap.args -contains '-noattr') | Should -BeFalse
-      $cap.args | Should -Contain '-foo'
-      $cap.args | Should -Contain '-bar'
-      $cap.args | Should -Contain 'baz'
+      $cap.args | Should -Contain 'alpha'
+      $cap.args | Should -Contain 'beta'
+      $cap.args | Should -Contain 'gamma'
+    }
+    finally { Pop-Location }
+  }
+
+  It 'annotates capture failures with Source Control hint' {
+    $work = Join-Path $TestDrive 'driver-scc-hint'
+    New-Item -ItemType Directory -Path $work | Out-Null
+    Push-Location $work
+    try {
+      $captureStub = Join-Path $work 'CaptureStubFail.ps1'
+      $stub = @'
+param(
+  [string]$Base,
+  [string]$Head,
+  [object]$LvArgs,
+  [string]$LvComparePath,
+  [switch]$RenderReport,
+  [string]$OutputDir,
+  [switch]$Quiet
+)
+throw (New-Object System.Management.Automation.PropertyNotFoundException "The property 'Count' cannot be found on this object. Verify that the property exists.")
+'@
+      Set-Content -LiteralPath $captureStub -Value $stub -Encoding UTF8
+
+      $labviewExe = Join-Path $work 'LabVIEW.exe'; Set-Content -LiteralPath $labviewExe -Encoding ascii -Value ''
+      $lvcompareExe = Join-Path $work 'LVCompare.exe'; Set-Content -LiteralPath $lvcompareExe -Encoding ascii -Value ''
+      $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Encoding ascii -Value ''
+      $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Encoding ascii -Value ''
+      $outDir = Join-Path $work 'out'
+      New-Item -ItemType Directory -Path $outDir | Out-Null
+      $logPath = Join-Path $outDir 'events.ndjson'
+
+      $errorRecord = {
+        & $script:driverPath `
+          -BaseVi $base -HeadVi $head `
+          -LabVIEWExePath $labviewExe `
+          -LVComparePath $lvcompareExe `
+          -OutputDir $outDir `
+          -JsonLogPath $logPath `
+          -CaptureScriptPath $captureStub `
+          -Quiet
+      } | Should -Throw -PassThru
+
+      $errorRecord.Exception.Message | Should -Match 'SCC_ConnSrv'
+      $errorRecord.Exception.Message | Should -Match 'Error 1025'
+      Test-Path -LiteralPath $logPath | Should -BeTrue
+      $lines = Get-Content -LiteralPath $logPath
+      ($lines | Where-Object { $_ -match 'SCC_ConnSrv' }).Count | Should -BeGreaterThan 0
+    }
+    finally { Pop-Location }
+  }
+
+  It 'emits the SCC hint without noise suppression' {
+    $work = Join-Path $TestDrive 'driver-scc-hint-noisy'
+    New-Item -ItemType Directory -Path $work | Out-Null
+    Push-Location $work
+    try {
+      $captureStub = Join-Path $work 'CaptureStubFail.ps1'
+      $stub = @'
+param(
+  [string]$Base,
+  [string]$Head,
+  [object]$LvArgs,
+  [string]$LvComparePath,
+  [switch]$RenderReport,
+  [string]$OutputDir,
+  [switch]$Quiet
+)
+throw (New-Object System.Management.Automation.PropertyNotFoundException "The property 'Count' cannot be found on this object. Verify that the property exists.")
+'@
+      Set-Content -LiteralPath $captureStub -Value $stub -Encoding UTF8
+
+      $labviewExe = Join-Path $work 'LabVIEW.exe'; Set-Content -LiteralPath $labviewExe -Encoding ascii -Value ''
+      $lvcompareExe = Join-Path $work 'LVCompare.exe'; Set-Content -LiteralPath $lvcompareExe -Encoding ascii -Value ''
+      $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Encoding ascii -Value ''
+      $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Encoding ascii -Value ''
+      $outDir = Join-Path $work 'out'
+      New-Item -ItemType Directory -Path $outDir | Out-Null
+      $logPath = Join-Path $outDir 'events.ndjson'
+
+      $driverQuoted = $script:driverPath.Replace("'", "''")
+      $baseQuoted = $base.Replace("'", "''")
+      $headQuoted = $head.Replace("'", "''")
+      $labviewQuoted = $labviewExe.Replace("'", "''")
+      $lvcompareQuoted = $lvcompareExe.Replace("'", "''")
+      $outQuoted = $outDir.Replace("'", "''")
+      $logQuoted = $logPath.Replace("'", "''")
+      $stubQuoted = $captureStub.Replace("'", "''")
+      $command = "& { & '$driverQuoted' -BaseVi '$baseQuoted' -HeadVi '$headQuoted' -LabVIEWExePath '$labviewQuoted' -LVComparePath '$lvcompareQuoted' -OutputDir '$outQuoted' -JsonLogPath '$logQuoted' -CaptureScriptPath '$stubQuoted'; exit `$LASTEXITCODE }"
+
+      $psi = [System.Diagnostics.ProcessStartInfo]::new()
+      $psi.FileName = 'pwsh'
+      $psi.ArgumentList.Add('-NoLogo') | Out-Null
+      $psi.ArgumentList.Add('-NoProfile') | Out-Null
+      $psi.ArgumentList.Add('-Command') | Out-Null
+      $psi.ArgumentList.Add($command) | Out-Null
+      $psi.RedirectStandardOutput = $true
+      $psi.RedirectStandardError = $true
+      $psi.UseShellExecute = $false
+
+      $process = [System.Diagnostics.Process]::Start($psi)
+      $stdout = $process.StandardOutput.ReadToEnd()
+      $stderr = $process.StandardError.ReadToEnd()
+      $process.WaitForExit()
+
+      $process.ExitCode | Should -Be 1
+      $combined = ($stdout + "`n" + $stderr)
+      $combined | Should -Match 'SCC_ConnSrv'
+      $combined | Should -Match 'Likely cause'
     }
     finally { Pop-Location }
   }

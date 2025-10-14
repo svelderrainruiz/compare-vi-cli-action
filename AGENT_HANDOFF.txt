@@ -2,35 +2,47 @@
 
 ## Context Snapshot
 - Standing priority: issue #127 (per `AGENTS.md` update)
-- Current branch: `develop` (CLI enrichment work staged locally; no branch-specific PR yet)
-- Recent focus: CLI-only execution path, capture schema enrichment, HTML execution-context updates, and new Pester coverage for CLI metadata.
-- Latest changes staged: updated CLI metadata parsing/rendering, README/ENVIRONMENT docs, and new test `tests/CompareReport.CliMetadata.Tests.ps1`.
+- Current branch: `develop`
+- Recent focus: CLI-only compare path, SCC modal diagnostics, deterministic closing, and Pester harness stabilization.
+- Latest changes:
+  - SCC modal hint added to `tools/Invoke-LVCompare.ps1` (annotates NDJSON and warnings).
+  - Harness closes LabVIEW/LVCompare in a `finally` block when `-CloseLabVIEW/-CloseLVCompare` are set.
+  - Expanded unit tests for `Invoke-LVCompare` (including a zero-noise SCC hint test).
+  - Pester timeout shim added (`tests/00-PesterCompat.TimeoutShim.ps1`).
+  - `.gitattributes`: `*.vi binary`.
+  - CompareVI module: exported `Resolve-Cli`; normalized canonical path; filtered Pester ForEach artefacts in
+    arg tokenization; relaxed flag validation (only `-lvpath` must carry a value).
+  - Child-process snapshot writes to `tests/results/_agent/` and uses safer variable names.
 
 ## Status & Known Gaps
-1. **CLI metadata enrichment**
-   - `scripts/Capture-LVCompare.ps1`, `tools/Invoke-LVCompare.ps1`, and `tools/TestStand-CompareHarness.ps1` now parse CLI stdout/stderr for `reportType`, `reportPath`, `status`, and `message`, then surface them in the HTML report.
-   - Embedded CLI report artefacts are decoded into `cli-images/`, and the summary KV block exposes image counts, sizes, and export paths for downstream tooling.
-   - Need a targeted integration run (CLI-only) to capture real output and confirm the HTML shows the new fields on self-hosted runners.
-
-2. **Automation tests**
-   - Added `tests/CompareReport.CliMetadata.Tests.ps1` to assert the new data attributes. Ensure it is included in CI (currently only local run). Hook into appropriate Pester suite if we start grouping HTML tests.
-
-3. **Docs refresh**
-   - README/ENVIRONMENT mention CLI-only defaults, but release notes / issue #127 comment thread still reference older telemetry focus. Update once validation is complete.
-
-4. **Branch protection cleanup (carry-over)**
-   - `develop` may still list `Workflows Lint` as required. Confirm and flip to only `Validate` if that hasn�t been done yet.
+1) SCC modal (Error 1025/0x401 in NI_SCC_ConnSrv) — mitigated via hint; still avoid by setting Source Control to `<None>` in
+   LabVIEW Options on the runner.
+2) CLI-only path — verified: `tools/Invoke-LVCompare.ps1` with `LVCI_COMPARE_POLICY=cli-only` generates `cli-report.html` and
+   assets. Warmup can be skipped; `Detect-RogueLV.ps1` is not used.
+3) Tests — remaining hotspots:
+   a. `CompareVI.Flags.Combinations` one case (mix with `-lvpath`). Either simplify quoting in the test or extend tokenization
+      to accept that mixed form. Module already validates only `-lvpath` pairing.
+   b. `ChildProcs.Schema` depth exceeded on JSON parse. Flatten `cmd` to a single string and keep depth ≤ 6; re-run.
+   c. `tools/Dev-Dashboard.ps1` `$imgText` default for HTML path.
+   d. `Invoke-PesterTests.ErrorHandling` adjust regex/assert to escape the file path in the crumb message.
+4) Docs/PRs — Once CLI-only validations are green, refresh #127 notes and release screenshots. Confirm branch protection
+   (`Validate` required on `develop`).
 
 ## Suggested Next Actions
-1. Run a CLI-only harness pass on a self-hosted runner with full LabVIEW CLI installed; verify `environment.cli.*` and HTML summary render as expected (`tests/results/teststand-cli-sanity`).
-2. Execute `Invoke-Pester tests/CompareReport.CliMetadata.Tests.ps1` (or `Invoke-Pester -Tag Unit`) to make sure the new test passes in your environment and wire it into any CI job if missing.
-3. If the HTML looks good, update issue #127 / release notes with validation screenshots and note the new data attributes.
-4. Double-check branch protection (`Validate` only). If still stale, run the gh command below.
+1) Run CLI-only compare and inspect outputs:
+   - `pwsh -Command "$env:LVCI_COMPARE_POLICY='cli-only'"`
+   - `pwsh -File tools/Invoke-LVCompare.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputDir tests/results/cli-only -RenderReport -JsonLogPath tests/results/cli-only/events.ndjson -LeakCheck -Summary`
+2) Verify SCC hint propagation (regression): `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`.
+3) Stabilize failing tests in order: flags mix case → child-procs JSON → dashboard default → dispatcher error-handling.
+4) Optional full sweep (time-boxed):
+   - `pwsh -File Invoke-PesterTests.ps1 -IncludeIntegration false`
+   - or `Invoke-Pester -Path tests -TagFilter Unit,Integration -ExcludeTag Policy -CI`
 
 ## Useful Commands
-- CLI-only harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputRoot tests/results/teststand-cli -RenderReport`
+- Handoff toggles: `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim`
+- CLI-only harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputRoot tests/results/teststand-cli -RenderReport -CloseLabVIEW -CloseLVCompare`
 - Schema check: `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/lvcompare-capture.schema.json --data tests/results/teststand-cli/compare/lvcompare-capture.json`
-- HTML unit test: `Invoke-Pester tests/CompareReport.CliMetadata.Tests.ps1`
+- Unit tests (LVCompare driver): `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`
 - Update protection (if needed):
   ```bash
   gh api repos/LabVIEW-Community-CI-CD/compare-vi-cli-action/branches/develop/protection \
@@ -39,8 +51,14 @@
     -F required_status_checks.checks[][context]=Validate
   ```
 
+## First Actions for the Next Agent
+1. Execute `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` (no edits; prints header + watcher status).
+2. Ensure LabVIEW Source Control is `<None>` on the runner (to avoid the SCC modal in non-interactive sessions).
+3. Run the CLI-only compare (above) and open `tests/results/cli-only/cli-report.html`.
+4. Triage the remaining test hotspots (see Status & Known Gaps) and keep changes scoped; reference `#127` in commits/PRs.
+
 ## Notes for Next Agent
-- HTML summary now emits data attributes (`data-cli-*`, `data-base-path`, `data-head-path`). Use these when adding UI tests.
-- `tests/CompareReport.CliMetadata.Tests.ps1` assumes `Render-CompareReport.ps1` resolves via relative path from repo root; adjust `$PSScriptRoot` if you move the test.
-- If you observe CLI runs without reportType/status, capture stdout and share so we can expand the regexes.
+- HTML report emits data attributes (`data-cli-*`, `data-base-path`, `data-head-path`).
+- `tests/CompareReport.CliMetadata.Tests.ps1` assumes `Render-CompareReport.ps1` resolves from repo root.
+- SCC modal string: “Error 1025 … NI_SCC_ConnSrv … SCC_Provider_Startup.vi.ProxyCaller” — now surfaced as a hint in logs.
 

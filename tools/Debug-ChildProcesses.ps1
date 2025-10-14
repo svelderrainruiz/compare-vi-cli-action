@@ -15,12 +15,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Get-CommandLine([int]$Pid){
-  try { ($ci = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $Pid) -ErrorAction SilentlyContinue); return ($ci.CommandLine) } catch { return $null }
+function Get-CommandLine([int]$ProcId){
+  try { ($ci = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $ProcId) -ErrorAction SilentlyContinue); return ($ci.CommandLine) } catch { return $null }
 }
 
 $repoRoot = (Resolve-Path '.').Path
-$agentDir = Join-Path $repoRoot (Join-Path $ResultsDir '_agent')
+# Always write snapshot under repo tests/results/_agent to keep location stable
+$agentDir = Join-Path (Join-Path $repoRoot 'tests/results') '_agent'
 if (-not (Test-Path -LiteralPath $agentDir)) { New-Item -ItemType Directory -Path $agentDir -Force | Out-Null }
 $outPath = Join-Path $agentDir 'child-procs.json'
 
@@ -51,14 +52,14 @@ foreach ($name in $Names) {
   foreach ($p in $procs) {
     $title = $null
     try { $title = $p.MainWindowTitle } catch {}
-    $pid = try { [int]$p.Id } catch { try { [int]$p.ProcessId } catch { $null } }
-    $cmd = if ($pid) { Get-CommandLine -Pid $pid } else { $null }
+    $procId = try { [int]$p.Id } catch { try { [int]$p.ProcessId } catch { $null } }
+    $cmd = if ($procId) { Get-CommandLine -ProcId $procId } else { $null }
     $ws = 0L; $pm = 0L
     try { $ws = [int64]$p.WorkingSet64 } catch {}
     try { $pm = [int64]$p.PagedMemorySize64 } catch {}
     $totalWs += $ws; $totalPm += $pm
     $items += [pscustomobject]@{
-      pid   = $pid
+      pid   = $procId
       ws    = $ws
       pm    = $pm
       title = $title

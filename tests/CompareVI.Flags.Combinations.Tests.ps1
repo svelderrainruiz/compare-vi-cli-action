@@ -29,8 +29,8 @@ Describe 'LVCompare flags (knowledgebase combinations)' -Tag 'Unit' {
     @{ args = '-nofppos'  ; flag='-nofppos'  },
     @{ args = '-noattr'   ; flag='-noattr'   }
   ) {
-    param($args, $flag)
-    $exec = New-ExecWithArgs -argSpec $args
+    param($argSpec, $flag)
+    $exec = New-ExecWithArgs -argSpec $argSpec
     $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($flag))
     @($exec.args) | Should -Contain $flag
   }
@@ -40,8 +40,8 @@ Describe 'LVCompare flags (knowledgebase combinations)' -Tag 'Unit' {
     @{ args = '-nobdcosm -noattr'  ; a='-nobdcosm'; b='-noattr'  },
     @{ args = '-nofppos -noattr'   ; a='-nofppos' ; b='-noattr'  }
   ) {
-    param($args,$a,$b)
-    $exec = New-ExecWithArgs -argSpec $args
+    param($argSpec,$a,$b)
+    $exec = New-ExecWithArgs -argSpec $argSpec
     $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($a))
     $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($b))
     @($exec.args) | Should -Contain $a
@@ -70,4 +70,3 @@ Describe 'LVCompare flags (knowledgebase combinations)' -Tag 'Unit' {
     $tokens[$idx+1] | Should -Be $lv
   }
 }
-

@@ -120,6 +120,10 @@ function Get-FileProductVersion([string]$Path) {
   } catch { return $null }
 }
 
+function Get-SourceControlBootstrapHint {
+  return 'Likely cause: LabVIEW Source Control bootstrap dialog (Error 1025/0x401 in NI_SCC_ConnSrv.lvlib:SCC_ConnSrv RunSCCConnSrv.vi -> SCC_Provider_Startup.vi.ProxyCaller). When LabVIEW starts headless it still loads the configured source control provider; if that provider cannot connect, LabVIEW shows a modal "Source Control" window and blocks LVCompare. Dismiss the dialog or disable Source Control via Tools > Source Control on the runner.'
+}
+
 function Get-CliReportFileExtension {
   param([string]$MimeType)
   if (-not $MimeType) { return 'bin' }
@@ -422,22 +426,41 @@ Write-JsonEvent 'plan' @{
       OutputDir    = $OutputDir
       Quiet        = $Quiet.IsPresent
     }
-    if (-not $LVComparePath) { try { $LVComparePath = Resolve-LVComparePath } catch {} }
-    if ($LVComparePath) { $captureParams.LvComparePath = $LVComparePath }
-    & $captureScript @captureParams
-  } catch {
-    Write-JsonEvent 'error' @{ stage='capture'; message=$_.Exception.Message }
-    Write-Warning ("Invoke-LVCompare: capture failure -> {0}" -f $_.Exception.Message)
-    if ($_.InvocationInfo) { Write-Warning $_.InvocationInfo.PositionMessage }
-    throw
+  if (-not $LVComparePath) { try { $LVComparePath = Resolve-LVComparePath } catch {} }
+  if ($LVComparePath) { $captureParams.LvComparePath = $LVComparePath }
+  & $captureScript @captureParams
+ } catch {
+   $message = $_.Exception.Message
+   if ($_.Exception -is [System.Management.Automation.PropertyNotFoundException] -and $message -match "property 'Count'") {
+     $hint = Get-SourceControlBootstrapHint
+     if ($message -notmatch 'SCC_ConnSrv') { $message = "$message; $hint" }
+   }
+   Write-JsonEvent 'error' @{ stage='capture'; message=$message }
+   Write-Warning ("Invoke-LVCompare: capture failure -> {0}" -f $message)
+   if ($_.InvocationInfo) { Write-Warning $_.InvocationInfo.PositionMessage }
+   throw (New-Object System.Management.Automation.RuntimeException($message, $_.Exception))
   }
  }
 
 # Read capture JSON to surface exit code and command
 $capPath = Join-Path $OutputDir 'lvcompare-capture.json'
-if (-not (Test-Path -LiteralPath $capPath -PathType Leaf)) { Write-JsonEvent 'error' @{ stage='post'; message='missing capture json' }; exit 2 }
+if (-not (Test-Path -LiteralPath $capPath -PathType Leaf)) {
+  $missingMessage = 'missing capture json'
+  $hint = Get-SourceControlBootstrapHint
+  if ($missingMessage -notmatch 'SCC_ConnSrv') { $missingMessage = "$missingMessage; $hint" }
+  Write-JsonEvent 'error' @{ stage='post'; message=$missingMessage }
+  Write-Error $missingMessage
+  exit 2
+}
 $cap = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json
-if (-not $cap) { Write-JsonEvent 'error' @{ stage='post'; message='unable to parse capture json' }; exit 2 }
+if (-not $cap) {
+  $parseMessage = 'unable to parse capture json'
+  $hint = Get-SourceControlBootstrapHint
+  if ($parseMessage -notmatch 'SCC_ConnSrv') { $parseMessage = "$parseMessage; $hint" }
+  Write-JsonEvent 'error' @{ stage='post'; message=$parseMessage }
+  Write-Error $parseMessage
+  exit 2
+}
 
 $exitCode = [int]$cap.exitCode
 $duration = [double]$cap.seconds

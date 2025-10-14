@@ -149,6 +149,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Default for includeIntegrationBool to avoid uninitialized usage during early helper calls
+if (-not (Get-Variable -Name includeIntegrationBool -Scope Script -ErrorAction SilentlyContinue)) {
+  $script:includeIntegrationBool = $false
+}
+
 function Test-EnvTruthy {
   param([string]$Value)
   if ([string]::IsNullOrWhiteSpace($Value)) { return $false }

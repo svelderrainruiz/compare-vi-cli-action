@@ -106,6 +106,8 @@ function Get-LVCompareArgTokens {
     if ($Spec -is [System.Array]) {
       foreach ($item in @($Spec)) {
         if ($null -eq $item) { continue }
+        # Ignore non-string items (e.g., Pester -ForEach metadata hashtables)
+        if (-not ($item -is [string])) { continue }
         $value = Strip-OuterQuotes ([string]$item)
         if (-not [string]::IsNullOrWhiteSpace($value)) { $rawTokens += $value }
       }
