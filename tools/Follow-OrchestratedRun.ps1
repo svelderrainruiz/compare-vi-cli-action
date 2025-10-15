@@ -56,6 +56,21 @@ if ($Watch) {
   Write-Host ''
   Write-Host 'Watching run logs (Ctrl+C to stop)...'
   $gh = Get-Command gh -ErrorAction Stop
-  & $gh.Source 'run','watch',[string]$run.databaseId,'--exit-status'
+  $watchArgs = @('run','watch',[string]$run.databaseId,'--exit-status')
+  $watchLines = @()
+  & $gh.Source @watchArgs 2>&1 | Tee-Object -Variable watchLines
+  $exitCode = $LASTEXITCODE
+  if ($exitCode -ne 0) {
+    $combined = ($watchLines | Out-String).Trim()
+    if ($combined -match '401\s+Unauthorized') {
+      Write-Warning 'gh run watch returned 401 Unauthorized. Provide GH_TOKEN/GITHUB_TOKEN with repo scope or run `gh auth login` to stream run logs.'
+    } elseif ($combined -match 'exceeded retry limit') {
+      Write-Warning 'gh run watch encountered repeated stream errors. Confirm your GitHub authentication and network access.'
+    }
+    if ($combined) {
+      Write-Warning $combined
+    }
+    throw "gh run watch exited with code $exitCode"
+  }
 }
 
