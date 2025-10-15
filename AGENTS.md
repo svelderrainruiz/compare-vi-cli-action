@@ -41,6 +41,8 @@ This document summarizes the expectations for automation agents working in the
 - Pattern filter: `./Invoke-PesterTests.ps1 -IncludePatterns 'CompareVI.*'`
 - Quick smoke: `./tools/Quick-DispatcherSmoke.ps1 -Keep`
 - Containerized non-LV checks: `pwsh -File tools/Run-NonLVChecksInDocker.ps1`
+- Compare harnesses default to headless CLI runs (`LVCI_COMPARE_POLICY=cli-only`). Override with `lv-only` only when you
+  explicitly need the LVCompare UI; otherwise leave it unset to avoid prompts and stuck LabVIEW instances.
 
 ## Coding style
 

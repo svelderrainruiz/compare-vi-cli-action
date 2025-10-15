@@ -73,12 +73,17 @@ LVCompare path as the required comparator; the CLI path is delivered via the new
 `LVCI_CLI_EXTRA_ARGS` for additional flags (for example `--noDependencies`), and honors
 `LVCI_CLI_TIMEOUT_SECONDS` (default 120).
 
-Use `LVCI_COMPARE_POLICY` to direct how automation chooses between LVCompare and LabVIEW CLI:
+Use `LVCI_COMPARE_POLICY` to direct how automation chooses between LVCompare and LabVIEW CLI. The automation now
+defaults to `cli-only` when the variable is unset so the compare flow remains headless. Set the variable explicitly if
+you need a different behaviour.
 
-- `lv-first` (default) – legacy behavior; only run CLI when explicitly requested via `LVCI_COMPARE_MODE`.
+- `cli-only` (default) – run via LabVIEW CLI and fail if CLI capture fails.
 - `cli-first` – attempt CLI first, fall back to LVCompare on recoverable CLI failures (missing report, parse errors).
-- `cli-only` – require CLI success; do not fall back.
+- `lv-first` – prefer LVCompare; only run CLI when explicitly requested via `LVCI_COMPARE_MODE`.
 - `lv-only` – enforce LVCompare only.
+
+When the base and head VIs share the same filename (typical commit-to-commit compares), automation continues to use the
+CLI path (unless `lv-only` is explicitly configured) and skips warmup to avoid launching LabVIEW UI windows.
 
 CLI-only quick start (64-bit Windows):
 

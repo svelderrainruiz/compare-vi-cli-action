@@ -44,26 +44,54 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][string]$BaseVi,
-  [Parameter(Mandatory)][string]$HeadVi,
-  [Alias('LabVIEWPath')]
-  [string]$LabVIEWExePath,
-  [Alias('LVCompareExePath')]
-  [string]$LVComparePath,
-  [string]$OutputRoot = 'tests/results/teststand-session',
-  [ValidateSet('detect','spawn','skip')]
-  [string]$Warmup = 'detect',
-  [string[]]$Flags,
-  [switch]$ReplaceFlags,
-  [switch]$RenderReport,
-  [switch]$CloseLabVIEW,
-  [switch]$CloseLVCompare
+[Parameter(Mandatory)][string]$BaseVi,
+[Parameter(Mandatory)][string]$HeadVi,
+[Alias('LabVIEWPath')]
+[string]$LabVIEWExePath,
+[Alias('LVCompareExePath')]
+[string]$LVComparePath,
+[string]$OutputRoot = 'tests/results/teststand-session',
+[ValidateSet('detect','spawn','skip')]
+[string]$Warmup = 'detect',
+[string[]]$Flags,
+[switch]$ReplaceFlags,
+[switch]$RenderReport,
+[switch]$CloseLabVIEW,
+[switch]$CloseLVCompare,
+[int]$TimeoutSeconds = 600,
+[switch]$DisableTimeout
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+try { Import-Module ThreadJob -ErrorAction SilentlyContinue } catch {}
+
 function New-Dir([string]$p){ if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null } }
+
+function Invoke-WithTimeout {
+  param(
+    [scriptblock]$Block,
+    [int]$TimeoutSeconds,
+    [string]$Stage,
+    [switch]$DisableTimeout
+  )
+
+  if ($DisableTimeout -or $TimeoutSeconds -le 0) {
+    return & $Block
+  }
+
+  $job = Start-ThreadJob -ScriptBlock $Block
+  try {
+    if (-not (Wait-Job -Job $job -Timeout $TimeoutSeconds)) {
+      try { Stop-Job -Job $job -Force -ErrorAction SilentlyContinue } catch {}
+      throw (New-Object System.TimeoutException("Harness stage '$Stage' exceeded ${TimeoutSeconds}s"))
+    }
+    return Receive-Job -Job $job
+  } finally {
+    try { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } catch {}
+  }
+}
 
 $repo = (Resolve-Path '.').Path
 
@@ -116,6 +144,7 @@ $warmupRan = $false
 $err = $null
 $closeLVCompareScript = Join-Path $repo 'tools' 'Close-LVCompare.ps1'
 $closeLabVIEWScript = Join-Path $repo 'tools' 'Close-LabVIEW.ps1'
+$effectiveTimeout = if ($DisableTimeout) { 0 } else { [Math]::Max(0, [int]$TimeoutSeconds) }
 
 try {
   # 1) Warmup LabVIEW runtime (optional)
@@ -125,7 +154,7 @@ try {
     $warmParams = @{ JsonLogPath = $warmupLog }
     if ($LabVIEWExePath) { $warmParams.LabVIEWPath = $LabVIEWExePath }
     try {
-      & $warmupScript @warmParams | Out-Null
+      Invoke-WithTimeout -Block { & $using:warmupScript @using:warmParams | Out-Null } -TimeoutSeconds $effectiveTimeout -Stage 'warmup' -DisableTimeout:$DisableTimeout | Out-Null
       $warmupRan = $true
     } catch {
       $err = $_.Exception.Message
@@ -147,7 +176,7 @@ try {
   if ($LVComparePath) { $invokeParams.LVComparePath = $LVComparePath }
   if ($Flags) { $invokeParams.Flags = $Flags }
   if ($ReplaceFlags) { $invokeParams.ReplaceFlags = $true }
-  & $invoke @invokeParams | Out-Null
+  Invoke-WithTimeout -Block { & $using:invoke @using:invokeParams | Out-Null } -TimeoutSeconds $effectiveTimeout -Stage 'compare' -DisableTimeout:$DisableTimeout | Out-Null
   if (Test-Path -LiteralPath $capPath) { $cap = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json }
 } catch { $err = $_.Exception.Message }
 finally {
@@ -177,6 +206,7 @@ if ($cap) {
 }
 $compareNode.autoCli = $autoCli
 $compareNode.sameName = $sameName
+$compareNode.timeoutSeconds = $effectiveTimeout
 if ($env:LVCI_COMPARE_POLICY) { $compareNode.policy = $env:LVCI_COMPARE_POLICY }
 if ($env:LVCI_COMPARE_MODE)   { $compareNode.mode   = $env:LVCI_COMPARE_MODE }
 

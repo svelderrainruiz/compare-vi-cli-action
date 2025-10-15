@@ -158,6 +158,7 @@ exit 0
       $indexData.compare.mode | Should -Be 'labview-cli'
       $indexData.compare.autoCli | Should -BeTrue
       $indexData.compare.sameName | Should -BeTrue
+      $indexData.compare.timeoutSeconds | Should -Be 600
     }
     finally { Pop-Location }
   }
