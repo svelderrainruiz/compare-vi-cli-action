@@ -12,7 +12,7 @@ CLI and the repository scripts.
 | 1 – Canonical CLI | Ensure LVCompare at default path | `scripts/Test-IntegrationEnvironment.ps1` |
 | 2 – VI inputs | Verify `LV_BASE_VI` / `LV_HEAD_VI` exist and differ | inline |
 | 3 – Single compare | Run one diff and capture metrics | `scripts/CompareVI.ps1` |
-| 4 – Integration tests | Execute Pester with `-IncludeIntegration` | `Invoke-PesterTests.ps1` |
+| 4 - Integration tests | Execute Pester with `-IntegrationMode include` | `Invoke-PesterTests.ps1` |
 | 5 – Loop soak | Multi-iteration latency / diff loop | `scripts/Run-AutonomousIntegrationLoop.ps1` |
 | 6 – Diagnostics | Optional raw CLI capture | inline |
 
@@ -46,7 +46,7 @@ Test-Path 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompar
 ```powershell
 pwsh -File scripts/Test-IntegrationEnvironment.ps1
 pwsh -File scripts/CompareVI.ps1 -Base $env:LV_BASE_VI -Head $env:LV_HEAD_VI
-./Invoke-PesterTests.ps1 -IncludeIntegration true
+./Invoke-PesterTests.ps1 -IntegrationMode include
 pwsh -File scripts/Run-AutonomousIntegrationLoop.ps1 -MaxIterations 25
 ```
 
@@ -72,3 +72,4 @@ Artifacts land under `tests/results/` (compare evidence, loop JSON, Pester resul
 - [`docs/TROUBLESHOOTING.md`](./TROUBLESHOOTING.md)
 - [`docs/COMPARE_LOOP_MODULE.md`](./COMPARE_LOOP_MODULE.md)
 - [`docs/FIXTURE_DRIFT.md`](./FIXTURE_DRIFT.md)
+

@@ -1,0 +1,30 @@
+{
+  "$ref": "#/definitions/cli-tokenize",
+  "definitions": {
+    "cli-tokenize": {
+      "type": "object",
+      "properties": {
+        "raw": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "normalized": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "raw",
+        "normalized"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Output emitted by comparevi-cli tokenize.",
+  "$id": "urn:compare-vi-cli-action:schema:cli-tokenize"
+}

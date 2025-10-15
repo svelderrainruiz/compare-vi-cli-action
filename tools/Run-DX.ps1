@@ -19,7 +19,7 @@ param(
   [string]$OutputRoot = 'tests/results/teststand-session',
   [string[]]$Flags,
   [switch]$ReplaceFlags,
-  [ValidateSet('detect','spawn')]
+  [ValidateSet('detect','spawn','skip')]
   [string]$Warmup = 'detect',
   [switch]$RenderReport,
   [switch]$CloseLabVIEW,
@@ -65,16 +65,17 @@ Write-DxLine "dx-start suite=$Suite results=$ResultsPath"
 # Pre snapshot
 try { & (Join-Path $PSScriptRoot 'Debug-ChildProcesses.ps1') -ResultsDir $ResultsPath | Out-Null } catch {}
 
-# Flag active processes pre-run (LVCompare, LabVIEW, g-cli, VIPM)
+# Flag active processes pre-run (LVCompare, LabVIEW, LabVIEWCLI, g-cli, VIPM)
 try {
   $pre = @{}
   try { $pre.lvcompare = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch {}
   try { $pre.labview   = @(Get-Process -Name 'LabVIEW'   -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch {}
+  try { $pre.labviewcli = @(Get-Process -Name 'LabVIEWCLI' -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch { try { $pre.labviewcli = @(Get-CimInstance Win32_Process -Filter "Name='LabVIEWCLI.exe'" -ErrorAction SilentlyContinue | Select-Object -Expand ProcessId) } catch {} }
   try { $pre.gcli      = @(Get-CimInstance Win32_Process -Filter "Name='g-cli.exe'" -ErrorAction SilentlyContinue | Select-Object -Expand ProcessId) } catch {}
   try { $pre.vipm      = @(Get-Process -Name 'VIPM' -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch { try { $pre.vipm = @(Get-CimInstance Win32_Process -Filter "Name='VIPM.exe'" -ErrorAction SilentlyContinue | Select-Object -Expand ProcessId) } catch {} }
-  $cnt = (($pre.lvcompare|Measure-Object).Count + ($pre.labview|Measure-Object).Count + ($pre.gcli|Measure-Object).Count + ($pre.vipm|Measure-Object).Count)
+  $cnt = (($pre.lvcompare|Measure-Object).Count + ($pre.labview|Measure-Object).Count + ($pre.labviewcli|Measure-Object).Count + ($pre.gcli|Measure-Object).Count + ($pre.vipm|Measure-Object).Count)
   if ($cnt -gt 0) {
-    Write-DxLine ("procs pre lvcompare={0} labview={1} gcli={2} vipm={3}" -f ($pre.lvcompare -join ','), ($pre.labview -join ','), ($pre.gcli -join ','), ($pre.vipm -join ',')) 'warn'
+    Write-DxLine ("procs pre lvcompare={0} labview={1} labviewcli={2} gcli={3} vipm={4}" -f ($pre.lvcompare -join ','), ($pre.labview -join ','), ($pre.labviewcli -join ','), ($pre.gcli -join ','), ($pre.vipm -join ',')) 'warn'
   }
 } catch {}
 
@@ -170,9 +171,35 @@ $harness = Join-Path $repoRoot 'tools/TestStand-CompareHarness.ps1'
       $cmdShort = $null
       try { if ($capJson.command) { $cmdShort = ($capJson.command -replace '\s+', ' ').Trim() } } catch {}
       if ($cmdShort) { Write-DxLine ("compare cmd={0}" -f $cmdShort) }
-      $cliPathFromSession = $null
-      try { if ($session -and $session.compare -and $session.compare.cliPath) { $cliPathFromSession = $session.compare.cliPath } } catch {}
-      if ($cliPathFromSession) { Write-DxLine ("compare cli={0}" -f $cliPathFromSession) }
+      try {
+        if ($session -and $session.compare -and $session.compare.policy) { $statusEnvelope.lvcompare.policy = $session.compare.policy }
+        if ($session -and $session.compare -and $session.compare.mode)   { $statusEnvelope.lvcompare.mode   = $session.compare.mode }
+      } catch {}
+      $cliInfo = $null
+      try {
+        if ($capJson.environment -and $capJson.environment.cli) {
+          $cliInfo = $capJson.environment.cli
+        }
+      } catch {}
+      if (-not $cliInfo) {
+        try { if ($session -and $session.compare -and $session.compare.cli) { $cliInfo = $session.compare.cli } } catch {}
+      }
+      if ($cliInfo) {
+        $statusEnvelope.lvcompare.cli = $cliInfo
+      }
+      $cliPathResolved = $null
+      try {
+        if ($cliInfo -and ($cliInfo | Get-Member -Name 'path' -ErrorAction SilentlyContinue)) {
+          $cliPathResolved = $cliInfo.path
+        }
+      } catch {}
+      if (-not $cliPathResolved) {
+        try { if ($session -and $session.compare -and $session.compare.cliPath) { $cliPathResolved = $session.compare.cliPath } } catch {}
+      }
+      if ($cliPathResolved) {
+        $statusEnvelope.lvcompare.cliPath = $cliPathResolved
+        Write-DxLine ("compare cliPath={0}" -f $cliPathResolved)
+      }
     } catch {}
   }
   elseif ($OutputRoot) {
@@ -214,7 +241,14 @@ $harness = Join-Path $repoRoot 'tools/TestStand-CompareHarness.ps1'
 } else {
   # Pester suite
   $console = if ($env:DX_CONSOLE_LEVEL -and -not [string]::IsNullOrWhiteSpace($env:DX_CONSOLE_LEVEL)) { $env:DX_CONSOLE_LEVEL } else { 'concise' }
-  $paramTable = @{ ResultsPath = $ResultsPath; IncludeIntegration = $IncludeIntegration.IsPresent; ConsoleLevel = $console; LiveOutput = $true }
+  $integrationMode = if ($IncludeIntegration.IsPresent) { 'include' } else { 'exclude' }
+  $includeIntegrationFlag = ($integrationMode -eq 'include')
+  $paramTable = @{
+    ResultsPath      = $ResultsPath
+    IntegrationMode  = $integrationMode
+    ConsoleLevel     = $console
+    LiveOutput       = $true
+  }
   if ($IncludePatterns -and $IncludePatterns.Count -gt 0) { $paramTable.IncludePatterns = $IncludePatterns }
   if ($TimeoutSeconds -gt 0) { $paramTable.TimeoutSeconds = [double]$TimeoutSeconds }
   elseif ($TimeoutMinutes -gt 0) { $paramTable.TimeoutMinutes = [double]$TimeoutMinutes }
@@ -230,6 +264,7 @@ $harness = Join-Path $repoRoot 'tools/TestStand-CompareHarness.ps1'
 
   $summaryPath = Join-Path $ResultsPath 'pester-summary.json'
   $summary = $null
+  $integrationSource = "runner:$integrationMode"
   if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
     try { $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -ErrorAction Stop } catch {}
   }
@@ -239,7 +274,9 @@ $harness = Join-Path $repoRoot 'tools/TestStand-CompareHarness.ps1'
     schema            = 'dx-status-pester/v1'
     at                = (Get-Date).ToUniversalTime().ToString('o')
     resultsDir        = $resultsResolved
-    includeIntegration= $IncludeIntegration.IsPresent
+    includeIntegration= $includeIntegrationFlag
+    integrationMode   = $integrationMode
+    integrationSource = $integrationSource
     includePatterns   = $IncludePatterns
     exitCode          = $exit
     success           = ($exit -eq 0)
@@ -248,6 +285,20 @@ $harness = Join-Path $repoRoot 'tools/TestStand-CompareHarness.ps1'
   if ($summary) {
     try {
       $statusEnvelope.summary = @{ result = $summary.result; totals = $summary.totals }
+    } catch {}
+    try {
+      if ($summary.PSObject.Properties.Name -contains 'integrationMode' -and $summary.integrationMode) {
+        $integrationMode = $summary.integrationMode
+        $statusEnvelope.integrationMode = $integrationMode
+      }
+      if ($summary.PSObject.Properties.Name -contains 'includeIntegration') {
+        try { $includeIntegrationFlag = [bool]$summary.includeIntegration } catch { $includeIntegrationFlag = $summary.includeIntegration }
+        $statusEnvelope.includeIntegration = $includeIntegrationFlag
+      }
+      if ($summary.PSObject.Properties.Name -contains 'integrationSource' -and $summary.integrationSource) {
+        $integrationSource = $summary.integrationSource
+        $statusEnvelope.integrationSource = $integrationSource
+      }
     } catch {}
   }
 }
@@ -276,16 +327,17 @@ if ($Suite -eq 'TestStand') {
   } catch {}
 }
 
-# Flag active processes post-run (LVCompare, LabVIEW, g-cli, VIPM)
+# Flag active processes post-run (LVCompare, LabVIEW, LabVIEWCLI, g-cli, VIPM)
 try {
   $post = @{}
   try { $post.lvcompare = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch {}
   try { $post.labview   = @(Get-Process -Name 'LabVIEW'   -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch {}
+  try { $post.labviewcli = @(Get-Process -Name 'LabVIEWCLI' -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch { try { $post.labviewcli = @(Get-CimInstance Win32_Process -Filter "Name='LabVIEWCLI.exe'" -ErrorAction SilentlyContinue | Select-Object -Expand ProcessId) } catch {} }
   try { $post.gcli      = @(Get-CimInstance Win32_Process -Filter "Name='g-cli.exe'" -ErrorAction SilentlyContinue | Select-Object -Expand ProcessId) } catch {}
   try { $post.vipm      = @(Get-Process -Name 'VIPM' -ErrorAction SilentlyContinue | Select-Object -Expand Id) } catch { try { $post.vipm = @(Get-CimInstance Win32_Process -Filter "Name='VIPM.exe'" -ErrorAction SilentlyContinue | Select-Object -Expand ProcessId) } catch {} }
-  $cnt2 = (($post.lvcompare|Measure-Object).Count + ($post.labview|Measure-Object).Count + ($post.gcli|Measure-Object).Count + ($post.vipm|Measure-Object).Count)
+  $cnt2 = (($post.lvcompare|Measure-Object).Count + ($post.labview|Measure-Object).Count + ($post.labviewcli|Measure-Object).Count + ($post.gcli|Measure-Object).Count + ($post.vipm|Measure-Object).Count)
   if ($cnt2 -gt 0) {
-    Write-DxLine ("procs post lvcompare={0} labview={1} gcli={2} vipm={3}" -f ($post.lvcompare -join ','), ($post.labview -join ','), ($post.gcli -join ','), ($post.vipm -join ',')) 'warn'
+    Write-DxLine ("procs post lvcompare={0} labview={1} labviewcli={2} gcli={3} vipm={4}" -f ($post.lvcompare -join ','), ($post.labview -join ','), ($post.labviewcli -join ','), ($post.gcli -join ','), ($post.vipm -join ',')) 'warn'
   }
 } catch {}
 
@@ -297,11 +349,11 @@ try {
   if ($null -eq $statusEnvelope) { $statusEnvelope = [ordered]@{ schema='dx-status/v1'; at=(Get-Date).ToUniversalTime().ToString('o'); resultsDir=(Resolve-PathSafe $ResultsPath) } }
   try {
     $procInfo = [ordered]@{
-      pre  = @{ lvcompare = @($pre.lvcompare); labview = @($pre.labview); gcli = @($pre.gcli); vipm = @($pre.vipm) }
-      post = @{ lvcompare = @($post.lvcompare); labview = @($post.labview); gcli = @($post.gcli); vipm = @($post.vipm) }
+      pre  = @{ lvcompare = @($pre.lvcompare); labview = @($pre.labview); labviewcli = @($pre.labviewcli); gcli = @($pre.gcli); vipm = @($pre.vipm) }
+      post = @{ lvcompare = @($post.lvcompare); labview = @($post.labview); labviewcli = @($post.labviewcli); gcli = @($post.gcli); vipm = @($post.vipm) }
     }
-    $preCount  = ((@($pre.lvcompare)|Measure-Object).Count + (@($pre.labview)|Measure-Object).Count + (@($pre.gcli)|Measure-Object).Count + (@($pre.vipm)|Measure-Object).Count)
-    $postCount = ((@($post.lvcompare)|Measure-Object).Count + (@($post.labview)|Measure-Object).Count + (@($post.gcli)|Measure-Object).Count + (@($post.vipm)|Measure-Object).Count)
+    $preCount  = ((@($pre.lvcompare)|Measure-Object).Count + (@($pre.labview)|Measure-Object).Count + (@($pre.labviewcli)|Measure-Object).Count + (@($pre.gcli)|Measure-Object).Count + (@($pre.vipm)|Measure-Object).Count)
+    $postCount = ((@($post.lvcompare)|Measure-Object).Count + (@($post.labview)|Measure-Object).Count + (@($post.labviewcli)|Measure-Object).Count + (@($post.gcli)|Measure-Object).Count + (@($post.vipm)|Measure-Object).Count)
     $statusEnvelope.processes = $procInfo
     $statusEnvelope.processWarn = ($postCount -gt 0)
   } catch {}

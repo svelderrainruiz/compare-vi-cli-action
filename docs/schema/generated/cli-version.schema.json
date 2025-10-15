@@ -1,0 +1,41 @@
+{
+  "$ref": "#/definitions/cli-version",
+  "definitions": {
+    "cli-version": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assemblyVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "informationalVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "framework": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name",
+        "assemblyVersion",
+        "informationalVersion",
+        "framework",
+        "os"
+      ],
+      "additionalProperties": true
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Output emitted by comparevi-cli version.",
+  "$id": "urn:compare-vi-cli-action:schema:cli-version"
+}

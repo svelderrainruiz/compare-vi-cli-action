@@ -10,7 +10,7 @@ Quick reference for building, testing, and releasing the LVCompare composite act
   - `pwsh -File tools/Run-Pester.ps1`
 - **Integration tests** (LabVIEW + LVCompare installed)
   - Set `LV_BASE_VI`, `LV_HEAD_VI`
-  - `./Invoke-PesterTests.ps1 -IncludeIntegration true`
+  - `./Invoke-PesterTests.ps1 -IntegrationMode include`
 - **Helpers**
   - `tools/Dev-Dashboard.ps1` → telemetry snapshot
   - `tools/Watch-Pester.ps1` → file watcher / retry loop
@@ -86,3 +86,4 @@ pwsh -File scripts/CompareVI.ps1 -Base VI1.vi -Head VI2.vi -LvCompareArgs "-nobd
 - [`docs/TESTING_PATTERNS.md`](./TESTING_PATTERNS.md)
 - [`docs/SCHEMA_HELPER.md`](./SCHEMA_HELPER.md)
 - [`docs/TROUBLESHOOTING.md`](./TROUBLESHOOTING.md)
+

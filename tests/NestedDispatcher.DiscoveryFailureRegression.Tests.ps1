@@ -28,7 +28,7 @@ Describe 'Nested Dispatcher Discovery Failure Regression' -Tag 'Unit' {
     Push-Location $workspace
     try {
     # Invoke dispatcher in an isolated PowerShell process so its Write-Error does not fail this parent test directly.
-    $cmd = "pwsh -NoLogo -NoProfile -File `"$dispatcherCopy`" -TestsPath tests -ResultsPath results -IncludeIntegration false"
+    $cmd = "pwsh -NoLogo -NoProfile -File `"$dispatcherCopy`" -TestsPath tests -ResultsPath results -IntegrationMode exclude"
     $output = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
     $exit = $LASTEXITCODE
       $summaryJson = Join-Path $workspace 'results' 'pester-summary.json'

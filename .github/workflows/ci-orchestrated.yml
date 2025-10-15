@@ -466,7 +466,7 @@ jobs:
       run: |
         pwsh -File tools/Invoke-CompareCli.ps1 `
           -Category '${{ matrix.category }}' `
-          -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
+          -IntegrationMode "${{ needs.normalize.outputs.include_integration == 'true' && 'include' || 'exclude' }}" `
           -ResultsRoot '${{ env.RESULTS_ROOT }}'
 
     - name: Summarize CLI output
@@ -1133,7 +1133,7 @@ jobs:
         foreach ($c in $cats) {
           $resDir = Join-Path '${{ env.RESULTS_DIR }}' $c.name
           $inc = @($c.inc)
-          ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
+          ./Invoke-PesterTests.ps1 -TestsPath tests -IntegrationMode "${{ needs.normalize.outputs.include_integration == 'true' && 'include' || 'exclude' }}" -ResultsPath $resDir -EmitFailuresJsonAlways -IncludePatterns $inc
         }
 
     - name: Generate traceability matrix (single)

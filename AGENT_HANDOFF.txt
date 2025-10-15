@@ -1,40 +1,56 @@
-# Agent Handoff – Compare VI CLI Action
+# Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Branch: `issue/127-remove-develop-two-green` (tied to #127, PR #132)
-- Primary focus: REST watcher telemetry + CLI validation (already merged as PR #131) and removal of the obsolete `develop-two-green` workflow.
-- Latest change staged: deleted `.github/workflows/develop-two-green.yml`.
+- Standing priority: issue #127 (per `AGENTS.md` update)
+- Current branch: `issue/127-cli-metadata-html` (tracking `origin/issue/127-cli-metadata-html`)
+- Local telemetry captured under `tests/results/_agent/handoff/`:
+  - `local-status.txt`, `local-diff.txt`, `branch.txt`, `head-sha.txt`
+- Latest work:
+  - `tools/Invoke-LVCompare.ps1` now auto-resolves `LabVIEWCLI.exe`, blocks `cli-only` mode when the binary is missing, and emits CLI metadata for TestStand consumers.
+  - `tools/TestStand-CompareHarness.ps1` / `tools/Run-DX.ps1` record warmup mode, compare policy/mode, flag overrides, and CLI details in `session-index.json`; harness exposes `-Warmup detect|spawn|skip` plus LVCompare flag passthrough.
+  - `tools/LabVIEWCli.psm1` surfaces provider names in verbose output, applies consistent headless toggles, and falls back to registered providers when given a string.
+  - `docs/LabVIEWCliShimPattern.md` (new) documents Shim Pattern v1.0; README, ENVIRONMENT, and TestStand plan docs reference the pattern and new warmup guidance.
+  - Added guard-crumb unit coverage in `tests/Invoke-PesterTests.Tests.ps1`; updated `docs/schema/generated/teststand-compare-session.schema.json` for the richer session index.
+- Quick smoke: `npm run priority:handoff-tests` (passed; includes session capsule schema coverage). Latest CLI-only compare via `tools/Invoke-LVCompare.ps1` (diff=True, exit=1) with report artifacts in `tests/results/cli-only/`. TestStand harness run (`tools/TestStand-CompareHarness.ps1 -Warmup detect -RenderReport -CloseLabVIEW`) succeeded (exit=0, diff=False) and wrote `tests/results/teststand-session/session-index.json` with the new CLI metadata.
 
 ## Status & Known Gaps
-1. **Branch protection**
-   - `develop` still lists `Workflows Lint` as a required status even though the workflow was retired. Update branch protection so only `Validate` is required:
-     ```bash
-     gh api repos/LabVIEW-Community-CI-CD/compare-vi-cli-action/branches/develop/protection \
-       -X PUT \
-       -F required_status_checks.strict=true \
-       -F required_status_checks.checks[][context]=Validate
-     ```
-
-2. **CLI & watcher telemetry (from PR #131)**
-   - `npm run cli:validate` builds/validates `comparevi-cli`; lint job now publishes `watcher-rest.json`.
-   - `tools/Update-SessionIndexWatcher.ps1` merges watcher output into `session-index.json` (`watchers.rest` node). Ensure any downstream tools expecting `session-index` ingest the new field.
-
-3. **Open PRs**
-   - #131: feat: add REST watcher telemetry ⇒ waiting on Validate; branch protection update above removes redundant `Workflows Lint`.
-   - #132: chore: remove develop-two-green workflow ⇒ this branch; lint/validate pending after branch protection fix.
+1) Rogue LabVIEW process detected (`tools/Detect-RogueLV.ps1` -> PID 30776). Needs manual close or re-run detection until cleared before any LVCompare work.
+2) Test coverage still outstanding:
+   a. Full dispatcher sweep (`Invoke-PesterTests.ps1 -IntegrationMode exclude`) — previous attempt aborted early.
+   b. Additional harness permutations (`-Warmup skip`, custom flags) and schema validation (`node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json`).
+   c. Optional: rerun targeted Pester modules (`tests/TestStand-CompareHarness.Tests.ps1` if authored).
+3) PR hygiene: refresh #127 description/screenshots with CLI metadata, session capsule context, and harness artifacts; confirm `Validate` remains required on `develop`.
 
 ## Suggested Next Actions
-1. Run the branch protection update command to drop `Workflows Lint`.
-2. Re-run CI on PRs #131 and #132 once protection updates propagate; merge when Validate passes.
-3. Confirm session index uploads include `watchers.rest` and document schema changes in release notes.
-4. After merging, update any SLO/automation docs referencing `develop-two-green`.
+1) No rogue LabVIEW processes detected (last scan clean). Keep running `tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary` before long compare/test sessions.
+2) Validate `tests/results/teststand-session/session-index.json` against the updated schema:
+   - `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json`
+   - Optional: rerun harness with `-Warmup skip -Flags '--ignore-case' --ignore-whitespace` to capture LVCompare fallback.
+3) Run the dispatcher sweep:
+   - `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`
+   - Triage output artifacts (`tests/results/pester-summary.json`, `pester-results.xml`) and update `tests/results/_agent/handoff/test-summary.json` as needed.
+4) Execute outstanding targeted coverage if time permits:
+   - `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`
+   - `Invoke-Pester tests/TestStand-CompareHarness.Tests.ps1` (if authored)
+5) Update #127 PR/issue notes with:
+   - CLI-only capture summary (`tests/results/cli-only/`)
+   - TestStand harness session index screenshot/JSON snippet
+   - Session capsule introduction
+   - Confirmation of pending tests (dispatcher, additional harness permutations)
 
-## Useful Commands
-- Update protection: see command above.
-- Validate CLI locally: `npm run cli:validate` (requires `dotnet publish` output).
-- Watch REST output: `npm run ci:watch:rest -- --run-id <id> --out tests/results/<job>/watcher-rest.json`.
-- Merge watcher data manually (if needed): `pwsh -File tools/Update-SessionIndexWatcher.ps1 -ResultsDir <dir> -WatcherJson <dir>/watcher-rest.json`.
+## First Actions for the Next Agent
+1. Review the snapshots in `tests/results/_agent/handoff/` (branch/head/status/diff) and fetch/pull `origin/issue/127-cli-metadata-html`.
+2. Validate `tests/results/teststand-session/session-index.json` with the schema command above (record output in `tests/results/_agent/handoff/test-summary.json` if rerun).
+3. Run `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`; capture summary artifacts and update the handoff telemetry.
+4. Review CLI artifacts (`tests/results/cli-only/`, `tests/results/teststand-session/`) and attach highlights/screenshots to the #127 PR update.
+5. Commit and push the outstanding changes (see `tests/results/_agent/handoff/local-status.txt`) referencing `#127`; ensure session capsules remain for future context.
 
 ## Notes for Next Agent
-- Expect PR #131 to satisfy the only required check (`Validate`) once protection is updated; `Workflows Lint` should disappear from required contexts.
-- After deleting `develop-two-green`, ensure no other workflow or doc references it (quick check already done via `git grep`).
+- Watcher telemetry (`tests/results/_agent/handoff/watcher-telemetry.json`) shows `stopped`; no trim required.
+- Session capsules accumulate under `tests/results/_agent/sessions/`; latest is `session-20251014T210508271Z-9a3ee054e211.json`.
+- CLI-only artifacts: `tests/results/cli-only/lvcompare-capture.json`, `events.ndjson`, `cli-report.html`.
+- TestStand harness artifacts: `tests/results/teststand-session/session-index.json`, warmup NDJSON, CLI report/images.
+- Pending git changes listed in `tests/results/_agent/handoff/local-status.txt` (ensure staging/commits reference `#127`).
+
+
+

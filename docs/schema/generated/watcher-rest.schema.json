@@ -1,0 +1,93 @@
+{
+  "$ref": "#/definitions/watcher-rest",
+  "definitions": {
+    "watcher-rest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "ci-watch/rest-v1"
+        },
+        "repo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "branch": {
+          "type": "string"
+        },
+        "headSha": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "conclusion": {
+          "type": "string"
+        },
+        "htmlUrl": {
+          "type": "string"
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "polledAtUtc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "conclusion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "htmlUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "repo",
+        "runId",
+        "polledAtUtc",
+        "jobs"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Summary produced by the REST watcher for GitHub Actions runs.",
+  "$id": "urn:compare-vi-cli-action:schema:watcher-rest"
+}

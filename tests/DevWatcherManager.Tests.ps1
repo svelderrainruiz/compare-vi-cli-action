@@ -1,5 +1,6 @@
 Describe 'Dev Watcher Manager' -Tag 'Unit' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot '_TestPathHelper.ps1')
     Get-Command node -ErrorAction Stop | Out-Null
   }
 
@@ -11,14 +12,15 @@ Describe 'Dev Watcher Manager' -Tag 'Unit' {
 
     $status = $null
     $statusPath = $null
-    for ($attempt = 0; $attempt -lt 15; $attempt++) {
+    $maxAttempts = Get-TestIterations -Default 15 -Fast 5
+    for ($attempt = 0; $attempt -lt $maxAttempts; $attempt++) {
       $statusJson = pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Status -ResultsDir $resultsDir
       $status = $statusJson | ConvertFrom-Json
       $statusPath = $status.files.status.path
       if ($status.files.status.exists -or (Test-Path -LiteralPath $statusPath)) {
         break
       }
-      Start-Sleep -Milliseconds 400
+      Invoke-TestSleep -Milliseconds 400 -FastMilliseconds 20
     }
 
     $status.schema | Should -Be 'dev-watcher/status-v2'
@@ -28,7 +30,7 @@ Describe 'Dev Watcher Manager' -Tag 'Unit' {
     $status.thresholds | Should -Not -BeNullOrEmpty
 
     pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Stop -ResultsDir $resultsDir | Out-Null
-    Start-Sleep -Milliseconds 200
+    Invoke-TestSleep -Milliseconds 200 -FastMilliseconds 20
 
     $afterStop = pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Status -ResultsDir $resultsDir | ConvertFrom-Json
     $afterStop.alive | Should -BeFalse
@@ -41,9 +43,15 @@ Describe 'Dev Watcher Manager' -Tag 'Unit' {
     New-Item -ItemType Directory -Path $watchDir -Force | Out-Null
 
     $logPath = Join-Path $watchDir 'watch.out'
-    $payload = 'X' * 980
-    for ($i = 0; $i -lt 6000; $i++) {
-      Add-Content -LiteralPath $logPath -Value ("Line {0:D4} {1}" -f $i, $payload) -Encoding utf8
+    $lineCountPrimary = if (Test-IsFastMode) { 4100 } else { 6000 }
+    $payloadPrimary = if (Test-IsFastMode) { 'X' * 2048 } else { 'X' * 980 }
+    $writer = [System.IO.StreamWriter]::new($logPath, $false, [System.Text.Encoding]::UTF8)
+    try {
+      for ($i = 0; $i -lt $lineCountPrimary; $i++) {
+        $writer.WriteLine(("Line {0:D4} {1}" -f $i, $payloadPrimary))
+      }
+    } finally {
+      $writer.Dispose()
     }
 
     $manualOutput = pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Trim -ResultsDir $resultsDir
@@ -56,8 +64,15 @@ Describe 'Dev Watcher Manager' -Tag 'Unit' {
     $meta.trimCount | Should -Be 1
     [double]$meta.lastTrimBytes | Should -BeGreaterThan 0
 
-    for ($i = 0; $i -lt 5000; $i++) {
-      Add-Content -LiteralPath $logPath -Value ("LineB {0:D4} {1}" -f $i, $payload) -Encoding utf8
+    $payloadSecondary = if (Test-IsFastMode) { 'Y' * 2048 } else { 'X' * 980 }
+    $lineCountSecondary = if (Test-IsFastMode) { 3200 } else { 5000 }
+    $appendWriter = [System.IO.StreamWriter]::new($logPath, $true, [System.Text.Encoding]::UTF8)
+    try {
+      for ($i = 0; $i -lt $lineCountSecondary; $i++) {
+        $appendWriter.WriteLine(("LineB {0:D4} {1}" -f $i, $payloadSecondary))
+      }
+    } finally {
+      $appendWriter.Dispose()
     }
 
     ((Get-Item -LiteralPath $logPath).Length) | Should -BeGreaterThan 5MB
@@ -65,7 +80,7 @@ Describe 'Dev Watcher Manager' -Tag 'Unit' {
     $statusAfterManual = pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -Status -ResultsDir $resultsDir
     ($statusAfterManual | ConvertFrom-Json).autoTrim.eligible | Should -BeFalse
 
-    Start-Sleep -Seconds 3
+    Invoke-TestSleep -Seconds 3 -FastSeconds 0.2
     $autoOutput = pwsh -NoLogo -NoProfile -File tools/Dev-WatcherManager.ps1 -AutoTrim -ResultsDir $resultsDir -AutoTrimCooldownSeconds 2
 
     $metaAfter = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json

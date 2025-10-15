@@ -187,7 +187,7 @@ try {
     $summary.integrationTestAttempted = $true
     Write-Section 'Integration Tests'
     try {
-      & pwsh -File './Invoke-PesterTests.ps1' -IncludeIntegration true | Out-Null
+      & pwsh -File './Invoke-PesterTests.ps1' -IntegrationMode include | Out-Null
       $summary.integrationTestExitCode = $LASTEXITCODE
       if ($LASTEXITCODE -ne 0) { $summary.errors += 'integration tests failed' }
     } catch { $summary.integrationTestExitCode = -1; $summary.errors += 'integration test invocation failed' }
@@ -211,3 +211,4 @@ finally {
 }
 
 if ($summary.overallStatus -eq 'FAIL') { exit 1 } else { exit 0 }
+

@@ -64,7 +64,7 @@ Quick commands:
 # Integration tests (requires LVCompare)
 $env:LV_BASE_VI = 'VI1.vi'
 $env:LV_HEAD_VI = 'VI2.vi'
-./Invoke-PesterTests.ps1 -IncludeIntegration true
+./Invoke-PesterTests.ps1 -IntegrationMode include
 ```
 
 ## Branch Protection (Maintainers)
@@ -158,3 +158,4 @@ If we later re-enable MD013:
 3. Avoid splitting code spans across lines solely for lint; prefer disabling for that line.
 
 Always ensure examples remain copy/paste friendly (avoid trailing spaces, stray prompts inside code blocks).
+

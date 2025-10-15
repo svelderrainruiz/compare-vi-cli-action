@@ -22,7 +22,7 @@ Describe 'Test-CanonicalCli helper' -Tag 'Unit' {
 }
 
 Describe 'Real CLI integration (placeholder)' -Tag 'Integration','CLI' {
-  It 'invokes loop once against provided base/head paths (skipped if files or CLI absent)' -Skip:(-not (Test-Path 'C:\repos\main\ControlLoop.vi')) -TimeoutSeconds 20 {
+  It 'invokes loop once against provided base/head paths (skipped if files or CLI absent)' -Skip:(-not (Test-Path 'C:\repos\main\ControlLoop.vi'))  {
     $base = 'C:\repos\main\ControlLoop.vi'
     $head = 'C:\repos\feature\ControlLoop.vi'
     if (-not (Test-Path $head)) { Set-ItResult -Skipped -Reason 'Head VI path not present' ; return }
@@ -33,3 +33,4 @@ Describe 'Real CLI integration (placeholder)' -Tag 'Integration','CLI' {
     $r.Iterations | Should -Be 1
   }
 }
+

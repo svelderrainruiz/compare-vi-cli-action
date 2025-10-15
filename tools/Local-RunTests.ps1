@@ -48,10 +48,11 @@ try {
     full     = @() # no filters
   }
 
+  $integrationMode = if ($IncludeIntegration.IsPresent) { 'include' } else { 'exclude' }
   $invokeParams = @{
-    TestsPath        = $TestsPath
-    ResultsPath      = $ResultsPath
-    IncludeIntegration = if ($IncludeIntegration.IsPresent) { 'true' } else { 'false' }
+    TestsPath       = $TestsPath
+    ResultsPath     = $ResultsPath
+    IntegrationMode = $integrationMode
   }
   $effectivePatterns = @()
   if ($IncludePatterns -and $IncludePatterns.Count -gt 0) {

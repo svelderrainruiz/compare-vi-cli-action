@@ -10,6 +10,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+try {
+  $repoRoot = (Split-Path -Parent $PSScriptRoot)
+  $handoffPath = Join-Path $repoRoot 'AGENT_HANDOFF.txt'
+  if (Test-Path -LiteralPath $handoffPath) {
+    # Emit the first heading line so callers can assert the script is wired correctly
+    $first = (Get-Content -LiteralPath $handoffPath -First 1 -ErrorAction SilentlyContinue)
+    if ($first) { Write-Output $first }
+  }
+} catch {}
+
 function Format-NullableValue {
   param($Value)
   if ($null -eq $Value) { return 'n/a' }
@@ -22,6 +32,182 @@ function Format-BoolLabel {
   if ($Value -eq $true) { return 'true' }
   if ($Value -eq $false) { return 'false' }
   return 'unknown'
+}
+
+$script:GitExecutable = $null
+function Get-GitExecutable {
+  if ($script:GitExecutable) { return $script:GitExecutable }
+  try {
+    $cmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($cmd) {
+      $script:GitExecutable = $cmd.Source
+      return $script:GitExecutable
+    }
+  } catch {}
+  return $null
+}
+
+function Invoke-Git {
+  param(
+    [Parameter(Mandatory)][string[]]$Arguments
+  )
+
+  $gitExe = Get-GitExecutable
+  if (-not $gitExe) { return $null }
+  try {
+    $output = & $gitExe @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0) { return $null }
+    return @($output)
+  } catch {
+    return $null
+  }
+}
+
+function Write-AgentSessionCapsule {
+  param(
+    [string]$ResultsRoot
+  )
+
+  $repoRoot = (Resolve-Path '.').Path
+  $sessionsRoot = Join-Path $ResultsRoot '_agent/sessions'
+  try {
+    New-Item -ItemType Directory -Force -Path $sessionsRoot | Out-Null
+  } catch {
+    Write-Warning ("Failed to create sessions directory {0}: {1}" -f $sessionsRoot, $_.Exception.Message)
+    return
+  }
+
+  $now = [DateTimeOffset]::UtcNow
+  $timestamp = $now.ToString('yyyyMMddTHHmmssfffZ')
+
+  $gitInfo = [ordered]@{}
+  $head = Invoke-Git -Arguments @('rev-parse','--verify','HEAD')
+  $headValues = @($head)
+  if ($headValues.Count -gt 0) {
+    $headSha = ($headValues[0]).Trim()
+    if ($headSha) {
+      $gitInfo.head = $headSha
+      $gitInfo.shortHead = if ($headSha.Length -gt 12) { $headSha.Substring(0, 12) } else { $headSha }
+    }
+  }
+
+  $branch = Invoke-Git -Arguments @('rev-parse','--abbrev-ref','HEAD')
+  $branchValues = @($branch)
+  if ($branchValues.Count -gt 0) {
+    $branchName = ($branchValues[0]).Trim()
+    if ($branchName -and $branchName -ne 'HEAD') { $gitInfo.branch = $branchName }
+  }
+
+  $statusShort = Invoke-Git -Arguments @('status','--short','--branch')
+  $statusShortValues = @($statusShort)
+  if ($statusShortValues.Count -gt 0) {
+    $gitInfo.statusShort = ($statusShortValues -join "`n")
+  }
+
+  $statusPorcelain = Invoke-Git -Arguments @('status','--porcelain')
+  $statusPorcelainValues = @($statusPorcelain)
+  if ($statusPorcelainValues.Count -gt 0) {
+    $gitInfo.porcelain = @($statusPorcelainValues | ForEach-Object { $_ })
+  }
+
+  $diffStat = Invoke-Git -Arguments @('diff','--stat')
+  $diffStatValues = @($diffStat)
+  if ($diffStatValues.Count -gt 0) {
+    $gitInfo.diffStat = ($diffStatValues -join "`n")
+  }
+
+  if ($gitInfo.Count -eq 0) { $gitInfo = $null }
+
+  $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+  $artifactCandidates = @(
+    @{ name = 'handoff.testSummary'; path = Join-Path $handoffDir 'test-summary.json' },
+    @{ name = 'handoff.hookSummary'; path = Join-Path $handoffDir 'hook-summary.json' },
+    @{ name = 'handoff.watcherTelemetry'; path = Join-Path $handoffDir 'watcher-telemetry.json' },
+    @{ name = 'handoff.releaseSummary'; path = Join-Path $handoffDir 'release-summary.json' },
+    @{ name = 'handoff.issueSummary'; path = Join-Path $handoffDir 'issue-summary.json' },
+    @{ name = 'handoff.router'; path = Join-Path $handoffDir 'issue-router.json' },
+    @{ name = 'handoff.localStatus'; path = Join-Path $handoffDir 'local-status.txt' },
+    @{ name = 'handoff.localDiff'; path = Join-Path $handoffDir 'local-diff.txt' },
+    @{ name = 'handoff.branch'; path = Join-Path $handoffDir 'branch.txt' },
+    @{ name = 'handoff.headSha'; path = Join-Path $handoffDir 'head-sha.txt' }
+  )
+
+  $artifacts = @()
+  foreach ($candidate in $artifactCandidates) {
+    $artifactPath = $candidate.path
+    $exists = $false
+    $size = $null
+    $lastWrite = $null
+    if ($artifactPath -and (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+      $exists = $true
+      $info = Get-Item -LiteralPath $artifactPath -ErrorAction SilentlyContinue
+      if ($info) {
+        $size = $info.Length
+        $lastWrite = $info.LastWriteTimeUtc.ToString('o')
+      }
+    }
+    $artifacts += [ordered]@{
+      name = $candidate.name
+      path = $artifactPath
+      exists = $exists
+      size = $size
+      lastWriteUtc = $lastWrite
+    }
+  }
+
+  $envKeys = @(
+    'LV_SUPPRESS_UI',
+    'LV_NO_ACTIVATE',
+    'LV_CURSOR_RESTORE',
+    'LV_IDLE_WAIT_SECONDS',
+    'LV_IDLE_MAX_WAIT_SECONDS',
+    'LVCI_COMPARE_MODE',
+    'LVCI_COMPARE_POLICY',
+    'LABVIEWCLI_PATH',
+    'LABVIEW_CLI_PATH',
+    'LABVIEW_CLI'
+  )
+  $environment = [ordered]@{}
+  foreach ($key in $envKeys) {
+    $environment[$key] = [System.Environment]::GetEnvironmentVariable($key)
+  }
+
+  $capsule = [ordered]@{
+    schema = 'agent-handoff/session@v1'
+    generatedAt = $now.ToString('o')
+    sessionId = ('session-{0}' -f $timestamp)
+    workspace = $repoRoot
+    results = [ordered]@{
+      root = $ResultsRoot
+      handoffDir = $handoffDir
+      sessionsDir = $sessionsRoot
+    }
+    artifacts = $artifacts
+    environment = $environment
+  }
+
+  if ($gitInfo) { $capsule.git = $gitInfo }
+
+  $fileBase = $capsule.sessionId
+  if ($gitInfo -and $gitInfo.shortHead) {
+    $fileBase = '{0}-{1}' -f $fileBase, $gitInfo.shortHead
+  }
+  $targetPath = Join-Path $sessionsRoot ("{0}.json" -f $fileBase)
+  $suffix = 1
+  while (Test-Path -LiteralPath $targetPath -PathType Leaf) {
+    $targetPath = Join-Path $sessionsRoot ("{0}-{1:D2}.json" -f $fileBase, $suffix)
+    $suffix++
+  }
+
+  try {
+    ($capsule | ConvertTo-Json -Depth 6) | Out-File -FilePath $targetPath -Encoding utf8
+    Write-Host ''
+    Write-Host '[Session Capsule]' -ForegroundColor Cyan
+    Write-Host ("  sessionId : {0}" -f $capsule.sessionId)
+    Write-Host ("  path      : {0}" -f $targetPath)
+  } catch {
+    Write-Warning ("Failed to write session capsule: {0}" -f $_.Exception.Message)
+  }
 }
 
 function Write-HookSummaries {
@@ -315,7 +501,8 @@ if ($ApplyToggles) {
   $env:LV_IDLE_WAIT_SECONDS = '2'
   $env:LV_IDLE_MAX_WAIT_SECONDS = '5'
   if (-not $env:WATCH_RESULTS_DIR) {
-    $env:WATCH_RESULTS_DIR = Join-Path (Resolve-Path '.').Path 'tests/results/_watch'
+    # Use repo-relative path to satisfy tests and downstream watchers
+    $env:WATCH_RESULTS_DIR = 'tests/results/_watch'
   }
 }
 
@@ -500,6 +687,8 @@ if ($hookSummaries -and $hookSummaries.Count -gt 0) {
   New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
   ($hookSummaries | ConvertTo-Json -Depth 4) | Out-File -FilePath (Join-Path $handoffDir 'hook-summary.json') -Encoding utf8
 }
+
+Write-AgentSessionCapsule -ResultsRoot $ResultsRoot
 
 if ($OpenDashboard) {
   $cli = Join-Path (Resolve-Path '.').Path 'tools/Dev-Dashboard.ps1'

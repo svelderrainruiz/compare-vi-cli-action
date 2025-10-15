@@ -258,7 +258,7 @@ $env:LV_BASE_VI = 'VI1.vi'
 $env:LV_HEAD_VI = 'VI2.vi'
 
 # 2. Run all tests
-./Invoke-PesterTests.ps1 -IncludeIntegration $true
+./Invoke-PesterTests.ps1 -IntegrationMode include
 
 # 3. Test diagnostics
 ./Invoke-PesterTests.ps1 -EmitResultShapeDiagnostics
@@ -294,7 +294,7 @@ $env:DISABLE_STEP_SUMMARY = '1'
 ### Immediate (Post-Merge)
 
 - [ ] CI/CD pipeline passes on develop branch (verify after merge)
-- [x] No regression in existing test pass rate (local `Invoke-PesterTests.ps1 -IncludeIntegration true` -> 193/193 green)
+- [x] No regression in existing test pass rate (local `Invoke-PesterTests.ps1 -IntegrationMode include` -> 193/193 green)
 - [x] Documentation builds without errors (`npm run lint:md`)
 
 ### Short-Term (1 week)
@@ -314,7 +314,7 @@ $env:DISABLE_STEP_SUMMARY = '1'
 This PR is ready to merge when:
 
 1. ✅ All acceptance criteria marked as met
-2. ✅ Test suite passes (193/193 via Invoke-PesterTests.ps1 -IncludeIntegration true on 2025-10-04)
+2. ✅ Test suite passes (193/193 via Invoke-PesterTests.ps1 -IntegrationMode include on 2025-10-04)
 3. ✅ Code review completed (1+ approvals)
 4. ✅ Documentation reviewed
 5. ✅ No blocking issues identified
@@ -326,4 +326,6 @@ This PR is ready to merge when:
 3. Announce new diagnostic features to team
 4. Monitor for issues in first week
 5. Schedule follow-up items (v0.5.0 scope)
+
+
 

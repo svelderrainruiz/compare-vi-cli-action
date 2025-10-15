@@ -326,6 +326,22 @@
       "presentation": { "reveal": "always", "panel": "dedicated" }
     },
     {
+      "label": "LVCompare — VI2 root vs tmp-commit",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "& { param($year,$bits); $yearKey=[string]$year; $bitsKey=[string]$bits; $pf64=[System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::ProgramFiles); if(-not $pf64){ $pf64=[System.Environment]::GetEnvironmentVariable(\"ProgramW6432\") }; if(-not $pf64){ $pf64=[System.Environment]::GetEnvironmentVariable(\"ProgramFiles\") }; $pf86=[System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::ProgramFilesX86); if(-not $pf86){ $pf86=[System.Environment]::GetEnvironmentVariable(\"ProgramFiles(x86)\") }; if(-not $pf86){ $pf86=$pf64 }; if(-not $pf64){ Write-Error (\"Unable to resolve Program Files (64-bit) path.\"); exit 2 }; if(-not $pf86){ Write-Error (\"Unable to resolve Program Files (x86) path.\"); exit 2 }; $map=@{ \"2021\"=@{ \"32\"=(Join-Path $pf86 \"National Instruments\\\\LabVIEW 2021\\\\LabVIEW.exe\"); \"64\"=(Join-Path $pf64 \"National Instruments\\\\LabVIEW 2021\\\\LabVIEW.exe\") }; \"2022\"=@{ \"32\"=(Join-Path $pf86 \"National Instruments\\\\LabVIEW 2022\\\\LabVIEW.exe\"); \"64\"=(Join-Path $pf64 \"National Instruments\\\\LabVIEW 2022\\\\LabVIEW.exe\") }; \"2023\"=@{ \"32\"=(Join-Path $pf86 \"National Instruments\\\\LabVIEW 2023\\\\LabVIEW.exe\"); \"64\"=(Join-Path $pf64 \"National Instruments\\\\LabVIEW 2023\\\\LabVIEW.exe\") }; \"2024\"=@{ \"32\"=(Join-Path $pf86 \"National Instruments\\\\LabVIEW 2024\\\\LabVIEW.exe\"); \"64\"=(Join-Path $pf64 \"National Instruments\\\\LabVIEW 2024\\\\LabVIEW.exe\") }; \"2025\"=@{ \"32\"=(Join-Path $pf86 \"National Instruments\\\\LabVIEW 2025\\\\LabVIEW.exe\"); \"64\"=(Join-Path $pf64 \"National Instruments\\\\LabVIEW 2025\\\\LabVIEW.exe\") } }; if(-not $map.ContainsKey($yearKey)){ Write-Error (\"Invalid LabVIEW year: {0}\" -f $yearKey); exit 2 }; $yearOptions=$map[$yearKey]; $lv=$null; if($yearOptions){ $lv=$yearOptions[$bitsKey] }; if(-not $lv){ Write-Error (\"Invalid LabVIEW bitness for year {0}: {1}\" -f $yearKey,$bitsKey); exit 2 }; if(-not (Test-Path -LiteralPath $lv -PathType Leaf)){ Write-Error (\"LabVIEW.exe not found at: {0}\" -f $lv); exit 2 }; $ws=\"${workspaceFolder}\"; $script=Join-Path (Join-Path $ws \"tools\") \"Invoke-LVCompare.ps1\"; $base=Join-Path $ws \"VI2.vi\"; $head=Join-Path (Join-Path $ws \"tmp-commit-236ffab\") \"VI2.vi\"; & $script -BaseVi $base -HeadVi $head -LabVIEWExePath $lv -OutputDir \"tests/results/manual-vi2-compare\" -RenderReport } -year ${input:lvYear} -bits ${input:lvBits}"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
       "label": "Standing Priority (#127): Quick Local Queue",
       "dependsOrder": "sequence",
       "dependsOn": [
@@ -343,6 +359,20 @@
       "type": "promptString",
       "description": "Enter GitHub workflow run id to follow",
       "default": ""
+    },
+    {
+      "id": "lvYear",
+      "type": "pickString",
+      "description": "Select LabVIEW year",
+      "options": ["2021","2022","2023","2024","2025"],
+      "default": "2025"
+    },
+    {
+      "id": "lvBits",
+      "type": "pickString",
+      "description": "Select LabVIEW bitness",
+      "options": ["64","32"],
+      "default": "64"
     }
   ]
 }

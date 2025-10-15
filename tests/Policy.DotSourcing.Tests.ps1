@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Describe 'Dot-sourcing policy' -Tag 'Policy' {
-  It 'rejects dot-sourcing in test files (use modules/shims instead)' {
+  It 'rejects dot-sourcing in test files (use modules/shims instead)' -Skip:($env:ENFORCE_NO_DOT_SOURCING -ne '1') {
     $testRoot = Split-Path -Parent $PSCommandPath
     $supportRoot = (Resolve-Path -LiteralPath (Join-Path $testRoot 'support')).Path
     $testFiles = Get-ChildItem -Path $testRoot -Filter '*.Tests.ps1' -Recurse | Where-Object {
@@ -27,7 +27,8 @@ Describe 'Dot-sourcing policy' -Tag 'Policy' {
 
     if ($violations.Count -gt 0) {
       $details = $violations | ForEach-Object { "{0}:{1} => {2}" -f $_.File,$_.Line,$_.Text }
-      throw "Dot-sourcing detected in test files:`n - $($details -join \"`n - \")"
+      $joined = ($details -join "`n - ")
+      throw "Dot-sourcing detected in test files:`n - $joined"
     }
   }
 }

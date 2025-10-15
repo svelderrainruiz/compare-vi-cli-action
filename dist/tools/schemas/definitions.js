@@ -53,6 +53,53 @@ const compareExecSchema = z.object({
     base: z.string().min(1),
     head: z.string().min(1),
 });
+const cliArtifactsImageSchema = z
+    .object({
+    index: nonNegativeInteger.optional(),
+    mimeType: z.string().min(1).optional(),
+    dataLength: nonNegativeInteger.optional(),
+    byteLength: nonNegativeInteger.optional(),
+    savedPath: z.string().min(1).optional(),
+    source: z.string().min(1).optional(),
+    decodeError: z.string().min(1).optional(),
+})
+    .passthrough();
+const cliArtifactsSchema = z
+    .object({
+    reportSizeBytes: nonNegativeInteger.optional(),
+    imageCount: nonNegativeInteger.optional(),
+    exportDir: z.string().min(1).optional(),
+    images: z.array(cliArtifactsImageSchema).optional(),
+})
+    .passthrough();
+const lvCompareEnvironmentSchema = z
+    .object({
+    lvcompareVersion: z.string().min(1).optional(),
+    labviewVersion: z.string().min(1).optional(),
+    bitness: z.enum(['x86', 'x64']).optional(),
+    osVersion: z.string().min(1).optional(),
+    arch: z.string().min(1).optional(),
+    compareMode: z.string().min(1).optional(),
+    comparePolicy: z.string().min(1).optional(),
+    cli: z
+        .object({
+        path: z.string().min(1).optional(),
+        version: z.string().min(1).optional(),
+        reportType: z.string().min(1).optional(),
+        reportPath: z.string().min(1).optional(),
+        status: z.string().min(1).optional(),
+        message: z.string().min(1).optional(),
+        artifacts: cliArtifactsSchema.optional(),
+    })
+        .optional(),
+    runner: z
+        .object({
+        labels: z.array(z.string().min(1)).optional(),
+        identityHash: z.string().min(1).optional(),
+    })
+        .optional(),
+})
+    .passthrough();
 const lvCompareCaptureSchema = z
     .object({
     schema: z.literal('lvcompare-capture-v1'),
@@ -68,6 +115,7 @@ const lvCompareCaptureSchema = z
     command: z.string().min(1),
     stdout: z.union([z.string(), z.null()]).optional(),
     stderr: z.union([z.string(), z.null()]).optional(),
+    environment: lvCompareEnvironmentSchema.optional(),
 })
     .passthrough();
 const pesterRunBlock = z
@@ -217,6 +265,14 @@ const singleCompareStateSchema = z.object({
     metadata: z.record(z.any()).optional(),
     runId: z.string().optional(),
 });
+const dispatcherResultsGuardSchema = z
+    .object({
+    schema: z.literal('dispatcher-results-guard/v1'),
+    at: isoString,
+    path: z.string().min(1),
+    message: z.string().min(1),
+})
+    .passthrough();
 const testStandCompareSessionSchema = z.object({
     schema: z.literal('teststand-compare-session/v1'),
     at: isoString,
@@ -357,6 +413,12 @@ export const schemas = [
         fileName: 'single-compare-state.schema.json',
         description: 'State file used to gate single compare invocations.',
         schema: singleCompareStateSchema,
+    },
+    {
+        id: 'dispatcher-results-guard',
+        fileName: 'dispatcher-results-guard.schema.json',
+        description: 'Guard crumb emitted when Invoke-PesterTests detects an invalid results directory.',
+        schema: dispatcherResultsGuardSchema,
     },
     {
         id: 'teststand-compare-session',

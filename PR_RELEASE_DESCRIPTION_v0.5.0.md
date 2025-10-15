@@ -15,7 +15,7 @@ Release Artifacts
 Validation (must be green)
 
 - [ ] Pester tests (windows-latest)
-- [ ] Pester (self-hosted, IncludeIntegration=true)
+- [ ] Pester (self-hosted, IntegrationMode include)
 - [ ] Fixture Drift (Windows/Ubuntu)
 - [ ] Validate: actionlint OK; docs link check OK
 - [ ] No stray LabVIEW.exe (guard summary)
@@ -30,3 +30,4 @@ Post-merge
 - [ ] Tag v0.5.0 on main
 - [ ] Monitor release workflows/artifacts
 - [ ] Open follow-ups: workflow composites; managed arg tokenizer adoption
+

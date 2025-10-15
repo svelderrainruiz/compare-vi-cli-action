@@ -1,18 +1,2 @@
-* text=auto eol=lf
-
-# Normalize line endings for scripts and configs
-*.ps1  text eol=lf
-*.psm1 text eol=lf
-*.psd1 text eol=lf
-*.yml  text eol=lf
-*.yaml text eol=lf
-*.json text eol=lf
-*.md   text eol=lf
-
-# Preserve binary files
-*.vi   -text
-*.zip  -text
-*.png  -text
-*.jpg  -text
-*.gif  -text
+*.vi binary
 

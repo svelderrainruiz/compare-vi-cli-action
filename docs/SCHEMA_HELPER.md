@@ -15,9 +15,9 @@ Utilities for validating JSON/NDJSON artefacts produced by the dispatcher and lo
 | Artefact | Schema |
 | -------- | ------ |
 | Run summary (`tests/results/pester-summary.json`) | `docs/schemas/pester-summary-v1_5.schema.json` |
-| Loop events NDJSON | `docs/schemas/loop-event-v1.schema.json` |
+| Loop events NDJSON | `docs/schemas/loop-script-events-v1.schema.json` |
 | Leak report | `docs/schemas/pester-leak-report-v1.schema.json` |
-| Dispatcher guard crumb | `docs/schemas/dispatcher-results-guard-v1.schema.json` |
+| Dispatcher guard crumb | `docs/schema/generated/dispatcher-results-guard.schema.json` |
 
 ## Usage
 

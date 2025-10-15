@@ -1,0 +1,49 @@
+{
+  "schema": "agent-handoff/session@v1",
+  "generatedAt": "2025-10-14T20:20:20.0000000Z",
+  "sessionId": "session-20251014T202020000Z-abcdef123456",
+  "workspace": "C:/workspace/compare-vi-cli-action",
+  "results": {
+    "root": "C:/workspace/compare-vi-cli-action/tests/results",
+    "handoffDir": "C:/workspace/compare-vi-cli-action/tests/results/_agent/handoff",
+    "sessionsDir": "C:/workspace/compare-vi-cli-action/tests/results/_agent/sessions"
+  },
+  "git": {
+    "head": "abcdef1234567890abcdef1234567890abcdef12",
+    "shortHead": "abcdef123456",
+    "branch": "issue/127-cli-metadata-html",
+    "statusShort": "## issue/127-cli-metadata-html...origin/issue/127-cli-metadata-html\n M AGENT_HANDOFF.txt",
+    "porcelain": [
+      " M AGENT_HANDOFF.txt"
+    ],
+    "diffStat": " AGENT_HANDOFF.txt | 2 +-"
+  },
+  "artifacts": [
+    {
+      "name": "handoff.testSummary",
+      "path": "C:/workspace/compare-vi-cli-action/tests/results/_agent/handoff/test-summary.json",
+      "exists": true,
+      "size": 512,
+      "lastWriteUtc": "2025-10-14T20:19:30.0000000Z"
+    },
+    {
+      "name": "handoff.hookSummary",
+      "path": "C:/workspace/compare-vi-cli-action/tests/results/_agent/handoff/hook-summary.json",
+      "exists": false,
+      "size": null,
+      "lastWriteUtc": null
+    }
+  ],
+  "environment": {
+    "LV_SUPPRESS_UI": "1",
+    "LV_NO_ACTIVATE": "1",
+    "LV_CURSOR_RESTORE": "1",
+    "LV_IDLE_WAIT_SECONDS": "2",
+    "LV_IDLE_MAX_WAIT_SECONDS": "5",
+    "LVCI_COMPARE_MODE": "labview-cli",
+    "LVCI_COMPARE_POLICY": "cli-only",
+    "LABVIEWCLI_PATH": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
+    "LABVIEW_CLI_PATH": null,
+    "LABVIEW_CLI": null
+  }
+}

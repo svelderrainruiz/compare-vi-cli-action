@@ -1,5 +1,6 @@
 Describe 'Pester Watcher Busy Loop Detection' -Tag 'Unit' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot '_TestPathHelper.ps1')
     $nodeCmd = Get-Command node -ErrorAction Stop
     $scriptRoot = Split-Path -Parent $PSCommandPath
     $repoRoot = Split-Path -Parent $scriptRoot
@@ -7,7 +8,7 @@ Describe 'Pester Watcher Busy Loop Detection' -Tag 'Unit' {
     $script:NodePath = $nodeCmd.Source
   }
 
-  It 'exits with code 3 when log grows without progress' -TimeoutSeconds 20 {
+  It 'exits with code 3 when log grows without progress' {
     $resultsDir = Join-Path $TestDrive 'busy-results'
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
     $logPath = Join-Path $resultsDir 'pester-dispatcher.log'
@@ -28,10 +29,10 @@ Describe 'Pester Watcher Busy Loop Detection' -Tag 'Unit' {
     $proc = Start-Process -FilePath $script:NodePath -ArgumentList $arguments -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru -WindowStyle Hidden
 
     try {
-      Start-Sleep -Milliseconds 200
-      for ($i = 0; $i -lt 6; $i++) {
+      Invoke-TestSleep -Milliseconds 200 -FastMilliseconds 20
+      for ($i = 0; $i -lt (Get-TestIterations -Default 6 -Fast 3); $i++) {
         Add-Content -LiteralPath $logPath -Value "Tick $i" -Encoding utf8
-        Start-Sleep -Milliseconds 400
+        Invoke-TestSleep -Milliseconds 400 -FastMilliseconds 25
       }
       $exited = $proc.WaitForExit(4000)
       if (-not $exited) {
@@ -50,7 +51,7 @@ Describe 'Pester Watcher Busy Loop Detection' -Tag 'Unit' {
     }
   }
 
-  It 'continues when progress markers are present' -TimeoutSeconds 20 {
+  It 'continues when progress markers are present' {
     $resultsDir = Join-Path $TestDrive 'progress-results'
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
     $logPath = Join-Path $resultsDir 'pester-dispatcher.log'
@@ -70,12 +71,12 @@ Describe 'Pester Watcher Busy Loop Detection' -Tag 'Unit' {
 
     $proc = Start-Process -FilePath $script:NodePath -ArgumentList $arguments -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru -WindowStyle Hidden
     try {
-      Start-Sleep -Milliseconds 200
-      for ($i = 0; $i -lt 4; $i++) {
+      Invoke-TestSleep -Milliseconds 200 -FastMilliseconds 20
+      for ($i = 0; $i -lt (Get-TestIterations -Default 4 -Fast 2); $i++) {
         Add-Content -LiteralPath $logPath -Value "[-] It progresses $i" -Encoding utf8
-        Start-Sleep -Milliseconds 600
+        Invoke-TestSleep -Milliseconds 600 -FastMilliseconds 30
       }
-      Start-Sleep -Milliseconds 800
+      Invoke-TestSleep -Milliseconds 800 -FastMilliseconds 40
     }
     finally {
       if (-not $proc.HasExited) {

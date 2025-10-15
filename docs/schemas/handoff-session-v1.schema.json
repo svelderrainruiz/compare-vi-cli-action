@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Handoff Session Capsule",
+  "type": "object",
+  "required": [
+    "schema",
+    "generatedAt",
+    "sessionId",
+    "workspace",
+    "results",
+    "artifacts",
+    "environment"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-handoff/session@v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "results": {
+      "type": "object",
+      "required": [
+        "root"
+      ],
+      "properties": {
+        "root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "handoffDir": {
+          "type": "string"
+        },
+        "sessionsDir": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "git": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "shortHead": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "statusShort": {
+          "type": "string"
+        },
+        "porcelain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "diffStat": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "exists"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "lastWriteUtc": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    }
+  },
+  "additionalProperties": true
+}

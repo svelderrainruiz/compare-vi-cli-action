@@ -137,7 +137,7 @@ jobs:
           $resDir = Join-Path 'tests/results' '${{ matrix.category }}'
           ./Invoke-PesterTests.ps1 `
             -TestsPath tests `
-            -IncludeIntegration '${{ needs.normalize.outputs.include_integration }}' `
+            -IntegrationMode "${{ needs.normalize.outputs.include_integration == 'true' && 'include' || 'exclude' }}" `
             -ResultsPath $resDir `
             -TimeoutSeconds ${{ steps.dprofile.outputs.timeout_seconds }} `
             -EmitFailuresJsonAlways `
@@ -313,6 +313,7 @@ jobs:
   
 
   
+
 
 
 

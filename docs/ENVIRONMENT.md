@@ -45,6 +45,29 @@ Artefacts: `tests/results/pester-leak-report.json`, `tests/results/pester-artifa
 | `LVCI_SINGLE_COMPARE` | Gate additional compare requests after first run |
 | `LVCI_SINGLE_COMPARE_AUTOSTOP` | Auto-stop invoker when single compare completes |
 
+## Compare mode (CLI)
+
+| Variable | Purpose |
+| -------- | ------- |
+| `LVCI_COMPARE_MODE` | Select compare mechanism: `labview-cli` or `lvcompare` |
+| `LVCI_COMPARE_POLICY` | Mode policy: `lv-first` (default), `cli-first`, `cli-only`, `lv-only` |
+| `LABVIEW_CLI_PATH` | Optional override for `LabVIEWCLI.exe` (defaults below) |
+
+Notes:
+
+- On 64-bit Windows hosts, automation defaults the CLI path to:
+  `C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe` when
+  no CLI path overrides are set.
+- With `LVCI_COMPARE_POLICY=cli-only` (or `LVCI_COMPARE_MODE=labview-cli` and not `lv-only`), both
+  the wrapper and the TestStand harness invoke the LabVIEW CLI directly to generate an HTML report
+  and enrich `lvcompare-capture.json` with an `environment.cli` metadata block (path, version,
+  reportType, reportPath, status, message).
+- When a CLI report is produced, embedded artefacts (for example, diff images) are decoded into
+  `tests/results/<session>/compare/cli-images/`, and `environment.cli.artifacts` records the report
+  size, image count, and exported file paths so downstream tooling can rehydrate attachments.
+- Dedicated shim entry points follow the versioned pattern documented in
+  [`docs/LabVIEWCliShimPattern.md`](./LabVIEWCliShimPattern.md) (current version: 1.0).
+
 ## Runbook & fixture reporting
 
 | Variable | Purpose |
