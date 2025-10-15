@@ -52,3 +52,7 @@ test('handoff release summary matches schema', () => {
 test('handoff test summary matches schema', () => {
   validateFixture('test summary', 'docs/schemas/handoff-test-results-v1.schema.json', 'tools/priority/__fixtures__/handoff/test-summary.json');
 });
+
+test('handoff session capsule matches schema', () => {
+  validateFixture('session capsule', 'docs/schemas/handoff-session-v1.schema.json', 'tools/priority/__fixtures__/handoff/session-capsule.json');
+});

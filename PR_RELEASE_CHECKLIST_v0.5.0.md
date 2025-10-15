@@ -10,7 +10,7 @@
 ## Pre-merge
 
 - [ ] Pester tests (windows-latest) green
-- [ ] Pester self-hosted (IncludeIntegration=true) green
+- [ ] Pester self-hosted (IntegrationMode include) green
 - [ ] Fixture Drift (Windows/Ubuntu) green
 - [ ] Validate: actionlint passes; docs link check OK
 - [ ] No stray LabVIEW.exe after runs (guard summary clean)
@@ -22,4 +22,5 @@
 - [ ] Tag v0.5.0 on main
 - [ ] Monitor release workflows/artifacts
 - [ ] Open follow-ups: composites consolidation; managed tokenizer adoption
+
 

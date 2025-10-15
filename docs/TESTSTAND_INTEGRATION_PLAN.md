@@ -17,6 +17,7 @@ pwsh -NoLogo -NoProfile -File tools/TestStand-CompareHarness.ps1 `
   -BaseVi (Resolve-Path .\VI1.vi) `
   -HeadVi (Resolve-Path .\VI2.vi) `
   -OutputRoot tests/results/teststand-session `
+  -Warmup detect `
   -RenderReport `
   -CloseLabVIEW `
   -CloseLVCompare
@@ -26,7 +27,7 @@ This produces:
 
 - `_warmup/labview-runtime.ndjson`
 - `compare/lvcompare-capture.json`, `compare/compare-events.ndjson`, `compare-report.html`
-- `session-index.json` summarising the run
+- `session-index.json` summarising the run (warmup mode, compare policy/mode, CLI metadata, decoded artefact summary)
 
 > **Note**: `-CloseLabVIEW` / `-CloseLVCompare` now queue post-run cleanup requests. The helpers do not invoke the close scripts inline; instead `tools/Post-Run-Cleanup.ps1` consumes the requests after `Invoke-PesterTests.ps1` completes, guaranteeing a single LabVIEWCLI invocation per job.
 
@@ -48,7 +49,7 @@ This produces:
 | --- | --- |
 | `npm run tests:discover` | Ensure the TypeScript manifest is current before mapping tests to harness inputs. |
 | `pwsh -File tools/TestStand-CompareHarness.ps1 ...` | Baseline manual smoke. |
-| `pwsh -File Invoke-PesterTests.ps1 -IncludeIntegration false -UseTestStandHarness -UseDiscoveryManifest` | End-to-end local run that mirrors CI. |
+| `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude -UseTestStandHarness -UseDiscoveryManifest` | End-to-end local run that mirrors CI. |
 | `pwsh -File tools/Quick-DispatcherSmoke.ps1 -Keep` | Verify workflow helpers accept the harness outputs. |
 
 ### 1.5 Acceptance delta guardrails
@@ -56,7 +57,7 @@ This produces:
 Before enabling the harness end-to-end, codify the updated acceptance criteria in `develop` so reruns stay deterministic:
 
 - Dispatcher runs now emit a dedicated “Selected Tests” block and always append the `/run orchestrated … include_integration=false` hint when integration is disabled. The helpers live in `Invoke-PesterTests.ps1` and are exercised by `tests/Invoke-PesterTests.Summary.Tests.ps1`.
-- When `IncludeIntegration=false`, the dispatcher exports `LVCI_FORBID_COMPARE=1` and `scripts/CompareVI.psm1` blocks LVCompare with a summary notice. This codifies the existing operator expectation that we do not launch LVCompare outside integration runs.
+- When `IntegrationMode=exclude`, the dispatcher exports `LVCI_FORBID_COMPARE=1` and `scripts/CompareVI.psm1` blocks LVCompare with a summary notice. This codifies the existing operator expectation that we do not launch LVCompare outside integration runs.
 - `tools/RunnerInvoker/RunnerInvoker.psm1` records an invoker `runId` in `tests/results/_invoker/current-run.json`, request logs, and single-compare state to keep telemetry correlated. The schema for `current-run.json` lives at `docs/schema/generated/pester-invoker-current-run.schema.json`; add validation coverage in the RunnerInvoker unit suites to keep it exercised.
 - Close helpers execute solely via `tools/Post-Run-Cleanup.ps1`, which reads request crumbs under `tests/results/_agent/post/requests` (populated by the TestStand harness, integration loop, etc.) and uses `tools/Once-Guard.psm1` to ensure each action runs once per job.
 
@@ -95,3 +96,4 @@ Before enabling the harness end-to-end, codify the updated acceptance criteria i
 - How do we best surface LabVIEW/LVCompare errors (e.g., via GitHub annotations)?
 
 Addressing these items will give us a consistent TestStand-driven workflow that works locally and in CI without compromising the deterministic guarantees we rely on today.
+

@@ -134,11 +134,11 @@ for the HTML report rendered by `scripts/Render-CompareReport.ps1`.
 1. **Prep fixtures** – ensure `fixtures/VI1.vi` and `fixtures/VI2.vi` (or your custom pair) are available in the workspace.
 2. **Point at the LabVIEW CLI** – on 64-bit Windows hosts, set `LABVIEW_CLI_PATH` to `C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe` (adjust only if your NI install lives elsewhere).
 3. **Choose compare mode/policy** – export `LVCI_COMPARE_MODE=labview-cli` and `LVCI_COMPARE_POLICY=cli-only` (or `cli-first`) so the harness prefers the CLI path.
-4. **Run the harness** – execute `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi fixtures/VI1.vi -HeadVi fixtures/VI2.vi -OutputRoot tests/results/teststand-cli -RenderReport`.
-5. **Inspect outputs** – open `tests/results/teststand-cli/compare/lvcompare-capture.json` and confirm the `environment.cli` block (path, version, reportType, status, message) along with LVCompare/LabVIEW versions, compare mode/policy, bitness, OS/arch, runner labels/hash.
-6. **Validate schema** – optional: `npm run schema:validate -- --schema docs/schema/generated/lvcompare-capture.schema.json --data tests/results/teststand-cli/compare/lvcompare-capture.json` to ensure the capture passes the new schema.
-7. **Review stdout/stderr** – check `lvcompare-stdout.txt` / `lvcompare-stderr.txt` to confirm the parsed CLI message matches the raw output; the last non-empty line is mirrored in `environment.cli.message`.
-8. **Copy execution context** – verify the Execution context panel (once rendered) shows CLI details and fallback badges; record screenshots or notes for UX feedback.
+4. **Run the harness** - execute `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi fixtures/VI1.vi -HeadVi fixtures/VI2.vi -OutputRoot tests/results/teststand-cli -Warmup detect -RenderReport` (use `-Warmup skip` to reuse an existing LabVIEW instance).
+5. **Inspect outputs** - open `tests/results/teststand-cli/compare/lvcompare-capture.json` and confirm the `environment.cli` block (path, version, reportType, status, message) along with LVCompare/LabVIEW versions, compare mode/policy, bitness, OS/arch, runner labels/hash. The companion `session-index.json` now records the warmup mode, compare policy/mode, CLI command, CLI metadata, and decoded artefact summary under `compare.cli`.
+6. **Validate schema** - optional: `npm run schema:validate -- --schema docs/schema/generated/lvcompare-capture.schema.json --data tests/results/teststand-cli/compare/lvcompare-capture.json` to ensure the capture passes the new schema.
+7. **Review stdout/stderr** - check `lvcompare-stdout.txt` / `lvcompare-stderr.txt` to confirm the parsed CLI message matches the raw output; the last non-empty line is mirrored in `environment.cli.message`.
+8. **Copy execution context** - verify the Execution context panel (once rendered) shows CLI details and fallback badges; record screenshots or notes for UX feedback.
 
 y
 

@@ -7,7 +7,7 @@ Describe 'Invoke-PesterTests Include/Exclude patterns' -Tag 'Unit' {
   It 'honors IncludePatterns for a single file' {
     $resultsDir = Join-Path $TestDrive 'results-inc'
     $inc = @('Invoke-PesterTests.*.ps1')
-    pwsh -File $script:dispatcher -TestsPath (Join-Path $repoRoot 'tests') -ResultsPath $resultsDir -IncludePatterns $inc -IncludeIntegration false | Out-Null
+    pwsh -File $script:dispatcher -TestsPath (Join-Path $repoRoot 'tests') -ResultsPath $resultsDir -IncludePatterns $inc -IntegrationMode exclude | Out-Null
     $sel = Join-Path $resultsDir 'pester-selected-files.txt'
     Test-Path $sel | Should -BeTrue
     $lines = @(Get-Content -LiteralPath $sel)
@@ -20,7 +20,7 @@ Describe 'Invoke-PesterTests Include/Exclude patterns' -Tag 'Unit' {
   It 'honors ExcludePatterns to remove files' {
     $resultsDir = Join-Path $TestDrive 'results-exc'
     $exc = @('PesterSummary.*.ps1')
-    pwsh -File $script:dispatcher -TestsPath (Join-Path $repoRoot 'tests') -ResultsPath $resultsDir -ExcludePatterns $exc -IncludeIntegration false | Out-Null
+    pwsh -File $script:dispatcher -TestsPath (Join-Path $repoRoot 'tests') -ResultsPath $resultsDir -ExcludePatterns $exc -IntegrationMode exclude | Out-Null
     $sel = Join-Path $resultsDir 'pester-selected-files.txt'
     Test-Path $sel | Should -BeTrue
     $lines = @(Get-Content -LiteralPath $sel)
@@ -29,4 +29,3 @@ Describe 'Invoke-PesterTests Include/Exclude patterns' -Tag 'Unit' {
     $noneExcluded | Should -BeTrue
   }
 }
-

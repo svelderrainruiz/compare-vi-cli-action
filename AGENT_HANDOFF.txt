@@ -2,74 +2,55 @@
 
 ## Context Snapshot
 - Standing priority: issue #127 (per `AGENTS.md` update)
-- Current branch: `develop`
-- Recent focus: CLI-only compare path, SCC modal diagnostics, deterministic closing, and Pester harness stabilization.
-- Latest changes:
-  - SCC modal hint added to `tools/Invoke-LVCompare.ps1` (annotates NDJSON and warnings).
-  - Harness closes LabVIEW/LVCompare in a `finally` block when `-CloseLabVIEW/-CloseLVCompare` are set.
-  - Expanded unit tests for `Invoke-LVCompare` (including a zero-noise SCC hint test).
-  - Pester timeout shim added (`tests/00-PesterCompat.TimeoutShim.ps1`).
-  - `.gitattributes`: `*.vi binary`.
-  - CompareVI module: exported `Resolve-Cli`; normalized canonical path; filtered Pester ForEach artefacts in
-    arg tokenization; relaxed flag validation (only `-lvpath` must carry a value).
-  - Child-process snapshot writes to `tests/results/_agent/` and uses safer variable names.
-  - New provider-agnostic LabVIEW CLI layer (`tools/LabVIEWCli.psm1`) with LabVIEWCLI provider registration and wrappers
-    for CloseLabVIEW, CreateComparisonReport, RunVI, RunVIAnalyzer, RunUnitTests, MassCompile, and ExecuteBuildSpec.
-  - `tools/Invoke-LVCompare.ps1` now calls the shared CLI abstraction; legacy inline LabVIEWCLI spawn removed.
+- Current branch: `issue/127-cli-metadata-html` (tracking `origin/issue/127-cli-metadata-html`)
+- Local telemetry captured under `tests/results/_agent/handoff/`:
+  - `local-status.txt`, `local-diff.txt`, `branch.txt`, `head-sha.txt`
+- Latest work:
+  - `tools/Invoke-LVCompare.ps1` now auto-resolves `LabVIEWCLI.exe`, blocks `cli-only` mode when the binary is missing, and emits CLI metadata for TestStand consumers.
+  - `tools/TestStand-CompareHarness.ps1` / `tools/Run-DX.ps1` record warmup mode, compare policy/mode, flag overrides, and CLI details in `session-index.json`; harness exposes `-Warmup detect|spawn|skip` plus LVCompare flag passthrough.
+  - `tools/LabVIEWCli.psm1` surfaces provider names in verbose output, applies consistent headless toggles, and falls back to registered providers when given a string.
+  - `docs/LabVIEWCliShimPattern.md` (new) documents Shim Pattern v1.0; README, ENVIRONMENT, and TestStand plan docs reference the pattern and new warmup guidance.
+  - Added guard-crumb unit coverage in `tests/Invoke-PesterTests.Tests.ps1`; updated `docs/schema/generated/teststand-compare-session.schema.json` for the richer session index.
+- Quick smoke: `npm run priority:handoff-tests` (passed; includes session capsule schema coverage). Latest CLI-only compare via `tools/Invoke-LVCompare.ps1` (diff=True, exit=1) with report artifacts in `tests/results/cli-only/`. TestStand harness run (`tools/TestStand-CompareHarness.ps1 -Warmup detect -RenderReport -CloseLabVIEW`) succeeded (exit=0, diff=False) and wrote `tests/results/teststand-session/session-index.json` with the new CLI metadata.
 
 ## Status & Known Gaps
-1) SCC modal (Error 1025/0x401 in NI_SCC_ConnSrv) - mitigated via hint; still avoid by setting Source Control to `<None>` in
-   LabVIEW Options on the runner.
-2) CLI abstraction - only the LabVIEWCLI provider is active. Confirm `Resolve-LabVIEWCliPath` succeeds before invoking wrappers
-   and set `LVCLI_PROVIDER=gcli` once the alternate provider lands.
-3) CLI-only compare remains valid: `tools/Invoke-LVCompare.ps1` with `LVCI_COMPARE_POLICY=cli-only` generates `cli-report.html`.
-   Warmup can be skipped; `Detect-RogueLV.ps1` is not used.
-4) Tests - remaining hotspots:
-   a. `CompareVI.Flags.Combinations` one case (mix with `-lvpath`). Either simplify quoting in the test or extend tokenization
-      to accept that mixed form. Module already validates only `-lvpath` pairing.
-   b. `ChildProcs.Schema` depth exceeded on JSON parse. Flatten `cmd` to a single string and keep depth ≤ 6; re-run.
-   c. `tools/Dev-Dashboard.ps1` `$imgText` default for HTML path.
-   d. `Invoke-PesterTests.ErrorHandling` adjust regex/assert to escape the file path in the crumb message.
-5) Docs/PRs - Once CLI-only validations are green, refresh #127 notes and release screenshots. Confirm branch protection
-   (`Validate` required on `develop`).
+1) Rogue LabVIEW process detected (`tools/Detect-RogueLV.ps1` -> PID 30776). Needs manual close or re-run detection until cleared before any LVCompare work.
+2) Test coverage still outstanding:
+   a. Full dispatcher sweep (`Invoke-PesterTests.ps1 -IntegrationMode exclude`) — previous attempt aborted early.
+   b. Additional harness permutations (`-Warmup skip`, custom flags) and schema validation (`node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json`).
+   c. Optional: rerun targeted Pester modules (`tests/TestStand-CompareHarness.Tests.ps1` if authored).
+3) PR hygiene: refresh #127 description/screenshots with CLI metadata, session capsule context, and harness artifacts; confirm `Validate` remains required on `develop`.
 
 ## Suggested Next Actions
-1) Run CLI-only compare and inspect outputs:
-   - `pwsh -Command "$env:LVCI_COMPARE_POLICY='cli-only'"`
-   - `pwsh -File tools/Invoke-LVCompare.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputDir tests/results/cli-only -RenderReport -JsonLogPath tests/results/cli-only/events.ndjson -LeakCheck -Summary`
-2) Smoke test new CLI wrappers (Preview mode first, then live if LabVIEW CLI exists):
-   - `Import-Module ./tools/LabVIEWCli.psm1`
-   - `Invoke-LVRunVI -ViPath VI1.vi -Arguments 1,2 -ShowFrontPanel -Preview`
-   - `Invoke-LVMassCompile -DirectoryToCompile VI1.vi -Preview`
-   - `Invoke-LVExecuteBuildSpec -ProjectPath path.lvproj -BuildSpecName "My Build" -Preview`
-3) Verify SCC hint propagation (regression): `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`.
-4) Stabilize failing tests in order: flags mix case → child-procs JSON → dashboard default → dispatcher error-handling.
-5) Optional full sweep (time-boxed):
-   - `pwsh -File Invoke-PesterTests.ps1 -IncludeIntegration false`
-   - or `Invoke-Pester -Path tests -TagFilter Unit,Integration -ExcludeTag Policy -CI`
-
-## Useful Commands
-- Handoff toggles: `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim`
-- CLI-only harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -OutputRoot tests/results/teststand-cli -RenderReport -CloseLabVIEW -CloseLVCompare`
-- Schema check: `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/lvcompare-capture.schema.json --data tests/results/teststand-cli/compare/lvcompare-capture.json`
-- Unit tests (LVCompare driver): `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`
-- Update protection (if needed):
-  ```bash
-  gh api repos/LabVIEW-Community-CI-CD/compare-vi-cli-action/branches/develop/protection \
-    -X PUT \
-    -F required_status_checks.strict=true \
-    -F required_status_checks.checks[][context]=Validate
-  ```
+1) No rogue LabVIEW processes detected (last scan clean). Keep running `tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary` before long compare/test sessions.
+2) Validate `tests/results/teststand-session/session-index.json` against the updated schema:
+   - `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json`
+   - Optional: rerun harness with `-Warmup skip -Flags '--ignore-case' --ignore-whitespace` to capture LVCompare fallback.
+3) Run the dispatcher sweep:
+   - `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`
+   - Triage output artifacts (`tests/results/pester-summary.json`, `pester-results.xml`) and update `tests/results/_agent/handoff/test-summary.json` as needed.
+4) Execute outstanding targeted coverage if time permits:
+   - `Invoke-Pester tests/Invoke-LVCompare.Tests.ps1`
+   - `Invoke-Pester tests/TestStand-CompareHarness.Tests.ps1` (if authored)
+5) Update #127 PR/issue notes with:
+   - CLI-only capture summary (`tests/results/cli-only/`)
+   - TestStand harness session index screenshot/JSON snippet
+   - Session capsule introduction
+   - Confirmation of pending tests (dispatcher, additional harness permutations)
 
 ## First Actions for the Next Agent
-1. Execute `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` (no edits; prints header + watcher status).
-2. Ensure LabVIEW Source Control is `<None>` on the runner (to avoid the SCC modal in non-interactive sessions).
-3. Confirm LabVIEW CLI binary availability (`Import-Module ./tools/LabVIEWCli.psm1; (Get-LVProviders | Select-Object -ExpandProperty Name)`).
-4. Run the CLI-only compare (above) and open `tests/results/cli-only/cli-report.html`.
-5. Triage the remaining test hotspots (see Status & Known Gaps) and keep changes scoped; reference `#127` in commits/PRs.
+1. Review the snapshots in `tests/results/_agent/handoff/` (branch/head/status/diff) and fetch/pull `origin/issue/127-cli-metadata-html`.
+2. Validate `tests/results/teststand-session/session-index.json` with the schema command above (record output in `tests/results/_agent/handoff/test-summary.json` if rerun).
+3. Run `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`; capture summary artifacts and update the handoff telemetry.
+4. Review CLI artifacts (`tests/results/cli-only/`, `tests/results/teststand-session/`) and attach highlights/screenshots to the #127 PR update.
+5. Commit and push the outstanding changes (see `tests/results/_agent/handoff/local-status.txt`) referencing `#127`; ensure session capsules remain for future context.
 
 ## Notes for Next Agent
-- HTML report emits data attributes (`data-cli-*`, `data-base-path`, `data-head-path`).
-- `tests/CompareReport.CliMetadata.Tests.ps1` assumes `Render-CompareReport.ps1` resolves from repo root.
-- SCC modal string: "Error 1025 . NI_SCC_ConnSrv . SCC_Provider_Startup.vi.ProxyCaller" - now surfaced as a hint in logs.
+- Watcher telemetry (`tests/results/_agent/handoff/watcher-telemetry.json`) shows `stopped`; no trim required.
+- Session capsules accumulate under `tests/results/_agent/sessions/`; latest is `session-20251014T210508271Z-9a3ee054e211.json`.
+- CLI-only artifacts: `tests/results/cli-only/lvcompare-capture.json`, `events.ndjson`, `cli-report.html`.
+- TestStand harness artifacts: `tests/results/teststand-session/session-index.json`, warmup NDJSON, CLI report/images.
+- Pending git changes listed in `tests/results/_agent/handoff/local-status.txt` (ensure staging/commits reference `#127`).
+
+
 

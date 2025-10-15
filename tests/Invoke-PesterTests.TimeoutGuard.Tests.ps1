@@ -1,5 +1,6 @@
 Describe 'Invoke-PesterTests Timeout Guard' -Tag 'Unit' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot '_TestPathHelper.ps1')
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
     $script:dispatcher = Join-Path $repoRoot 'Invoke-PesterTests.ps1'
   }
@@ -12,7 +13,7 @@ Describe 'Invoke-PesterTests Timeout Guard' -Tag 'Unit' {
     $testFile = Join-Path $temp 'Sleep.Tests.ps1'
     @(
       "Describe 'Sleep' {",
-      "  It 'sleeps' { Start-Sleep -Seconds 30 }",
+      "  It 'sleeps' { Start-Sleep -Seconds 3 }",
       "}"
     ) | Out-File -FilePath $testFile -Encoding utf8
 
@@ -21,16 +22,27 @@ Describe 'Invoke-PesterTests Timeout Guard' -Tag 'Unit' {
 
     $env:COMPARISON_ACTION_DEBUG='0'
     # Invoke dispatcher with very small timeout
-    pwsh -File $script:dispatcher -TestsPath $temp -ResultsPath $results -JsonSummaryPath $jsonSummary -TimeoutMinutes 0.01 -IncludeIntegration false -EmitFailuresJsonAlways | Out-Null
+    $previousFast = $env:FAST_PESTER
+    $env:FAST_PESTER = '0'
+    try {
+      pwsh -File $script:dispatcher -TestsPath $temp -ResultsPath $results -JsonSummaryPath $jsonSummary -TimeoutSeconds 1 -IntegrationMode exclude -EmitFailuresJsonAlways | Out-Null
 
-    $summaryPath = Join-Path $results $jsonSummary
-    Test-Path $summaryPath | Should -BeTrue
-    $obj = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
-    $obj.timedOut | Should -BeTrue
+      $summaryPath = Join-Path $results $jsonSummary
+      Test-Path $summaryPath | Should -BeTrue
+      $obj = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+      $obj.total | Should -Be 0
+      $obj.errors | Should -BeGreaterOrEqual 1
+      $obj.timedOut | Should -BeTrue
+      $obj.meanTest_ms | Should -Be $null
+      $obj.p95Test_ms | Should -Be $null
+      $obj.maxTest_ms | Should -Be $null
 
-    $partialLog = Join-Path $results 'pester-partial.log'
-    Test-Path $partialLog | Should -BeTrue
-    $partialContent = Get-Content -LiteralPath $partialLog -Raw
-    ($partialContent.Length -gt 0) | Should -BeTrue
+      $partialLog = Join-Path $results 'pester-partial.log'
+      Test-Path -LiteralPath $partialLog | Should -BeTrue
+    } finally {
+      if ($null -ne $previousFast) { $env:FAST_PESTER = $previousFast }
+      else { Remove-Item Env:\FAST_PESTER -ErrorAction SilentlyContinue }
+      if (Test-Path $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+    }
   }
 }

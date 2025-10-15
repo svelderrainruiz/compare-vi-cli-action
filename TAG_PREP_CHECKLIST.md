@@ -21,7 +21,7 @@ Helper reference for maintainers prior to cutting the final `v0.4.0` tag. Delete
 ## 3. Functional Sanity Pass
 
 - [ ] Run dispatcher (unit only): `./Invoke-PesterTests.ps1` (expect PASS).
-- [ ] (If canonical LVCompare present) run full suite: `./Invoke-PesterTests.ps1 -IncludeIntegration true`.
+- [ ] (If canonical LVCompare present) run full suite: `./Invoke-PesterTests.ps1 -IntegrationMode include`.
 - [ ] Manual single compare smoke (identical path short-circuit) if convenient.
 - [ ] Manual legacy name usage triggers `[NamingMigrationWarning]` exactly once.
 
@@ -83,3 +83,4 @@ Include sections:
 ---
 Generated: 2025-10-03
 (Helper file; adjust or remove post-release.)
+

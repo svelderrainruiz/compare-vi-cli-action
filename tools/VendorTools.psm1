@@ -68,8 +68,8 @@ function Get-MarkdownlintCli2Version {
 function Resolve-LVComparePath {
   if (-not $IsWindows) { return $null }
   $candidates = @(
-    "$env:ProgramFiles\National Instruments\Shared\LabVIEW Compare\LVCompare.exe",
-    "$env:ProgramFiles(x86)\National Instruments\Shared\LabVIEW Compare\LVCompare.exe"
+    (Join-Path $env:ProgramFiles 'National Instruments\Shared\LabVIEW Compare\LVCompare.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'National Instruments\Shared\LabVIEW Compare\LVCompare.exe')
   )
   foreach ($c in $candidates) { if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { return $c } }
   return $null
@@ -87,8 +87,8 @@ function Resolve-LabVIEWCliPath {
     } catch {}
   }
   $candidates = @(
-    "$env:ProgramFiles\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe",
-    "$env:ProgramFiles(x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe"
+    (Join-Path $env:ProgramFiles 'National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe')
   )
   foreach ($c in $candidates) {
     if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { return $c }

@@ -48,6 +48,7 @@
     "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\"",
     "handoff:schema": "npm run schema:validate -- --schema docs/schemas/handoff-hook-summary-v1.schema.json --data tests/results/_agent/handoff/hook-summary.json --optional",
     "handoff:release-schema": "npm run schema:validate -- --schema docs/schemas/handoff-release-v1.schema.json --data tests/results/_agent/handoff/release-summary.json --optional",
+    "handoff:session-schema": "npm run schema:validate -- --schema docs/schemas/handoff-session-v1.schema.json --data tests/results/_agent/sessions/*.json --optional",
     "publish:cli": "pwsh -NoLogo -NoProfile -File tools/Publish-Cli.ps1",
     "docs:manifest:validate": "npm run schema:validate -- --schema docs/schemas/documentation-manifest-v1.schema.json --data docs/documentation-manifest.json"
   },

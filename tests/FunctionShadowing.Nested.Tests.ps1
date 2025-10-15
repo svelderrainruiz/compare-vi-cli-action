@@ -40,7 +40,7 @@ Describe "Inner Smoke" {
     Push-Location $workspace
     try {
       # Invoke dispatcher in a separate pwsh process to prevent its Write-Error from failing this test.
-      $cmd = "pwsh -NoLogo -NoProfile -File `"$dispatcherCopy`" -TestsPath tests -ResultsPath results -IncludeIntegration false"
+      $cmd = "pwsh -NoLogo -NoProfile -File `"$dispatcherCopy`" -TestsPath tests -ResultsPath results -IntegrationMode exclude"
       $innerOutput = & pwsh -NoLogo -NoProfile -Command $cmd 2>&1
       $nestedExit = $LASTEXITCODE
       $summaryJson = Join-Path $workspace 'results' 'pester-summary.json'

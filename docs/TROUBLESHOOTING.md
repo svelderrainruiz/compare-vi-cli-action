@@ -53,7 +53,7 @@ Set `fail-on-diff: false` to treat code 1 as notice-only.
 
 ## Test environment tips
 
-- Run `./Invoke-PesterTests.ps1 -IncludeIntegration true` to repro CI suites.
+- Run `./Invoke-PesterTests.ps1 -IntegrationMode include` to repro CI suites.
 - Use `tools/Dev-Dashboard.ps1` for a quick telemetry snapshot (locks, queue waits).
 - Hand-offs: `tools/Print-AgentHandoff.ps1 -AutoTrim` surfaces watcher state and trims logs.
 
@@ -63,3 +63,4 @@ Set `fail-on-diff: false` to treat code 1 as notice-only.
 - [`docs/USAGE_GUIDE.md`](./USAGE_GUIDE.md)
 - [`docs/COMPARE_LOOP_MODULE.md`](./COMPARE_LOOP_MODULE.md)
 - [`docs/DEV_DASHBOARD_PLAN.md`](./DEV_DASHBOARD_PLAN.md)
+

@@ -74,10 +74,20 @@ function ConvertTo-ArgList([object]$value) {
 
 function Convert-ArgTokensNormalized([string[]]$tokens) {
 	if (-not $tokens) { return @() }
-	& $script:CompareModule { param($innerTokens) Convert-ArgTokenList -tokens $innerTokens } $tokens
+	$tokensArray = @($tokens | ForEach-Object { $_ })
+	if ($tokensArray.Count -eq 0) { return @() }
+	try {
+		$converted = & $script:CompareModule { param($innerTokens) Convert-ArgTokenList -tokens $innerTokens } $tokensArray
+		if ($null -eq $converted) { return $tokensArray }
+		if ($converted -is [System.Array]) { return @($converted) }
+		return @([string]$converted)
+	} catch {
+		return $tokensArray
+	}
 }
 
 function Test-ArgTokensValid([string[]]$tokens) {
+	if (-not $tokens) { return $true }
 	# Validate that any -lvpath is followed by a value token
 	for ($i=0; $i -lt $tokens.Count; $i++) {
 		if ($tokens[$i] -ieq '-lvpath') {

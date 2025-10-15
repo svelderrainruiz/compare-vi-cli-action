@@ -315,13 +315,21 @@ function Write-TerminalReport {
       if ($cliArtifacts.PSObject.Properties.Name -contains 'reportSizeBytes' -and $cliArtifacts.reportSizeBytes -ne $null) {
         Write-Host "  CLI Report Size : $($cliArtifacts.reportSizeBytes) bytes"
       }
+      $imgLine = $null
+      $hasExportDir = ($cliArtifacts.PSObject.Properties.Name -contains 'exportDir' -and $cliArtifacts.exportDir)
       if ($cliArtifacts.PSObject.Properties.Name -contains 'imageCount' -and $cliArtifacts.imageCount -ne $null) {
         $imgLine = "  CLI Images      : $($cliArtifacts.imageCount)"
-        if ($cliArtifacts.PSObject.Properties.Name -contains 'exportDir' -and $cliArtifacts.exportDir) {
+        if ($hasExportDir) {
           $imgLine += " (export: $($cliArtifacts.exportDir))"
+        } elseif ($compare.ReportPath) {
+          $imgLine += " (report: $($compare.ReportPath))"
         }
-        Write-Host $imgLine
+      } elseif ($hasExportDir) {
+        $imgLine = "  CLI Images      : export: $($cliArtifacts.exportDir)"
+      } elseif ($compare.ReportPath) {
+        $imgLine = "  CLI Images      : report: $($compare.ReportPath)"
       }
+      if ($imgLine) { Write-Host $imgLine }
     }
   } else {
     Write-Host "  Status   : no compare telemetry"
@@ -569,9 +577,17 @@ function ConvertTo-HtmlReport {
     }
   }
 
-  $failedTestsHtml = if ($pester.FailedTests.Count -gt 0) {
-    $rows = foreach ($test in $pester.FailedTests) {
-      "<li>$(& $encode $test.Name) — $(& $encode $test.Result)</li>"
+  $failedTestsList = @()
+  if ($pester -and $pester.PSObject.Properties.Name -contains 'FailedTests' -and $pester.FailedTests) {
+    if ($pester.FailedTests -is [System.Collections.IEnumerable] -and -not ($pester.FailedTests -is [string])) {
+      $failedTestsList = @($pester.FailedTests)
+    } else {
+      $failedTestsList = @($pester.FailedTests)
+    }
+  }
+  $failedTestsHtml = if ($failedTestsList.Count -gt 0) {
+    $rows = foreach ($test in $failedTestsList) {
+      "<li>$(& $encode $test.Name) - $(& $encode $test.Result)</li>"
   }
   "<ul>$([string]::Join('', $rows))</ul>"
   } else { '<p>None</p>' }
@@ -690,8 +706,8 @@ function ConvertTo-HtmlReport {
 
   <section>
     <h2>Compare Outcome</h2>
+    $rows = @()
     @(if ($compare) {
-        $rows = @()
         if ($compareExitValue -ne $null) { $rows += "<dt>Exit Code</dt><dd>$(& $encode $compareExitValue)</dd>" }
         if ($compareDiffValue -ne $null) { $rows += "<dt>Diff</dt><dd>$(& $encode $compareDiffValue)</dd>" }
         if ($compareDurationValue -ne $null) { $rows += "<dt>Duration</dt><dd>$(& $encode ([math]::Round($compareDurationValue,1))) ms</dd>" }
@@ -700,6 +716,7 @@ function ConvertTo-HtmlReport {
         if ($compareReportPathValue) { $rows += "<dt>Report</dt><dd>$(& $encode $compareReportPathValue)</dd>" }
         elseif ($compareCapturePathValue) { $rows += "<dt>Capture</dt><dd>$(& $encode $compareCapturePathValue)</dd>" }
         if ($artifactsReportSize -ne $null) { $rows += "<dt>CLI Report Size</dt><dd>$(& $encode $artifactsReportSize) bytes</dd>" }
+        $imgText = $null
         if ($artifactsImageCount -ne $null) {
           $imgText = "$artifactsImageCount"
           if ($artifactsExportDir) {
@@ -707,9 +724,13 @@ function ConvertTo-HtmlReport {
           } elseif ($compareReportPathValue) {
             $imgText = "$artifactsImageCount (report: $compareReportPathValue)"
           }
-          $rows += "<dt>CLI Images</dt><dd>$(& $encode $imgText)</dd>"
         } elseif ($artifactsExportDir) {
-          $rows += "<dt>CLI Image Export</dt><dd>$(& $encode $artifactsExportDir)</dd>"
+          $imgText = "export: $artifactsExportDir"
+        } elseif ($compareReportPathValue) {
+          $imgText = "report: $compareReportPathValue"
+        }
+        if ($imgText) {
+          $rows += "<dt>CLI Images</dt><dd>$(& $encode $imgText)</dd>"
         }
         if ($compareJsonPathValue) { $rows += "<dt>Outcome JSON</dt><dd>$(& $encode $compareJsonPathValue)</dd>" }
         if ($rows.Count -eq 0) { $rows += '<dt>Status</dt><dd>Available</dd>' }

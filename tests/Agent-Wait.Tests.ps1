@@ -3,6 +3,7 @@ Describe 'Agent-Wait utility' -Tag 'Unit' {
     $here = Split-Path -Parent $PSCommandPath
     $root = Split-Path -Parent $here
     . (Join-Path $root 'tools' 'Agent-Wait.ps1')
+    . (Join-Path $here '_TestPathHelper.ps1')
   }
 
   It 'writes marker and results under provided ResultsDir and reports within margin' {
@@ -12,7 +13,7 @@ Describe 'Agent-Wait utility' -Tag 'Unit' {
     $markerPath = Start-AgentWait -Reason 'unit-test' -ExpectedSeconds 1 -ToleranceSeconds 5 -ResultsDir $resultsDir -Id 'ut1'
     $markerPath | Should -Not -BeNullOrEmpty
 
-    Start-Sleep -Milliseconds 120
+    Invoke-TestSleep -Milliseconds 120 -FastMilliseconds 10
     $result = End-AgentWait -ResultsDir $resultsDir -ToleranceSeconds 5 -Id 'ut1'
     $result | Should -Not -BeNullOrEmpty
 
@@ -46,11 +47,19 @@ Describe 'Agent-Wait utility' -Tag 'Unit' {
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
 
     # Expect 0s, use 0s tolerance, but sleep ~1.1s to ensure difference > tolerance
-    $null = Start-AgentWait -Reason 'unit-test-outside' -ExpectedSeconds 0 -ToleranceSeconds 0 -ResultsDir $resultsDir
-    Start-Sleep -Milliseconds 1100
-    $result = End-AgentWait -ResultsDir $resultsDir -ToleranceSeconds 0
-    $result | Should -Not -BeNullOrEmpty
-    $result.withinMargin | Should -BeFalse
-    [int]$result.differenceSeconds | Should -BeGreaterOrEqual 1
+    if (Test-IsFastMode) {
+      $null = Start-AgentWait -Reason 'unit-test-outside' -ExpectedSeconds 0 -ToleranceSeconds 0 -ResultsDir $resultsDir
+      Invoke-TestSleep -Milliseconds 120 -FastMilliseconds 20
+      $result = End-AgentWait -ResultsDir $resultsDir -ToleranceSeconds 0
+      $result | Should -Not -BeNullOrEmpty
+      $result.withinMargin | Should -BeFalse
+    } else {
+      $null = Start-AgentWait -Reason 'unit-test-outside' -ExpectedSeconds 0 -ToleranceSeconds 0 -ResultsDir $resultsDir
+      Microsoft.PowerShell.Utility\Start-Sleep -Milliseconds 1100
+      $result = End-AgentWait -ResultsDir $resultsDir -ToleranceSeconds 0
+      $result | Should -Not -BeNullOrEmpty
+      $result.withinMargin | Should -BeFalse
+      [int]$result.differenceSeconds | Should -BeGreaterOrEqual 1
+    }
   }
 }

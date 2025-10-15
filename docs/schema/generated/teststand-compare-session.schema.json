@@ -15,12 +15,28 @@
         "warmup": {
           "type": "object",
           "properties": {
-            "events": {
+            "mode": {
               "type": "string",
-              "minLength": 1
+              "enum": [
+                "detect",
+                "spawn",
+                "skip"
+              ]
+            },
+            "events": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
+            "mode",
             "events"
           ],
           "additionalProperties": false
@@ -39,7 +55,27 @@
             "report": {
               "type": "boolean"
             },
+            "command": {
+              "type": "string",
+              "minLength": 1
+            },
             "cliPath": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cli": {
+              "type": "object"
+            },
+            "policy": {
+              "type": "string",
+              "enum": [
+                "lv-first",
+                "cli-first",
+                "cli-only",
+                "lv-only"
+              ]
+            },
+            "mode": {
               "type": "string",
               "minLength": 1
             }
@@ -80,7 +116,14 @@
           ]
         },
         "error": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [

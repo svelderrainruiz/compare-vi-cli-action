@@ -85,6 +85,49 @@ $ErrorActionPreference = 'Stop'
 try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force } catch {}
 try { Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'LabVIEWCli.psm1') -Force } catch {}
 
+function Set-DefaultLabVIEWCliPath {
+  param([switch]$ThrowOnMissing)
+
+  $resolver = Get-Command -Name 'Resolve-LabVIEWCliPath' -ErrorAction SilentlyContinue
+  if (-not $resolver) {
+    try {
+      $vendorModule = Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1'
+      if (Test-Path -LiteralPath $vendorModule -PathType Leaf) {
+        Import-Module $vendorModule -Force | Out-Null
+        $resolver = Get-Command -Name 'Resolve-LabVIEWCliPath' -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+
+  if (-not $resolver) {
+    if ($ThrowOnMissing) {
+      throw 'Resolve-LabVIEWCliPath is unavailable. Import tools/VendorTools.psm1 before calling Set-DefaultLabVIEWCliPath.'
+    }
+    return $null
+  }
+
+  $cliPath = $null
+  try { $cliPath = Resolve-LabVIEWCliPath } catch {}
+  if (-not $cliPath) {
+    if ($ThrowOnMissing) {
+      throw 'LabVIEWCLI.exe could not be located. Set LABVIEWCLI_PATH or install the LabVIEW CLI component.'
+    }
+    return $null
+  }
+
+  try {
+    if (Test-Path -LiteralPath $cliPath -PathType Leaf) {
+      $cliPath = (Resolve-Path -LiteralPath $cliPath -ErrorAction Stop).Path
+    }
+  } catch {}
+
+  foreach ($name in @('LABVIEWCLI_PATH','LABVIEW_CLI_PATH','LABVIEW_CLI')) {
+    try { [System.Environment]::SetEnvironmentVariable($name, $cliPath) } catch {}
+  }
+
+  return $cliPath
+}
+
 function Write-JsonEvent {
   param([string]$Type,[hashtable]$Data)
   if (-not $JsonLogPath) { return }

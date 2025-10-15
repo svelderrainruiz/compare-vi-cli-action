@@ -4,6 +4,10 @@
   "description": "Convenience commands for building the CompareVI CLI and driving standing-priority workflows.",
   "version": "0.1.0",
   "publisher": "labview-ci-cd",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -12,6 +16,7 @@
   ],
   "activationEvents": [
     "onCommand:comparevi.buildAndParse",
+    "onCommand:comparevi.runManualCompare",
     "onCommand:comparevi.startStandingPriority",
     "onCommand:comparevi.watchStandingPriority",
     "onCommand:comparevi.openArtifact",
@@ -20,10 +25,47 @@
   ],
   "main": "out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "compareviManual",
+          "title": "CompareVI Manual",
+          "icon": "media/manual.svg"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "comparevi.buildAndParse",
         "title": "CompareVI: Build & Parse CLI"
+      },
+      {
+        "command": "comparevi.runManualCompare",
+        "title": "CompareVI: Run Manual Compare (LVCompare)"
+      },
+      {
+        "command": "comparevi.manual.refresh",
+        "title": "CompareVI Manual: Refresh Profiles"
+      },
+      {
+        "command": "comparevi.manual.runProfile",
+        "title": "CompareVI Manual: Run Profile"
+      },
+      {
+        "command": "comparevi.manual.selectBase",
+        "title": "CompareVI Manual: Select Base Source"
+      },
+      {
+        "command": "comparevi.manual.selectHead",
+        "title": "CompareVI Manual: Select Head Source"
+      },
+      {
+        "command": "comparevi.manual.openCapture",
+        "title": "CompareVI Manual: Open Capture"
+      },
+      {
+        "command": "comparevi.manual.openReport",
+        "title": "CompareVI Manual: Open Report"
       },
       {
         "command": "comparevi.startStandingPriority",
@@ -48,9 +90,22 @@
           "id": "compareviArtifactExplorer",
           "name": "CompareVI Artifacts"
         }
+      ],
+      "compareviManual": [
+        {
+          "id": "compareviManualProfiles",
+          "name": "Manual Profiles"
+        }
       ]
     },
     "menus": {
+      "view/title": [
+        {
+          "when": "view == compareviManualProfiles",
+          "command": "comparevi.manual.refresh",
+          "group": "navigation@1"
+        }
+      ],
       "view/item/context": [
         {
           "when": "view == compareviArtifactExplorer",
@@ -61,6 +116,31 @@
           "when": "view == compareviArtifactExplorer && viewItem == compareviJsonArtifact",
           "command": "comparevi.showArtifactSummary",
           "group": "navigation@2"
+        },
+        {
+          "when": "view == compareviManualProfiles && viewItem == compareviManualProfile",
+          "command": "comparevi.manual.runProfile",
+          "group": "inline@1"
+        },
+        {
+          "when": "view == compareviManualProfiles && viewItem == compareviManualProfile",
+          "command": "comparevi.manual.selectBase",
+          "group": "inline@2"
+        },
+        {
+          "when": "view == compareviManualProfiles && viewItem == compareviManualProfile",
+          "command": "comparevi.manual.selectHead",
+          "group": "inline@3"
+        },
+        {
+          "when": "view == compareviManualProfiles && viewItem == compareviManualProfile",
+          "command": "comparevi.manual.openCapture",
+          "group": "navigation@4"
+        },
+        {
+          "when": "view == compareviManualProfiles && viewItem == compareviManualProfile",
+          "command": "comparevi.manual.openReport",
+          "group": "navigation@5"
         }
       ]
     },
@@ -76,6 +156,43 @@
           "type": "string",
           "default": "C:\\\\github_token.txt",
           "description": "Fallback path for admin GitHub token when environment variables are not set."
+        },
+        "comparevi.manualProfilePath": {
+          "type": "string",
+          "default": "tools/comparevi.profiles.json",
+          "description": "Path to the manual LVCompare profile file. Supports ${workspaceFolder}."
+        },
+        "comparevi.showSourcePicker": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prompt to select base/head commit sources when running manual compares."
+        },
+        "comparevi.keepTempVi": {
+          "type": "boolean",
+          "default": false,
+          "description": "Keep extracted temporary VIs after manual compares (useful for debugging)."
+        },
+        "comparevi.passFlags": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, pass profile flags to Invoke-LVCompare.ps1 via -Flags. Leave false to omit flags."
+        },
+        "comparevi.showFlagPicker": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a multi-select picker to choose LVCompare flags before running manual compares."
+        },
+        "comparevi.knownFlags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "-nobdcosm",
+            "-nofppos",
+            "-noattr"
+          ],
+          "description": "Known LVCompare flags offered in the picker. Edit to add or remove values as needed."
         }
       }
     }

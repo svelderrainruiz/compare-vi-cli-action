@@ -65,6 +65,8 @@ Notes:
 - When a CLI report is produced, embedded artefacts (for example, diff images) are decoded into
   `tests/results/<session>/compare/cli-images/`, and `environment.cli.artifacts` records the report
   size, image count, and exported file paths so downstream tooling can rehydrate attachments.
+- Dedicated shim entry points follow the versioned pattern documented in
+  [`docs/LabVIEWCliShimPattern.md`](./LabVIEWCliShimPattern.md) (current version: 1.0).
 
 ## Runbook & fixture reporting
 

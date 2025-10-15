@@ -198,10 +198,11 @@ function Select-LVProvider {
       $binary = $provider.ResolveBinaryPath()
       if ([string]::IsNullOrWhiteSpace($binary) -or -not (Test-Path -LiteralPath $binary -PathType Leaf)) { continue }
       if (-not ($provider.Supports($Operation))) { continue }
-      return [pscustomobject]@{
-        Provider = $provider
-        Binary   = (Resolve-Path -LiteralPath $binary).Path
-      }
+        return [pscustomobject]@{
+          Provider     = $provider
+          ProviderName = $provider.Name()
+          Binary       = (Resolve-Path -LiteralPath $binary).Path
+        }
     } catch {
       Write-Verbose ("Provider {0} selection failed: {1}" -f $provider.Name(), $_.Exception.Message)
     }
@@ -210,13 +211,13 @@ function Select-LVProvider {
   throw "No registered provider can execute operation '$Operation'. Checked: $names"
 }
 
-function Set-LVHeadlessEnv {
-  $guard = @{}
-  foreach ($pair in @{'LV_SUPPRESS_UI'='1'; 'LV_NO_ACTIVATE'='1'; 'LV_CURSOR_RESTORE'='1'}) {
-    $existing = [System.Environment]::GetEnvironmentVariable($pair.Key)
-    if ($existing) { $guard[$pair.Key] = $existing }
-    [System.Environment]::SetEnvironmentVariable($pair.Key, $pair.Value)
-  }
+  function Set-LVHeadlessEnv {
+    $guard = @{}
+    foreach ($pair in (@{'LV_SUPPRESS_UI'='1'; 'LV_NO_ACTIVATE'='1'; 'LV_CURSOR_RESTORE'='1'}).GetEnumerator()) {
+      $existing = [System.Environment]::GetEnvironmentVariable($pair.Key)
+      if ($existing) { $guard[$pair.Key] = $existing }
+      [System.Environment]::SetEnvironmentVariable($pair.Key, $pair.Value)
+    }
   if (-not [System.Environment]::GetEnvironmentVariable('LV_IDLE_WAIT_SECONDS')) {
     [System.Environment]::SetEnvironmentVariable('LV_IDLE_WAIT_SECONDS','2')
     $guard['LV_IDLE_WAIT_SECONDS'] = $null
@@ -274,14 +275,43 @@ function Invoke-LVOperation {
   $normalized = Resolve-LVNormalizedParams -OperationSpec $spec -Params $Params
   $selection = Select-LVProvider -Operation $Operation -RequestedProvider $Provider
   $provider = $selection.Provider
+  $providerObject = $selection.Provider
+  $providerName = $selection.ProviderName
   $binary = $selection.Binary
-  if ($provider -and ($provider | Get-Member -Name 'Validate')) {
-    $provider.Validate($Operation, $normalized)
+  if (-not $providerName -and $provider -and -not ($provider -is [string])) {
+    try { $providerName = $provider.Name() } catch {}
   }
-  $arguments = $provider.BuildArgs($Operation, $normalized)
+  if ($provider -is [string]) {
+    $lookupName = if (-not [string]::IsNullOrWhiteSpace($providerName)) { $providerName } else { $provider.Trim() }
+    if (-not [string]::IsNullOrWhiteSpace($lookupName)) {
+      Write-Verbose ("LabVIEW CLI provider fallback lookup for '{0}'." -f $lookupName)
+      if (-not $providerName) { $providerName = $lookupName }
+      $fallbackProvider = Get-LVProviderByName $lookupName
+      if (-not $fallbackProvider) {
+        $fallbackProvider = Get-LVProviders | Where-Object { $_.Name() -eq $lookupName } | Select-Object -First 1
+      }
+      if ($fallbackProvider) {
+        Write-Verbose ("LabVIEW CLI provider '{0}' resolved via fallback (type {1})." -f $lookupName, $fallbackProvider.GetType().FullName)
+        $providerObject = $fallbackProvider
+      }
+    }
+  }
+  $providerLabel = if ($providerName) { $providerName } elseif ($Provider) { $Provider } else { 'auto' }
+  if ($null -eq $providerObject) { throw "Provider '$providerLabel' could not be resolved." }
+  try {
+    if ($providerObject -and ($providerObject | Get-Member -Name 'Name' -ErrorAction SilentlyContinue)) {
+      $providerLabel = $providerObject.Name()
+      if (-not $providerName) { $providerName = $providerLabel }
+    }
+  } catch {}
+  Write-Verbose ("LabVIEW CLI provider '{0}' resolved to type {1}" -f $providerLabel, ($providerObject.GetType().FullName))
+  if ($providerObject -and ($providerObject | Get-Member -Name 'Validate')) {
+    $providerObject.Validate($Operation, $normalized)
+  }
+  $arguments = $providerObject.BuildArgs($Operation, $normalized)
   $commandLine = "$binary " + ($arguments -join ' ')
   $result = [ordered]@{
-    provider        = $provider.Name()
+    provider        = if ($providerObject -and ($providerObject | Get-Member -Name 'Name' -ErrorAction SilentlyContinue)) { $providerObject.Name() } else { $providerLabel }
     operation       = $Operation
     cliPath         = $binary
     args            = @($arguments)

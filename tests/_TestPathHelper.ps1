@@ -22,3 +22,49 @@ function Resolve-RepoRoot {
   return (Resolve-Path '.').Path
 }
 
+function Test-IsFastMode {
+  $cacheVar = Get-Variable -Scope Script -Name __FAST_MODE_CACHE -ErrorAction SilentlyContinue
+  if ($cacheVar) { return [bool]$cacheVar.Value }
+  $raw = [System.Environment]::GetEnvironmentVariable('FAST_PESTER')
+  if (-not $raw) { $raw = [System.Environment]::GetEnvironmentVariable('FAST_TESTS') }
+  $isFast = $false
+  if ($raw -and $raw.Trim()) {
+    $isFast = ($raw.Trim() -match '^(?i:1|true|yes|on)$')
+  }
+  $script:__FAST_MODE_CACHE = $isFast
+  return $isFast
+}
+
+function Invoke-TestSleep {
+  [CmdletBinding(DefaultParameterSetName = 'Milliseconds')]
+  param(
+    [Parameter(Mandatory, ParameterSetName = 'Milliseconds')]
+    [double]$Milliseconds,
+
+    [Parameter(ParameterSetName = 'Milliseconds')]
+    [double]$FastMilliseconds = 5,
+
+    [Parameter(Mandatory, ParameterSetName = 'Seconds')]
+    [double]$Seconds,
+
+    [Parameter(ParameterSetName = 'Seconds')]
+    [double]$FastSeconds = 0.05
+  )
+
+  if ($PSCmdlet.ParameterSetName -eq 'Seconds') {
+    if (Test-IsFastMode) { Microsoft.PowerShell.Utility\Start-Sleep -Seconds $FastSeconds }
+    else { Microsoft.PowerShell.Utility\Start-Sleep -Seconds $Seconds }
+  } else {
+    if (Test-IsFastMode) { Microsoft.PowerShell.Utility\Start-Sleep -Milliseconds $FastMilliseconds }
+    else { Microsoft.PowerShell.Utility\Start-Sleep -Milliseconds $Milliseconds }
+  }
+}
+
+function Get-TestIterations {
+  param(
+    [Parameter(Mandatory)][int]$Default,
+    [int]$Fast = 3
+  )
+  if (Test-IsFastMode) { return $Fast }
+  return $Default
+}

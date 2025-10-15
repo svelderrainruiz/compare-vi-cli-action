@@ -26,7 +26,7 @@ This document describes the Pester test execution architecture, featuring a dual
 
 ```powershell
 # Called directly by pester-selfhosted.yml workflow
-./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration true -ResultsPath tests/results
+./Invoke-PesterTests.ps1 -TestsPath tests -IntegrationMode include -ResultsPath tests/results
 ```
 
 ### 2. Local Test Dispatcher (`tools/Run-Pester.ps1`)
@@ -217,3 +217,5 @@ Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
 - [End-to-End Testing Guide](./docs/E2E_TESTING_GUIDE.md)
 - [JSON/NDJSON Schema Helper (Test Shapes)](./docs/SCHEMA_HELPER.md)
 - [Open-Source Actions Repository](https://github.com/LabVIEW-Community-CI-CD/open-source)
+
+

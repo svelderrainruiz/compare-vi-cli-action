@@ -86,3 +86,7 @@ src/**/bin/
 /tools/vscode/comparevi-extension/dist/
 
 tools/vscode/comparevi-extension/.vscode-test/
+
+# Allow committed fixtures under the VS Code helper
+!vscode/comparevi-helper/test/fixtures/workspace/tmp-commit-236ffab/
+!vscode/comparevi-helper/test/fixtures/workspace/tmp-commit-236ffab/**

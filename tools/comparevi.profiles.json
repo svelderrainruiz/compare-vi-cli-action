@@ -1,0 +1,18 @@
+{
+  "profiles": [
+    {
+      "name": "vi2-root-vs-previous",
+      "year": "2025",
+      "bits": "64",
+      "vis": [
+        { "id": "root", "ref": "HEAD", "path": "VI2.vi" },
+        { "id": "previous", "ref": "HEAD~1", "path": "VI2.vi" }
+      ],
+      "defaultBase": "previous",
+      "defaultHead": "root",
+      "outputDir": "${workspaceFolder}/tests/results/manual-vi2-compare",
+      "flags": []
+    }
+  ]
+}
+

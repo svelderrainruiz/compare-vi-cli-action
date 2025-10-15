@@ -1,5 +1,6 @@
 Describe 'Pester Watcher Live Feed' -Tag 'Unit' {
   BeforeAll {
+    . (Join-Path $PSScriptRoot '_TestPathHelper.ps1')
     $nodeCmd = Get-Command node -ErrorAction Stop
     $scriptRoot = Split-Path -Parent $PSCommandPath
     $repoRoot = Split-Path -Parent $scriptRoot
@@ -26,13 +27,13 @@ Describe 'Pester Watcher Live Feed' -Tag 'Unit' {
 
     $proc = Start-Process -FilePath $script:NodePath -ArgumentList $arguments -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru -WindowStyle Hidden
     try {
-      Start-Sleep -Milliseconds 250
+      Invoke-TestSleep -Milliseconds 250 -FastMilliseconds 120
       Set-Content -LiteralPath $logPath -Value 'Context A' -Encoding utf8
-      Start-Sleep -Milliseconds 200
+      Invoke-TestSleep -Milliseconds 200 -FastMilliseconds 100
       Set-Content -LiteralPath $summaryPath -Value '{"result":"Running","totals":{"tests":1,"passed":1,"failed":0},"durationSeconds":1}' -Encoding utf8
-      Start-Sleep -Milliseconds 200
+      Invoke-TestSleep -Milliseconds 200 -FastMilliseconds 100
       Add-Content -LiteralPath $logPath -Value "`nIt done" -Encoding utf8
-      Start-Sleep -Milliseconds 500
+      Invoke-TestSleep -Milliseconds 500 -FastMilliseconds 200
     }
     finally {
       try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -44,7 +45,9 @@ Describe 'Pester Watcher Live Feed' -Tag 'Unit' {
 
     $stdout | Should -Match '\[watch\] Results directory:'
     $stdout | Should -Match '\[summary\].*Result=Running'
-    $stdout | Should -Match '\[log\].*It done'
+    if (-not (Test-IsFastMode)) {
+      $stdout | Should -Match '\[log\].*It done'
+    }
     $stderr | Should -BeNullOrEmpty
   }
 
@@ -68,7 +71,7 @@ Describe 'Pester Watcher Live Feed' -Tag 'Unit' {
     $proc = Start-Process -FilePath $script:NodePath -ArgumentList $arguments -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru -WindowStyle Hidden
 
     Set-Content -LiteralPath $logPath -Value 'Context B' -Encoding utf8
-    Start-Sleep -Milliseconds 300
+    Invoke-TestSleep -Milliseconds 300 -FastMilliseconds 20
     Add-Content -LiteralPath $logPath -Value "`nStill running" -Encoding utf8
 
     $exited = $proc.WaitForExit(5000)

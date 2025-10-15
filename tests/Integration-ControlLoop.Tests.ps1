@@ -8,6 +8,8 @@ $env:INTEGRATION_LOOP_SUPPRESS_AUTORUN = '1'
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptRoot '..') | Select-Object -ExpandProperty Path
+$helperPath = Join-Path $scriptRoot '_TestPathHelper.ps1'
+if (Test-Path -LiteralPath $helperPath) { . $helperPath }
 $modulePath = Join-Path $repoRoot 'module' 'CompareLoop' 'CompareLoop.psd1'
 Import-Module $modulePath -Force
 
@@ -74,7 +76,9 @@ Describe 'Invoke-IntegrationCompareLoop (DI executor)' -Tag 'Unit' {
       $codes = 1,0,1,0,1
       $i = $script:seq
       if ($i -ge $durations.Count) { $i = $durations.Count-1 }
-      Start-Sleep -Milliseconds $durations[$i]
+      $delay = $durations[$i]
+      if (Get-Command Invoke-TestSleep -ErrorAction SilentlyContinue) { Invoke-TestSleep -Milliseconds $delay -FastMilliseconds ([Math]::Min($delay,5)) }
+      else { Start-Sleep -Milliseconds $delay }
       $code = $codes[$i]
       $script:seq++
       return $code
@@ -92,7 +96,12 @@ Describe 'Invoke-IntegrationCompareLoop (DI executor)' -Tag 'Unit' {
   }
 
   It 'supports fractional interval sleeps (sub-second) without error' {
-    $exec = { param($CliPath,$Base,$Head,$CompareArgs) Start-Sleep -Milliseconds 15; return 0 }
+    $exec = {
+      param($CliPath,$Base,$Head,$CompareArgs)
+      if (Get-Command Invoke-TestSleep -ErrorAction SilentlyContinue) { Invoke-TestSleep -Milliseconds 15 -FastMilliseconds 5 }
+      else { Start-Sleep -Milliseconds 15 }
+      return 0
+    }
     $start = Get-Date
   $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 2 -IntervalSeconds 0.05 -CompareExecutor $exec -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet
     $elapsed = (Get-Date) - $start
@@ -103,7 +112,14 @@ Describe 'Invoke-IntegrationCompareLoop (DI executor)' -Tag 'Unit' {
 
   It 'respects custom histogram bin count' {
     $script:seq = 0
-    $exec = { param($CliPath,$Base,$Head,$CompareArgs) $script:seq++; Start-Sleep -Milliseconds (10 + ($script:seq*5)); return 0 }
+    $exec = {
+      param($CliPath,$Base,$Head,$CompareArgs)
+      $script:seq++
+      $duration = 10 + ($script:seq*5)
+      if (Get-Command Invoke-TestSleep -ErrorAction SilentlyContinue) { Invoke-TestSleep -Milliseconds $duration -FastMilliseconds ([Math]::Min($duration,8)) }
+      else { Start-Sleep -Milliseconds $duration }
+      return 0
+    }
   $r = Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 4 -IntervalSeconds 0 -HistogramBins 3 -CompareExecutor $exec -BypassCliValidation -SkipValidation -PassThroughPaths -Quiet
     ($r.Histogram | Measure-Object).Count | Should -Be 3
     (($r.Histogram | Measure-Object -Property Count -Sum).Sum) | Should -Be 4
@@ -112,13 +128,19 @@ Describe 'Invoke-IntegrationCompareLoop (DI executor)' -Tag 'Unit' {
   It 'emits metrics snapshot file at configured cadence' {
   $snap = Join-Path $script:tempDir 'snapshots.jsonl'
     if (Test-Path -LiteralPath $snap) { Remove-Item -LiteralPath $snap -Force }
-  $exec = { param($CliPath,$Base,$Head,$CompareArgs) Start-Sleep -Milliseconds 5; return 0 }
+  $exec = {
+    param($CliPath,$Base,$Head,$CompareArgs)
+    if (Get-Command Invoke-TestSleep -ErrorAction SilentlyContinue) { Invoke-TestSleep -Milliseconds 5 -FastMilliseconds 2 }
+    else { Start-Sleep -Milliseconds 5 }
+    return 0
+  }
     $caught = $null
     try {
       Invoke-IntegrationCompareLoop -Base $script:base -Head $script:head -MaxIterations 4 -IntervalSeconds 0 -MetricsSnapshotEvery 2 -MetricsSnapshotPath $snap -CompareExecutor $exec -BypassCliValidation -Quiet | Out-Null
     } catch { $caught = $_ }
     $caught | Should -Be $null
-    Start-Sleep -Milliseconds 20
+    if (Get-Command Invoke-TestSleep -ErrorAction SilentlyContinue) { Invoke-TestSleep -Milliseconds 20 -FastMilliseconds 10 }
+    else { Start-Sleep -Milliseconds 20 }
     Test-Path -LiteralPath $snap | Should -BeTrue
     $lines = Get-Content -LiteralPath $snap -ErrorAction Stop
     ($lines | Measure-Object).Count | Should -Be 2

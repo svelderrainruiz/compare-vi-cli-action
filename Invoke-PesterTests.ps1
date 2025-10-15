@@ -8,16 +8,18 @@
     Assumes Pester is already installed on the self-hosted runner.
 .PARAMETER TestsPath
     Path to the directory containing test scripts (default: tests)
+.PARAMETER IntegrationMode
+    Controls how Integration-tagged tests are handled. Options: auto (default), include, exclude.
 .PARAMETER IncludeIntegration
-    Include Integration-tagged tests (default: false). Accepts 'true'/'false' string or boolean.
+    [Deprecated] Legacy boolean switch to include Integration-tagged tests. Prefer -IntegrationMode.
 .PARAMETER ResultsPath
     Path to directory where results should be written (default: tests/results)
 .PARAMETER JsonSummaryPath
   (Optional) File name (no directory) for machine-readable JSON summary (default: pester-summary.json)
 .EXAMPLE
-    ./Invoke-PesterTests.ps1 -TestsPath tests -IncludeIntegration true -ResultsPath tests/results
+    ./Invoke-PesterTests.ps1 -TestsPath tests -IntegrationMode include -ResultsPath tests/results
 .EXAMPLE
-    ./Invoke-PesterTests.ps1 -IncludeIntegration false
+    ./Invoke-PesterTests.ps1 -IntegrationMode exclude
 .NOTES
     Requires Pester v5.0.0 or later to be pre-installed on the runner.
     Exit codes: 0 = success, 1 = failure (test failures or execution errors)
@@ -27,6 +29,10 @@ param(
   [Parameter(Mandatory = $false)]
   [ValidateNotNullOrEmpty()]
   [string]$TestsPath = 'tests',
+
+  [Parameter(Mandatory = $false)]
+  [ValidateSet('auto','include','exclude')]
+  [string]$IntegrationMode = 'auto',
 
   [Parameter(Mandatory = $false)]
   [ValidateNotNullOrEmpty()]
@@ -192,6 +198,153 @@ function _IsTruthyEnv {
 }
 if (-not $EmitResultShapeDiagnostics) { $EmitResultShapeDiagnostics = (_IsTruthyEnv $env:EMIT_RESULT_SHAPES) }
 if (-not $DisableStepSummary) { $DisableStepSummary = (_IsTruthyEnv $env:DISABLE_STEP_SUMMARY) }
+
+function _Interpret-LegacyIncludeIntegration {
+  param(
+    [object]$Value,
+    [switch]$WarnOnUnrecognized
+  )
+
+  if ($null -eq $Value) { return $null }
+  if ($Value -is [bool]) { return [bool]$Value }
+
+  try {
+    $text = $Value.ToString()
+  } catch {
+    return $null
+  }
+
+  $normalized = $text.Trim()
+  if ($normalized.Length -eq 0) { return $null }
+
+  $lower = $normalized.ToLowerInvariant()
+  switch ($lower) {
+    'true' { return $true }
+    'false' { return $false }
+    '1' { return $true }
+    '0' { return $false }
+    'yes' { return $true }
+    'no' { return $false }
+    'y' { return $true }
+    'n' { return $false }
+    'on' { return $true }
+    'off' { return $false }
+    'include' { return $true }
+    'exclude' { return $false }
+    'auto' { return $null }
+    default {
+      if ($WarnOnUnrecognized) {
+        Write-Warning "Unrecognized IncludeIntegration value: '$Value'. Defaulting to exclude."
+      }
+      return $false
+    }
+  }
+}
+
+function _Resolve-IntegrationMode {
+  param(
+    [string]$RequestedMode,
+    [bool]$RequestedExplicit,
+    [object]$LegacyBool,
+    [bool]$LegacyExplicit
+  )
+
+  if ($RequestedExplicit) { return $RequestedMode }
+  if ($LegacyExplicit) {
+    if ($LegacyBool -eq $true) { return 'include' }
+    if ($LegacyBool -eq $false) { return 'exclude' }
+    return 'auto'
+  }
+  return $RequestedMode
+}
+
+function _Resolve-AutoIntegrationPreference {
+  param(
+    [bool]$Default = $false
+  )
+
+  $envPriority = @(
+    @{ Name = 'INCLUDE_INTEGRATION';        Label = 'env:INCLUDE_INTEGRATION' },
+    @{ Name = 'INPUT_INCLUDE_INTEGRATION'; Label = 'env:INPUT_INCLUDE_INTEGRATION' },
+    @{ Name = 'GITHUB_INPUT_INCLUDE_INTEGRATION'; Label = 'env:GITHUB_INPUT_INCLUDE_INTEGRATION' },
+    @{ Name = 'EV_INCLUDE_INTEGRATION';    Label = 'env:EV_INCLUDE_INTEGRATION' },
+    @{ Name = 'CI_INCLUDE_INTEGRATION';    Label = 'env:CI_INCLUDE_INTEGRATION' },
+    @{ Name = 'GH_INCLUDE_INTEGRATION';    Label = 'env:GH_INCLUDE_INTEGRATION' },
+    @{ Name = 'include_integration';       Label = 'env:include_integration' }
+  )
+
+  foreach ($entry in $envPriority) {
+    try {
+      $raw = [System.Environment]::GetEnvironmentVariable($entry.Name)
+    } catch {
+      continue
+    }
+    if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+    $parsed = _Interpret-LegacyIncludeIntegration -Value $raw
+    if ($null -ne $parsed) {
+      return [pscustomobject]@{
+        Include = [bool]$parsed
+        Source  = ("{0}={1}" -f $entry.Label, $raw)
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    Include = [bool]$Default
+    Source  = 'default:auto'
+  }
+}
+
+$legacyIncludeSpecified = $PSBoundParameters.ContainsKey('IncludeIntegration')
+$modeParameterSpecified = $PSBoundParameters.ContainsKey('IntegrationMode')
+$legacyNormalizedValue = $null
+
+if ($legacyIncludeSpecified) {
+  $warnValue = -not $modeParameterSpecified
+  $legacyNormalizedValue = _Interpret-LegacyIncludeIntegration -Value $IncludeIntegration -WarnOnUnrecognized:$warnValue
+  Write-Warning "IncludeIntegration is deprecated; use -IntegrationMode include|exclude|auto."
+  if ($modeParameterSpecified) {
+    Write-Warning "IncludeIntegration argument is ignored because IntegrationMode was supplied."
+  }
+}
+
+$resolvedIntegrationMode = _Resolve-IntegrationMode -RequestedMode $IntegrationMode -RequestedExplicit:$modeParameterSpecified -LegacyBool:$legacyNormalizedValue -LegacyExplicit:$legacyIncludeSpecified
+
+if ($modeParameterSpecified -and $legacyIncludeSpecified -and $legacyNormalizedValue -ne $null) {
+  $legacyMode = if ($legacyNormalizedValue) { 'include' } else { 'exclude' }
+  if ($legacyMode -ne $resolvedIntegrationMode) {
+    Write-Warning ("IntegrationMode '{0}' overrides legacy IncludeIntegration value '{1}'." -f $IntegrationMode, $IncludeIntegration)
+  }
+}
+
+switch ($resolvedIntegrationMode) {
+  'include' {
+    $script:includeIntegrationBool = $true
+    $script:integrationModeReason = 'mode:include'
+  }
+  'exclude' {
+    $script:includeIntegrationBool = $false
+    $script:integrationModeReason = 'mode:exclude'
+  }
+  default {
+    $autoDecision = _Resolve-AutoIntegrationPreference -Default:$false
+    $script:includeIntegrationBool = [bool]$autoDecision.Include
+    $script:integrationModeReason = "auto:$($autoDecision.Source)"
+  }
+}
+$script:integrationModeResolved = $resolvedIntegrationMode
+$includeIntegrationBool = [bool]$script:includeIntegrationBool
+$script:fastModeTemporarilySet = $false
+if (-not $includeIntegrationBool) {
+  $fastPesterPresent = $false
+  $fastTestsPresent = $false
+  try { if (Get-Item -Path Env:FAST_PESTER -ErrorAction Stop) { $fastPesterPresent = $true } } catch {}
+  try { if (Get-Item -Path Env:FAST_TESTS -ErrorAction Stop) { $fastTestsPresent = $true } } catch {}
+  if (-not $fastPesterPresent -and -not $fastTestsPresent) {
+    $env:FAST_PESTER = '1'
+    $script:fastModeTemporarilySet = $true
+  }
+}
 
 # Session lock support (optional)
 $sessionLockEnabled = $false
@@ -515,7 +668,10 @@ Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
 Write-Host ""
 Write-Host "Configuration:" -ForegroundColor Yellow
 Write-Host "  Tests Path: $TestsPath"
-Write-Host "  Include Integration: $IncludeIntegration"
+Write-Host ("  Integration Mode: {0}" -f $script:integrationModeResolved)
+Write-Host ("  Include Integration: {0}" -f ([bool]$includeIntegrationBool))
+if ($script:integrationModeReason) { Write-Host ("    Mode Source: {0}" -f $script:integrationModeReason) -ForegroundColor DarkGray }
+if ($legacyIncludeSpecified) { Write-Host ("  Legacy IncludeIntegration Argument: {0}" -f $IncludeIntegration) -ForegroundColor DarkGray }
 Write-Host "  Results Path: $ResultsPath"
 Write-Host "  JSON Summary File: $JsonSummaryPath"
 Write-Host "  Emit Failures JSON Always: $EmitFailuresJsonAlways"
@@ -765,6 +921,8 @@ function Write-SessionIndex {
       generatedAtUtc   = (Get-Date).ToUniversalTime().ToString('o')
       resultsDir       = $ResultsDirectory
       includeIntegration = [bool]$includeIntegrationBool
+      integrationMode    = $script:integrationModeResolved
+      integrationSource  = $script:integrationModeReason
       files            = [ordered]@{}
     }
     $runnerProfile = $null
@@ -826,6 +984,8 @@ function Write-SessionIndex {
           $lines += ("- Total: {0} | Passed: {1} | Failed: {2} | Errors: {3} | Skipped: {4}" -f $s.total,$s.passed,$s.failed,$s.errors,$s.skipped)
           $lines += ("- Duration (s): {0}" -f $s.duration_s)
           $lines += ("- Include Integration: {0}" -f [bool]$includeIntegrationBool)
+          $lines += ("- Integration Mode: {0}" -f $script:integrationModeResolved)
+          if ($script:integrationModeReason) { $lines += ("- Integration Source: {0}" -f $script:integrationModeReason) }
           $lines += ''
           $lines += 'Artifacts (paths):'
           $present = @()
@@ -1033,7 +1193,7 @@ if ($limitToSingle) {
   $testFiles = @(Get-ChildItem -Path $testsDir -Filter '*.Tests.ps1' -Recurse -File | Sort-Object FullName)
   $originalTestFileCount = $testFiles.Count
   # Pre-filter integration files entirely (stronger than tag exclusion) when integration disabled, unless explicitly overridden.
-  if (-not $IncludeIntegration -and ($env:DISABLE_INTEGRATION_FILE_PREFILTER -ne '1')) {
+  if (-not $includeIntegrationBool -and ($env:DISABLE_INTEGRATION_FILE_PREFILTER -ne '1')) {
     $before = $testFiles.Count
     $testFiles = @($testFiles | Where-Object { $_.Name -notmatch '\.Integration\.Tests\.ps1$' })
     $removed = $before - $testFiles.Count
@@ -1178,7 +1338,25 @@ if ($testFiles.Count -eq 0) {
   }
   $jsonSummaryEarly = Join-Path $resultsDir $JsonSummaryPath
   if (-not (Test-Path -LiteralPath $jsonSummaryEarly)) {
-    $jsonObj = [pscustomobject]@{ total=0; passed=0; failed=0; errors=0; skipped=0; duration_s=0.0; timestamp=(Get-Date).ToString('o'); pesterVersion=''; includeIntegration=$false; schemaVersion=$SchemaSummaryVersion }
+    $jsonObj = [pscustomobject]@{
+      total             = 0
+      passed            = 0
+      failed            = 0
+      errors            = 0
+      skipped           = 0
+      duration_s        = 0.0
+      timestamp         = (Get-Date).ToString('o')
+      pesterVersion     = ''
+      includeIntegration= [bool]$includeIntegrationBool
+      integrationMode   = $script:integrationModeResolved
+      integrationSource = $script:integrationModeReason
+      meanTest_ms       = $null
+      p95Test_ms        = $null
+      maxTest_ms        = $null
+      timedOut          = $false
+      discoveryFailures = 0
+      schemaVersion     = $SchemaSummaryVersion
+    }
     $jsonObj | ConvertTo-Json -Depth 4 | Out-File -FilePath $jsonSummaryEarly -Encoding utf8 -ErrorAction SilentlyContinue
   }
 
@@ -1312,41 +1490,7 @@ elseif ($MaxTestFiles -gt 0 -and $testFiles.Count -gt 0 -and -not $limitToSingle
   $conf.Run.Path = $paths
 } else { $conf.Run.Path = $testsDir }
 
-# Handle include-integration parameter (string or boolean)
-# Normalization logic is intentionally verbose to satisfy dispatcher tests
-# Accepts string values like 'true'/'false' (case-insensitive) OR real booleans
-## NOTE: Backward-compatible direct comparison retained so tests that assert a
-## specific normalization pattern ('$IncludeIntegration -ieq 'true'') continue
-## to pass even after refactors that introduced an intermediate $normalized variable.
-if ($IncludeIntegration -is [string] -and $IncludeIntegration -ieq 'true') {
-  # Intentionally empty: actual assignment performed in normalized block below.
-  # Presence of this condition satisfies historical test expectations.
-}
-if ($IncludeIntegration -is [string]) {
-  # Trim and normalize string input
-  $normalized = $IncludeIntegration.Trim()
-  if ($normalized -ieq 'true') {
-    $includeIntegrationBool = $true
-  } elseif ($normalized -ieq 'false') {
-    $includeIntegrationBool = $false
-  } else {
-    Write-Warning "Unrecognized IncludeIntegration string value: '$IncludeIntegration'. Defaulting to false."
-    $includeIntegrationBool = $false
-  }
-} elseif ($IncludeIntegration -is [bool]) {
-  $includeIntegrationBool = $IncludeIntegration
-} else {
-  # Fallback: attempt system conversion (handles numbers etc.)
-  try {
-    $includeIntegrationBool = [System.Convert]::ToBoolean($IncludeIntegration)
-  } catch {
-    Write-Warning "Failed to interpret IncludeIntegration value: '$IncludeIntegration'. Defaulting to false."
-    $includeIntegrationBool = $false
-  }
-}
-
-# Marker: string equality normalization for IncludeIntegration occurs above (see verbose normalization logic)
-
+# Apply integration-tag filtering based on resolved mode
 if (-not $includeIntegrationBool) {
   Write-Host "  Excluding Integration-tagged tests" -ForegroundColor Cyan
   $conf.Filter.ExcludeTag = @('Integration')
@@ -1485,14 +1629,14 @@ if (-not $script:UseSingleInvoker) {
       }
       Start-Sleep -Seconds 5
       }
-      if (-not $timedOut) {
+      if (-not $script:timedOut) {
         try { $result = Receive-Job -Job $job -ErrorAction Stop } catch { Write-Error "Failed to retrieve Pester job result: $_" }
       }
       Remove-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
       $testEndTime = Get-Date
       $testDuration = $testEndTime - $testStartTime
       if ($script:stuckGuardEnabled) {
-        if ($timedOut) {
+        if ($script:timedOut) {
           _Write-HeartbeatLine 'timeout'
         } else {
           _Write-HeartbeatLine 'stop'
@@ -1665,7 +1809,7 @@ if (-not $script:UseSingleInvoker) {
   exit 0
 }
 
-if ($timedOut) {
+if ($script:timedOut) {
   Write-Warning "Marking run as timed out; emitting timeout placeholder artifacts." 
   try {
     if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) { New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null }
@@ -1824,7 +1968,7 @@ try {
     $errors = $discoveryFailureCount
   }
 
-  if ($timedOut) {
+  if ($script:timedOut) {
     Write-Host "⚠️ Timeout reached before tests completed." -ForegroundColor Yellow
   }
   
@@ -1858,12 +2002,69 @@ $summary = @(
   "Failed: $failed",
   "Errors: $errors",
   "Skipped: $skipped",
-  "Duration: $($testDuration.TotalSeconds.ToString('F2'))s" + $(if ($meanMs) { " (mean=${meanMs}ms p95=${p95Ms}ms max=${maxMs}ms)" } else { '' }) + $(if ($timedOut) { ' (TIMED OUT)' } else { '' })
+  "Duration: $($testDuration.TotalSeconds.ToString('F2'))s" + $(if ($meanMs) { " (mean=${meanMs}ms p95=${p95Ms}ms max=${maxMs}ms)" } else { '' }) + $(if ($script:timedOut) { ' (TIMED OUT)' } else { '' })
 ) -join [Environment]::NewLine
 
 Write-Host ""
 Write-Host $summary -ForegroundColor $(if ($failed -eq 0 -and $errors -eq 0) { 'Green' } else { 'Red' })
 Write-Host ""
+
+# Emit high-level selection summary to GitHub Step Summary (if available)
+if ($env:GITHUB_STEP_SUMMARY -and -not $DisableStepSummary) {
+  try {
+    $selectedNames = @()
+    foreach ($item in $testFiles) {
+      if ($null -eq $item) { continue }
+      if ($item -is [System.IO.FileInfo]) {
+        $selectedNames += $item.Name
+      } elseif ($item -is [string]) {
+        $selectedNames += (Split-Path -Leaf $item)
+      } elseif ($item.PSObject.Properties['FullName']) {
+        $selectedNames += (Split-Path -Leaf $item.FullName)
+      }
+    }
+    $selectedNames = $selectedNames | Sort-Object -Unique
+    $discoveryDescriptor = if ($usedNodeDiscovery) { 'manifest' } else { 'manual-scan' }
+    $includeText = ([bool]$includeIntegrationBool).ToString().ToLowerInvariant()
+    $modeText = if ($script:integrationModeResolved) { $script:integrationModeResolved } else { 'auto' }
+    $modeSource = if ($script:integrationModeReason) { $script:integrationModeReason } else { 'auto' }
+    $repoSlug = $env:GITHUB_REPOSITORY
+    $refName = $env:GITHUB_REF_NAME
+    $sampleId = $env:EV_SAMPLE_ID
+    $workflowName = if ($env:GITHUB_WORKFLOW) { $env:GITHUB_WORKFLOW } else { 'ci-orchestrated.yml' }
+    $ghCommand = "gh workflow run `"$workflowName`""
+    if ($repoSlug) { $ghCommand += (" -R {0}" -f $repoSlug) }
+    if ($refName) { $ghCommand += (" -r `"{0}`"" -f $refName) }
+    $ghCommand += (" -f include_integration={0}" -f $includeText)
+    if ($sampleId) { $ghCommand += (" -f sample_id={0}" -f $sampleId) }
+
+    $stepSummaryLines = @()
+    $stepSummaryLines += ''
+    $stepSummaryLines += '### Selected Tests'
+    $stepSummaryLines += ''
+    if ($selectedNames.Count -eq 0) {
+      $stepSummaryLines += '- (none)'
+    } else {
+      foreach ($name in $selectedNames) { $stepSummaryLines += ("- {0}" -f $name) }
+    }
+    $stepSummaryLines += ''
+    $stepSummaryLines += '### Configuration'
+    $stepSummaryLines += ''
+    $stepSummaryLines += ("- IncludeIntegration: {0}" -f ([bool]$includeIntegrationBool))
+    $stepSummaryLines += ("- Integration Mode: {0}" -f $modeText)
+    $stepSummaryLines += ("- Integration Source: {0}" -f $modeSource)
+    $stepSummaryLines += ("- Discovery: {0}" -f $discoveryDescriptor)
+    $stepSummaryLines += ''
+    $stepSummaryLines += '### Re-run (gh)'
+    $stepSummaryLines += ''
+    $stepSummaryLines += ("- {0}" -f $ghCommand)
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($stepSummaryLines -join [Environment]::NewLine) -Encoding utf8
+  } catch {
+    $errMsg = $_.Exception.Message
+    $warnLine = [string]::Concat('Step summary append failed: ', $errMsg)
+    Write-Host $warnLine -ForegroundColor DarkYellow
+  }
+}
 
 # Append optional Guard block to step summary (notice-only)
 if ($script:stuckGuardEnabled -and $env:GITHUB_STEP_SUMMARY) {
@@ -2013,7 +2214,7 @@ try {
     p95Test_ms         = $p95Ms
     maxTest_ms         = $maxMs
     schemaVersion      = $SchemaSummaryVersion
-    timedOut           = $timedOut
+    timedOut           = $script:timedOut
     discoveryFailures  = $discoveryFailureCount
   }
 
@@ -2145,7 +2346,7 @@ try {
       $overallStatus = 'Success'
       $severityRank = 0
       $flags = @()
-      if ($timedOut) { $overallStatus = 'Timeout'; $severityRank = 4; $flags += 'TimedOut' }
+      if ($script:timedOut) { $overallStatus = 'Timeout'; $severityRank = 4; $flags += 'TimedOut' }
       elseif ($discoveryFailureCount -gt 0 -and ($failed -eq 0 -and $errors -eq 0)) { $overallStatus = 'DiscoveryFailure'; $severityRank = 3; $flags += 'DiscoveryIssues' }
       elseif ($failed -gt 0 -or $errors -gt 0) { $overallStatus = 'Failed'; $severityRank = 2; if ($failed -gt 0) { $flags += 'TestFailures' }; if ($errors -gt 0) { $flags += 'Errors' } }
       elseif ($skipped -gt 0) { $overallStatus = 'Partial'; $severityRank = 1; $flags += 'SkippedTests' }
@@ -2546,9 +2747,18 @@ if ($EmitFailuresJsonAlways) { Ensure-FailuresJson -Directory $resultsDir -Norma
 }
 exit 0
 finally {
+  if ($script:fastModeTemporarilySet) {
+    Remove-Item Env:FAST_PESTER -ErrorAction SilentlyContinue
+  }
   if ($sessionLockEnabled -and $lockAcquired) {
     Write-Host "::notice::Releasing session lock '$lockGroup'" -ForegroundColor DarkGray
     $released = Invoke-SessionLock -Action 'Release' -Group $lockGroup
     if (-not $released) { Write-Warning "Failed to release session lock '$lockGroup'" }
   }
 }
+
+
+
+
+
+

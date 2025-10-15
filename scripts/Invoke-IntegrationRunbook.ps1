@@ -200,7 +200,8 @@ function Invoke-PhaseTests {
   try {
     $cmd = @()
     $cmd += (Join-Path (Get-Location) 'Invoke-PesterTests.ps1')
-    if ($inc) { $cmd += @('-IncludeIntegration','true') }
+    $mode = if ($inc) { 'include' } else { 'exclude' }
+    $cmd += @('-IntegrationMode', $mode)
     & $cmd[0] @($cmd[1..($cmd.Count-1)])
     $code = $LASTEXITCODE
     $r.details.exitCode = $code
@@ -346,3 +347,4 @@ if ($env:GITHUB_STEP_SUMMARY) {
 if ($PassThru) { return $final }
 
 if ($overallFailed) { exit 1 } else { exit 0 }
+

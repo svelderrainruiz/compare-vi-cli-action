@@ -88,12 +88,18 @@ CLI-only quick start (64-bit Windows):
 - To force CLI-only compare end-to-end (no LVCompare invocation):
   - Set `LVCI_COMPARE_MODE=labview-cli` and `LVCI_COMPARE_POLICY=cli-only`.
   - Run either wrapper:
-    - Harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -RenderReport`
+    - Harness: `pwsh -File tools/TestStand-CompareHarness.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -Warmup detect -RenderReport` (`-Warmup skip` reuses an existing LabVIEW instance)
     - Wrapper: `pwsh -File tools/Invoke-LVCompare.ps1 -BaseVi VI1.vi -HeadVi VI2.vi -RenderReport`
 - The capture (`lvcompare-capture.json`) includes an `environment.cli` block detailing the CLI
   path, version, parsed report type/path, status, and the final CLI message, alongside the command
   and arguments used for the `CreateComparisonReport` operation. When `-RenderReport` is set, the
   single-file HTML report is written alongside the capture.
+
+Shim authors should follow the versioned pattern documented in [`docs/LabVIEWCliShimPattern.md`](./docs/LabVIEWCliShimPattern.md)
+(`Close-LabVIEW.ps1` implements pattern v1.0).
+The TestStand session index (`session-index.json`) now records the warmup mode, compare policy/mode,
+the resolved CLI command, and the `environment.cli` metadata surfaced by the capture for downstream
+telemetry tools.
 
 ## Monitoring & telemetry
 
@@ -117,7 +123,8 @@ DX reminders. Workflows call `tools/Invoke-DevDashboard.ps1` to publish HTML/JSO
 - `npm run dev:watcher:ensure` / `status` / `stop` (persistent watcher lifecycle).
 - `npm run dev:watcher:trim` (rotates `watch.out` / `watch.err` when >5 MB or ~4,000 lines).
 - `tools/Print-AgentHandoff.ps1 -AutoTrim` (prints summary and trims automatically when
-  `needsTrim=true`).
+  `needsTrim=true`; also writes a session capsule under
+  `tests/results/_agent/sessions/` for the current workspace state).
 
 Status JSON contains `state`, heartbeat freshness, and byte counters – ideal for hand-offs or
 CI summaries.
@@ -159,7 +166,7 @@ Tips:
 | --- | --- | --- |
 | `pwsh -File tools/PrePush-Checks.ps1` / “Run PrePush Checks” | `tools/PrePush-Checks.ps1` | Validate: lint, compare-report manifest, rerun hint helper |
 | `pwsh ./Invoke-PesterTests.ps1` / “Run Pester Tests (Unit)” | `Invoke-PesterTests.ps1` | Validate: unit suites |
-| `pwsh ./Invoke-PesterTests.ps1 -IncludeIntegration true` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1` with integration flag | Validate: integration coverage leading into orchestrated phase |
+| `pwsh ./Invoke-PesterTests.ps1 -IntegrationMode include` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1` with integration flag | Validate: integration coverage leading into orchestrated phase |
 | “Build Tools Image (Docker)” | `tools/Build-ToolsImage.ps1 -Tag comparevi-tools:local` | Prepares a unified container with all non-LV deps (dotnet/Node/Python/PS/actionlint) |
 | “Run Non-LV Checks (Tools Image)” | `tools/Run-NonLVChecksInDocker.ps1 -ToolsImageTag comparevi-tools:local -UseToolsImage` | Validate: run actionlint/markdownlint/docs drift + build CLI (output `dist/comparevi-cli`) in one container |
 | “Run Non-LV Checks (Docker)” | `tools/Run-NonLVChecksInDocker.ps1` | Validate: same checks using per-tool images (fallback path) |
@@ -266,7 +273,7 @@ Run the commands below (or invoke the matching VS Code task) before pushing. Eac
 | --- | --- | --- | --- |
 | `pwsh -File tools/PrePush-Checks.ps1` / “Run PrePush Checks” | `tools/PrePush-Checks.ps1` | `validate.yml › lint` | Runs actionlint, markdownlint, tracked-artifact guard, rerun-hint helper, watcher schema validation. |
 | `pwsh ./Invoke-PesterTests.ps1` / “Run Pester Tests (Unit)” | `Invoke-PesterTests.ps1` | Unit consumers in `validate.yml` | Fast feedback on unit suites before dispatching orchestrated runs. |
-| `pwsh ./Invoke-PesterTests.ps1 -IncludeIntegration true` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1 -IncludeIntegration true` | Integration phase in `ci-orchestrated.yml` and smoke stages in `validate.yml` | Requires LVCompare; runs the same categories the orchestrated pipeline executes. |
+| `pwsh ./Invoke-PesterTests.ps1 -IntegrationMode include` / “Run Pester Tests (Integration)” | `Invoke-PesterTests.ps1 -IntegrationMode include` | Integration phase in `ci-orchestrated.yml` and smoke stages in `validate.yml` | Requires LVCompare; runs the same categories the orchestrated pipeline executes. |
 | “Run Non-LV Checks (Tools Image)” | `tools/Run-NonLVChecksInDocker.ps1 -ToolsImageTag comparevi-tools:local -UseToolsImage` | `validate.yml › cli-smoke` non-LV preflight | Uses the consolidated tools image so actionlint/markdownlint/docs drift checks match the smoke job environment. |
 | “Run Non-LV Checks (Docker)” | `tools/Run-NonLVChecksInDocker.ps1` | `validate.yml › cli-smoke` fallback path | Falls back to per-tool containers when the unified image is unavailable. |
 | “Integration (Standing Priority): Auto Push + Start + Watch” | `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` | `ci-orchestrated.yml` standing-priority dispatcher + watcher | Pushes with the admin token, resolves issue [#127](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/127), dispatches, then streams logs via Docker watcher. |
@@ -281,8 +288,9 @@ Keeping these green locally prevents surprises when Validate or the orchestrated
 - `npm run priority:handoff` — import the latest handoff summaries into the current PowerShell session (globals such as `$StandingPrioritySnapshot` and `$StandingPriorityRouter`).
 - `npm run priority:handoff-tests` — execute the priority/hooks/semver checks and write `tests/results/_agent/handoff/test-summary.json` for later review.
 - `npm run priority:release` — simulate the release path from the router; add `-- -Execute` to run `Branch-Orchestrator.ps1 -Execute` instead of the default dry-run.
-- `npm run handoff:schema` — validate the stored hook handoff summary against `docs/schemas/handoff-hook-summary-v1.schema.json`.
-- `npm run handoff:release-schema` — validate the release summary (`tests/results/_agent/handoff/release-summary.json`) against `docs/schemas/handoff-release-v1.schema.json`.
+- `npm run handoff:schema` - validate the stored hook handoff summary against `docs/schemas/handoff-hook-summary-v1.schema.json`.
+- `npm run handoff:release-schema` - validate the release summary (`tests/results/_agent/handoff/release-summary.json`) against `docs/schemas/handoff-release-v1.schema.json`.
+- `npm run handoff:session-schema` - validate stored session capsules (`tests/results/_agent/sessions/*.json`) against `docs/schemas/handoff-session-v1.schema.json`.
 - `npm run semver:check` — run the SemVer validator (`tools/priority/validate-semver.mjs`) against the current package version.
 
 
@@ -358,3 +366,4 @@ publish helper to build per-RID archives and checksums for distribution.
   - `./comparevi-cli version`
   - `./comparevi-cli tokenize --input 'foo -x=1 "bar baz"'`
   - `./comparevi-cli procs`
+
