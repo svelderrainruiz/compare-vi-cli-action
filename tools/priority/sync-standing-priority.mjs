@@ -237,10 +237,14 @@ export function main() {
   console.log(`[priority] Standing issue: #${number}`);
 
   let issue;
+  let fetchSource = 'live';
+  let fetchError = null;
   try {
     issue = fetchIssue(number);
   } catch (err) {
     console.warn(`[priority] Fetch failed: ${err.message}`);
+    fetchSource = 'cache';
+    fetchError = err?.message || null;
     if (cache.number !== number) throw err;
     const fallbackSnapshot = loadSnapshot(repoRoot, number) || {};
     issue = {
@@ -278,22 +282,29 @@ export function main() {
     lastSeenUpdatedAt: snapshot.updatedAt || cache.lastSeenUpdatedAt || null,
     issueDigest: snapshot.digest,
     bodyDigest: snapshot.bodyDigest ?? cache.bodyDigest ?? null,
-    cachedAtUtc: new Date().toISOString()
+    cachedAtUtc: new Date().toISOString(),
+    lastFetchSource: fetchSource,
+    lastFetchError: fetchError
   };
   writeJson(cachePath, newCache);
 
   const topActions = router.actions.slice(0, 3).map((a) => a.key).join(', ') || 'n/a';
+  const sourceLine =
+    fetchSource === 'live'
+      ? '- Source: live fetch'
+      : `- Source: cache fallback${fetchError ? ` (${fetchError})` : ''}`;
   const summaryLines = [
     '### Standing Priority Snapshot',
     `- Issue: #${snapshot.number} — ${snapshot.title || '(no title)'}`,
     `- State: ${snapshot.state || 'n/a'}  Updated: ${snapshot.updatedAt || 'n/a'}`,
     `- Digest: \`${snapshot.digest}\``,
     `- Labels: ${(snapshot.labels || []).join(', ') || 'none'}`,
-    `- Top actions: ${topActions}`
+    `- Top actions: ${topActions}`,
+    sourceLine
   ];
   stepSummaryAppend(summaryLines);
 
-  return { snapshot, router };
+  return { snapshot, router, fetchSource, fetchError };
 }
 
 const modulePath = path.resolve(fileURLToPath(import.meta.url));
