@@ -29,6 +29,11 @@ This produces:
 - `compare/lvcompare-capture.json`, `compare/compare-events.ndjson`, `compare-report.html`
 - `session-index.json` summarising the run (warmup mode, compare policy/mode, CLI metadata, decoded artefact summary)
 
+The repository includes a reference capture at `fixtures/teststand-session/session-index.json` so schema validation stays
+available even when fresh harness artefacts are not present. `npm run session:teststand:validate` now checks both the sample
+and any `tests/results/teststand-session/session-index.json` produced locally, allowing agents to verify shape changes without
+rerunning LabVIEW.
+
 Validate the session index with `npm run session:teststand:validate` so schema regressions surface immediately when the harness
 outputs change.
 
