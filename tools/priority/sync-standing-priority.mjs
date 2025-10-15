@@ -28,6 +28,19 @@ function writeJson(file, obj) {
   fs.writeFileSync(file, JSON.stringify(obj, null, 2) + '\n', 'utf8');
 }
 
+function loadSnapshot(repoRoot, number) {
+  if (!number) return null;
+  const snapshotPath = path.join(
+    repoRoot,
+    'tests',
+    'results',
+    '_agent',
+    'issue',
+    `${number}.json`
+  );
+  return readJson(snapshotPath);
+}
+
 export function hashObject(value) {
   const payload = typeof value === 'string' ? value : JSON.stringify(value);
   return crypto.createHash('sha256').update(payload).digest('hex');
@@ -229,16 +242,17 @@ export function main() {
   } catch (err) {
     console.warn(`[priority] Fetch failed: ${err.message}`);
     if (cache.number !== number) throw err;
+    const fallbackSnapshot = loadSnapshot(repoRoot, number) || {};
     issue = {
       number: cache.number,
-      title: cache.title || null,
-      state: cache.state || 'unknown',
-      updatedAt: cache.lastSeenUpdatedAt || null,
-      url: cache.url || null,
-      labels: cache.labels || [],
-      assignees: cache.assignees || [],
-      milestone: cache.milestone || null,
-      commentCount: null,
+      title: cache.title || fallbackSnapshot.title || null,
+      state: cache.state || fallbackSnapshot.state || 'unknown',
+      updatedAt: cache.lastSeenUpdatedAt || fallbackSnapshot.updatedAt || null,
+      url: cache.url || fallbackSnapshot.url || null,
+      labels: cache.labels || fallbackSnapshot.labels || [],
+      assignees: cache.assignees || fallbackSnapshot.assignees || [],
+      milestone: cache.milestone || fallbackSnapshot.milestone || null,
+      commentCount: cache.commentCount ?? fallbackSnapshot.commentCount ?? null,
       body: null
     };
   }
@@ -254,11 +268,17 @@ export function main() {
   const newCache = {
     ...cache,
     number,
-    title: snapshot.title || cache.title,
-    url: snapshot.url || cache.url,
-    state: snapshot.state || cache.state,
-    lastSeenUpdatedAt: snapshot.updatedAt,
-    issueDigest: snapshot.digest
+    title: snapshot.title || cache.title || null,
+    url: snapshot.url || cache.url || null,
+    state: snapshot.state || cache.state || null,
+    labels: Array.isArray(snapshot.labels) ? snapshot.labels : cache.labels || [],
+    assignees: Array.isArray(snapshot.assignees) ? snapshot.assignees : cache.assignees || [],
+    milestone: snapshot.milestone ?? cache.milestone ?? null,
+    commentCount: snapshot.commentCount ?? cache.commentCount ?? null,
+    lastSeenUpdatedAt: snapshot.updatedAt || cache.lastSeenUpdatedAt || null,
+    issueDigest: snapshot.digest,
+    bodyDigest: snapshot.bodyDigest ?? cache.bodyDigest ?? null,
+    cachedAtUtc: new Date().toISOString()
   };
   writeJson(cachePath, newCache);
 
