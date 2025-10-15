@@ -25,6 +25,16 @@ This document summarizes the expectations for automation agents working in the
      dispatch CI, update the PR (reference `#<standing-number>`), monitor to green, merge when
      acceptance is met.
 
+## Streaming guardrails
+
+- Heavy log archives and binary fixtures previously pushed this workspace over Codex streaming limits. We
+  trimmed the checked-in payloads (`logs/2025-10-09`, `job-*.log`, `tmp-win-drift.log`, `tmp_predefined.html`,
+  drift artifact zips) so future agents start below the ceiling.
+- Keep bulky diagnostics out of source. When capturing long logs, prefer short repro snippets or attach
+  artifacts to issues instead of committing them.
+- `.openai-ignore` enumerates directories/files Codex should skip to stay under streaming limits. Update that
+  list if new large assets appear (and remove the assets from git when possible).
+
 ## Repository layout
 
 - `scripts/` – PowerShell modules and shims (prefer `Import-Module`, avoid dot-sourcing).
