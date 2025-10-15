@@ -1,29 +1,29 @@
 # Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Standing priority refreshed via `npm run priority:sync`; GH CLI unavailable so cache points to issue #134 (`Standing priority: evolve CompareVI helper into N-provider CLI companion`).
-- Working branch: `issue/134-cli-companion` (created locally; no remote configured in this container).
+- Standing priority refreshed via `npm run priority:sync`; cache still points to issue #134 (`Standing priority: evolve CompareVI helper into N-provider CLI companion`).
+- Working branch: `issue/134-cli-companion` (local only in this container).
 - LabVIEW safety toggles exported in this shell (`LV_SUPPRESS_UI=1`, `LV_NO_ACTIVATE=1`, `LV_CURSOR_RESTORE=1`, `LV_IDLE_WAIT_SECONDS=2`, `LV_IDLE_MAX_WAIT_SECONDS=5`).
-- PowerShell (`pwsh`) is **not** available in this container, so LabVIEW guard/rogue scans and Pester orchestration could not execute.
-- Schema validation attempted with `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json` → command succeeded but reported `No files matched` because `tests/results/teststand-session/` is absent in this workspace.
-- Captured handoff telemetry under `tests/results/_agent/handoff/test-summary.json` (`agent-handoff/test-results@v1`) summarizing the blocked commands above.
-- No CLI-only or TestStand harness artifacts exist locally; reproduction will require a workspace that includes LabVIEW CLI and generated session outputs.
+- PowerShell (`pwsh`) remains unavailable, so LabVIEW guard/rogue scans and Pester orchestration are still blocked.
+- `npm run priority:handoff-tests` fails immediately (`pwsh: not found`), so no automated hook/semver coverage captured yet in this workspace.
+- Schema validation attempted with `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json`; command succeeds but reports `No files matched` because `tests/results/teststand-session/` is absent locally.
+- Updated handoff telemetry recorded in `tests/results/_agent/handoff/test-summary.json` (`agent-handoff/test-results@v1`) capturing the blocked handoff script and schema attempt.
 
 ## Status & Known Gaps
-1. PowerShell tooling is missing. All `pwsh`-based workflows (rogue detection, `Invoke-PesterTests.ps1`, harness scripts) are currently blocked.
-2. TestStand session artifacts referenced in prior handoffs (`tests/results/teststand-session/session-index.json`, CLI NDJSON, reports) are not present, so schema validation and documentation updates remain outstanding.
-3. Dispatcher sweep (`Invoke-PesterTests.ps1 -IntegrationMode exclude`) and targeted coverage for the TestStand harness have not run in this environment.
-4. Issue/PR context for #134 still needs refreshing once artifacts/tests are regenerated (include CLI metadata, session capsule pointers, and validation status).
+1. PowerShell tooling is still missing. All `pwsh`-based workflows (rogue detection, `Invoke-PesterTests.ps1`, priority handoff script) remain blocked until PowerShell is installed.
+2. TestStand session artifacts (`tests/results/teststand-session/session-index.json`) and CLI-only outputs are absent, so schema validation and related documentation cannot progress yet.
+3. Dispatcher sweep (`Invoke-PesterTests.ps1 -IntegrationMode exclude`) and targeted TestStand harness coverage have not run in this environment.
+4. Issue/PR context for #134 still needs refreshed notes once artifacts/tests are regenerated (include CLI metadata, session capsules, validation status).
 
 ## Suggested Next Actions
-1. Re-run the LabVIEW safety helper once `pwsh` is available: `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` (or at minimum `tools/Detect-RogueLV.ps1`).
-2. Generate fresh CLI-only and TestStand session artifacts on a machine with LabVIEW CLI access, then copy `tests/results/cli-only/` and `tests/results/teststand-session/` back into the repo.
-3. After artifacts exist, rerun the schema validator:
+1. Install or enable PowerShell 7+, then re-run the LabVIEW safety helper: `pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` (or at minimum `tools/Detect-RogueLV.ps1`).
+2. Generate or copy fresh CLI-only and TestStand session artifacts on a host with LabVIEW CLI access; populate `tests/results/cli-only/` and `tests/results/teststand-session/` locally.
+3. Re-run the schema validator once artifacts exist:
    - `node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json`
-4. Execute the dispatcher sweep and any targeted Pester modules once PowerShell is installed:
+4. Execute dispatcher coverage once PowerShell is available:
    - `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`
    - Optionally `pwsh -File Invoke-PesterTests.ps1 -TestsPath tests/TestStand-CompareHarness.Tests.ps1`
-5. Update issue/PR #134 with regenerated artifact notes, schema validation outcomes, and the refreshed handoff/test summaries.
+5. Update issue/PR #134 with regenerated artifact notes, schema validation outcomes, and refreshed handoff/test summaries.
 
 ## First Actions for the Next Agent
 1. Ensure PowerShell 7+ is available; rerun `tools/Print-AgentHandoff.ps1 -ApplyToggles` (or equivalent) to capture a clean rogue scan before proceeding with LabVIEW compares.
@@ -33,7 +33,7 @@
 5. Commit/push updates referencing `#127` per repo convention, ensuring handoff telemetry stays in sync.
 
 ## Notes for Next Agent
-- `tests/results/_agent/handoff/test-summary.json` records today\'s blocked commands (status `blocked`, failureCount=2).
-- No watcher telemetry exists for this session (container lacks prior `_agent/handoff/` assets).
+- `tests/results/_agent/handoff/test-summary.json` now records `npm run priority:handoff-tests` (blocked: `pwsh` missing) and the schema validation attempt (no matching data files).
+- No watcher telemetry exists for this session; container still lacks `_agent/handoff/` watcher assets.
 - `.agent_priority_cache.json` currently reflects cached metadata for issue #134; rerun `npm run priority:sync` after installing `gh` to refresh directly from GitHub.
 - Container image does not ship LabVIEW or LabVIEW CLI; expect to run compare/harness workflows on a Windows host with the required tooling.

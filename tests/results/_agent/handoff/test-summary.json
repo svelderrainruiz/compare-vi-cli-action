@@ -1,35 +1,26 @@
 {
   "schema": "agent-handoff/test-results@v1",
-  "generatedAt": "2025-10-15T23:48:16Z",
+  "generatedAt": "2025-10-15T23:52:39Z",
   "status": "blocked",
-  "total": 3,
-  "failureCount": 2,
+  "total": 2,
+  "failureCount": 1,
   "results": [
     {
-      "command": "pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary",
+      "command": "npm run priority:handoff-tests",
       "exitCode": 127,
-      "stdout": "bash: command not found: pwsh",
+      "stdout": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n\n> compare-vi-cli-action@0.5.0 priority:handoff-tests\n> pwsh -NoLogo -NoProfile -File tools/priority/Run-HandoffTests.ps1\n\nsh: 1: pwsh: not found\n",
       "stderr": "",
-      "startedAt": "2025-10-15T23:46:30Z",
-      "completedAt": "2025-10-15T23:46:30Z",
+      "startedAt": "2025-10-15T23:52:10Z",
+      "completedAt": "2025-10-15T23:52:10Z",
       "durationMs": 0
     },
     {
       "command": "node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json",
       "exitCode": 0,
-      "stdout": "[schema] No files matched pattern 'tests/results/teststand-session/session-index.json'.\n[schema] No data files validated (globs empty).",
+      "stdout": "[schema] No files matched pattern 'tests/results/teststand-session/session-index.json'.\n[schema] No data files validated (globs empty).\n",
       "stderr": "",
-      "startedAt": "2025-10-15T23:47:10Z",
-      "completedAt": "2025-10-15T23:47:10Z",
-      "durationMs": 0
-    },
-    {
-      "command": "pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude",
-      "exitCode": 127,
-      "stdout": "bash: command not found: pwsh",
-      "stderr": "",
-      "startedAt": "2025-10-15T23:47:45Z",
-      "completedAt": "2025-10-15T23:47:45Z",
+      "startedAt": "2025-10-15T23:52:30Z",
+      "completedAt": "2025-10-15T23:52:30Z",
       "durationMs": 0
     }
   ]
