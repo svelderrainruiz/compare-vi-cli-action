@@ -79,6 +79,19 @@ $paths = [ordered]@{
 New-Dir $paths.warmupDir
 New-Dir $paths.compareDir
 
+$baseLeaf = Split-Path -Path $BaseVi -Leaf
+$headLeaf = Split-Path -Path $HeadVi -Leaf
+$sameName = [string]::Equals($baseLeaf, $headLeaf, [System.StringComparison]::OrdinalIgnoreCase)
+$policy = $env:LVCI_COMPARE_POLICY
+$autoCli = $false
+if ($sameName -and $policy -ne 'lv-only') {
+  $autoCli = $true
+  if ($Warmup -ne 'skip') {
+    Write-Host "Harness: skipping warmup for same-name VIs (CLI path auto-selected)." -ForegroundColor Gray
+    $Warmup = 'skip'
+  }
+}
+
 $warmupLog = Join-Path $paths.warmupDir 'labview-runtime.ndjson'
 $compareLog = Join-Path $paths.compareDir 'compare-events.ndjson'
 $capPath = Join-Path $paths.compareDir 'lvcompare-capture.json'
@@ -147,6 +160,8 @@ if ($cap) {
   if ($cap.cliPath)   { $compareNode.cliPath = $cap.cliPath }
   if ($cap.environment -and $cap.environment.cli) { $compareNode.cli = $cap.environment.cli }
 }
+$compareNode.autoCli = $autoCli
+$compareNode.sameName = $sameName
 if ($env:LVCI_COMPARE_POLICY) { $compareNode.policy = $env:LVCI_COMPARE_POLICY }
 if ($env:LVCI_COMPARE_MODE)   { $compareNode.mode   = $env:LVCI_COMPARE_MODE }
 

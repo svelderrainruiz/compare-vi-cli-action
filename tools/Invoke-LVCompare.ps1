@@ -421,6 +421,18 @@ if ($ReplaceFlags.IsPresent) {
   if ($Flags) { $effectiveFlags += $Flags }
 }
 
+$baseName = Split-Path -Path $BaseVi -Leaf
+$headName = Split-Path -Path $HeadVi -Leaf
+$sameName = [string]::Equals($baseName, $headName, [System.StringComparison]::OrdinalIgnoreCase)
+
+ $policy = $env:LVCI_COMPARE_POLICY
+ $mode   = $env:LVCI_COMPARE_MODE
+ $autoCli = $false
+ if ($sameName -and $policy -ne 'lv-only') {
+   $autoCli = $true
+   if ($mode -ne 'labview-cli') { $mode = 'labview-cli' }
+ }
+
 Write-JsonEvent 'plan' @{
   base      = $BaseVi
   head      = $HeadVi
@@ -429,13 +441,15 @@ Write-JsonEvent 'plan' @{
   flags     = ($effectiveFlags -join ' ')
   out       = $OutputDir
   report    = $RenderReport.IsPresent
+  policy    = $policy
+  mode      = $mode
+  sameName  = $sameName
+  autoCli   = $autoCli
 }
 
  # Decide execution path based on compare policy/mode
- $policy = $env:LVCI_COMPARE_POLICY
- $mode   = $env:LVCI_COMPARE_MODE
  $didCli = $false
- if (($policy -eq 'cli-only') -or ($mode -eq 'labview-cli' -and $policy -ne 'lv-only')) {
+ if (($policy -eq 'cli-only') -or $autoCli -or ($mode -eq 'labview-cli' -and $policy -ne 'lv-only')) {
    try {
      $cliRes = Invoke-LabVIEWCLICompare -Base $BaseVi -Head $HeadVi -OutDir $OutputDir -RenderReport:$RenderReport.IsPresent
      Write-JsonEvent 'result' @{ exitCode=$cliRes.ExitCode; seconds=$cliRes.Seconds; command=$cliRes.Command; report=(Test-Path $cliRes.ReportPath) }

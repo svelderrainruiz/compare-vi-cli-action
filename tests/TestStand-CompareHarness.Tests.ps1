@@ -85,3 +85,78 @@ exit 0
     finally { Pop-Location }
   }
 }
+
+Describe 'TestStand-CompareHarness.ps1 (auto CLI fallback)' -Tag 'Unit' {
+  It 'skips warmup and records autoCli when comparing same-name VIs' {
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $baseDir = Join-Path $TestDrive 'base'
+    $headDir = Join-Path $TestDrive 'head'
+    New-Item -ItemType Directory -Path $baseDir, $headDir | Out-Null
+    $baseVi = Join-Path $baseDir 'Sample.vi'
+    $headVi = Join-Path $headDir 'Sample.vi'
+    Set-Content -LiteralPath $baseVi -Value 'base' -Encoding UTF8
+    Set-Content -LiteralPath $headVi -Value 'head' -Encoding UTF8
+
+    $work = Join-Path $TestDrive 'harness-auto-cli'
+    New-Item -ItemType Directory -Path $work | Out-Null
+    Push-Location $work
+    try {
+      New-Item -ItemType Directory -Path 'tools' | Out-Null
+      Copy-Item -LiteralPath (Join-Path $repoRoot 'tools\TestStand-CompareHarness.ps1') -Destination 'tools\TestStand-CompareHarness.ps1'
+
+      $sentinel = Join-Path $work 'warmup-called.txt'
+      $sentinelLiteral = $sentinel -replace "'", "''"
+      Set-Content -LiteralPath 'tools/Warmup-LabVIEWRuntime.ps1' -Encoding UTF8 -Value @"
+param()
+Set-Content -LiteralPath '$sentinelLiteral' -Value 'warmup' -Encoding utf8
+exit 0
+"@
+
+      $invokeStub = @"
+param(
+  [string]`$BaseVi,
+  [string]`$HeadVi,
+  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,
+  [Alias('LVCompareExePath')][string]`$LVComparePath,
+  [string]`$OutputDir,
+  [switch]`$RenderReport,
+  [string]`$JsonLogPath,
+  [object]`$Flags
+)
+if (-not (Test-Path `$OutputDir)) { New-Item -ItemType Directory -Path `$OutputDir -Force | Out-Null }
+if (`$JsonLogPath) { '{}' | Set-Content -LiteralPath `$JsonLogPath -Encoding utf8 }
+$capture = @{ exitCode = 0; seconds = 0.5; command = 'stub-cli' } | ConvertTo-Json
+Set-Content -LiteralPath (Join-Path `$OutputDir 'lvcompare-capture.json') -Value `$capture -Encoding utf8
+if (`$RenderReport) { Set-Content -LiteralPath (Join-Path `$OutputDir 'compare-report.html') -Value '<html/>' -Encoding utf8 }
+exit 0
+"@
+      Set-Content -LiteralPath 'tools/Invoke-LVCompare.ps1' -Value $invokeStub -Encoding UTF8
+      Set-Content -LiteralPath 'tools/Close-LVCompare.ps1' -Value "param() exit 0" -Encoding UTF8
+      Set-Content -LiteralPath 'tools/Close-LabVIEW.ps1' -Value "param() exit 0" -Encoding UTF8
+
+      $harness = Join-Path $work 'tools\TestStand-CompareHarness.ps1'
+      $outputRoot = Join-Path $work 'results'
+      $previousPolicy = $env:LVCI_COMPARE_POLICY
+      try {
+        Remove-Item Env:LVCI_COMPARE_POLICY -ErrorAction SilentlyContinue
+        & pwsh -NoLogo -NoProfile -File $harness `
+          -BaseVi $baseVi `
+          -HeadVi $headVi `
+          -OutputRoot $outputRoot `
+          -Warmup detect `
+          -RenderReport `
+          -CloseLabVIEW *> $null
+      } finally {
+        if ($null -ne $previousPolicy) { $env:LVCI_COMPARE_POLICY = $previousPolicy } else { Remove-Item Env:LVCI_COMPARE_POLICY -ErrorAction SilentlyContinue }
+      }
+
+      Test-Path -LiteralPath $sentinel | Should -BeFalse
+      $sessionIndex = Join-Path $outputRoot 'session-index.json'
+      Test-Path -LiteralPath $sessionIndex | Should -BeTrue
+      $indexData = Get-Content -LiteralPath $sessionIndex -Raw | ConvertFrom-Json
+      $indexData.compare.autoCli | Should -BeTrue
+      $indexData.compare.sameName | Should -BeTrue
+    }
+    finally { Pop-Location }
+  }
+}
