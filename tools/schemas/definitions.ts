@@ -296,17 +296,32 @@ const dispatcherResultsGuardSchema = z
   })
   .passthrough();
 
+const warmupModeSchema = z.enum(['detect', 'spawn', 'skip']);
+const warmupEventsSchema = z.union([z.string().min(1), z.null()]);
+
+const compareCliSchema = z.object({}).passthrough();
+
+const comparePolicySchema = z.enum(['lv-first', 'cli-first', 'cli-only', 'lv-only']);
+
 const testStandCompareSessionSchema = z.object({
   schema: z.literal('teststand-compare-session/v1'),
   at: isoString,
   warmup: z.object({
-    events: z.string().min(1),
+    mode: warmupModeSchema,
+    events: warmupEventsSchema,
   }),
   compare: z.object({
     events: z.string().min(1),
     capture: z.string().min(1),
     report: z.boolean(),
+    command: z.string().min(1).optional(),
     cliPath: z.string().min(1).optional(),
+    cli: compareCliSchema.optional(),
+    policy: comparePolicySchema.optional(),
+    mode: z.string().min(1).optional(),
+    autoCli: z.boolean().optional(),
+    sameName: z.boolean().optional(),
+    timeoutSeconds: z.number().min(0).optional(),
   }),
   outcome: z
     .object({
@@ -316,7 +331,7 @@ const testStandCompareSessionSchema = z.object({
       diff: z.boolean().optional(),
     })
     .nullable(),
-  error: z.string().optional(),
+  error: z.union([z.string().min(1), z.null()]).optional(),
 });
 
 const invokerEventSchema = z.object({

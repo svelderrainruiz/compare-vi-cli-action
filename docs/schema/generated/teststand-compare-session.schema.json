@@ -64,7 +64,9 @@
               "minLength": 1
             },
             "cli": {
-              "type": "object"
+              "type": "object",
+              "properties": {},
+              "additionalProperties": true
             },
             "policy": {
               "type": "string",
@@ -78,6 +80,16 @@
             "mode": {
               "type": "string",
               "minLength": 1
+            },
+            "autoCli": {
+              "type": "boolean"
+            },
+            "sameName": {
+              "type": "boolean"
+            },
+            "timeoutSeconds": {
+              "type": "number",
+              "minimum": 0
             }
           },
           "required": [
@@ -118,7 +130,8 @@
         "error": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             {
               "type": "null"
