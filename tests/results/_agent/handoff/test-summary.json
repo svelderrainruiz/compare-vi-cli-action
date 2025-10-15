@@ -1,0 +1,36 @@
+{
+  "schema": "agent-handoff/test-results@v1",
+  "generatedAt": "2025-10-15T23:48:16Z",
+  "status": "blocked",
+  "total": 3,
+  "failureCount": 2,
+  "results": [
+    {
+      "command": "pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary",
+      "exitCode": 127,
+      "stdout": "bash: command not found: pwsh",
+      "stderr": "",
+      "startedAt": "2025-10-15T23:46:30Z",
+      "completedAt": "2025-10-15T23:46:30Z",
+      "durationMs": 0
+    },
+    {
+      "command": "node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json",
+      "exitCode": 0,
+      "stdout": "[schema] No files matched pattern 'tests/results/teststand-session/session-index.json'.\n[schema] No data files validated (globs empty).",
+      "stderr": "",
+      "startedAt": "2025-10-15T23:47:10Z",
+      "completedAt": "2025-10-15T23:47:10Z",
+      "durationMs": 0
+    },
+    {
+      "command": "pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude",
+      "exitCode": 127,
+      "stdout": "bash: command not found: pwsh",
+      "stderr": "",
+      "startedAt": "2025-10-15T23:47:45Z",
+      "completedAt": "2025-10-15T23:47:45Z",
+      "durationMs": 0
+    }
+  ]
+}
