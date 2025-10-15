@@ -54,6 +54,8 @@
 - Current workspace snapshot is missing the `tests/results/teststand-session/` directory referenced above, so schema validation
   commands and report reviews will need fresh artifacts before they can run again.
 - Container image does not include `pwsh`; LabVIEW safety toggles from `tools/Print-AgentHandoff.ps1` could not be applied.
+- Captured `npm run priority:test` results at `tests/results/_agent/handoff/test-summary.json` (schema validated) noting the
+  absence of `tests/results/teststand-session/session-index.json` artifacts in this workspace.
 
 
 
