@@ -31,7 +31,7 @@ This document summarizes the expectations for automation agents working in the
 ## Build / test / develop
 
 - Unit tests: `./Invoke-PesterTests.ps1`
-- Integration: `./Invoke-PesterTests.ps1 -IncludeIntegration true`
+- Integration: `./Invoke-PesterTests.ps1 -IntegrationMode include`
 - Custom paths: `./Invoke-PesterTests.ps1 -TestsPath tests -ResultsPath tests/results`
 - Pattern filter: `./Invoke-PesterTests.ps1 -IncludePatterns 'CompareVI.*'`
 - Quick smoke: `./tools/Quick-DispatcherSmoke.ps1 -Keep`
@@ -156,6 +156,8 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
       emits a compact JSON block to `tests/results/_agent/handoff/watcher-telemetry.json`.
     - When `-AutoTrim` (or `HANDOFF_AUTOTRIM=1`) is set, trims oversized watcher logs if eligible
       and appends notes to the GitHub Step Summary when available.
+    - Each invocation also drops a session capsule under `tests/results/_agent/sessions/`
+      (schema `agent-handoff/session@v1`) capturing branch/head/status snapshots for determinism.
 - Capture quick regression coverage with `npm run priority:handoff-tests`; the script runs
   `priority:test`, `hooks:test`, and `semver:check`, then writes `tests/results/_agent/handoff/test-summary.json`
   so subsequent agents (or CI summaries) can replay the outcomes.
@@ -251,3 +253,4 @@ Guidance:
 - For markdownlint, try `Resolve-MarkdownlintCli2Path`; only fall back to `npx --no-install` when necessary.
 - For LVCompare, continue to enforce the canonical path; pass `-lvpath` to LVCompare and never launch `LabVIEW.exe`.
 - Do not lint or link-check vendor documentation under `bin/`; scope link checks to `docs/` or ignore `bin/**`.
+
