@@ -51,6 +51,9 @@
 - CLI-only artifacts: `tests/results/cli-only/lvcompare-capture.json`, `events.ndjson`, `cli-report.html`.
 - TestStand harness artifacts: `tests/results/teststand-session/session-index.json`, warmup NDJSON, CLI report/images.
 - Pending git changes listed in `tests/results/_agent/handoff/local-status.txt` (ensure staging/commits reference `#127`).
+- Current workspace snapshot is missing the `tests/results/teststand-session/` directory referenced above, so schema validation
+  commands and report reviews will need fresh artifacts before they can run again.
+- Container image does not include `pwsh`; LabVIEW safety toggles from `tools/Print-AgentHandoff.ps1` could not be applied.
 
 
 
