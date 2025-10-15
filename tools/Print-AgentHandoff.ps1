@@ -10,13 +10,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$script:HandoffFirstLine = $null
+$script:StandingPriorityContext = $null
 try {
   $repoRoot = (Split-Path -Parent $PSScriptRoot)
   $handoffPath = Join-Path $repoRoot 'AGENT_HANDOFF.txt'
   if (Test-Path -LiteralPath $handoffPath) {
-    # Emit the first heading line so callers can assert the script is wired correctly
-    $first = (Get-Content -LiteralPath $handoffPath -First 1 -ErrorAction SilentlyContinue)
-    if ($first) { Write-Output $first }
+    $script:HandoffFirstLine = Get-Content -LiteralPath $handoffPath -First 1 -ErrorAction SilentlyContinue
   }
 } catch {}
 
@@ -32,6 +32,131 @@ function Format-BoolLabel {
   if ($Value -eq $true) { return 'true' }
   if ($Value -eq $false) { return 'false' }
   return 'unknown'
+}
+
+function Get-StandingPriorityContext {
+  param(
+    [string]$RepoRoot,
+    [string]$ResultsRoot
+  )
+
+  if (-not $RepoRoot) {
+    $RepoRoot = (Resolve-Path '.').Path
+  }
+
+  $cachePath = Join-Path $RepoRoot '.agent_priority_cache.json'
+  if (-not (Test-Path -LiteralPath $cachePath -PathType Leaf)) {
+    throw "Standing priority cache not found at $cachePath. Run 'npm run priority:sync'."
+  }
+
+  try {
+    $cacheJson = Get-Content -LiteralPath $cachePath -Raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    throw ("Standing priority cache parse failed: {0}" -f $_.Exception.Message)
+  }
+
+  $issueDir = Join-Path $RepoRoot 'tests/results/_agent/issue'
+  if (-not (Test-Path -LiteralPath $issueDir -PathType Container)) {
+    throw "Standing priority snapshots missing under $issueDir. Run 'npm run priority:sync'."
+  }
+
+  $latestIssue = Get-ChildItem -LiteralPath $issueDir -Filter '*.json' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notlike 'router.json' } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if (-not $latestIssue) {
+    throw "Standing priority snapshot not found in $issueDir. Run 'npm run priority:sync'."
+  }
+
+  try {
+    $snapshot = Get-Content -LiteralPath $latestIssue.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    throw ("Standing priority snapshot parse failed: {0}" -f $_.Exception.Message)
+  }
+
+  if ($null -eq $snapshot.number) {
+    throw "Standing priority snapshot missing issue number. Run 'npm run priority:sync'."
+  }
+
+  $cacheNumber = $cacheJson.PSObject.Properties['number'] ? $cacheJson.number : $null
+  if ($cacheNumber -ne $snapshot.number) {
+    throw ("Standing priority mismatch: cache #{0} vs snapshot #{1}. Run 'npm run priority:sync'." -f $cacheNumber, $snapshot.number)
+  }
+
+  $cacheDigest = $cacheJson.PSObject.Properties['issueDigest'] ? $cacheJson.issueDigest : $null
+  $snapshotDigest = $snapshot.PSObject.Properties['digest'] ? $snapshot.digest : $null
+  if ([string]::IsNullOrWhiteSpace($cacheDigest) -or [string]::IsNullOrWhiteSpace($snapshotDigest)) {
+    throw "Standing priority digest missing. Run 'npm run priority:sync'."
+  }
+  if ($cacheDigest -ne $snapshotDigest) {
+    throw ("Standing priority digest mismatch for issue #{0}. Run 'npm run priority:sync'." -f $snapshot.number)
+  }
+
+  $routerPath = Join-Path $issueDir 'router.json'
+  $router = $null
+  if (Test-Path -LiteralPath $routerPath -PathType Leaf) {
+    try {
+      $router = Get-Content -LiteralPath $routerPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      $router = $null
+    }
+  }
+
+  return [ordered]@{
+    cachePath = $cachePath
+    cache = $cacheJson
+    snapshotPath = $latestIssue.FullName
+    snapshot = $snapshot
+    routerPath = if (Test-Path -LiteralPath $routerPath -PathType Leaf) { $routerPath } else { $null }
+    router = $router
+  }
+}
+
+function Invoke-StandingPrioritySync {
+  param([string]$RepoRoot)
+
+  if (-not $RepoRoot) {
+    $RepoRoot = (Resolve-Path '.').Path
+  }
+
+  $priorityScript = Join-Path $RepoRoot 'tools' 'priority' 'sync-standing-priority.mjs'
+  $nodeCmd = $null
+  try {
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  } catch {}
+
+  if ($nodeCmd -and (Test-Path -LiteralPath $priorityScript -PathType Leaf)) {
+    & $nodeCmd.Source $priorityScript | Out-Host
+    return $true
+  }
+
+  Write-Host '::notice::Standing priority sync skipped (node or script missing).'
+  return $false
+}
+
+function Ensure-StandingPriorityContext {
+  param(
+    [string]$RepoRoot,
+    [string]$ResultsRoot
+  )
+
+  if ($script:StandingPriorityContext) { return $script:StandingPriorityContext }
+
+  if (-not $RepoRoot) { $RepoRoot = (Resolve-Path '.').Path }
+
+  try {
+    $ctx = Get-StandingPriorityContext -RepoRoot $RepoRoot -ResultsRoot $ResultsRoot
+    $script:StandingPriorityContext = $ctx
+    return $ctx
+  } catch {
+    $initialError = $_
+    $synced = Invoke-StandingPrioritySync -RepoRoot $RepoRoot
+    if (-not $synced) { throw $initialError }
+    $ctx = Get-StandingPriorityContext -RepoRoot $RepoRoot -ResultsRoot $ResultsRoot
+    $script:StandingPriorityContext = $ctx
+    return $ctx
+  }
 }
 
 $script:GitExecutable = $null
@@ -172,6 +297,8 @@ function Write-AgentSessionCapsule {
     $environment[$key] = [System.Environment]::GetEnvironmentVariable($key)
   }
 
+  $priorityContext = Ensure-StandingPriorityContext -RepoRoot $repoRoot -ResultsRoot $ResultsRoot
+
   $capsule = [ordered]@{
     schema = 'agent-handoff/session@v1'
     generatedAt = $now.ToString('o')
@@ -187,6 +314,38 @@ function Write-AgentSessionCapsule {
   }
 
   if ($gitInfo) { $capsule.git = $gitInfo }
+
+  if ($priorityContext) {
+    $topActions = $null
+    if ($priorityContext.router -and $priorityContext.router.PSObject.Properties['actions']) {
+      $topActions = @($priorityContext.router.actions | Select-Object -First 5 | ForEach-Object { $_.key })
+    }
+
+    $capsule.standingPriority = [ordered]@{
+      issue = [ordered]@{
+        number = $priorityContext.snapshot.number
+        title = $priorityContext.snapshot.title
+        state = $priorityContext.snapshot.state
+        updatedAt = $priorityContext.snapshot.updatedAt
+        digest = $priorityContext.snapshot.digest
+        path = $priorityContext.snapshotPath
+      }
+      cache = [ordered]@{
+        path = $priorityContext.cachePath
+        cachedAtUtc = $priorityContext.cache.cachedAtUtc
+        lastSeenUpdatedAt = $priorityContext.cache.lastSeenUpdatedAt
+        issueDigest = $priorityContext.cache.issueDigest
+      }
+      router = if ($priorityContext.routerPath) {
+        [ordered]@{
+          path = $priorityContext.routerPath
+          topActions = $topActions
+        }
+      } else {
+        $null
+      }
+    }
+  }
 
   $fileBase = $capsule.sessionId
   if ($gitInfo -and $gitInfo.shortHead) {
@@ -506,53 +665,50 @@ if ($ApplyToggles) {
   }
 }
 
-Get-Content -LiteralPath $handoff
+$handoffLines = Get-Content -LiteralPath $handoff -ErrorAction Stop
+if ($script:HandoffFirstLine -and $handoffLines.Count -gt 0) {
+  if (-not [string]::Equals($script:HandoffFirstLine, $handoffLines[0], [System.StringComparison]::Ordinal)) {
+    Write-Warning ("Handoff heading mismatch. Expected '{0}', found '{1}'." -f $script:HandoffFirstLine, $handoffLines[0])
+  }
+}
+$handoffLines | ForEach-Object { Write-Output $_ }
 
 try {
-  $repoRoot = (Resolve-Path '.').Path
-  $priorityScript = Join-Path $repoRoot 'tools' 'priority' 'sync-standing-priority.mjs'
-  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-  if ($nodeCmd -and (Test-Path -LiteralPath $priorityScript -PathType Leaf)) {
-    & $nodeCmd.Source $priorityScript | Out-Host
-  } else {
-    Write-Host '::notice::Standing priority sync skipped (node or script missing).'
-  }
+  Ensure-StandingPriorityContext -RepoRoot (Resolve-Path '.').Path -ResultsRoot $ResultsRoot | Out-Null
 } catch {
-  Write-Warning ("Standing priority sync failed: {0}" -f $_.Exception.Message)
+  Write-Warning ("Standing priority ensure failed: {0}" -f $_.Exception.Message)
 }
 
 try {
-  $issueDir = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/issue'
-  if (Test-Path -LiteralPath $issueDir -PathType Container) {
-    $latestIssue = Get-ChildItem -LiteralPath $issueDir -Filter '*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($latestIssue) {
-      $issueSnap = Get-Content -LiteralPath $latestIssue.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
-      Write-Host ''
-      Write-Host '[Standing Priority]' -ForegroundColor Cyan
-      Write-Host ("  issue    : #{0}" -f $issueSnap.number)
-      Write-Host ("  title    : {0}" -f (Format-NullableValue $issueSnap.title))
-      Write-Host ("  state    : {0}" -f (Format-NullableValue $issueSnap.state))
-      Write-Host ("  updated  : {0}" -f (Format-NullableValue $issueSnap.updatedAt))
-      Write-Host ("  digest   : {0}" -f (Format-NullableValue $issueSnap.digest))
+  $priorityContext = Ensure-StandingPriorityContext -RepoRoot (Resolve-Path '.').Path -ResultsRoot $ResultsRoot
+  if ($priorityContext) {
+    $issueSnap = $priorityContext.snapshot
+    Write-Host ''
+    Write-Host '[Standing Priority]' -ForegroundColor Cyan
+    Write-Host ("  issue    : #{0}" -f (Format-NullableValue $issueSnap.number))
+    Write-Host ("  title    : {0}" -f (Format-NullableValue $issueSnap.title))
+    Write-Host ("  state    : {0}" -f (Format-NullableValue $issueSnap.state))
+    Write-Host ("  updated  : {0}" -f (Format-NullableValue $issueSnap.updatedAt))
+    Write-Host ("  digest   : {0}" -f (Format-NullableValue $issueSnap.digest))
 
-      if ($env:GITHUB_STEP_SUMMARY) {
-        $priorityLines = @(
-          '### Standing Priority',
-          '',
-          ('- Issue: #{0} — {1}' -f $issueSnap.number, (Format-NullableValue $issueSnap.title)),
-          ('- State: {0}  Updated: {1}' -f (Format-NullableValue $issueSnap.state), (Format-NullableValue $issueSnap.updatedAt)),
-          ('- Digest: `{0}`' -f (Format-NullableValue $issueSnap.digest))
-        )
-        ($priorityLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-      }
+    if ($env:GITHUB_STEP_SUMMARY) {
+      $priorityLines = @(
+        '### Standing Priority',
+        '',
+        ('- Issue: #{0} — {1}' -f (Format-NullableValue $issueSnap.number), (Format-NullableValue $issueSnap.title)),
+        ('- State: {0}  Updated: {1}' -f (Format-NullableValue $issueSnap.state), (Format-NullableValue $issueSnap.updatedAt)),
+        ('- Digest: `{0}`' -f (Format-NullableValue $issueSnap.digest))
+      )
+      ($priorityLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
 
-      $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
-      New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
-      Copy-Item -LiteralPath $latestIssue.FullName -Destination (Join-Path $handoffDir 'issue-summary.json') -Force
-      $routerSrc = Join-Path $issueDir 'router.json'
-      if (Test-Path -LiteralPath $routerSrc -PathType Leaf) {
-        Copy-Item -LiteralPath $routerSrc -Destination (Join-Path $handoffDir 'issue-router.json') -Force
-      }
+    $handoffDir = Join-Path $ResultsRoot '_agent/handoff'
+    New-Item -ItemType Directory -Force -Path $handoffDir | Out-Null
+    if ($priorityContext.snapshotPath) {
+      Copy-Item -LiteralPath $priorityContext.snapshotPath -Destination (Join-Path $handoffDir 'issue-summary.json') -Force
+    }
+    if ($priorityContext.routerPath) {
+      Copy-Item -LiteralPath $priorityContext.routerPath -Destination (Join-Path $handoffDir 'issue-router.json') -Force
     }
   }
 } catch {

@@ -1,7 +1,7 @@
 # Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Standing priority: issue #127 (per `AGENTS.md` update)
+- Standing priority: `npm run priority:sync` → `.agent_priority_cache.json` (standing issue snapshot)
 - Current branch: `issue/127-cli-metadata-html` (tracking `origin/issue/127-cli-metadata-html`)
 - Local telemetry captured under `tests/results/_agent/handoff/`:
   - `local-status.txt`, `local-diff.txt`, `branch.txt`, `head-sha.txt`

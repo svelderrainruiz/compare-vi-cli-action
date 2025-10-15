@@ -7,8 +7,10 @@ This document summarizes the expectations for automation agents working in the
 
 ## Primary directive
 
-- Issue **#127** is the standing priority. Treat progress on #127 as the top objective for edits,
-  CI runs, and PRs.
+- The standing priority is whichever issue carries the `standing-priority` label. Run
+  `npm run priority:sync` at session start so `.agent_priority_cache.json` and
+  `tests/results/_agent/issue/` reflect the latest snapshot; treat that issue as the top objective for
+  edits, CI runs, and PRs.
 - The human operator is signed in with an admin GitHub token; assume privileged operations
   (labels, reruns, merges) are allowed when safe.
 - Default behaviour:
@@ -16,9 +18,12 @@ This document summarizes the expectations for automation agents working in the
   - Keep workflows deterministic and green.
   - Reference `#127` in commit and PR descriptions.
 - First actions in a session:
-  1. Pull #127 details (tasks, acceptance, linked PRs).
-  2. Create or sync a working branch (`issue/127-<slug>`), push minimal changes, dispatch CI.
-  3. Open or update the PR, apply required labels, monitor to green, merge when acceptance is met.
+  1. `npm run priority:sync` to refresh the standing-priority snapshot and router artifacts.
+  2. Review `.agent_priority_cache.json` / `tests/results/_agent/issue/` for tasks, acceptance, and
+     linked PRs on the standing issue.
+  3. Create or sync a working branch (`issue/<standing-number>-<slug>`), push minimal changes,
+     dispatch CI, update the PR (reference `#<standing-number>`), monitor to green, merge when
+     acceptance is met.
 
 ## Repository layout
 
