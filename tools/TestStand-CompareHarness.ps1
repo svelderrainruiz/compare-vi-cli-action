@@ -82,7 +82,10 @@ New-Dir $paths.compareDir
 $baseLeaf = Split-Path -Path $BaseVi -Leaf
 $headLeaf = Split-Path -Path $HeadVi -Leaf
 $sameName = [string]::Equals($baseLeaf, $headLeaf, [System.StringComparison]::OrdinalIgnoreCase)
-$policy = $env:LVCI_COMPARE_POLICY
+$rawPolicy = $env:LVCI_COMPARE_POLICY
+$policy = if ([string]::IsNullOrWhiteSpace($rawPolicy)) { 'cli-only' } else { $rawPolicy }
+$rawMode = $env:LVCI_COMPARE_MODE
+$mode = if ([string]::IsNullOrWhiteSpace($rawMode)) { 'labview-cli' } else { $rawMode }
 $autoCli = $false
 if ($sameName -and $policy -ne 'lv-only') {
   $autoCli = $true
@@ -90,6 +93,18 @@ if ($sameName -and $policy -ne 'lv-only') {
     Write-Host "Harness: skipping warmup for same-name VIs (CLI path auto-selected)." -ForegroundColor Gray
     $Warmup = 'skip'
   }
+}
+if ($policy -eq 'cli-only') {
+  if ($Warmup -ne 'skip') {
+    Write-Host "Harness: skipping warmup (headless CLI default policy)." -ForegroundColor Gray
+    $Warmup = 'skip'
+  }
+}
+if ([string]::IsNullOrWhiteSpace($rawPolicy)) {
+  try { [System.Environment]::SetEnvironmentVariable('LVCI_COMPARE_POLICY', $policy, 'Process') } catch {}
+}
+if ([string]::IsNullOrWhiteSpace($rawMode)) {
+  try { [System.Environment]::SetEnvironmentVariable('LVCI_COMPARE_MODE', $mode, 'Process') } catch {}
 }
 
 $warmupLog = Join-Path $paths.warmupDir 'labview-runtime.ndjson'

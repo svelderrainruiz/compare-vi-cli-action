@@ -154,6 +154,8 @@ exit 0
       $sessionIndex = Join-Path $outputRoot 'session-index.json'
       Test-Path -LiteralPath $sessionIndex | Should -BeTrue
       $indexData = Get-Content -LiteralPath $sessionIndex -Raw | ConvertFrom-Json
+      $indexData.compare.policy | Should -Be 'cli-only'
+      $indexData.compare.mode | Should -Be 'labview-cli'
       $indexData.compare.autoCli | Should -BeTrue
       $indexData.compare.sameName | Should -BeTrue
     }

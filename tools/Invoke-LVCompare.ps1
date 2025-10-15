@@ -426,7 +426,9 @@ $headName = Split-Path -Path $HeadVi -Leaf
 $sameName = [string]::Equals($baseName, $headName, [System.StringComparison]::OrdinalIgnoreCase)
 
  $policy = $env:LVCI_COMPARE_POLICY
+ if ([string]::IsNullOrWhiteSpace($policy)) { $policy = 'cli-only' }
  $mode   = $env:LVCI_COMPARE_MODE
+ if ([string]::IsNullOrWhiteSpace($mode)) { $mode = 'labview-cli' }
  $autoCli = $false
  if ($sameName -and $policy -ne 'lv-only') {
    $autoCli = $true
