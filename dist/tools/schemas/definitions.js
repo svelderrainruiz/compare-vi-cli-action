@@ -72,6 +72,15 @@ const cliArtifactsSchema = z
     images: z.array(cliArtifactsImageSchema).optional(),
 })
     .passthrough();
+const cliInfoSchema = z.object({
+    path: z.string().min(1).optional(),
+    version: z.string().min(1).optional(),
+    reportType: z.string().min(1).optional(),
+    reportPath: z.string().min(1).optional(),
+    status: z.string().min(1).optional(),
+    message: z.string().min(1).optional(),
+    artifacts: cliArtifactsSchema.optional(),
+});
 const lvCompareEnvironmentSchema = z
     .object({
     lvcompareVersion: z.string().min(1).optional(),
@@ -81,17 +90,7 @@ const lvCompareEnvironmentSchema = z
     arch: z.string().min(1).optional(),
     compareMode: z.string().min(1).optional(),
     comparePolicy: z.string().min(1).optional(),
-    cli: z
-        .object({
-        path: z.string().min(1).optional(),
-        version: z.string().min(1).optional(),
-        reportType: z.string().min(1).optional(),
-        reportPath: z.string().min(1).optional(),
-        status: z.string().min(1).optional(),
-        message: z.string().min(1).optional(),
-        artifacts: cliArtifactsSchema.optional(),
-    })
-        .optional(),
+    cli: cliInfoSchema.optional(),
     runner: z
         .object({
         labels: z.array(z.string().min(1)).optional(),
@@ -275,7 +274,7 @@ const dispatcherResultsGuardSchema = z
     .passthrough();
 const warmupModeSchema = z.enum(['detect', 'spawn', 'skip']);
 const warmupEventsSchema = z.union([z.string().min(1), z.null()]);
-const compareCliSchema = z.object({}).passthrough();
+const compareCliSchema = cliInfoSchema;
 const comparePolicySchema = z.enum(['lv-first', 'cli-first', 'cli-only', 'lv-only']);
 const testStandCompareSessionSchema = z.object({
     schema: z.literal('teststand-compare-session/v1'),
