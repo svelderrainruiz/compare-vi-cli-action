@@ -191,6 +191,8 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
 
 - Prefer the REST watcher when monitoring workflows: `npm run ci:watch:rest -- --run-id <id>` streams job status and exits non-zero if
   the run fails. Passing `--branch <name>` auto-selects the latest run. The VS Code task “CI Watch (REST)” prompts for a run id.
+- The watcher now aborts with `conclusion: watcher-error` after repeated 404s or other API failures (90s / 120s grace by default), still
+  writing `watcher-rest.json` so session-index telemetry isn’t lost.
 - Use the Docker watcher (`tools/Watch-InDocker.ps1`) when you need dispatcher logs or artifact download mirrors. Both watchers honor
   `GH_TOKEN`/`GITHUB_TOKEN` and fall back to `C:\github_token.txt` on Windows.
 - Keep watcher summaries in `tests/results/_agent/` up to date so downstream agents inherit telemetry context.
