@@ -4,6 +4,7 @@
     "ms-vscode.powershell",
     "github.vscode-github-actions",
     "davidanson.vscode-markdownlint",
-    "ms-azuretools.vscode-docker"
+    "ms-azuretools.vscode-docker",
+    "local.comparevi-helper"
   ]
 }

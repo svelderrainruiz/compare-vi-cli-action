@@ -1151,12 +1151,20 @@ export function activate(context: vscode.ExtensionContext) {
     statusBar.text = "CompareVI: idle";
     statusBar.tooltip = "Run CompareVI tasks or watch standing priority runs.";
     statusBar.show();
+    // Initial session-index read if present
+    const initialResultsRoot = getConfiguration().get<string>("watch.resultsPath", "tests/results");
+    const initialSessionIndex = path.join(repoRoot, initialResultsRoot, "session-index.json");
+    void refreshFromSessionIndex(initialSessionIndex, statusBar);
 
     const disposables: vscode.Disposable[] = [];
 
     const refreshArtifacts = () => {
         artifactProvider.refresh();
         void evaluateOutcomeDiagnostics(artifactProvider, diagnosticState);
+        // Opportunistically refresh status bar from session index on any results change
+        const resultsRoot = getConfiguration().get<string>("watch.resultsPath", "tests/results");
+        const sessionIndex = path.join(repoRoot, resultsRoot, "session-index.json");
+        void refreshFromSessionIndex(sessionIndex, statusBar);
     };
 
     if (workspaceFolder) {
@@ -1303,7 +1311,99 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(
             "comparevi.watchStandingPriority",
             async () => {
-                await runTask(TASK_WATCH);
+                // Robust REST watcher with QuickPick (Run Id or Branch) and status bar updates
+                try {
+                    const cfg = getConfiguration();
+                    const resultsRoot = cfg.get<string>("watch.resultsPath", "tests/results");
+                    const errorGraceMs = cfg.get<number>("watch.errorGraceMs", 120000);
+                    const notFoundGraceMs = cfg.get<number>("watch.notFoundGraceMs", 90000);
+
+                    const outPath = path.join(repoRoot, resultsRoot, "_agent", "watcher-rest.json");
+                    const sessionIndex = path.join(repoRoot, resultsRoot, "session-index.json");
+
+                    const choice = await vscode.window.showQuickPick([
+                        { label: "Watch by Branch", description: "Use latest run for current branch" },
+                        { label: "Watch by Run Id", description: "Provide a run id manually" }
+                    ], { placeHolder: "How would you like to watch the orchestrated run?" });
+                    if (!choice) { return; }
+
+                    let args: string[] = [];
+                    let selectedBranch: string | undefined;
+                    let selectedRunId: string | undefined;
+                    if (choice.label.startsWith("Watch by Run Id")) {
+                        const runId = await vscode.window.showInputBox({ prompt: "Enter workflow run id", validateInput: v => /^(\d+)$/.test(v ?? "") ? undefined : "Enter a numeric run id" });
+                        if (!runId) { return; }
+                        args = ["--run-id", runId];
+                        selectedRunId = runId;
+                    } else {
+                        // determine current branch
+                        let branch = "";
+                        try {
+                            const r = spawnSync(process.platform === "win32" ? "git.exe" : "git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: repoRoot, encoding: "utf8" });
+                            if (r.status === 0) { branch = (r.stdout ?? "").trim(); }
+                        } catch {
+                            // ignore
+                        }
+                        if (!branch) {
+                            const b = await vscode.window.showInputBox({ prompt: "Enter branch to watch", value: "develop" });
+                            if (!b) { return; }
+                            branch = b;
+                        }
+                        args = ["--branch", branch, "--workflow", ".github/workflows/ci-orchestrated.yml"];
+                        selectedBranch = branch;
+                    }
+
+                    // Ensure output directory exists
+                    await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
+
+                    // Prefer PowerShell wrapper to also merge session index; fallback to node directly
+                    const pwsh = process.platform === "win32" ? "pwsh.exe" : "pwsh";
+                    const check = spawnSync(pwsh, ["-NoLogo", "-NoProfile", "-Command", "$PSVersionTable.PSVersion"], { cwd: repoRoot });
+                    const havePwsh = (check.status === 0);
+
+                    if (havePwsh) {
+                        statusBar.text = "CompareVI: watching (REST)…";
+                        const psArgs: string[] = [
+                            "-NoLogo", "-NoProfile", "-File",
+                            path.join(repoRoot, "tools", "Watch-OrchestratedRest.ps1"),
+                            ...(
+                                selectedRunId
+                                    ? ["-RunId", selectedRunId]
+                                    : ["-Branch", (selectedBranch ?? "develop"), "-Workflow", ".github/workflows/ci-orchestrated.yml"]
+                            ),
+                            "-OutPath", outPath,
+                            "-ErrorGraceMs", String(errorGraceMs),
+                            "-NotFoundGraceMs", String(notFoundGraceMs)
+                        ];
+                        await new Promise<void>((resolve) => {
+                            const cp = spawn(pwsh, psArgs, { cwd: repoRoot, env: process.env });
+                            cp.stdout?.on("data", d => manualOutputChannel?.append(utf8Decoder.decode(d)));
+                            cp.stderr?.on("data", d => manualOutputChannel?.append(utf8Decoder.decode(d)));
+                            cp.on("close", async () => {
+                                await refreshFromSessionIndex(sessionIndex, statusBar);
+                                resolve();
+                            });
+                        });
+                    } else {
+                        statusBar.text = "CompareVI: watching (REST, node)…";
+                        const watcherJs = path.join(repoRoot, "dist", "tools", "watchers", "orchestrated-watch.js");
+                        const nodeArgs: string[] = [watcherJs, ...args, "--out", outPath, "--error-grace-ms", String(errorGraceMs), "--notfound-grace-ms", String(notFoundGraceMs)];
+                        await new Promise<void>((resolve) => {
+                            const cp = spawn(process.execPath, nodeArgs, { cwd: repoRoot, env: process.env });
+                            cp.stdout?.on("data", d => manualOutputChannel?.append(utf8Decoder.decode(d)));
+                            cp.stderr?.on("data", d => manualOutputChannel?.append(utf8Decoder.decode(d)));
+                            cp.on("close", async () => {
+                                await mergeWatcherIntoSessionIndex(outPath, sessionIndex);
+                                await refreshFromSessionIndex(sessionIndex, statusBar);
+                                resolve();
+                            });
+                        });
+                    }
+                } catch (err) {
+                    vscode.window.showErrorMessage(`REST watcher failed: ${(err as Error).message}`);
+                } finally {
+                    statusBar.text = "CompareVI: idle";
+                }
             }
         ),
         vscode.commands.registerCommand("comparevi.openArtifact", async (item?: ArtifactItem) => {
@@ -1323,3 +1423,52 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
+async function refreshFromSessionIndex(sessionIndexPath: string, statusBar: vscode.StatusBarItem) {
+    try {
+        if (!fs.existsSync(sessionIndexPath)) {
+            return;
+        }
+        const raw = await fs.promises.readFile(sessionIndexPath, "utf8");
+        const data = JSON.parse(raw);
+        const rest = data?.watchers?.rest;
+        if (!rest) {
+            return;
+        }
+        const status: string = rest.status ?? "unknown";
+        const conclusion: string = rest.conclusion ?? "unknown";
+        const url: string | undefined = rest.htmlUrl ?? undefined;
+        const label = conclusion && conclusion !== "" ? `${status}/${conclusion}` : status;
+        statusBar.text = `CompareVI: ${label}`;
+        statusBar.tooltip = url ? `Open run: ${url}` : "Run CompareVI tasks or watch standing priority runs.";
+        if (url) {
+            statusBar.command = {
+                title: "Open Run",
+                command: "vscode.open",
+                arguments: [vscode.Uri.parse(url)]
+            } as any;
+        } else {
+            statusBar.command = "comparevi.watchStandingPriority";
+        }
+    } catch {
+        // ignore parse errors
+    }
+}
+
+async function mergeWatcherIntoSessionIndex(watcherPath: string, sessionIndexPath: string) {
+    try {
+        if (!fs.existsSync(watcherPath)) { return; }
+        const raw = await fs.promises.readFile(watcherPath, "utf8");
+        const watch = JSON.parse(raw);
+        let idx: any = {};
+        if (fs.existsSync(sessionIndexPath)) {
+            try { idx = JSON.parse(await fs.promises.readFile(sessionIndexPath, "utf8")); } catch { idx = {}; }
+        }
+        idx.watchers = idx.watchers ?? {};
+        idx.watchers.rest = watch;
+        await fs.promises.mkdir(path.dirname(sessionIndexPath), { recursive: true });
+        await fs.promises.writeFile(sessionIndexPath, JSON.stringify(idx, null, 2), "utf8");
+    } catch {
+        // ignore merge errors
+    }
+}

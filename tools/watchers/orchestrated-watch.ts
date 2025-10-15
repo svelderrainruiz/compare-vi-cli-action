@@ -27,6 +27,8 @@ interface WorkflowJobsResponse {
 }
 
 const DEFAULT_WORKFLOW_FILE = '.github/workflows/ci-orchestrated.yml';
+const DEFAULT_ERROR_GRACE_MS = 120_000;
+const DEFAULT_NOT_FOUND_GRACE_MS = 90_000;
 
 interface WatcherSummary {
   schema: 'ci-watch/rest-v1';
@@ -46,6 +48,61 @@ interface WatcherSummary {
     conclusion?: string | null;
     htmlUrl?: string;
   }>;
+}
+
+class WatcherAbort extends Error {
+  public readonly summary: WatcherSummary;
+
+  constructor(message: string, summary: WatcherSummary) {
+    super(message);
+    this.name = 'WatcherAbort';
+    this.summary = summary;
+  }
+}
+
+function normaliseError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message ?? String(error);
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return JSON.stringify(error);
+}
+
+function isNotFoundError(error: unknown): boolean {
+  const message = normaliseError(error).toLowerCase();
+  return message.includes('404') || message.includes('not found');
+}
+
+function buildSummary(params: {
+  repo: string;
+  runId: number;
+  run?: WorkflowRun;
+  jobs?: WorkflowJobsResponse['jobs'];
+  status: string;
+  conclusion: string;
+}): WatcherSummary {
+  const { repo, runId, run, jobs, status, conclusion } = params;
+  return {
+    schema: 'ci-watch/rest-v1',
+    repo,
+    runId,
+    branch: run?.head_branch ?? undefined,
+    headSha: run?.head_sha ?? undefined,
+    status,
+    conclusion,
+    htmlUrl: run?.html_url ?? undefined,
+    displayTitle: run?.display_title ?? undefined,
+    polledAtUtc: new Date().toISOString(),
+    jobs: (jobs ?? []).map((job) => ({
+      id: job.id,
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion ?? undefined,
+      htmlUrl: job.html_url ?? undefined,
+    })),
+  };
 }
 
 function resolveRepo(): string {
@@ -99,12 +156,22 @@ function formatJob(job: WorkflowJobsResponse['jobs'][number]): string {
   return `- ${job.name}: ${status}${suffix}`;
 }
 
-async function watchRun(repo: string, runId: number, token: string | undefined, pollMs = 15000): Promise<WatcherSummary> {
+async function watchRun(
+  repo: string,
+  runId: number,
+  token: string | undefined,
+  pollMs = 15000,
+  errorGraceMs = DEFAULT_ERROR_GRACE_MS,
+  notFoundGraceMs = DEFAULT_NOT_FOUND_GRACE_MS,
+): Promise<WatcherSummary> {
   // eslint-disable-next-line no-console
   console.log(`Watching run ${runId} in ${repo}...`);
 
   let latestRun: WorkflowRun | undefined;
   let latestJobs: WorkflowJobsResponse['jobs'] = [];
+  let runDataLoaded = false;
+  let errorWindowStart: number | undefined;
+  let notFoundStart: number | undefined;
 
   while (true) {
     try {
@@ -140,7 +207,13 @@ async function watchRun(repo: string, runId: number, token: string | undefined, 
           // eslint-disable-next-line no-console
           console.log(formatJob(job));
         }
+      } else {
+        latestJobs = [];
       }
+
+      runDataLoaded = true;
+      errorWindowStart = undefined;
+      notFoundStart = undefined;
 
       if (status === 'completed') {
         return {
@@ -166,6 +239,43 @@ async function watchRun(repo: string, runId: number, token: string | undefined, 
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(`[watcher] ${((err as Error).message).trim()}`);
+      if (!runDataLoaded && isNotFoundError(err)) {
+        if (!notFoundStart) {
+          notFoundStart = Date.now();
+        }
+        if (Date.now() - notFoundStart >= notFoundGraceMs) {
+          const summary = buildSummary({
+            repo,
+            runId,
+            run: latestRun,
+            jobs: latestJobs,
+            status: 'not_found',
+            conclusion: 'watcher-error',
+          });
+          throw new WatcherAbort(
+            `Run ${runId} in ${repo} was not found after ${Math.round(notFoundGraceMs / 1000)}s.`,
+            summary,
+          );
+        }
+      } else {
+        if (!errorWindowStart) {
+          errorWindowStart = Date.now();
+        }
+        if (Date.now() - errorWindowStart >= errorGraceMs) {
+          const summary = buildSummary({
+            repo,
+            runId,
+            run: latestRun,
+            jobs: latestJobs,
+            status: latestRun?.status ?? 'error',
+            conclusion: 'watcher-error',
+          });
+          throw new WatcherAbort(
+            `Aborting watcher for run ${runId} after ${Math.round(errorGraceMs / 1000)}s of consecutive errors.`,
+            summary,
+          );
+        }
+      }
     }
 
     await sleep(pollMs);
@@ -181,6 +291,8 @@ async function main() {
   parser.add_argument('--workflow', { default: DEFAULT_WORKFLOW_FILE, help: 'Workflow file name (default: ci-orchestrated)' });
   parser.add_argument('--poll-ms', { type: Number, default: 15000, help: 'Polling interval in milliseconds' });
   parser.add_argument('--out', { help: 'Optional path to write watcher summary JSON' });
+  parser.add_argument('--error-grace-ms', { type: Number, default: DEFAULT_ERROR_GRACE_MS, help: 'Milliseconds of consecutive errors before aborting (default: 120000)' });
+  parser.add_argument('--notfound-grace-ms', { type: Number, default: DEFAULT_NOT_FOUND_GRACE_MS, help: 'Milliseconds to wait after repeated 404 responses before aborting (default: 90000)' });
   const args = parser.parse_args();
 
   const repo = resolveRepo();
@@ -198,16 +310,39 @@ async function main() {
     runId = latest.id;
   }
 
-  const summary = await watchRun(repo, runId, token, args.poll_ms ?? 15000);
+  try {
+    const summary = await watchRun(
+      repo,
+      runId,
+      token,
+      args.poll_ms ?? 15000,
+      args.error_grace_ms ?? DEFAULT_ERROR_GRACE_MS,
+      args.notfound_grace_ms ?? DEFAULT_NOT_FOUND_GRACE_MS,
+    );
 
-  if (args.out) {
-    const outPath = resolve(process.cwd(), args.out as string);
-    mkdirSync(dirname(outPath), { recursive: true });
-    writeFileSync(outPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
-  }
+    if (args.out) {
+      const outPath = resolve(process.cwd(), args.out as string);
+      mkdirSync(dirname(outPath), { recursive: true });
+      writeFileSync(outPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+    }
 
-  if (summary.conclusion && summary.conclusion.toLowerCase() !== 'success') {
-    process.exitCode = 1;
+    if (summary.conclusion && summary.conclusion.toLowerCase() !== 'success') {
+      process.exitCode = 1;
+    }
+  } catch (err) {
+    if (err instanceof WatcherAbort) {
+      // eslint-disable-next-line no-console
+      console.error(`[watcher] ${err.message}`);
+      if (args.out) {
+        const outPath = resolve(process.cwd(), args.out as string);
+        mkdirSync(dirname(outPath), { recursive: true });
+        writeFileSync(outPath, `${JSON.stringify(err.summary, null, 2)}\n`, 'utf8');
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    throw err;
   }
 }
 

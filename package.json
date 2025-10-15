@@ -50,7 +50,11 @@
     "handoff:release-schema": "npm run schema:validate -- --schema docs/schemas/handoff-release-v1.schema.json --data tests/results/_agent/handoff/release-summary.json --optional",
     "handoff:session-schema": "npm run schema:validate -- --schema docs/schemas/handoff-session-v1.schema.json --data tests/results/_agent/sessions/*.json --optional",
     "publish:cli": "pwsh -NoLogo -NoProfile -File tools/Publish-Cli.ps1",
-    "docs:manifest:validate": "npm run schema:validate -- --schema docs/schemas/documentation-manifest-v1.schema.json --data docs/documentation-manifest.json"
+    "docs:manifest:validate": "npm run schema:validate -- --schema docs/schemas/documentation-manifest-v1.schema.json --data docs/documentation-manifest.json",
+    "ext:package": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1",
+    "ext:install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -Install",
+    "ext:bump-package": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch",
+    "ext:bump-install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch -Install"
   },
   "devDependencies": {
     "@types/argparse": "^2.0.16",

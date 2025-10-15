@@ -74,6 +74,7 @@ function Invoke-IntegrationCompareLoop {
     [int]$DebounceMilliseconds = 250,
     [ValidateSet('None','Text','Markdown','Html')][string]$DiffSummaryFormat = 'None',
     [string]$DiffSummaryPath,
+    [switch]$RenderReport,
     [switch]$AdaptiveInterval,
     [double]$MinIntervalSeconds = 1,
     [double]$MaxIntervalSeconds = 30,
@@ -108,6 +109,42 @@ function Invoke-IntegrationCompareLoop {
   }
 
   $cli = if ($BypassCliValidation) { $script:CanonicalLVCompare } else { Test-CanonicalCli }
+
+  function Get-ReportPathFromCommand {
+    param(
+      [string]$Command,
+      [string]$WorkingDirectory
+    )
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $null }
+    $match = [regex]::Match(
+      $Command,
+      '-reportPath\s+(?:"(?<quoted>[^"]+)"|(?<plain>\S+))',
+      [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if (-not $match.Success) { return $null }
+    $value = if ($match.Groups['quoted'].Success) { $match.Groups['quoted'].Value } else { $match.Groups['plain'].Value }
+    if ([string]::IsNullOrWhiteSpace($value)) { return $null }
+    if ([System.IO.Path]::IsPathRooted($value)) { return $value }
+    if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) { return $value }
+    try {
+      return (Resolve-Path -LiteralPath (Join-Path $WorkingDirectory $value) -ErrorAction Stop).Path
+    } catch {
+      return (Join-Path $WorkingDirectory $value)
+    }
+  }
+
+  function Test-ReportHasDifferences {
+    param([string]$ReportPath)
+    if ([string]::IsNullOrWhiteSpace($ReportPath)) { return $false }
+    if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) { return $false }
+    try {
+      $content = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop
+      if ([string]::IsNullOrWhiteSpace($content)) { return $false }
+      return ($content -match 'Difference Type:' -or $content -match 'class="diff-detail"')
+    } catch {
+      return $false
+    }
+  }
 
   # Preflight: disallow comparing two VIs with identical filenames in different directories (LVCompare may raise IDE dialog)
   try {
@@ -404,9 +441,49 @@ function Invoke-IntegrationCompareLoop {
       }
       $resultDiff = $null
       $compareResult = $null
+      $reportPath = $null
+      $useReportCapture = ([bool]$RenderReport -or $DiffSummaryFormat -ne 'None')
       if ($CompareExecutor) {
         # Invoke executor positionally to avoid parameter name coupling.
         $exitCode = & $CompareExecutor $cli $baseAbs $headAbs $argsList
+      } elseif ($useReportCapture) {
+        try {
+          $reportRoot = $null
+          if ($RunSummaryJsonPath) {
+            try {
+              $resolvedSummary = Resolve-Path -LiteralPath $RunSummaryJsonPath -ErrorAction Stop
+              if ($resolvedSummary) { $reportRoot = Split-Path -Parent $resolvedSummary.Path }
+            } catch {
+              $candidateDir = Split-Path -Parent $RunSummaryJsonPath
+              if ($candidateDir) { $reportRoot = (Join-Path (Get-Location).Path $candidateDir) }
+            }
+          }
+          if (-not $reportRoot) {
+            $reportRoot = Join-Path $repoRoot 'tests' 'results' 'loop'
+          }
+          $iterationLabel = ('iteration-{0:D4}' -f $iteration)
+          $iterationOutput = Join-Path $reportRoot $iterationLabel
+          $lvCompareScript = Join-Path $repoRoot 'tools' 'Invoke-LVCompare.ps1'
+          $lvParams = @{
+            BaseVi      = $baseAbs
+            HeadVi      = $headAbs
+            OutputDir   = $iterationOutput
+            RenderReport = $true
+            Quiet       = $true
+          }
+          if ($argsList -and $argsList.Count -gt 0) { $lvParams.Flags = $argsList }
+          & $lvCompareScript @lvParams | Out-Null
+          $capPath = Join-Path $iterationOutput 'lvcompare-capture.json'
+          if (Test-Path -LiteralPath $capPath -PathType Leaf) {
+            $compareResult = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json
+          }
+          $reportPath = Join-Path $iterationOutput 'compare-report.html'
+          $exitCode = if ($compareResult) { [int]$compareResult.exitCode } else { 0 }
+        } catch {
+          if (-not $Quiet) { Write-Warning ("Invoke-LVCompare failed: {0}" -f $_.Exception.Message) }
+          $exitCode = -999
+          $status = 'ERROR'
+        }
       } else {
         try {
           $compareParams = @{
@@ -429,23 +506,64 @@ function Invoke-IntegrationCompareLoop {
         }
       }
       $iterationSw.Stop()
-      if ($compareResult -and $compareResult.CompareDurationSeconds -gt 0) {
-        $durationSeconds = [math]::Round([double]$compareResult.CompareDurationSeconds,3)
+      $calcDuration = $null
+      if ($compareResult) {
+        if ($compareResult.PSObject.Properties.Name -contains 'CompareDurationSeconds' -and $compareResult.CompareDurationSeconds -gt 0) {
+          $calcDuration = [double]$compareResult.CompareDurationSeconds
+        } elseif ($compareResult.PSObject.Properties.Name -contains 'seconds' -and $compareResult.seconds -gt 0) {
+          $calcDuration = [double]$compareResult.seconds
+        }
+      }
+      if ($calcDuration -ne $null) {
+        $durationSeconds = [math]::Round($calcDuration,3)
       } else {
         $durationSeconds = [math]::Round($iterationSw.Elapsed.TotalSeconds,3)
       }
       $totalSeconds += $durationSeconds
-      switch ($exitCode) {
-        0 { $diff = $false }
-        1 {
-          $diff = if ($null -ne $resultDiff) { $resultDiff } else { $true }
-          if ($diff) { $diffCount++ }
-          else {
-            $status = 'ERROR'
-            $errorCount++
-          }
+      if ($useReportCapture -and -not $CompareExecutor) {
+        if (-not $reportPath -and $compareResult -and $compareResult.command) {
+          $reportPath = Get-ReportPathFromCommand -Command $compareResult.command -WorkingDirectory $compareResult.cwd
         }
-        default { $status = 'ERROR'; $errorCount++ }
+        $reportDetected = Test-ReportHasDifferences -ReportPath $reportPath
+        if ($exitCode -eq 1) {
+          $diff = $true
+          $diffCount++
+        } elseif ($reportDetected) {
+          $diff = $true
+          $resultDiff = $true
+          $diffCount++
+          if (-not $Quiet) { Write-Verbose ("Detected differences via report at {0}" -f $reportPath) }
+        } elseif ($exitCode -ne 0) {
+          $status = 'ERROR'
+          $errorCount++
+        }
+      } else {
+        switch ($exitCode) {
+          0 {
+            $diff = $false
+            if ($compareResult) {
+              $reportPath = Get-ReportPathFromCommand -Command $compareResult.Command -WorkingDirectory $compareResult.Cwd
+              if (-not $diff -and $reportPath) {
+                $reportDetected = Test-ReportHasDifferences -ReportPath $reportPath
+                if ($reportDetected) {
+                  $diff = $true
+                  $resultDiff = $true
+                  $diffCount++
+                  if (-not $Quiet) { Write-Verbose ("Detected differences via report at {0}" -f $reportPath) }
+                }
+              }
+            }
+          }
+          1 {
+            $diff = if ($null -ne $resultDiff) { $resultDiff } else { $true }
+            if ($diff) { $diffCount++ }
+            else {
+              $status = 'ERROR'
+              $errorCount++
+            }
+          }
+          default { $status = 'ERROR'; $errorCount++ }
+        }
       }
       if ($durationSeconds -gt 0) {
         if ($hybridMode -and -not $streamingActive) {
@@ -463,6 +581,7 @@ function Invoke-IntegrationCompareLoop {
       durationSeconds = $durationSeconds
       skipped = [bool]$skipReason
       skipReason = $skipReason
+      reportPath = $reportPath
       baseChanged = $baseChanged
       headChanged = $headChanged
     }

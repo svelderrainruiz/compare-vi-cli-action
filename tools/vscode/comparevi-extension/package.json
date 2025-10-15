@@ -193,6 +193,21 @@
             "-noattr"
           ],
           "description": "Known LVCompare flags offered in the picker. Edit to add or remove values as needed."
+        },
+        "comparevi.watch.resultsPath": {
+          "type": "string",
+          "default": "tests/results",
+          "description": "Root directory where watcher outputs and session-index.json are written."
+        },
+        "comparevi.watch.errorGraceMs": {
+          "type": "number",
+          "default": 120000,
+          "description": "Milliseconds of consecutive GitHub API errors before the REST watcher aborts and writes watcher-error."
+        },
+        "comparevi.watch.notFoundGraceMs": {
+          "type": "number",
+          "default": 90000,
+          "description": "Milliseconds to tolerate repeated 404 Not Found when the run id is not yet visible before aborting."
         }
       }
     }

@@ -132,6 +132,7 @@ param(
   , [int]$JsonLogMaxRolls = ($env:LOOP_JSON_LOG_MAX_ROLLS -as [int])
   , [int]$JsonLogMaxAgeSeconds = ($env:LOOP_JSON_LOG_MAX_AGE_SECONDS -as [int])
   , [string]$FinalStatusJsonPath = $env:LOOP_FINAL_STATUS_JSON
+  , [switch]$RenderReport
 )
 
 # Defaults / fallbacks
@@ -174,6 +175,7 @@ if ($MetricsSnapshotEvery -gt 0 -and -not $MetricsSnapshotPath) { $MetricsSnapsh
 
 # Infer run summary path if env flag set
 if (-not $RunSummaryJsonPath -and $env:LOOP_EMIT_RUN_SUMMARY -match '^(1|true)$') { $RunSummaryJsonPath = 'loop-run-summary.json' }
+if (-not $PSBoundParameters.ContainsKey('RenderReport') -and $DiffSummaryFormat -ne 'None') { $RenderReport = $true }
 
 Import-Module (Join-Path $PSScriptRoot '../module/CompareLoop/CompareLoop.psd1') -Force
 
@@ -222,6 +224,7 @@ if ($MetricsSnapshotEvery -gt 0) {
 if ($RunSummaryJsonPath) { $invokeParams.RunSummaryJsonPath = $RunSummaryJsonPath }
 if ($AdaptiveInterval) { $invokeParams.AdaptiveInterval = $true }
 if ($exec) { $invokeParams.CompareExecutor = $exec; $invokeParams.SkipValidation = $true; $invokeParams.PassThroughPaths = $true; $invokeParams.BypassCliValidation = $true }
+if ($RenderReport) { $invokeParams.RenderReport = $true }
 
 function Write-Detail {
   param([string]$Message,[string]$Level='Info')

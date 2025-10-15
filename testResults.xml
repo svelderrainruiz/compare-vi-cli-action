@@ -1,20 +1,19 @@
 ﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
-<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="1" errors="0" failures="1" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-10-14" time="01:14:43">
-  <environment platform="Microsoft Windows 11 Enterprise|C:\WINDOWS|\Device\Harddisk0\Partition3" cwd="C:\codex\home\runner\work\compare-vi-cli-action" machine-name="USAUSLT-Z7DLW6G" nunit-version="2.5.8.0" clr-version="9.0.8" os-version="10.0.22631" user="svelderr" user-domain="NI" />
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="2" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-10-15" time="14:09:20">
+  <environment clr-version="9.0.8" os-version="10.0.22631" nunit-version="2.5.8.0" platform="Microsoft Windows 11 Enterprise|C:\WINDOWS|\Device\Harddisk0\Partition3" machine-name="USAUSLT-Z7DLW6G" user="svelderr" cwd="C:\codex\home\runner\work\compare-vi-cli-action" user-domain="NI" />
   <culture-info current-culture="en-US" current-uiculture="en-US" />
-  <test-suite type="TestFixture" name="Pester" executed="True" result="Failure" success="False" time="50.0216" asserts="0" description="Pester">
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Success" success="True" time="41.9757" asserts="0" description="Pester">
     <results>
-      <test-suite type="TestFixture" name="C:\codex\home\runner\work\compare-vi-cli-action\tests\ChildProcs.Schema.Tests.ps1" executed="True" result="Failure" success="False" time="50.0216" asserts="0" description="C:\codex\home\runner\work\compare-vi-cli-action\tests\ChildProcs.Schema.Tests.ps1">
+      <test-suite type="TestFixture" name="C:\codex\home\runner\work\compare-vi-cli-action\tests\Run-AutonomousIntegrationLoop.Tests.ps1" executed="True" result="Success" success="True" time="41.9757" asserts="0" description="C:\codex\home\runner\work\compare-vi-cli-action\tests\Run-AutonomousIntegrationLoop.Tests.ps1">
         <results>
-          <test-suite type="TestFixture" name="Child process snapshot schema sanity" executed="True" result="Failure" success="False" time="49.4243" asserts="0" description="Child process snapshot schema sanity">
+          <test-suite type="TestFixture" name="Run-AutonomousIntegrationLoop FinalStatusJsonPath emission" executed="True" result="Success" success="True" time="9.413" asserts="0" description="Run-AutonomousIntegrationLoop FinalStatusJsonPath emission">
             <results>
-              <test-case description="emits a well-formed child-procs snapshot JSON" name="Child process snapshot schema sanity.emits a well-formed child-procs snapshot JSON" time="49.3406" asserts="0" success="False" result="Failure" executed="True">
-                <failure>
-                  <message>JsonReaderException: The reader's MaxDepth of 6 has been exceeded. Path 'groups.pwsh.items[0].cmd[0]', line 26, position 13.
-ArgumentException: Conversion from JSON failed with error: The reader's MaxDepth of 6 has been exceeded. Path 'groups.pwsh.items[0].cmd[0]', line 26, position 13.</message>
-                  <stack-trace>at &lt;ScriptBlock&gt;, C:\codex\home\runner\work\compare-vi-cli-action\tests\ChildProcs.Schema.Tests.ps1:14</stack-trace>
-                </failure>
-              </test-case>
+              <test-case description="emits final status JSON with expected shape in simulate mode" name="Run-AutonomousIntegrationLoop FinalStatusJsonPath emission.emits final status JSON with expected shape in simulate mode" time="9.2604" asserts="0" success="True" result="Success" executed="True" />
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="Run-AutonomousIntegrationLoop DiffExitCode behavior" executed="True" result="Success" success="True" time="41.3925" asserts="0" description="Run-AutonomousIntegrationLoop DiffExitCode behavior">
+            <results>
+              <test-case description="returns custom diff exit code when diffs detected and no errors" name="Run-AutonomousIntegrationLoop DiffExitCode behavior.returns custom diff exit code when diffs detected and no errors" time="31.9059" asserts="0" success="True" result="Success" executed="True" />
             </results>
           </test-suite>
         </results>
