@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\tools\providers\spec\operations.json" Link="Operations\operations.json" />
+    <EmbeddedResource Include="..\..\tools\providers\spec\providers.json" Link="Providers\providers.json" />
   </ItemGroup>
 </Project>
 
