@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json.Nodes;
 
@@ -8,6 +9,7 @@ namespace CompareVi.Shared
     {
         private const string OperationsSchema = "comparevi-cli/operations@v1";
         private const string OperationSchema = "comparevi-cli/operation@v1";
+        private const string OperationNamesSchema = "comparevi-cli/operation-names@v1";
 
         public static JsonObject CreateOperationsListPayload()
         {
@@ -58,6 +60,43 @@ namespace CompareVi.Shared
 
             payload = null!;
             return false;
+        }
+
+        public static JsonObject CreateOperationNamesPayload()
+        {
+            var root = OperationCatalog.LoadRaw();
+            var operationsArray = GetOperationsArray(root);
+
+            var names = new List<string>();
+            foreach (var item in operationsArray)
+            {
+                if (item is not JsonObject obj)
+                {
+                    continue;
+                }
+
+                if (!TryGetOperationName(obj, out var name))
+                {
+                    continue;
+                }
+
+                names.Add(name!);
+            }
+
+            names.Sort(StringComparer.OrdinalIgnoreCase);
+
+            var namesArray = new JsonArray();
+            foreach (var name in names)
+            {
+                namesArray.Add(name);
+            }
+
+            return new JsonObject
+            {
+                ["schema"] = OperationNamesSchema,
+                ["operationCount"] = names.Count,
+                ["names"] = namesArray,
+            };
         }
 
         private static JsonArray GetOperationsArray(JsonObject root)

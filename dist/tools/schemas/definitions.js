@@ -386,6 +386,20 @@ export const cliOperationsSchema = z
         });
     }
 });
+export const cliOperationNamesSchema = z
+    .object({
+    schema: z.literal('comparevi-cli/operation-names@v1'),
+    operationCount: nonNegativeInteger,
+    names: z.array(z.string().min(1)).min(1),
+})
+    .superRefine((value, ctx) => {
+    if (value.operationCount !== value.names.length) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'operationCount must equal names.length',
+        });
+    }
+});
 const cliArtifactFileSchema = z.object({
     path: z.string().min(1),
     sha256: hexSha256,
@@ -506,6 +520,12 @@ export const schemas = [
         fileName: 'cli-operations.schema.json',
         description: 'Operations catalog exposed by comparevi-cli operations.',
         schema: cliOperationsSchema,
+    },
+    {
+        id: 'cli-operation-names',
+        fileName: 'cli-operation-names.schema.json',
+        description: 'Sorted operation names exposed by comparevi-cli operations --names-only.',
+        schema: cliOperationNamesSchema,
     },
     {
         id: 'cli-artifact-meta',

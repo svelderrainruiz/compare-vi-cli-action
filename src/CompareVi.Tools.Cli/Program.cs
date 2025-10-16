@@ -54,7 +54,7 @@ internal static class Program
         Console.WriteLine("  comparevi-cli tokenize --input \"arg string\"");
         Console.WriteLine("  comparevi-cli procs");
         Console.WriteLine("  comparevi-cli quote --path <path>");
-        Console.WriteLine("  comparevi-cli operations [--name <operation>]");
+        Console.WriteLine("  comparevi-cli operations [--name <operation>] [--names-only]");
     }
 
     private static int CmdVersion()
@@ -136,16 +136,37 @@ internal static class Program
     private static int CmdOperations(string[] args)
     {
         string? operationName = null;
+        var namesOnly = false;
         for (int i = 1; i < args.Length; i++)
         {
             if (args[i].Equals("--name", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 operationName = args[i + 1];
                 i++;
+                continue;
+            }
+
+            if (args[i].Equals("--names", StringComparison.OrdinalIgnoreCase) ||
+                args[i].Equals("--names-only", StringComparison.OrdinalIgnoreCase))
+            {
+                namesOnly = true;
             }
         }
 
         operationName = operationName?.Trim();
+
+        if (namesOnly && !string.IsNullOrEmpty(operationName))
+        {
+            Console.Error.WriteLine("--names-only cannot be combined with --name.");
+            return 2;
+        }
+
+        if (namesOnly)
+        {
+            var payload = OperationCatalogFormatter.CreateOperationNamesPayload();
+            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
 
         if (string.IsNullOrEmpty(operationName))
         {
