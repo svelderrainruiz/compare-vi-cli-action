@@ -14,16 +14,34 @@ try {
   if (Test-Path -LiteralPath $idxPath -PathType Leaf) { return }
 
   $idx = [ordered]@{
-    schema           = 'session-index/v1'
-    schemaVersion    = '1.0.0'
-    generatedAtUtc   = (Get-Date).ToUniversalTime().ToString('o')
-    resultsDir       = $ResultsDir
-    files            = [ordered]@{}
+    schema             = 'session-index/v1'
+    schemaVersion      = '1.0.0'
+    generatedAtUtc     = (Get-Date).ToUniversalTime().ToString('o')
+    resultsDir         = $ResultsDir
+    includeIntegration = $false
+    integrationMode    = $null
+    integrationSource  = $null
+    files              = [ordered]@{}
   }
   $sumPath = Join-Path $ResultsDir $SummaryJson
   if (Test-Path -LiteralPath $sumPath -PathType Leaf) {
     try {
       $s = Get-Content -LiteralPath $sumPath -Raw | ConvertFrom-Json -ErrorAction Stop
+      $includeIntegration = $false
+      if ($s.PSObject.Properties.Name -contains 'includeIntegration') {
+        $includeIntegration = [bool]$s.includeIntegration
+      }
+      $integrationMode = $null
+      if ($s.PSObject.Properties.Name -contains 'integrationMode') {
+        $integrationMode = $s.integrationMode
+      }
+      $integrationSource = $null
+      if ($s.PSObject.Properties.Name -contains 'integrationSource') {
+        $integrationSource = $s.integrationSource
+      }
+      $idx.includeIntegration = $includeIntegration
+      $idx.integrationMode = $integrationMode
+      $idx.integrationSource = $integrationSource
       $idx['summary'] = [ordered]@{
         total      = $s.total
         passed     = $s.passed
@@ -41,6 +59,9 @@ try {
       $lines += ("- Status: {0}" -f $idx.status)
       $lines += ("- Total: {0} | Passed: {1} | Failed: {2} | Errors: {3} | Skipped: {4}" -f $s.total,$s.passed,$s.failed,$s.errors,$s.skipped)
       $lines += ("- Duration (s): {0}" -f $s.duration_s)
+      $lines += ("- Include Integration: {0}" -f $includeIntegration)
+      if ($integrationMode) { $lines += ("- Integration Mode: {0}" -f $integrationMode) }
+      if ($integrationSource) { $lines += ("- Integration Source: {0}" -f $integrationSource) }
       $idx['stepSummary'] = ($lines -join "`n")
     } catch { }
   }

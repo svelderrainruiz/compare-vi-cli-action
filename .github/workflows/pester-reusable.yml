@@ -587,25 +587,16 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          if (-not $env:GITHUB_STEP_SUMMARY) { return }
-          $workflowName = '${{ github.workflow }}'
-          $refName = '${{ github.ref_name }}'
-          $sampleId = '${{ inputs.sample_id }}'
-          $cmdParts = @("gh workflow run `"$workflowName`"", "-r `"$refName`"")
-          if ($sampleId) { $cmdParts += "-f sample_id=$sampleId" }
-          $command = $cmdParts -join ' '
-          $workflowRef = '${{ github.workflow_ref }}'
-          $workflowPath = ''
-          if ($workflowRef -match '\.github/workflows/(?<path>[^@]+)@') {
-            $workflowPath = $Matches['path']
+          $params = @{
+            WorkflowName   = '${{ github.workflow }}'
+            WorkflowFile   = 'pester-reusable.yml'
+            RefName        = '${{ github.ref_name }}'
+            SampleId       = '${{ inputs.sample_id }}'
+            WorkflowRef    = '${{ github.workflow_ref }}'
+            Repository     = '${{ github.repository }}'
+            EmitSampleNote = $true
           }
-          $repo = '${{ github.repository }}'
-          $lines = @('### Re-run With Same Inputs','',"- Command: `$command`")
-          if (-not $sampleId) { $lines += '- sample_id omitted; workflow will auto-generate if supported.' }
-          if ($workflowPath) {
-            $lines += ("- Workflow: https://github.com/{0}/actions/workflows/{1}" -f $repo, $workflowPath)
-          }
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          & (Join-Path $PWD 'tools/Write-RerunSummary.ps1') @params
 
       - name: Print agent hand-off summary (auto-trim)
         if: always()

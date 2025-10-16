@@ -33,6 +33,32 @@
         "includeIntegration": {
           "type": "boolean"
         },
+        "integrationMode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "include",
+                "exclude",
+                "auto"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "integrationSource": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "meanTest_ms": {
           "type": "number"
         },

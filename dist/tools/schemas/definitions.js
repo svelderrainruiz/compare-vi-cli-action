@@ -157,6 +157,8 @@ const pesterSummarySchema = z.object({
     timestamp: isoString,
     pesterVersion: z.string().min(1),
     includeIntegration: z.boolean(),
+    integrationMode: z.enum(['include', 'exclude', 'auto']).nullable().optional(),
+    integrationSource: z.string().min(1).nullable().optional(),
     meanTest_ms: z.number().optional(),
     p95Test_ms: z.number().optional(),
     maxTest_ms: z.number().optional(),
@@ -349,6 +351,8 @@ export const cliQuoteSchema = z.object({
 export const cliProcsSchema = z.object({
     labviewPids: z.array(nonNegativeInteger),
     lvcomparePids: z.array(nonNegativeInteger),
+    labviewCliPids: z.array(nonNegativeInteger),
+    gcliPids: z.array(nonNegativeInteger),
 });
 const cliOperationsDefaultValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 export const cliOperationsParameterSchema = z

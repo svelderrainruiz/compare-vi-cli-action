@@ -17,6 +17,11 @@ Describe 'Ensure-SessionIndex' -Tag 'Unit' {
     $idx = Get-Content -LiteralPath $idxPath -Raw | ConvertFrom-Json
     $idx.schema | Should -Be 'session-index/v1'
     $idx.status | Should -Be 'ok'
+    $idx.includeIntegration | Should -BeFalse
+    $idx.PSObject.Properties.Name | Should -Contain 'integrationMode'
+    $idx.PSObject.Properties.Name | Should -Contain 'integrationSource'
+    $idx.integrationMode | Should -BeNullOrEmpty
+    $idx.integrationSource | Should -BeNullOrEmpty
     $idx.summary.total | Should -Be 2
     $idx.summary.passed | Should -Be 2
     $idx.summary.failed | Should -Be 0
