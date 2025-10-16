@@ -11,8 +11,9 @@
   still blocked.
 - `apt-get update` cannot reach upstream mirrors in this environment (HTTP 403 responses), so
   installing PowerShell through the package manager is currently blocked.
-- `npm run priority:handoff-tests` fails immediately (`pwsh: not found`), so no automated
-  hook/semver coverage captured yet in this workspace.
+- `npm run priority:handoff-tests` now runs through the new Node shim (no PowerShell
+  dependency) and captures fresh hook/semver coverage in
+  `tests/results/_agent/handoff/test-summary.json`.
 - Re-ran `npm run priority:sync`; the run still falls back to the cached standing-issue metadata
   because `gh` is unavailable in the container.
 - A placeholder TestStand session folder (`tests/results/teststand-session/`) now exists; it currently
@@ -77,16 +78,18 @@
    sync.
 
 ## Notes for Next Agent
-- `tests/results/_agent/handoff/test-summary.json` now records `npm run priority:handoff-tests`
-  (blocked: `pwsh` missing), the schema validation attempt (no matching data files), the failed
-  `apt-get update` (HTTP 403), and the successful `npm run priority:sync` rerun (still backed by the
-  cached standing-priority snapshot).
+- Added a Node-based shim at `tools/priority/run-handoff-tests.mjs` so
+  `npm run priority:handoff-tests` no longer requires PowerShell.
+- `tests/results/_agent/handoff/test-summary.json` now records the successful Node-driven
+  `priority:handoff-tests` run (captured 2025-10-16T00:37Z), alongside the earlier schema
+  validation attempt, the failed `apt-get update` (HTTP 403), and the cached
+  `npm run priority:sync` reruns (still blocked on `gh`).
 - No watcher telemetry exists for this session; container still lacks `_agent/handoff/` watcher
   assets.
 - `.agent_priority_cache.json` currently reflects cached metadata for issue #134; rerun
   `npm run priority:sync` after installing `gh` to refresh directly from GitHub.
 - Container image does not ship LabVIEW or LabVIEW CLI; expect to run compare/harness workflows on a
   Windows host with the required tooling.
-- `tests/results/_agent/handoff/test-summary.json` refreshed at 2025-10-16T00:28Z to log the latest
-  `npm run priority:sync` rerun and the additional schema validation check (still referencing the
-  placeholder TestStand session data).
+- `tests/results/_agent/handoff/test-summary.json` was last refreshed at
+  2025-10-16T00:37Z after the Node shim executed; schema validation still references the
+  placeholder TestStand session data.
