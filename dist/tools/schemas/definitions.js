@@ -285,7 +285,7 @@ const testStandCompareSessionSchema = z.object({
     }),
     compare: z.object({
         events: z.string().min(1),
-        capture: z.string().min(1),
+        capture: z.union([z.string().min(1), z.null()]),
         report: z.boolean(),
         command: z.string().min(1).optional(),
         cliPath: z.string().min(1).optional(),

@@ -7,7 +7,7 @@
   },
   "compare": {
     "events": "C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/compare-events.ndjson",
-    "capture": "C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/lvcompare-capture.json",
+    "capture": null,
     "report": false,
     "policy": "cli-only",
     "mode": "labview-cli",
