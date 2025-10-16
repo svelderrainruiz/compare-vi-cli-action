@@ -1,7 +1,7 @@
 {
   "schema": "agent-handoff/test-results@v1",
-  "generatedAt": "2025-10-16T00:05:38Z",
-  "status": "blocked",
+  "generatedAt": "2025-10-16T00:11:53Z",
+  "status": "failed",
   "total": 4,
   "failureCount": 2,
   "results": [
@@ -17,10 +17,10 @@
     {
       "command": "node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json",
       "exitCode": 0,
-      "stdout": "[schema] No files matched pattern 'tests/results/teststand-session/session-index.json'.\n[schema] No data files validated (globs empty).\n",
+      "stdout": "[schema] Validated 1 file(s) against /workspace/compare-vi-cli-action/docs/schema/generated/teststand-compare-session.schema.json.\n",
       "stderr": "",
-      "startedAt": "2025-10-15T23:52:30Z",
-      "completedAt": "2025-10-15T23:52:30Z",
+      "startedAt": "2025-10-16T00:11:47Z",
+      "completedAt": "2025-10-16T00:11:47Z",
       "durationMs": 0
     },
     {
@@ -41,5 +41,8 @@
       "completedAt": "2025-10-16T00:03:46Z",
       "durationMs": 6000
     }
+  ],
+  "notes": [
+    "PowerShell tarball install via GitHub releases blocked by proxy (wget 403)."
   ]
 }
