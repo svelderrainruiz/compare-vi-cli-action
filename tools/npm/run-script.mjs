@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { createSanitizedNpmEnv } from './sanitize-env.mjs';
+import { createNpmLaunchSpec } from './spawn.mjs';
 
 function printUsage() {
   console.error('Usage: run-script.mjs [npm-options] <script> [-- <script-args>]');
@@ -50,8 +51,11 @@ if (scriptArgs.length > 0) {
   npmArgs.push('--', ...scriptArgs);
 }
 
-const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', npmArgs, {
-  env: createSanitizedNpmEnv(),
+const env = createSanitizedNpmEnv();
+const launchSpec = createNpmLaunchSpec(npmArgs, env);
+
+const child = spawn(launchSpec.command, launchSpec.args, {
+  env,
   stdio: 'inherit',
 });
 
