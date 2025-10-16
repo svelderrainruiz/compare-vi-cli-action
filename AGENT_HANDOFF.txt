@@ -13,12 +13,15 @@
   installing PowerShell through the package manager is currently blocked.
 - `npm run priority:handoff-tests` fails immediately (`pwsh: not found`), so no automated
   hook/semver coverage captured yet in this workspace.
+- Re-ran `npm run priority:sync`; the run still falls back to the cached standing-issue metadata
+  because `gh` is unavailable in the container.
 - A placeholder TestStand session folder (`tests/results/teststand-session/`) now exists; it currently
   mirrors the committed fixture so schema validation commands can execute, but it still needs to be
   replaced with freshly captured artifacts from a real run.
 - Schema validation re-run with the placeholder data via `node dist/tools/schemas/validate-json.js
   --schema docs/schema/generated/teststand-compare-session.schema.json --data
-  tests/results/teststand-session/session-index.json`; command succeeds locally.
+  tests/results/teststand-session/session-index.json`; command succeeds locally (latest run
+  timestamped 2025-10-16T00:27Z).
 - Updated handoff telemetry recorded in `tests/results/_agent/handoff/test-summary.json`
   (`agent-handoff/test-results@v1`) capturing the blocked handoff script, schema attempt, apt
   failure details, and the latest `npm run priority:sync` rerun (still limited to cached metadata
@@ -84,3 +87,6 @@
   `npm run priority:sync` after installing `gh` to refresh directly from GitHub.
 - Container image does not ship LabVIEW or LabVIEW CLI; expect to run compare/harness workflows on a
   Windows host with the required tooling.
+- `tests/results/_agent/handoff/test-summary.json` refreshed at 2025-10-16T00:28Z to log the latest
+  `npm run priority:sync` rerun and the additional schema validation check (still referencing the
+  placeholder TestStand session data).
