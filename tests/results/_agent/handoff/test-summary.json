@@ -1,8 +1,8 @@
 {
   "schema": "agent-handoff/test-results@v1",
-  "generatedAt": "2025-10-16T00:20:57Z",
+  "generatedAt": "2025-10-16T00:28:55Z",
   "status": "failed",
-  "total": 5,
+  "total": 7,
   "failureCount": 2,
   "results": [
     {
@@ -49,12 +49,31 @@
       "startedAt": "2025-10-16T00:20:43Z",
       "completedAt": "2025-10-16T00:20:43Z",
       "durationMs": 0
+    },
+    {
+      "command": "npm run priority:sync",
+      "exitCode": 0,
+      "stdout": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n\n> compare-vi-cli-action@0.5.0 priority:sync\n> node tools/priority/sync-standing-priority.mjs\n\n[priority] gh CLI not found; falling back to cached standing-priority issue number\n[priority] Standing issue: #134\n[priority] Fetch failed: Command not found: gh\n",
+      "stderr": "",
+      "startedAt": "2025-10-16T00:24:50Z",
+      "completedAt": "2025-10-16T00:24:50Z",
+      "durationMs": 0
+    },
+    {
+      "command": "node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json",
+      "exitCode": 0,
+      "stdout": "[schema] Validated 1 file(s) against /workspace/compare-vi-cli-action/docs/schema/generated/teststand-compare-session.schema.json.\n",
+      "stderr": "",
+      "startedAt": "2025-10-16T00:27:45Z",
+      "completedAt": "2025-10-16T00:27:45Z",
+      "durationMs": 0
     }
   ],
   "notes": [
     "PowerShell tarball install via GitHub releases blocked by proxy (wget 403).",
     "Copied fixtures/teststand-session/session-index.json into tests/results/teststand-session/ as a placeholder.",
     "Replace the placeholder TestStand results with fresh artifacts once tooling access is restored.",
-    "Re-ran npm run priority:sync; cache refreshed from local snapshot because gh remains unavailable."
+    "Re-ran npm run priority:sync; cache refreshed from local snapshot because gh remains unavailable.",
+    "Repeated schema validation locally to confirm placeholder TestStand session still matches the generated schema."
   ]
 }
