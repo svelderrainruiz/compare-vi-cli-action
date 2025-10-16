@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 const USER_AGENT = 'compare-vi-cli-action/priority-sync';
 
@@ -512,7 +513,9 @@ export async function main() {
     lastFetchSource: fetchSource,
     lastFetchError: fetchError
   };
-  writeJson(cachePath, newCache);
+  if (shouldWriteCache(cache, newCache)) {
+    writeJson(cachePath, newCache);
+  }
 
   const topActions = router.actions.slice(0, 3).map((a) => a.key).join(', ') || 'n/a';
   const sourceLine =
@@ -531,6 +534,21 @@ export async function main() {
   stepSummaryAppend(summaryLines);
 
   return { snapshot, router, fetchSource, fetchError };
+}
+
+export function shouldWriteCache(previousCache, nextCache) {
+  if (!previousCache || typeof previousCache !== 'object') {
+    return true;
+  }
+
+  const normalizedNext = { ...nextCache };
+  if ('cachedAtUtc' in previousCache) {
+    normalizedNext.cachedAtUtc = previousCache.cachedAtUtc;
+  } else {
+    delete normalizedNext.cachedAtUtc;
+  }
+
+  return !isDeepStrictEqual(previousCache, normalizedNext);
 }
 
 const modulePath = path.resolve(fileURLToPath(import.meta.url));
