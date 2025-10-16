@@ -1,77 +1,66 @@
 # Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Reinstalled GitHub CLI (2.45.0) and re-ran `node tools/npm/run-script.mjs priority:sync`; the cache
-  still points to issue #134 because the CLI remains unauthenticated (`gh auth login` / `GH_TOKEN`
-  missing). `.agent_priority_cache.json` reflects the latest fallback attempt (2025-10-16T15:32Z).
-- Working tree remains on branch `work`; `issue/134-cli-companion` has not been created locally.
-- Added the Microsoft package feed, installed PowerShell 7.5.3, and pulled in Pester 5.7.1 so `pwsh`
-  and the dispatcher tooling are available in this container.
-- Attempted `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`; the dispatcher repeatedly
-  relaunched itself after the results guard flagged
-  `/tmp/a868d15e-3921-44a2-a345-46ae835883d1/blocked-results.txt`. Terminated the cascading `pwsh`
-  tree (`pkill -f Invoke-PesterTests.ps1`); the failure is captured in
-  `tests/results/_diagnostics/guard.json`. No Pester summary was produced during this run.
-- Placeholder TestStand session data validated again via `node
-  dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json
-  --data tests/results/teststand-session/session-index.json` (succeeds this session).
-- Refreshed the quick coverage shim with `node tools/npm/run-script.mjs priority:handoff-tests`,
-  updating `tests/results/_agent/handoff/test-summary.json` at 2025-10-16T15:48Z.
-- `tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary`
-  reports no rogue LabVIEW or LVCompare processes (run completed at 2025-10-16T15:49Z).
+- Re-ran `node tools/npm/run-script.mjs priority:sync`; without `gh` or a GitHub token available the
+  script fell back to the cached standing issue (#134) and logged the missing CLI error. The cache now
+  records the unauthenticated attempt timestamped 2025-10-16T17:16Z.
+- REST fallback attempts failed unauthenticated (`TypeError: fetch failed`).
+- Working tree remains on branch `work`; no topic branch (for example `issue/134-cli-companion`) is
+  present locally.
+- Neither GitHub CLI nor PowerShell (`pwsh`) are installed in this container right now, so dispatcher
+  or guard scripts cannot be invoked until those prerequisites are restored.
+- No dispatcher reruns happened this session. The previously referenced
+  `tests/results/_diagnostics/guard.json` file is absent, so the prior guard-loop diagnostics are no
+  longer available in-tree.
+- `tests/results/_agent/handoff/test-summary.json` still reflects the
+  2025-10-16T15:48Z `priority:handoff-tests` execution; no new validation commands were run here.
+- Placeholder TestStand and CLI-only artifacts remain under `tests/results/`, matching the state
+  described in issue #134.
 
 ## Status & Known Gaps
-1. GitHub CLI is present but unauthenticated, so standing-priority syncs continue to fall back to the
-   cached metadata.
-2. Dispatcher coverage is still outstanding. The last attempt hit the results guard loop and produced
-   no summaries; investigate `tests/results/_diagnostics/guard.json` (and any lingering
-   `/tmp/*/blocked-results.txt` artifacts) before retrying `Invoke-PesterTests.ps1 -IntegrationMode
-   exclude`.
-3. TestStand session artifacts (`tests/results/teststand-session/session-index.json`) and the
-   `tests/results/cli-only/` folder are still populated with placeholder data—real runs from a
-   LabVIEW-capable host are required.
-4. Issue/PR context for #134 still needs refreshed notes once genuine artifacts and test coverage are
-   produced (include CLI metadata, session capsules, validation status).
+1. GitHub CLI is missing entirely, so standing-priority syncs cannot reach GitHub until `gh` is
+   installed and authenticated.
+2. Dispatcher coverage is still outstanding. No recent runs exist and the last guard diagnostics are
+   gone, so the failure mode needs to be recreated before we can debug it.
+3. PowerShell 7+ (with Pester) is absent, blocking dispatcher executions and guard sweeps inside this
+   container.
+4. TestStand session artifacts (`tests/results/teststand-session/`) and `tests/results/cli-only/`
+   still contain placeholder data; real LabVIEW runs remain required.
+5. Issue/PR #134 lacks refreshed notes summarizing CLI auth state, dispatcher attempts, and artifact
+   provenance.
 
 ## Suggested Next Actions
-1. Authenticate GitHub CLI (via `gh auth login` or `GH_TOKEN`) and rerun
-   `node tools/npm/run-script.mjs priority:sync` so the cache reflects the live standing issue.
-2. Inspect `tests/results/_diagnostics/guard.json` and the referenced `/tmp/.../blocked-results.txt`
-   path to understand why the dispatcher guard tripped; clean up the blockage so the next
-   `Invoke-PesterTests.ps1` run can emit results instead of recursing.
-3. Once the guard condition is cleared, rerun `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode
-   exclude` (and, if time allows, targeted TestStand harness coverage) and capture the resulting
-   summaries/artifacts.
-4. Generate or copy fresh CLI-only and TestStand session artifacts on a LabVIEW-capable host, then
-   re-run the schema validator against the genuine data set.
-5. Update issue/PR #134 with notes covering GitHub CLI auth status, dispatcher outcome, schema
-   validation, and artifact refresh.
+1. Install GitHub CLI, authenticate (`gh auth login` or set `GH_TOKEN`), and rerun
+   `node tools/npm/run-script.mjs priority:sync` to refresh `.agent_priority_cache.json` with live
+   metadata.
+2. Restore PowerShell 7 (plus Pester) so dispatcher/guard tooling is available again.
+3. Recreate the dispatcher guard failure by running `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode
+   exclude`; capture any new guard artifacts (such as `_diagnostics/guard.json`) for analysis and clear
+   blockers so a full run can complete.
+4. Produce genuine CLI-only and TestStand session artifacts on a LabVIEW-capable host, then validate
+   them via the JSON schema tooling.
+5. Update issue/PR #134 with notes covering toolchain setup, dispatcher outcomes, and artifact
+   provenance.
 
 ## First Actions for the Next Agent
-1. Authenticate GitHub CLI (`gh auth login` or `GH_TOKEN`) and rerun
-   `node tools/npm/run-script.mjs priority:sync` so the standing-priority cache reflects the live issue
-   metadata.
-2. Resolve the dispatcher guard failure (see `tests/results/_diagnostics/guard.json`) and verify no
-   lingering defunct `pwsh` processes remain before retrying `pwsh -File Invoke-PesterTests.ps1
-   -IntegrationMode exclude`.
-3. Fetch or regenerate the missing `tests/results/teststand-session/` and `tests/results/cli-only/`
-   directories so schema validation and documentation review can resume with real data. Re-run the
-   JSON schema validator once genuine artifacts are in place.
-4. Capture the dispatcher and schema results in the appropriate summaries/telemetry, then update
-   issue/PR #134 with the refreshed context.
+1. Install and authenticate GitHub CLI, then rerun `node tools/npm/run-script.mjs priority:sync` so the
+   standing-priority cache reflects live metadata.
+2. Reinstall PowerShell 7 + Pester (or confirm availability) and rerun the dispatcher with guard
+   diagnostics enabled to reproduce the prior loop and gather artifacts.
+3. Replace the placeholder `tests/results/teststand-session/` and `tests/results/cli-only/` payloads
+   with real outputs from a LabVIEW-capable host, validating them against the published schemas.
+4. Record the new dispatcher and schema outcomes in the handoff telemetry, then update issue/PR #134
+   with the refreshed context.
 
 ## Notes for Next Agent
-- GitHub CLI 2.45.0 and PowerShell 7.5.3 (with Pester 5.7.1) are installed locally; only GitHub
-  authentication is missing.
-- `tests/results/_agent/handoff/test-summary.json` now records the 2025-10-16T15:48Z
-  `priority:handoff-tests` execution.
-- `tests/results/_diagnostics/guard.json` documents the dispatcher guard failure that caused the
-  aborted `Invoke-PesterTests.ps1` run. The referenced `/tmp/.../blocked-results.txt` file was already
-  absent when inspected, so the next agent may need to recreate/clear the guard condition manually.
+- GitHub CLI and PowerShell are currently absent; plan to reinstall before attempting dispatcher or
+  guard commands.
+- `tests/results/_agent/handoff/test-summary.json` records the 2025-10-16T15:48Z
+  `priority:handoff-tests` run; nothing newer exists.
 - No watcher telemetry exists for this session; `_agent/handoff/` watcher assets remain empty.
-- `.agent_priority_cache.json` still reflects cached metadata for issue #134 until GitHub CLI is
-  authenticated.
-- Container image lacks LabVIEW/LVCompare; real artifact generation must happen on a LabVIEW-capable
-  Windows environment.
-- Schema validation continues to operate on placeholder TestStand session data until genuine output is
-  available.
+- `.agent_priority_cache.json` mirrors the cached metadata for issue #134 until GitHub CLI is
+  installed and authenticated.
+- The container still lacks LabVIEW/LVCompare; genuine artifacts must come from a Windows host with
+  those tools available.
+- Schema validation will continue to rely on placeholder TestStand data until real outputs are
+  imported.
