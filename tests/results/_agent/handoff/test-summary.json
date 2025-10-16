@@ -1,9 +1,9 @@
 {
   "schema": "agent-handoff/test-results@v1",
-  "generatedAt": "2025-10-15T23:52:39Z",
+  "generatedAt": "2025-10-15T23:57:13Z",
   "status": "blocked",
-  "total": 2,
-  "failureCount": 1,
+  "total": 3,
+  "failureCount": 2,
   "results": [
     {
       "command": "npm run priority:handoff-tests",
@@ -22,6 +22,15 @@
       "startedAt": "2025-10-15T23:52:30Z",
       "completedAt": "2025-10-15T23:52:30Z",
       "durationMs": 0
+    },
+    {
+      "command": "apt-get update",
+      "exitCode": 100,
+      "stdout": "E: The repository 'http://apt.llvm.org/noble llvm-toolchain-noble-20 InRelease' is not signed.\nE: Failed to fetch http://apt.llvm.org/noble/dists/llvm-toolchain-noble-20/InRelease  403  Forbidden [IP: 172.30.0.35 8080]\nE: The repository 'http://security.ubuntu.com/ubuntu noble-security InRelease' is not signed.\nE: Failed to fetch http://security.ubuntu.com/ubuntu/dists/noble-security/InRelease  403  Forbidden [IP: 172.30.0.35 8080]\nE: The repository 'http://archive.ubuntu.com/ubuntu noble InRelease' is not signed.\nE: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble/InRelease  403  Forbidden [IP: 172.30.0.35 8080]\nE: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  403  Forbidden [IP: 172.30.0.35 8080]\nE: The repository 'http://archive.ubuntu.com/ubuntu noble-updates InRelease' is not signed.\nE: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble-backports/InRelease  403  Forbidden [IP: 172.30.0.35 8080]\nE: The repository 'http://archive.ubuntu.com/ubuntu noble-backports InRelease' is not signed.\n",
+      "stderr": "",
+      "startedAt": "2025-10-15T23:56:30Z",
+      "completedAt": "2025-10-15T23:56:40Z",
+      "durationMs": 10000
     }
   ]
 }
