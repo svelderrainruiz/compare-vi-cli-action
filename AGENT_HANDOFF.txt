@@ -20,8 +20,9 @@
   --schema docs/schema/generated/teststand-compare-session.schema.json --data
   tests/results/teststand-session/session-index.json`; command succeeds locally.
 - Updated handoff telemetry recorded in `tests/results/_agent/handoff/test-summary.json`
-  (`agent-handoff/test-results@v1`) capturing the blocked handoff script, schema attempt, and apt
-  failure details.
+  (`agent-handoff/test-results@v1`) capturing the blocked handoff script, schema attempt, apt
+  failure details, and the latest `npm run priority:sync` rerun (still limited to cached metadata
+  because `gh` is unavailable).
 
 ## Status & Known Gaps
 1. PowerShell tooling is still missing. All `pwsh`-based workflows (rogue detection,
@@ -74,8 +75,9 @@
 
 ## Notes for Next Agent
 - `tests/results/_agent/handoff/test-summary.json` now records `npm run priority:handoff-tests`
-  (blocked: `pwsh` missing), the schema validation attempt (no matching data files), and the failed
-  `apt-get update` (HTTP 403).
+  (blocked: `pwsh` missing), the schema validation attempt (no matching data files), the failed
+  `apt-get update` (HTTP 403), and the successful `npm run priority:sync` rerun (still backed by the
+  cached standing-priority snapshot).
 - No watcher telemetry exists for this session; container still lacks `_agent/handoff/` watcher
   assets.
 - `.agent_priority_cache.json` currently reflects cached metadata for issue #134; rerun
