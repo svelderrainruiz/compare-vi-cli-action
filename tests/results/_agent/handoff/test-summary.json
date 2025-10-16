@@ -43,6 +43,8 @@
     }
   ],
   "notes": [
-    "PowerShell tarball install via GitHub releases blocked by proxy (wget 403)."
+    "PowerShell tarball install via GitHub releases blocked by proxy (wget 403).",
+    "Copied fixtures/teststand-session/session-index.json into tests/results/teststand-session/ as a placeholder.",
+    "Replace the placeholder TestStand results with fresh artifacts once tooling access is restored."
   ]
 }
