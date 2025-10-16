@@ -1,0 +1,35 @@
+{
+  "$ref": "#/definitions/cli-provider-names",
+  "definitions": {
+    "cli-provider-names": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "comparevi-cli/provider-names@v1"
+        },
+        "providerCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema",
+        "providerCount",
+        "names"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Sorted provider identifiers exposed by comparevi-cli providers --names-only.",
+  "$id": "urn:compare-vi-cli-action:schema:cli-provider-names"
+}

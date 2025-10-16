@@ -400,6 +400,62 @@ export const cliOperationNamesSchema = z
         });
     }
 });
+const cliProviderBinarySchema = z
+    .object({
+    env: z.array(z.string().min(1)).optional(),
+})
+    .passthrough();
+const cliProviderSpecSchema = z
+    .object({
+    id: z.string().min(1),
+    displayName: z.string().min(1).optional(),
+    description: z.string().min(1).optional(),
+    binary: cliProviderBinarySchema.optional(),
+    operations: z.array(z.string().min(1)).optional(),
+})
+    .passthrough();
+export const cliProvidersSchema = z
+    .object({
+    schema: z.literal('comparevi-cli/providers@v1'),
+    providerCount: nonNegativeInteger,
+    providers: z.array(cliProviderSpecSchema).min(1),
+})
+    .superRefine((value, ctx) => {
+    if (value.providerCount !== value.providers.length) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'providerCount must equal providers.length',
+        });
+    }
+});
+export const cliProviderSchema = z
+    .object({
+    schema: z.literal('comparevi-cli/provider@v1'),
+    providerId: z.string().min(1),
+    provider: cliProviderSpecSchema,
+})
+    .superRefine((value, ctx) => {
+    if (value.providerId.localeCompare(value.provider.id, undefined, { sensitivity: 'accent' }) !== 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'providerId must match provider.id (case-insensitive)',
+        });
+    }
+});
+export const cliProviderNamesSchema = z
+    .object({
+    schema: z.literal('comparevi-cli/provider-names@v1'),
+    providerCount: nonNegativeInteger,
+    names: z.array(z.string().min(1)).min(1),
+})
+    .superRefine((value, ctx) => {
+    if (value.providerCount !== value.names.length) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'providerCount must equal names.length',
+        });
+    }
+});
 const cliArtifactFileSchema = z.object({
     path: z.string().min(1),
     sha256: hexSha256,
@@ -526,6 +582,24 @@ export const schemas = [
         fileName: 'cli-operation-names.schema.json',
         description: 'Sorted operation names exposed by comparevi-cli operations --names-only.',
         schema: cliOperationNamesSchema,
+    },
+    {
+        id: 'cli-providers',
+        fileName: 'cli-providers.schema.json',
+        description: 'Providers catalog exposed by comparevi-cli providers.',
+        schema: cliProvidersSchema,
+    },
+    {
+        id: 'cli-provider',
+        fileName: 'cli-provider.schema.json',
+        description: 'Single provider payload emitted by comparevi-cli providers --name <provider>.',
+        schema: cliProviderSchema,
+    },
+    {
+        id: 'cli-provider-names',
+        fileName: 'cli-provider-names.schema.json',
+        description: 'Sorted provider identifiers exposed by comparevi-cli providers --names-only.',
+        schema: cliProviderNamesSchema,
     },
     {
         id: 'cli-artifact-meta',
