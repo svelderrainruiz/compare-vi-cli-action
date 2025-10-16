@@ -8,6 +8,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import {
   cliArtifactMetaSchema,
+  cliOperationNamesSchema,
   cliOperationsSchema,
   cliQuoteSchema,
   cliProcsSchema,
@@ -110,6 +111,11 @@ function main() {
     zodToJsonSchema(cliOperationsSchema, { target: 'jsonSchema7', name: 'cli-operations' }) as Record<string, unknown>,
   );
 
+  const operationNamesValidator = compileValidator(
+    'cli-operation-names',
+    zodToJsonSchema(cliOperationNamesSchema, { target: 'jsonSchema7', name: 'cli-operation-names' }) as Record<string, unknown>,
+  );
+
   const versionData = runCli(dll, ['version']);
   validate('comparevi-cli version', versionData, versionValidator);
 
@@ -124,6 +130,9 @@ function main() {
 
   const operationsData = runCli(dll, ['operations']);
   validate('comparevi-cli operations', operationsData, operationsValidator);
+
+  const operationsNamesData = runCli(dll, ['operations', '--names-only']);
+  validate('comparevi-cli operations --names-only', operationsNamesData, operationNamesValidator);
 
   const metaData = readArtifactMeta();
   if (metaData) {

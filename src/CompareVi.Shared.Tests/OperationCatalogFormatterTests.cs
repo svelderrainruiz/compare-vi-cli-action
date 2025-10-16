@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Text.Json.Nodes;
 using CompareVi.Shared;
 using Xunit;
@@ -37,6 +39,21 @@ namespace CompareVi.Shared.Tests
             var found = OperationCatalogFormatter.TryCreateOperationPayload("does-not-exist", out _);
 
             Assert.False(found);
+        }
+
+        [Fact]
+        public void CreateOperationNamesPayload_ReturnsSortedNames()
+        {
+            var payload = OperationCatalogFormatter.CreateOperationNamesPayload();
+
+            Assert.Equal("comparevi-cli/operation-names@v1", payload["schema"]!.GetValue<string>());
+            var names = Assert.IsType<JsonArray>(payload["names"]);
+            Assert.NotEmpty(names);
+            Assert.Equal(payload["operationCount"]!.GetValue<int>(), names.Count);
+
+            var nameStrings = names.Select(node => node!.GetValue<string>()).ToArray();
+            var sorted = nameStrings.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray();
+            Assert.Equal(sorted, nameStrings);
         }
     }
 }
