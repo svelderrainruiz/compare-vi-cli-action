@@ -11,6 +11,13 @@
     "generatedAtUtc": { "type": "string", "format": "date-time" },
     "resultsDir": { "type": "string" },
     "includeIntegration": { "type": "boolean" },
+    "integrationMode": {
+      "anyOf": [
+        { "type": "string", "enum": ["include", "exclude", "auto"] },
+        { "type": "null" }
+      ]
+    },
+    "integrationSource": { "type": ["string", "null"] },
     "status": { "type": "string", "enum": ["ok", "fail"] },
     "files": {
       "type": "object",

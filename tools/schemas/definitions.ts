@@ -172,6 +172,8 @@ const pesterSummarySchema = z.object({
   timestamp: isoString,
   pesterVersion: z.string().min(1),
   includeIntegration: z.boolean(),
+  integrationMode: z.enum(['include', 'exclude', 'auto']).nullable().optional(),
+  integrationSource: z.string().min(1).nullable().optional(),
   meanTest_ms: z.number().optional(),
   p95Test_ms: z.number().optional(),
   maxTest_ms: z.number().optional(),
