@@ -316,26 +316,24 @@ Tune behaviour with `HOOKS_ENFORCE=fail|warn|off` (default: `fail` in CI, `warn`
 
 #### VS Code extension (experimental)
 
-A thin VS Code extension lives in `tools/vscode/comparevi-extension`. It exposes commands that wrap the tasks above:
-- `CompareVI: Build & Parse CLI`
-- `CompareVI: Start Standing Priority Run`
-- `CompareVI: Watch Standing Priority Run`
-- `CompareVI: Open Artifact`
-- `CompareVI: Show Artifact Summary`
+The N-CLI companion (under `vscode/comparevi-helper`) centralises CompareVI and other CLI helpers in VS Code. The CompareVI provider mirrors the CLI workflows from this repository—manual compares, commit compares, preset CRUD, artifact thumbnails—while adding health checks and telemetry. A stub g-cli provider exercises the provider registry and warns when g-cli is not installed yet.
+
+Key features:
+
+- Provider switcher with metadata (docs links, health status, disabled reason).
+- LabVIEW health checks (LabVIEW.exe + LabVIEW.ini snapshotting) and g-cli executable detection.
+- CLI preview commands (copy/current/last, open in terminal) and quick controls for commit ref swaps, presets, and artifact thumbnails.
+- Local NDJSON telemetry written to `tests/results/telemetry/` when `comparevi.telemetryEnabled` is enabled.
 
 For local development:
-1. Run `npm install` inside `tools/vscode/comparevi-extension`.
+1. Run `npm install` inside `vscode/comparevi-helper`.
 2. From VS Code, run **Debug: Start Debugging** on the extension to launch a dev host.
-3. Commands shell out to the tasks in `.vscode/tasks.json`, so behaviour stays aligned with local scripts/CI. `npm run compile` builds TypeScript, and `npm test` exercises a smoke test via `@vscode/test-electron`.
-
-The extension also contributes a **CompareVI Artifacts** tree in the Explorer view. It lists `tests/results/compare-cli/queue-summary.json`, `compare-outcome.json`, the session index, and phase manifest when available. Use the context menu (or the summary command) to view an HTML summary of JSON artifacts alongside the raw file.
+3. `npm run test:unit` and `npm run test:ext` validate provider registry behaviour, telemetry, multi-root flows, and UI wiring.
 
 Packaging notes:
 
 1. Development: run `npm install` then press `F5` (Debug: Start Debugging) from VS Code to side-load the extension.
-2. Compilation: run `npm run compile` prior to packaging.
-3. Optional VSIX: install `vsce` locally and run `npx vsce package` inside `tools/vscode/comparevi-extension`; install the resulting VSIX via “Extensions: Install from VSIX...” if you prefer a self-contained bundle instead of running the debug host.
-pm test exercises the registration smoke test via @vscode/test-electron.
+2. Optional VSIX: install `vsce` locally and run `npm run package --prefix vscode/comparevi-helper`; install the resulting VSIX via “Extensions: Install from VSIX...” if you prefer a self-contained bundle instead of running the debug host.
 
 
 ## Documentation Manifest

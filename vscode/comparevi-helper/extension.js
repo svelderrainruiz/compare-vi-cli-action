@@ -12,8 +12,20 @@ const {
   detectCliArtifacts
 } = require('./lib/core');
 const git = require('./lib/git');
+const telemetry = require('./lib/telemetry');
 const providerRegistry = require('./providers');
-const { registerProvider, unregisterProvider, listProviders, getProvider, listProviderMetadata } = providerRegistry;
+const {
+  registerProvider,
+  unregisterProvider,
+  listProviders,
+  getProvider,
+  listProviderMetadata,
+  getActiveProvider,
+  getActiveProviderId,
+  setActiveProvider,
+  onDidChangeActiveProvider
+} = providerRegistry;
+const createGcliProvider = require('./providers/gcli');
 
 function interpolateWorkspaceFolder(input) {
   const folders = vscode.workspace.workspaceFolders;
@@ -29,20 +41,7 @@ let viCompareProvider;
 let statusBarEnabled = true;
 let lastStatusResult = { exitCode: null, diff: false };
 let compareVIProviderRegistration;
-let activeProviderId = 'comparevi';
-
-function setActiveProvider(id) {
-  const provider = id ? getProvider(id) : undefined;
-  if (!provider) {
-    return false;
-  }
-  activeProviderId = id;
-  return true;
-}
-
-function getActiveProvider() {
-  return getProvider(activeProviderId);
-}
+let gcliProviderRegistration;
 
 const SOURCE_STATE_KEY = 'comparevi.lastSources';
 const TEMP_PREFIX = path.join(os.tmpdir(), 'comparevi-');
@@ -69,6 +68,15 @@ function setSpawnOverride(fn) {
 
 function resetSpawnOverride() {
   spawnOverride = undefined;
+}
+
+async function recordTelemetry(event, data = {}) {
+  const providerId = getActiveProviderId ? (getActiveProviderId() || 'comparevi') : 'comparevi';
+  const payload = {
+    provider: providerId,
+    ...data
+  };
+  await telemetry.writeEvent(event, payload);
 }
 
 function getNonce() {
@@ -109,6 +117,21 @@ async function writePresets(next) {
   } catch { return false; }
 }
 
+async function persistLabviewSnapshot(outDir, labviewIniPath) {
+  try {
+    if (!labviewIniPath || !fs.existsSync(labviewIniPath)) {
+      return false;
+    }
+    await fsp.mkdir(outDir, { recursive: true });
+    const snapshotPath = path.join(outDir, 'LabVIEW.ini.snapshot');
+    const iniContent = await fsp.readFile(labviewIniPath, 'utf8');
+    await fsp.writeFile(snapshotPath, iniContent, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function pickFlags(knownFlags, initial) {
   const previous = workspaceState?.get('comparevi.lastFlags');
   const seed = Array.isArray(initial) && initial.length ? initial : (Array.isArray(previous) ? previous : []);
@@ -147,6 +170,9 @@ function applyStatusBarConfig(config) {
   }
   item.command = 'comparevi.toggleDiffSuccess';
   const diffAsSuccess = !!config.get('comparevi.diffAsSuccess');
+  const year = String(config.get('comparevi.labview.year') || '2025');
+  const bits = String(config.get('comparevi.labview.bits') || '64');
+  const labviewExePath = resolveLabVIEWPath(year, bits);
   const labviewIniPath = path.join(path.dirname(labviewExePath), 'LabVIEW.ini');
   const hasLabviewIni = fs.existsSync(labviewIniPath);
   if (!hasLabviewIni) {
@@ -459,6 +485,8 @@ async function runManualCompareInternal(options = {}) {
   const headVi = interpolateWorkspaceFolder(config.get('comparevi.paths.headVi') || '${workspaceFolder}/tmp-commit-236ffab/VI2.vi');
   const outDir = interpolateWorkspaceFolder(config.get('comparevi.output.dir') || 'tests/results/manual-vi2-compare');
   const labviewExePath = resolveLabVIEWPath(year, bits);
+  const labviewIniPath = path.join(path.dirname(labviewExePath), 'LabVIEW.ini');
+  const hasLabviewIni = fs.existsSync(labviewIniPath);
 
   if (process.platform !== 'win32') {
     vscode.window.showErrorMessage('CompareVI manual run requires Windows.');
@@ -507,6 +535,13 @@ async function runManualCompareInternal(options = {}) {
   const ch = getOutput();
   const originLabel = origin === 'panel' ? ' (noise tester)' : '';
   ch.appendLine(`[${new Date().toISOString()}] CompareVI started${originLabel}`);
+  await recordTelemetry('comparevi.manual.start', {
+    base: toWorkspaceRelative(baseVi),
+    head: toWorkspaceRelative(headVi),
+    outputDir: toWorkspaceRelative(outDir),
+    flags: Array.isArray(flagsToUse) ? flagsToUse : [],
+    origin
+  });
   const proc = spawnPwsh(args, { cwd: repoRoot });
   proc.stdout.on('data', d => ch.append(String(d)));
   proc.stderr.on('data', d => ch.append(String(d)));
@@ -515,17 +550,19 @@ async function runManualCompareInternal(options = {}) {
     const reportPath = path.join(outDir, 'compare-report.html');
     const capInfo = summarizeCapture(capPath);
     const norm = (code === 1 && diffAsSuccess) ? 0 : code;
-    if (hasLabviewIni) {
-      try {
-        const iniSnapshot = path.join(outDir, 'LabVIEW.ini.snapshot');
-        const iniContent = fs.readFileSync(labviewIniPath, 'utf8');
-        fs.writeFileSync(iniSnapshot, iniContent, 'utf8');
-      } catch {}
-    }
+    const snapshotWritten = await persistLabviewSnapshot(outDir, hasLabviewIni ? labviewIniPath : undefined);
     await presentSummary({ repoRoot, outDir, capInfo, reportPath, diffAsSuccess, autoOpenReportOnDiff: autoOpen, showSummary });
     if (norm !== 0) {
       vscode.window.showErrorMessage(`CompareVI exited with code ${code}`);
     }
+    await recordTelemetry('comparevi.manual.complete', {
+      exitCode: code,
+      normalizedExitCode: norm,
+      diffDetected: capInfo ? capInfo.exitCode === 1 : undefined,
+      outputDir: toWorkspaceRelative(outDir),
+      origin,
+      snapshotWritten
+    });
     viCompareProvider?.refresh?.();
   });
   return true;
@@ -548,6 +585,7 @@ async function runCommitCompareFlow({ baseRef, headRef, updateSettings = false }
   const year = String(config.get('comparevi.labview.year') || '2025');
   const bits = String(config.get('comparevi.labview.bits') || '64');
   const labviewExePath = resolveLabVIEWPath(year, bits);
+  const labviewIniPath = path.join(path.dirname(labviewExePath), 'LabVIEW.ini');
   const outDir = interpolateWorkspaceFolder(config.get('comparevi.output.dir') || 'tests/results/manual-vi2-compare');
   const diffAsSuccess = !!config.get('comparevi.diffAsSuccess');
   const profile = {
@@ -573,6 +611,11 @@ async function runCommitCompareFlow({ baseRef, headRef, updateSettings = false }
   const { tempDir, base, head, keepTemp } = comparison;
   const scriptPath = path.join(repoRoot, 'tools', 'Invoke-LVCompare.ps1');
   const args = buildPwshCommandWrapper(scriptPath, base.tempPath, head.tempPath, labviewExePath, outDir, undefined, diffAsSuccess);
+  await recordTelemetry('comparevi.commit.start', {
+    baseRef: effectiveBase,
+    headRef: effectiveHead,
+    outputDir: toWorkspaceRelative(outDir)
+  });
 
   return await new Promise((resolve, reject) => {
     const proc = spawnPwsh(args, { cwd: repoRoot });
@@ -588,6 +631,7 @@ async function runCommitCompareFlow({ baseRef, headRef, updateSettings = false }
         const capPath = path.join(outDir, 'lvcompare-capture.json');
         const reportPath = path.join(outDir, 'compare-report.html');
         const capInfo = summarizeCapture(capPath);
+        const snapshotWritten = await persistLabviewSnapshot(outDir, labviewIniPath);
         await presentSummary({
           repoRoot,
           outDir,
@@ -597,6 +641,15 @@ async function runCommitCompareFlow({ baseRef, headRef, updateSettings = false }
           autoOpenReportOnDiff: !!config.get('comparevi.autoOpenReportOnDiff'),
           showSummary: !!config.get('comparevi.showSummary'),
           sources: { base, head }
+        });
+        await recordTelemetry('comparevi.commit.complete', {
+          exitCode: code,
+          normalizedExitCode: (code === 1 && diffAsSuccess) ? 0 : code,
+          diffDetected: capInfo ? capInfo.exitCode === 1 : undefined,
+          outputDir: toWorkspaceRelative(outDir),
+          baseRef: effectiveBase,
+          headRef: effectiveHead,
+          snapshotWritten
         });
       } finally {
         await cleanupTempDir(tempDir, keepTemp);
@@ -638,6 +691,7 @@ async function compareActiveWithPrevious() {
   const year = String(config.get('comparevi.labview.year') || '2025');
   const bits = String(config.get('comparevi.labview.bits') || '64');
   const labviewExePath = resolveLabVIEWPath(year, bits);
+  const labviewIniPath = path.join(path.dirname(labviewExePath), 'LabVIEW.ini');
   const outDir = interpolateWorkspaceFolder(config.get('comparevi.output.dir') || 'tests/results/manual-vi2-compare');
 
   if (process.platform !== 'win32') {
@@ -698,6 +752,10 @@ async function compareActiveWithPrevious() {
   const args = buildPwshCommandWrapper(scriptPath, baseTemp, headTemp, labviewExePath, outDir, selectedFlags, diffAsSuccess);
   const ch = getOutput();
   ch.appendLine(`[${new Date().toISOString()}] CompareVI: Active vs Previous started`);
+  await recordTelemetry('comparevi.active.start', {
+    vi: toWorkspaceRelative(active),
+    outputDir: toWorkspaceRelative(outDir)
+  });
   const proc = spawnPwsh(args, { cwd: repoRoot });
   proc.stdout.on('data', d => ch.append(String(d)));
   proc.stderr.on('data', d => ch.append(String(d)));
@@ -706,6 +764,7 @@ async function compareActiveWithPrevious() {
     const reportPath = path.join(outDir, 'compare-report.html');
     const capInfo = summarizeCapture(capPath);
     const norm = (code === 1 && diffAsSuccess) ? 0 : code;
+    const snapshotWritten = await persistLabviewSnapshot(outDir, labviewIniPath);
     await presentSummary({
       repoRoot,
       outDir,
@@ -723,6 +782,14 @@ async function compareActiveWithPrevious() {
     if (norm !== 0) {
       vscode.window.showErrorMessage(`CompareVI exited with code ${code}`);
     }
+    await recordTelemetry('comparevi.active.complete', {
+      exitCode: code,
+      normalizedExitCode: norm,
+      diffDetected: capInfo ? capInfo.exitCode === 1 : undefined,
+      outputDir: toWorkspaceRelative(outDir),
+      vi: toWorkspaceRelative(active),
+      snapshotWritten
+    });
   });
 }
 
@@ -802,6 +869,7 @@ async function runProfileWithProfile(profile, config, origin = 'command') {
   const outDir = profile.outputDir
     ? interpolateWorkspaceFolder(profile.outputDir)
     : interpolateWorkspaceFolder(config.get('comparevi.output.dir') || 'tests/results/manual-vi2-compare');
+  const labviewIniPath = path.join(path.dirname(labviewExePath), 'LabVIEW.ini');
 
   if (!fs.existsSync(labviewExePath)) {
     const installed = detectInstalledLabVIEWs();
@@ -838,6 +906,12 @@ async function runProfileWithProfile(profile, config, origin = 'command') {
     const { tempDir, base, head, keepTemp } = comparison;
     setStatusBarPending('CompareVI running…');
     const args = buildPwshCommandWrapper(scriptPath, base.tempPath, head.tempPath, labviewExePath, outDir, selectedFlags, diffAsSuccess);
+    await recordTelemetry('comparevi.profile.start', {
+      profile: profile.name || 'unnamed',
+      mode: 'commit',
+      origin,
+      outputDir: toWorkspaceRelative(outDir)
+    });
     const proc = spawnPwsh(args, { cwd: repoRoot });
     const originLabel = origin === 'tree' ? '(from view)' : '(commit sources)';
     ch.appendLine(`[${new Date().toISOString()}] CompareVI profile '${profile.name || 'unnamed'}' started ${originLabel}`);
@@ -848,11 +922,22 @@ async function runProfileWithProfile(profile, config, origin = 'command') {
       const reportPath = path.join(outDir, 'compare-report.html');
       const capInfo = summarizeCapture(capPath);
       const norm = (code === 1 && diffAsSuccess) ? 0 : code;
+      const snapshotWritten = await persistLabviewSnapshot(outDir, labviewIniPath);
       await presentSummary({ repoRoot, outDir, capInfo, reportPath, diffAsSuccess, autoOpenReportOnDiff: autoOpen, showSummary, sources: { base, head } });
       await cleanupTempDir(tempDir, keepTemp);
       if (norm !== 0) {
         vscode.window.showErrorMessage(`CompareVI exited with code ${code}`);
       }
+      await recordTelemetry('comparevi.profile.complete', {
+        profile: profile.name || 'unnamed',
+        mode: 'commit',
+        origin,
+        exitCode: code,
+        normalizedExitCode: norm,
+        diffDetected: capInfo ? capInfo.exitCode === 1 : undefined,
+        outputDir: toWorkspaceRelative(outDir),
+        snapshotWritten
+      });
     });
     return;
   }
@@ -860,8 +945,13 @@ async function runProfileWithProfile(profile, config, origin = 'command') {
   const baseVi = profile.baseVi || interpolateWorkspaceFolder(config.get('comparevi.paths.baseVi') || '${workspaceFolder}/VI2.vi');
   const headVi = profile.headVi || interpolateWorkspaceFolder(config.get('comparevi.paths.headVi') || '${workspaceFolder}/tmp-commit-236ffab/VI2.vi');
   setStatusBarPending('CompareVI running…');
-  setStatusBarPending('CompareVI running…');
   const args = buildPwshCommandWrapper(scriptPath, baseVi, headVi, labviewExePath, outDir, selectedFlags, diffAsSuccess);
+  await recordTelemetry('comparevi.profile.start', {
+    profile: profile.name || 'unnamed',
+    mode: 'manual',
+    origin,
+    outputDir: toWorkspaceRelative(outDir)
+  });
   const proc = spawnPwsh(args, { cwd: repoRoot });
   ch.appendLine(`[${new Date().toISOString()}] CompareVI profile '${profile.name || 'unnamed'}' started${origin === 'tree' ? ' (from view)' : ''}`);
   proc.stdout.on('data', d => ch.append(String(d)));
@@ -871,10 +961,21 @@ async function runProfileWithProfile(profile, config, origin = 'command') {
     const reportPath = path.join(outDir, 'compare-report.html');
     const capInfo = summarizeCapture(capPath);
     const norm = (code === 1 && diffAsSuccess) ? 0 : code;
+    const snapshotWritten = await persistLabviewSnapshot(outDir, labviewIniPath);
     await presentSummary({ repoRoot, outDir, capInfo, reportPath, diffAsSuccess, autoOpenReportOnDiff: autoOpen, showSummary });
     if (norm !== 0) {
       vscode.window.showErrorMessage(`CompareVI exited with code ${code}`);
     }
+    await recordTelemetry('comparevi.profile.complete', {
+      profile: profile.name || 'unnamed',
+      mode: 'manual',
+      origin,
+      exitCode: code,
+      normalizedExitCode: norm,
+      diffDetected: capInfo ? capInfo.exitCode === 1 : undefined,
+      outputDir: toWorkspaceRelative(outDir),
+      snapshotWritten
+    });
   });
 }
 
@@ -985,7 +1086,7 @@ class ViCompareViewProvider {
           this.refresh();
         }
       } else if (message.type === 'openProviderDocs') {
-        const providerId = String(message.id || '').trim() || activeProviderId;
+        const providerId = String(message.id || '').trim() || getActiveProviderId();
         const provider = getProvider(providerId);
         const url = provider?.docsUrl;
         if (url) {
@@ -1352,8 +1453,11 @@ class ViCompareViewProvider {
     const providersMeta = listProviderMetadata().map((meta) => ({
       id: meta.id,
       displayName: meta.displayName,
-      docsUrl: getProvider(meta.id)?.docsUrl || null
+      docsUrl: getProvider(meta.id)?.docsUrl || null,
+      disabled: !!meta.disabled,
+      status: meta.status || null
     }));
+    const activeId = getActiveProviderId() || 'comparevi';
     return {
       baseVi,
       headVi,
@@ -1376,7 +1480,7 @@ class ViCompareViewProvider {
       commitRefs,
       labviewAvailability: availMap,
       providers: providersMeta,
-      activeProviderId
+      activeProviderId: activeId
     };
   }
 
@@ -1429,6 +1533,7 @@ class ViCompareViewProvider {
     <select id="providerSelect"></select>
     <button id="openProviderDocs" type="button" style="margin-left:4px;">Docs</button>
   </div>
+  <div id="providerStatus" class="hint" style="margin-top:4px;"></div>
   <h2 style="margin-top:12px;">VI Compare Parameters</h2>
   <div class="paths">
     <div><strong>Base:</strong> <span id="baseVi"></span> <button id="editBase" class="linkbtn" type="button">Edit</button> <button id="pickBase" class="linkbtn" type="button">Pick…</button></div>
@@ -1501,6 +1606,7 @@ class ViCompareViewProvider {
     const statusEl = document.getElementById('status');
     const providerSelect = document.getElementById('providerSelect');
     const providerDocsBtn = document.getElementById('openProviderDocs');
+    const providerStatusEl = document.getElementById('providerStatus');
     const baseEl = document.getElementById('baseVi');
     const headEl = document.getElementById('headVi');
     const outEl = document.getElementById('outDir');
@@ -1549,6 +1655,8 @@ class ViCompareViewProvider {
     const diffAsSuccess = document.getElementById('diffAsSuccess');
     let parameters = [];
     let selected = new Set();
+    let providerCache = [];
+    let activeProviderState = 'comparevi';
     window.__presets = [];
     copyCliBtn.disabled = true;
     openCliBtn.disabled = true;
@@ -1714,6 +1822,7 @@ class ViCompareViewProvider {
 
     providerSelect.addEventListener('change', () => {
       const providerId = providerSelect.value;
+      updateProviderStatus(providerId, providerCache);
       vscode.postMessage({ type: 'switchProvider', id: providerId });
     });
 
@@ -1773,11 +1882,17 @@ class ViCompareViewProvider {
         renderParameters();
         populateLabVIEW(payload);
         populateProfiles(payload.profiles || []);
-        populateProviders(payload.providers || [], payload.activeProviderId);
+        const canRun = populateProviders(payload.providers || [], payload.activeProviderId);
         window.__presets = payload.presets || [];
         populatePresets(window.__presets);
         populateCommitRefs(payload.commitRefs || {});
-        testBtn.disabled = !payload.testConfigured;
+        testBtn.disabled = !payload.testConfigured || !canRun;
+        runBtn.disabled = !canRun;
+        compareActiveBtn.disabled = !canRun;
+        runCommitBtn.disabled = !canRun;
+        if (!canRun) {
+          runProfileBtn.disabled = true;
+        }
         testHintEl.textContent = payload.testSummary || (payload.testConfigured ? '' : 'Configure comparevi.panel.testTask or comparevi.panel.testCommand to enable Run Tests.');
         const d = payload.diag || {};
         renderDiag(!!d.baseExists, diagBaseIcon, diagBaseText, 'Base VI exists', d.basePath ? '(' + d.basePath + ')' : '');
@@ -1786,9 +1901,19 @@ class ViCompareViewProvider {
         renderDiag(!!d.outDirExists, diagOutIcon, diagOutText, 'Output directory exists', d.outDirPath ? '(' + d.outDirPath + ')' : '');
         renderDiag(!!d.labviewIniExists, diagIniIcon, diagIniText, 'LabVIEW.ini present', d.labviewIniPath ? '(' + d.labviewIniPath + ')' : '');
         renderDiag(!!d.gcliExists, diagGcliIcon, diagGcliText, 'g-cli executable', d.gcliPath ? '(' + d.gcliPath + ')' : '');
-        revealBtn.disabled = !d.outDirExists;
-        openReportBtn.disabled = !d.reportExists;
-        openCaptureBtn.disabled = !d.capExists;
+        const allowArtifacts = !!canRun;
+        revealBtn.disabled = !allowArtifacts || !d.outDirExists;
+        openReportBtn.disabled = !allowArtifacts || !d.reportExists;
+        openCaptureBtn.disabled = !allowArtifacts || !d.capExists;
+        if (activeProviderState === 'comparevi') {
+          if (!d.labviewIniExists) {
+            providerStatusEl.textContent = `LabVIEW.ini missing at ${d.labviewIniPath || 'expected location'}.`;
+            providerStatusEl.className = 'hint bad';
+          } else if (!providerStatusEl.className.includes('bad')) {
+            providerStatusEl.textContent = 'CompareVI active.';
+            providerStatusEl.className = 'hint ok';
+          }
+        }
         // Last result chip
         const last = payload.last || {};
         let label = '—';
@@ -1804,9 +1929,9 @@ class ViCompareViewProvider {
         const inlineCommand = (payload.preview && payload.preview.current && payload.preview.current.inline) || '';
         cliInline.textContent = inlineCommand || '(no command)';
         const hasCurrentCli = !!inlineCommand;
-        copyCliBtn.disabled = !hasCurrentCli;
-        openCliBtn.disabled = !hasCurrentCli;
-        copyCliLastBtn.disabled = !(payload.preview && payload.preview.last);
+        copyCliBtn.disabled = !hasCurrentCli || !canRun;
+        openCliBtn.disabled = !hasCurrentCli || !canRun;
+        copyCliLastBtn.disabled = !(payload.preview && payload.preview.last) || !canRun;
         // Toggle for diff-as-success
         diffAsSuccess.checked = !!payload.diffAsSuccess;
         diffAsSuccess.onchange = () => {
@@ -1905,7 +2030,8 @@ function activateCompareVI(context) {
       event.affectsConfiguration('comparevi.diffAsSuccess') ||
       event.affectsConfiguration('comparevi.commitRefs.base') ||
       event.affectsConfiguration('comparevi.commitRefs.head') ||
-      event.affectsConfiguration('comparevi.presets')
+      event.affectsConfiguration('comparevi.presets') ||
+      event.affectsConfiguration('comparevi.providers.gcli.path')
     ) {
       viCompareProvider.refresh();
     }
@@ -1948,21 +2074,42 @@ function createCompareVIProvider() {
 
 function activate(context) {
   compareVIProviderRegistration = createCompareVIProvider();
+  gcliProviderRegistration = createGcliProvider();
+
   registerProvider(compareVIProviderRegistration);
+  registerProvider(gcliProviderRegistration);
+
   context.subscriptions.push({
     dispose: () => unregisterProvider(compareVIProviderRegistration?.id || 'comparevi')
   });
-  activeProviderId = compareVIProviderRegistration.id;
+  context.subscriptions.push({
+    dispose: () => unregisterProvider(gcliProviderRegistration?.id || 'gcli')
+  });
+
   compareVIProviderRegistration.activate(context);
+  gcliProviderRegistration.activate?.(context);
+  setActiveProvider(compareVIProviderRegistration.id);
+
+  const providerWatcher = onDidChangeActiveProvider(() => {
+    try {
+      viCompareProvider?.refresh?.();
+    } catch { /* noop */ }
+  });
+  context.subscriptions.push(providerWatcher);
 }
 
 function deactivate() {
   try {
     compareVIProviderRegistration?.deactivate?.();
+    gcliProviderRegistration?.deactivate?.();
   } finally {
     if (compareVIProviderRegistration) {
       unregisterProvider(compareVIProviderRegistration.id);
       compareVIProviderRegistration = undefined;
+    }
+    if (gcliProviderRegistration) {
+      unregisterProvider(gcliProviderRegistration.id);
+      gcliProviderRegistration = undefined;
     }
   }
 }
@@ -1979,7 +2126,9 @@ module.exports = {
     setStatusBarResult,
     setStatusBarPending,
     listProviders,
-    getProvider
+    getProvider,
+    setActiveProvider,
+    getActiveProviderId
   }
 };
 
@@ -2000,29 +2149,57 @@ class CompareViProfilesProvider {
     } catch {}
   }
 
-  function populateProviders(list, activeId) {
-    providerSelect.innerHTML = '';
-    if (!Array.isArray(list) || list.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = 'No providers registered';
-      providerSelect.appendChild(opt);
-      providerSelect.disabled = true;
-      providerDocsBtn.disabled = true;
-      return;
+    function updateProviderStatus(activeId, providersList) {
+      providerCache = Array.isArray(providersList) ? providersList : [];
+      const fallbackId = providerCache[0]?.id;
+      activeProviderState = activeId || fallbackId || 'comparevi';
+      const provider = providerCache.find((p) => p.id === activeProviderState);
+      const status = provider?.status || {};
+      const disabled = !!provider?.disabled;
+      const ok = !disabled && (typeof status.ok === 'boolean' ? status.ok : true);
+      const name = provider ? (provider.displayName || provider.id) : 'No provider';
+      let message = status.message || '';
+      if (!message) {
+        if (!provider) message = 'No providers registered.';
+        else if (provider.id === 'comparevi') message = `${name} active.`;
+        else message = `${name} active. Controls disabled until CompareVI is selected.`;
+      }
+      providerStatusEl.textContent = message;
+      providerStatusEl.className = 'hint ' + (ok ? 'ok' : 'bad');
+      providerDocsBtn.disabled = !(provider && provider.docsUrl);
+      if (providerSelect.value !== activeProviderState) {
+        providerSelect.value = activeProviderState;
+      }
+      return ok && activeProviderState === 'comparevi';
     }
-    providerSelect.disabled = false;
-    providerDocsBtn.disabled = false;
-    list.forEach((provider) => {
-      const opt = document.createElement('option');
-      opt.value = provider.id;
-      opt.textContent = provider.displayName || provider.id;
-      if (provider.id === activeId) opt.selected = true;
-      providerSelect.appendChild(opt);
-    });
-    const active = list.find((p) => p.id === (activeId || list[0]?.id));
-    providerDocsBtn.disabled = !(active && active.docsUrl);
-  }
+
+    function populateProviders(list, activeId) {
+      providerSelect.innerHTML = '';
+      providerCache = Array.isArray(list) ? list : [];
+      if (!providerCache.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No providers registered';
+        providerSelect.appendChild(opt);
+        providerSelect.disabled = true;
+        providerDocsBtn.disabled = true;
+        providerStatusEl.textContent = 'No providers registered. Configure providers to continue.';
+        providerStatusEl.className = 'hint bad';
+        activeProviderState = 'comparevi';
+        return false;
+      }
+      providerSelect.disabled = false;
+      providerDocsBtn.disabled = false;
+      providerCache.forEach((provider) => {
+        const opt = document.createElement('option');
+        opt.value = provider.id;
+        opt.textContent = provider.displayName || provider.id;
+        if (provider.disabled) opt.textContent += ' (unavailable)';
+        if (provider.id === activeId) opt.selected = true;
+        providerSelect.appendChild(opt);
+      });
+      return updateProviderStatus(activeId, providerCache);
+    }
 
   refresh() { this._emitter.fire(); }
 

@@ -227,6 +227,16 @@
           "type": "boolean",
           "default": true,
           "description": "Show a status bar item with the last CompareVI result and a toggle for Treat Diff as Success."
+        },
+        "comparevi.providers.gcli.path": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the g-cli executable. Leave blank to use the default install location."
+        },
+        "comparevi.telemetryEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable local telemetry logging for compare runs (written to tests/results/telemetry)."
         }
       }
     },

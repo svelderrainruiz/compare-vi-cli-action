@@ -8,6 +8,8 @@ const gitHelpers = require('../../lib/git');
 
 const EXTENSION_ID = 'local.comparevi-helper';
 const workspaceRoot = path.resolve(__dirname, '../fixtures/workspace');
+const telemetryDir = path.join(workspaceRoot, 'tests', 'results', 'telemetry');
+const telemetryFile = path.join(telemetryDir, 'n-cli-companion.ndjson');
 
 function extractOutputDir(args) {
   if (Array.isArray(args)) {
@@ -115,6 +117,20 @@ suite('CompareVI extension', () => {
       testingApi.resetSpawnOverride();
     }
     gitHelpers.resetGitRunnerOverride();
+    if (fs.existsSync(telemetryDir)) {
+      fs.rmSync(telemetryDir, { recursive: true, force: true });
+    }
+  });
+
+  setup(() => {
+    if (fs.existsSync(telemetryDir)) {
+      fs.rmSync(telemetryDir, { recursive: true, force: true });
+    }
+    testingApi?.setActiveProvider?.('comparevi');
+  });
+
+  teardown(() => {
+    testingApi?.setActiveProvider?.('comparevi');
   });
 
   teardown(() => {
@@ -156,6 +172,11 @@ suite('CompareVI extension', () => {
     expect(capture.exitCode).to.equal(1);
     const statusItem = testingApi.getStatusItem();
     expect(statusItem.text).to.include('VI Diff');
+    expect(fs.existsSync(telemetryFile)).to.be.true;
+    const telemetryEntries = fs.readFileSync(telemetryFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    const events = telemetryEntries.map((entry) => entry.event);
+    expect(events).to.include('comparevi.profile.start');
+    expect(events).to.include('comparevi.profile.complete');
   });
 
   test('compare active VI with previous commit produces capture via stub', async () => {
@@ -202,6 +223,45 @@ suite('CompareVI extension', () => {
     const preset = state.presets.find((p) => p.name === 'Quick');
     expect(preset.flags).to.deep.equal(['-nobdcosm']);
     expect(state.preview.current.inline).to.be.a('string').that.includes('-OutputDir');
+  });
+
+  test('provider registry includes g-cli stub metadata', () => {
+    const state = testingApi.getPanelState();
+    expect(state.activeProviderId).to.equal('comparevi');
+    const providers = state.providers || [];
+    const ids = providers.map((p) => p.id);
+    expect(ids).to.include('comparevi');
+    expect(ids).to.include('gcli');
+    const gcli = providers.find((p) => p.id === 'gcli');
+    expect(gcli.disabled).to.be.true;
+  });
+
+  test('g-cli provider status reflects configured executable', async () => {
+    const config = vscode.workspace.getConfiguration();
+    const stubPath = path.join(workspaceRoot, 'fake-g-cli.exe');
+    fs.writeFileSync(stubPath, '');
+
+    try {
+      await config.update('comparevi.providers.gcli.path', stubPath, vscode.ConfigurationTarget.Workspace);
+      const state = testingApi.getPanelState();
+      const gcli = state.providers.find((p) => p.id === 'gcli');
+      expect(gcli).to.not.be.undefined;
+      expect(gcli.disabled).to.be.false;
+      expect(gcli.status.ok).to.be.true;
+      expect(gcli.status.message).to.include('detected');
+    } finally {
+      await config.update('comparevi.providers.gcli.path', '', vscode.ConfigurationTarget.Workspace);
+      if (fs.existsSync(stubPath)) {
+        fs.unlinkSync(stubPath);
+      }
+    }
+  });
+
+  test('active provider switching updates panel state', () => {
+    const switched = testingApi.setActiveProvider('gcli');
+    expect(switched).to.be.true;
+    const state = testingApi.getPanelState();
+    expect(state.activeProviderId).to.equal('gcli');
   });
 
   test('toggle diff as success command updates setting and status bar', async () => {

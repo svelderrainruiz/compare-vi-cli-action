@@ -1,6 +1,20 @@
-# CompareVI Helper (Local Dev Extension)
+# N-CLI Companion (Local Dev Extension)
 
-This lightweight extension adds a command to run LVCompare against two VIs in this repo, with quick year/bitness selection.
+The N-CLI companion hosts CompareVI and future CLI providers in one panel so you can swap tooling without reinstalling new
+extensions. The default CompareVI provider keeps all of the manual compare conveniences (flag presets, commit compare, artifact
+summaries) and now layers in health checks, telemetry breadcrumbs, and a provider switcher. A stub g-cli provider is included to
+exercise the multi-provider plumbing and warn when the executable is missing.
+
+## Providers
+
+- **CompareVI** – full-featured provider used by existing workflows. Presents the VI Compare panel, LabVIEW health checks, CLI
+  previews, and profile runner.
+- **G CLI (stub)** – exercises provider switching and g-cli detection. When the configured executable cannot be found the panel
+  disables CompareVI actions and surfaces the missing-path warning so you can install/configure the tool before expanding the
+  provider.
+
+Switch providers from the top of the VI Compare panel. Provider metadata (docs URL, health status, disabled reason) renders in the
+panel header and controls the enabled/disabled state of compare actions.
 
 ## Commands
 
@@ -35,6 +49,9 @@ This lightweight extension adds a command to run LVCompare against two VIs in th
 - `comparevi.knownFlags` — list of LVCompare flags shown in the picker
 - `comparevi.showSourcePicker` (default `true`) — prompt for base/head commit sources when profiles define commit refs
 - `comparevi.keepTempVi` (default `false`) — retain extracted temporary VIs after each run (handy for debugging)
+- `comparevi.providers.gcli.path` (default empty) — optional override for the g-cli executable path used by the stub provider
+- `comparevi.telemetryEnabled` (default `true`) — when enabled, write NDJSON telemetry events for each compare run under
+  `tests/results/telemetry/`
 
 ## Commit-Based Sources
 
@@ -61,6 +78,13 @@ The CompareVI Manual side bar (Activity Bar → CompareVI Manual) lists profiles
 - Paths in `vis` entries are relative to the repository. If omitted, the extension will list `.vi` files in the commit and prompt you to choose one.
 - Temporary files are cleaned up automatically unless `comparevi.keepTempVi` is enabled.
 - Tree view vignettes display the current commit selections; context menus still provide “Run”, “Open Report”, etc.
+- Each compare run snapshots `LabVIEW.ini` (when present) alongside CLI artifacts so you can audit LabVIEW configuration changes over time.
+
+## Telemetry
+
+When `comparevi.telemetryEnabled` is true the extension appends NDJSON events to `tests/results/telemetry/n-cli-companion.ndjson`.
+Entries include the provider id, run type (manual/profile/commit/active), exit codes, and whether a LabVIEW.ini snapshot was captured.
+Disable the setting to opt out locally.
 
 ## Run locally
 
