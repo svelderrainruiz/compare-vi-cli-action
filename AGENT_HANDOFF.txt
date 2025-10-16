@@ -1,60 +1,35 @@
 # Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Installed GitHub CLI (`apt-get install gh`). The binary is now present (`gh --version` → 2.45.0) but
-  remains unauthenticated; `gh auth status` still reports "not logged in" because no `GH_TOKEN` was
-  provided. `node tools/npm/run-script.mjs priority:sync` therefore continues to fall back to the cached
-  metadata for standing issue #134 (latest attempt: 2025-10-16T19:01:53Z, error instructing to run
-  `gh auth login`).
-- Added Microsoft's repository package and installed PowerShell 7 (`pwsh --version` → 7.5.3).
-- Bootstrapped Pester 5.5.0 manually by downloading the PSGallery `.nupkg` and unpacking it under
-  `~/.local/share/powershell/Modules/Pester/5.5.0`. `Import-Module Pester -MinimumVersion 5.0.0` now
-  succeeds.
-- Ran `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900
-  -AppendToStepSummary`; no rogue LabVIEW/LVCompare processes were reported and new
-  `tests/results/_lvcompare_notice/notice-*.json` files were recorded for the sweep.
-- Attempted `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`. The dispatcher bootstrapped
-  correctly with Pester 5.5.0 and began executing 145 files, but the run was manually interrupted after
-  roughly four and a half minutes to keep the session moving; no consolidated `pester-summary.json`
-  was produced. `_lvcompare_notice` notices from the partial run remain under `tests/results/`.
-- Working tree still tracks branch `work`. No topic branch was created and no commits exist yet in this
-  session.
+- Installed GitHub CLI via apt (`gh --version` → 2.45.0) but left it unauthenticated; `gh auth status` still reports "not logged in".
+- Added Microsoft's apt repository, installed PowerShell 7 (`pwsh --version` → 7.5.3), and expanded the Pester 5.5.0 `.nupkg` into `~/.local/share/powershell/Modules/Pester/5.5.0` so `Import-Module Pester -MinimumVersion 5` succeeds.
+- Applied the handoff toggles (`pwsh -NoLogo -File tools/Print-AgentHandoff.ps1 -ApplyToggles`).
+- Ran `node tools/npm/run-script.mjs priority:sync`; without auth it fell back to the cached standing issue and refreshed `.agent_priority_cache.json` at 2025-10-16T19:19:36Z with the same login error.
+- Attempted `pwsh -NoLogo -File Invoke-PesterTests.ps1 -IntegrationMode exclude`. The dispatcher enumerated 145 files and began spawning worker `pwsh` instances, but after ~20 minutes it was still chewing through new child processes without emitting `pester-summary.json` or XML results. I terminated the run (`pkill`/`kill`) to unblock the session; only guard output (`tests/results/_diagnostics/guard.json`) and the selected-file list were written.
+- Captured a fresh rogue sweep (`tools/Detect-RogueLV.ps1 ... -LookBackSeconds 900 -AppendToStepSummary`) — no live or rogue LV/LVCompare processes were detected and new notices landed under `tests/results/_lvcompare_notice/`.
+- Working tree remains on branch `work`; no commits existed prior to this session.
 
 ## Status & Known Gaps
-1. GitHub CLI is installed but unauthenticated. Without `gh auth login` or a `GH_TOKEN`, priority syncs
-   cannot reach GitHub for live metadata.
-2. Dispatcher coverage remains incomplete: the latest `Invoke-PesterTests.ps1 -IntegrationMode exclude`
-   run was aborted, so guard telemetry, summaries, and XML/JSON outputs are still missing for the
-   current bits.
-3. TestStand and CLI-only session artifacts are unchanged placeholders; genuine LabVIEW outputs are
-   still outstanding.
-4. Issue/PR #134 has not been updated with the restored toolchain details or partial dispatcher attempt.
+1. GitHub CLI remains unauthenticated, so standing-priority syncs rely on cached metadata (`lastFetchError` still instructs to run `gh auth login`).
+2. Dispatcher coverage is still missing: the latest run was aborted after sustained worker churn and left no `pester-summary.json`, NUnit XML, or session summaries in `tests/results/`.
+3. `tests/results/_diagnostics/guard.json` shows repeated "Results path points to a file" notices from the guard test; a successful end-to-end dispatcher pass is still outstanding.
+4. TestStand/CLI artifacts and watcher telemetry remain untouched; issue/PR #134 has not been updated with the current toolchain rebuild or the incomplete dispatcher attempt.
 
 ## Suggested Next Actions
-1. Authenticate GitHub CLI (or supply `GH_TOKEN`) and rerun `node tools/npm/run-script.mjs priority:sync`
-   so `.agent_priority_cache.json` reflects live issue data.
-2. Re-run `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude` to completion now that Pester is
-   available, capturing the resulting summaries, artifacts, and guard diagnostics.
-3. Sync the new dispatcher run, rogue scan output, and any additional telemetry to issue/PR #134.
-4. Continue sourcing validated CLI/TestStand artifacts from a LabVIEW-capable Windows host.
+1. Authenticate `gh` (or export `GH_TOKEN`) and rerun `node tools/npm/run-script.mjs priority:sync` so `.agent_priority_cache.json` and the router artifacts reflect live data.
+2. Re-run `Invoke-PesterTests.ps1 -IntegrationMode exclude`, investigate why the worker processes never converge, and capture the expected `tests/results` outputs (summary JSON, XML, guard telemetry, watcher capsules).
+3. Once the dispatcher run succeeds, sync its findings — along with the restored PowerShell/Pester toolchain details and rogue sweep — back to issue/PR #134.
+4. Continue the rogue LV sweep cadence via `tools/Detect-RogueLV.ps1` after major PowerShell runs.
 
 ## First Actions for the Next Agent
-1. Log into GitHub CLI (or export `GH_TOKEN`) and confirm the standing-priority cache refreshes without
-   falling back to stale metadata.
-2. Complete a dispatcher run (`Invoke-PesterTests.ps1 -IntegrationMode exclude`) and archive the outputs
-   in `tests/results/`, including summaries and watcher telemetry if available.
-3. Propagate the restored toolchain status (gh, pwsh, Pester) and dispatcher findings back to
-   issue/PR #134.
-4. Maintain the rogue LV sweep cadence using `tools/Detect-RogueLV.ps1` (now operational with pwsh).
+1. Log into GitHub CLI (or set `GH_TOKEN`) and confirm `priority:sync` succeeds without the cached-only fallback.
+2. Drive a full dispatcher pass (`Invoke-PesterTests.ps1 -IntegrationMode exclude`), ensuring the worker churn is understood/resolved and the standard `tests/results` artifacts are produced.
+3. Update issue/PR #134 with the environment restoration status and dispatcher outcomes.
+4. Run the rogue LV detection helper to keep `_lvcompare_notice` fresh.
 
 ## Notes for Next Agent
-- `.agent_priority_cache.json` updated at 2025-10-16T19:01:53Z with the error message directing to
-  `gh auth login`.
-- PowerShell 7.5.3 and Pester 5.5.0 are available under `/opt/microsoft/powershell/7/pwsh` and
-  `~/.local/share/powershell/Modules/Pester/5.5.0` respectively.
-- `tests/results/_lvcompare_notice/` contains fresh notices from the rogue sweep and the interrupted
-  dispatcher attempt.
-- `tools/Detect-RogueLV.ps1` wrote `tests/results/_lvcompare_notice/notice-20251016-1911451863535.json`
-  (and related files) showing no live or rogue LV/LVCompare processes.
-- No new watcher artifacts were produced; `_agent/watcher` remains empty. The dispatcher run was halted
-  before summaries were emitted.
+- Pester 5.5.0 lives at `~/.local/share/powershell/Modules/Pester/5.5.0`; PowerShell 7.5.3 is under `/opt/microsoft/powershell/7/pwsh`.
+- `.agent_priority_cache.json` now records the 2025-10-16T19:19:36Z cached sync attempt (error still points to `gh auth login`).
+- `tests/results/_diagnostics/guard.json` documents the guard failures from the aborted dispatcher run; `tests/results/pester-selected-files.txt` lists the 145 test files that were queued.
+- No watcher artifacts or `pester-summary.json` exist yet; the dispatcher termination left several defunct worker `pwsh` processes that `init` will reap (use `pkill -f pwsh` if any linger before the next run).
+- Latest rogue sweep (`tests/results/_lvcompare_notice/notice-20251016-1939320807419.json` and siblings) reports zero live/rogue LV/LVCompare processes.
