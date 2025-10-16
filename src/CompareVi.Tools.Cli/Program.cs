@@ -30,6 +30,8 @@ internal static class Program
                     return CmdQuote(args);
                 case "operations":
                     return CmdOperations(args);
+                case "providers":
+                    return CmdProviders(args);
                 default:
                     Console.Error.WriteLine($"Unknown command: {cmd}");
                     PrintHelp();
@@ -55,6 +57,7 @@ internal static class Program
         Console.WriteLine("  comparevi-cli procs");
         Console.WriteLine("  comparevi-cli quote --path <path>");
         Console.WriteLine("  comparevi-cli operations [--name <operation>] [--names-only]");
+        Console.WriteLine("  comparevi-cli providers [--name <provider>] [--names-only]");
     }
 
     private static int CmdVersion()
@@ -182,6 +185,59 @@ internal static class Program
         }
 
         Console.Error.WriteLine($"Operation '{operationName}' was not found in the operations catalog.");
+        return 3;
+    }
+
+    private static int CmdProviders(string[] args)
+    {
+        string? providerName = null;
+        var namesOnly = false;
+
+        for (int i = 1; i < args.Length; i++)
+        {
+            if (args[i].Equals("--name", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                providerName = args[i + 1];
+                i++;
+                continue;
+            }
+
+            if (args[i].Equals("--names", StringComparison.OrdinalIgnoreCase) ||
+                args[i].Equals("--names-only", StringComparison.OrdinalIgnoreCase))
+            {
+                namesOnly = true;
+            }
+        }
+
+        providerName = providerName?.Trim();
+
+        if (namesOnly && !string.IsNullOrEmpty(providerName))
+        {
+            Console.Error.WriteLine("--names-only cannot be combined with --name.");
+            return 2;
+        }
+
+        if (namesOnly)
+        {
+            var payload = ProviderCatalogFormatter.CreateProviderNamesPayload();
+            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+
+        if (string.IsNullOrEmpty(providerName))
+        {
+            var payload = ProviderCatalogFormatter.CreateProvidersListPayload();
+            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+
+        if (ProviderCatalogFormatter.TryCreateProviderPayload(providerName!, out var providerPayload))
+        {
+            Console.WriteLine(providerPayload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            return 0;
+        }
+
+        Console.Error.WriteLine($"Provider '{providerName}' was not found in the providers catalog.");
         return 3;
     }
 }
