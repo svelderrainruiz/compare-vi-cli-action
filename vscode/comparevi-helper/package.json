@@ -331,7 +331,7 @@
     "@vscode/vsce": "^3.6.2",
     "chai": "^4.3.10",
     "glob": "^10.3.10",
-    "mocha": "^10.2.0",
+    "mocha": "^11.7.4",
     "vitest": "^1.1.0"
   },
   "dependencies": {
