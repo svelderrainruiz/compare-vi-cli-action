@@ -1,8 +1,8 @@
 {
   "schema": "agent-handoff/test-results@v1",
-  "generatedAt": "2025-10-15T23:57:13Z",
+  "generatedAt": "2025-10-16T00:05:38Z",
   "status": "blocked",
-  "total": 3,
+  "total": 4,
   "failureCount": 2,
   "results": [
     {
@@ -31,6 +31,15 @@
       "startedAt": "2025-10-15T23:56:30Z",
       "completedAt": "2025-10-15T23:56:40Z",
       "durationMs": 10000
+    },
+    {
+      "command": "npm run session:teststand:validate",
+      "exitCode": 0,
+      "stdout": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n\n> compare-vi-cli-action@0.5.0 session:teststand:validate\n> npm run schema:validate -- --schema docs/schema/generated/teststand-compare-session.schema.json --data fixtures/teststand-session/session-index.json --data tests/results/teststand-session/session-index.json --optional\n\nnpm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n\n> compare-vi-cli-action@0.5.0 schema:validate\n> tsc -p tsconfig.cli.json && node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data fixtures/teststand-session/session-index.json --data tests/results/teststand-session/session-index.json --optional\n[schema] Validated 2 file(s) against /workspace/compare-vi-cli-action/docs/schema/generated/teststand-compare-session.schema.json.\n",
+      "stderr": "",
+      "startedAt": "2025-10-16T00:03:40Z",
+      "completedAt": "2025-10-16T00:03:46Z",
+      "durationMs": 6000
     }
   ]
 }
