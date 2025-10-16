@@ -44,6 +44,7 @@ let compareVIProviderRegistration;
 let gcliProviderRegistration;
 
 const SOURCE_STATE_KEY = 'comparevi.lastSources';
+const ACTIVE_PROVIDER_STATE_KEY = 'comparevi.activeProviderId';
 const TEMP_PREFIX = path.join(os.tmpdir(), 'comparevi-');
 const DEFAULT_PARAMETER_FLAGS = ['-nobdcosm', '-nofppos', '-noattr', '-nofp'];
 const DEFAULT_GCLI_PATH = process.platform === 'win32'
@@ -231,6 +232,27 @@ function getRepoRoot() {
 
 function getSourceState() {
   return workspaceState?.get(SOURCE_STATE_KEY) || {};
+}
+
+function getSavedActiveProviderId() {
+  if (!workspaceState || typeof workspaceState.get !== 'function') {
+    return undefined;
+  }
+  const stored = workspaceState.get(ACTIVE_PROVIDER_STATE_KEY);
+  return typeof stored === 'string' && stored.trim().length ? stored : undefined;
+}
+
+function persistActiveProviderId(id) {
+  if (!workspaceState || typeof workspaceState.update !== 'function') {
+    return;
+  }
+  const value = (typeof id === 'string' && id.trim().length) ? id : null;
+  try {
+    const result = workspaceState.update(ACTIVE_PROVIDER_STATE_KEY, value);
+    if (result && typeof result.then === 'function') {
+      result.catch(() => {});
+    }
+  } catch {}
 }
 
 async function updateSourceState(profileName, role, entryId, viPath) {
@@ -2088,9 +2110,15 @@ function activate(context) {
 
   compareVIProviderRegistration.activate(context);
   gcliProviderRegistration.activate?.(context);
-  setActiveProvider(compareVIProviderRegistration.id);
+  const savedProviderId = getSavedActiveProviderId();
+  const initialProviderId = (savedProviderId && getProvider(savedProviderId))
+    ? savedProviderId
+    : compareVIProviderRegistration.id;
+  setActiveProvider(initialProviderId);
+  persistActiveProviderId(getActiveProviderId());
 
-  const providerWatcher = onDidChangeActiveProvider(() => {
+  const providerWatcher = onDidChangeActiveProvider((activeId) => {
+    persistActiveProviderId(activeId);
     try {
       viCompareProvider?.refresh?.();
     } catch { /* noop */ }
@@ -2128,7 +2156,8 @@ module.exports = {
     listProviders,
     getProvider,
     setActiveProvider,
-    getActiveProviderId
+    getActiveProviderId,
+    getStoredActiveProviderId: () => getSavedActiveProviderId()
   }
 };
 
