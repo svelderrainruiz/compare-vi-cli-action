@@ -1,67 +1,60 @@
 # Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Ran `node tools/npm/run-script.mjs priority:sync` at session start; the helper again fell back to the
-  cached metadata for standing issue #134 because GitHub CLI is still missing and unauthenticated REST
-  calls fail. The cache timestamp now reflects this session (`cachedAtUtc` ≈ 2025-10-16T18:53:50Z).
-- Confirmed `gh` remains absent on this image (`which gh` yields no path), so we cannot reauthenticate
-  or pull fresh issue data until the binary is installed or a `GH_TOKEN` is supplied.
-- `gh auth status` is still blocked because the executable is unavailable; unauthenticated REST calls
-  continue to fail with `fetch failed`.
-- PowerShell (`pwsh`) remains missing (`pwsh --version` exits with `command not found`). A prior
-  `apt-get install powershell` attempt on this image also failed because the package is not published in
-  the default Ubuntu repositories, so dispatcher and guard automation are still offline pending a
-  Microsoft feed or manual install path.
-- Working tree remains on branch `work`; no topic branch (for example `issue/134-cli-companion`) exists
-  locally, and no new commits were created during this session beyond cache refresh updates.
-- No orchestrated dispatcher, guard, or watcher tooling ran, so `tests/results/_agent/` still only
-  contains the previously published telemetry. The earlier `tests/results/_diagnostics/guard.json`
-  artifact is still absent.
-- Placeholder CLI-only and TestStand artifacts remain unchanged; nothing new was captured from a
-  LabVIEW-capable host.
+- Installed GitHub CLI (`apt-get install gh`). The binary is now present (`gh --version` → 2.45.0) but
+  remains unauthenticated; `gh auth status` still reports "not logged in" because no `GH_TOKEN` was
+  provided. `node tools/npm/run-script.mjs priority:sync` therefore continues to fall back to the cached
+  metadata for standing issue #134 (latest attempt: 2025-10-16T19:01:53Z, error instructing to run
+  `gh auth login`).
+- Added Microsoft's repository package and installed PowerShell 7 (`pwsh --version` → 7.5.3).
+- Bootstrapped Pester 5.5.0 manually by downloading the PSGallery `.nupkg` and unpacking it under
+  `~/.local/share/powershell/Modules/Pester/5.5.0`. `Import-Module Pester -MinimumVersion 5.0.0` now
+  succeeds.
+- Ran `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900
+  -AppendToStepSummary`; no rogue LabVIEW/LVCompare processes were reported and new
+  `tests/results/_lvcompare_notice/notice-*.json` files were recorded for the sweep.
+- Attempted `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`. The dispatcher bootstrapped
+  correctly with Pester 5.5.0 and began executing 145 files, but the run was manually interrupted after
+  roughly four and a half minutes to keep the session moving; no consolidated `pester-summary.json`
+  was produced. `_lvcompare_notice` notices from the partial run remain under `tests/results/`.
+- Working tree still tracks branch `work`. No topic branch was created and no commits exist yet in this
+  session.
 
 ## Status & Known Gaps
-1. GitHub CLI is absent. Priority syncs cannot reach GitHub until `gh` is installed and authenticated
-   or an equivalent token-backed REST workflow is configured.
-2. PowerShell 7 + Pester are still missing, so dispatcher and guard diagnostics remain blocked.
-3. Dispatcher coverage has not been rerun since before the CLI removal; the prior guard failure
-   scenario is still unverified with current bits.
-4. TestStand and CLI-only session payloads are still placeholders rather than validated LabVIEW
-   outputs produced on real hardware.
-5. Issue/PR #134 has not been refreshed with notes covering the missing toolchain, dispatcher status,
-   or artifact provenance from recent sessions.
+1. GitHub CLI is installed but unauthenticated. Without `gh auth login` or a `GH_TOKEN`, priority syncs
+   cannot reach GitHub for live metadata.
+2. Dispatcher coverage remains incomplete: the latest `Invoke-PesterTests.ps1 -IntegrationMode exclude`
+   run was aborted, so guard telemetry, summaries, and XML/JSON outputs are still missing for the
+   current bits.
+3. TestStand and CLI-only session artifacts are unchanged placeholders; genuine LabVIEW outputs are
+   still outstanding.
+4. Issue/PR #134 has not been updated with the restored toolchain details or partial dispatcher attempt.
 
 ## Suggested Next Actions
-1. Install GitHub CLI and authenticate (`gh auth login` or provide `GH_TOKEN`), then rerun
-   `node tools/npm/run-script.mjs priority:sync` so `.agent_priority_cache.json` carries live metadata.
-2. Install PowerShell 7 + Pester from the Microsoft feed or an offline package so dispatcher and guard
-   automation can resume.
-3. Once PowerShell is available, rerun the dispatcher with guard diagnostics enabled (for example,
-   `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`) to recreate the previous loop and
-   capture fresh artifacts.
-4. Produce real CLI-only and TestStand session artifacts on a LabVIEW-capable Windows host and validate
-   them with the schema tooling before checking them in.
-5. Update issue/PR #134 after restoring the toolchain to document the new dispatcher runs, schema
-   outcomes, and remaining gaps.
+1. Authenticate GitHub CLI (or supply `GH_TOKEN`) and rerun `node tools/npm/run-script.mjs priority:sync`
+   so `.agent_priority_cache.json` reflects live issue data.
+2. Re-run `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude` to completion now that Pester is
+   available, capturing the resulting summaries, artifacts, and guard diagnostics.
+3. Sync the new dispatcher run, rogue scan output, and any additional telemetry to issue/PR #134.
+4. Continue sourcing validated CLI/TestStand artifacts from a LabVIEW-capable Windows host.
 
 ## First Actions for the Next Agent
-1. Restore GitHub CLI access (install + authenticate) and rerun the standing-priority sync to refresh
-   cached metadata.
-2. Enable PowerShell 7 + Pester and validate dispatcher/guard workflows so we can continue debugging the
-   standing issue.
-3. Replace the placeholder CLI/TestStand payloads with validated outputs from a LabVIEW-capable host and
-   document the provenance.
-4. Record any new dispatcher, schema, or watcher telemetry in this handoff log and update issue/PR #134
-   accordingly.
+1. Log into GitHub CLI (or export `GH_TOKEN`) and confirm the standing-priority cache refreshes without
+   falling back to stale metadata.
+2. Complete a dispatcher run (`Invoke-PesterTests.ps1 -IntegrationMode exclude`) and archive the outputs
+   in `tests/results/`, including summaries and watcher telemetry if available.
+3. Propagate the restored toolchain status (gh, pwsh, Pester) and dispatcher findings back to
+   issue/PR #134.
+4. Maintain the rogue LV sweep cadence using `tools/Detect-RogueLV.ps1` (now operational with pwsh).
 
 ## Notes for Next Agent
-- `node tools/npm/run-script.mjs priority:sync` continues to fail without GitHub CLI or credentials; the
-  cached metadata was last refreshed at 2025-10-16T18:53:50Z with the "gh CLI not found" error.
-- `tests/results/_agent/handoff/test-summary.json` still reflects the 2025-10-16T15:48Z
-  `priority:handoff-tests` run; no follow-up validation was executed.
-- Watcher telemetry remains unchanged; `_agent/handoff/` contains no new watcher artifacts for this
-  session.
-- `.agent_priority_cache.json` records the latest failure reason (`gh CLI not found`) from the
-  2025-10-16T18:53:50Z sync and has not been manually edited.
-- The container still lacks LabVIEW/LVCompare, so genuine Compare VI outputs must be harvested from a
-  Windows host with those tools available.
+- `.agent_priority_cache.json` updated at 2025-10-16T19:01:53Z with the error message directing to
+  `gh auth login`.
+- PowerShell 7.5.3 and Pester 5.5.0 are available under `/opt/microsoft/powershell/7/pwsh` and
+  `~/.local/share/powershell/Modules/Pester/5.5.0` respectively.
+- `tests/results/_lvcompare_notice/` contains fresh notices from the rogue sweep and the interrupted
+  dispatcher attempt.
+- `tools/Detect-RogueLV.ps1` wrote `tests/results/_lvcompare_notice/notice-20251016-1911451863535.json`
+  (and related files) showing no live or rogue LV/LVCompare processes.
+- No new watcher artifacts were produced; `_agent/watcher` remains empty. The dispatcher run was halted
+  before summaries were emitted.
