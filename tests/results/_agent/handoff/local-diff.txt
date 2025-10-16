@@ -1,15 +1,16 @@
-# git status --short (2025-10-16T01:06:44Z)
+# git status --short (2025-10-17T19:25:10Z)
  M .agent_priority_cache.json
  M tests/results/_agent/handoff/local-diff.txt
+ M tests/results/_agent/handoff/local-status.txt
  M tests/results/teststand-session/compare/compare-events.ndjson
  M tests/results/teststand-session/compare/lvcompare-capture.json
  M tests/results/teststand-session/session-index.json
 
 # git diff --stat
  .agent_priority_cache.json                                     |  2 +-
- tests/results/_agent/handoff/local-diff.txt                    | 37 ++++++++++++++-----------------------
- tests/results/_agent/handoff/local-status.txt                  |  5 +----
+ tests/results/_agent/handoff/local-diff.txt                    | 13 ++++++-------
+ tests/results/_agent/handoff/local-status.txt                  |  1 -
  tests/results/teststand-session/compare/compare-events.ndjson  |  4 ++--
- tests/results/teststand-session/compare/lvcompare-capture.json | 32 ++++++++++++++++----------------
- tests/results/teststand-session/session-index.json             | 16 ++++++++--------
- 6 files changed, 42 insertions(+), 54 deletions(-)
+ tests/results/teststand-session/compare/lvcompare-capture.json | 35 +++++++++--------------------------
+ tests/results/teststand-session/session-index.json             | 12 ++++--------
+ 6 files changed, 22 insertions(+), 45 deletions(-)
