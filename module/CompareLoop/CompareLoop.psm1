@@ -8,12 +8,34 @@ $moduleDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $moduleDir | Split-Path -Parent
 Import-Module (Join-Path $repoRoot 'scripts' 'ArgTokenization.psm1') -Force
 Import-Module (Join-Path $repoRoot 'scripts' 'CompareVI.psm1') -Force
+Import-Module (Join-Path $repoRoot 'tools' 'VendorTools.psm1') -Force
 
 function Test-CanonicalCli {
-  if (-not (Test-Path -LiteralPath $script:CanonicalLVCompare -PathType Leaf)) {
-    throw "LVCompare.exe not found at canonical path: $script:CanonicalLVCompare"
+  $candidates = New-Object System.Collections.Generic.List[string]
+  if ($script:CanonicalLVCompare) { $null = $candidates.Add($script:CanonicalLVCompare) }
+  try {
+    $resolved = Resolve-LVComparePath
+    if ($resolved) {
+      if (-not ($candidates | Where-Object { $_ -eq $resolved })) {
+        $null = $candidates.Insert(0, $resolved)
+      }
+    }
+  } catch {}
+  $fallback = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+  if ($fallback -and -not ($candidates | Where-Object { $_ -eq $fallback })) {
+    $null = $candidates.Add($fallback)
   }
-  $script:CanonicalLVCompare
+  foreach ($path in $candidates) {
+    if ($path -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+      $script:CanonicalLVCompare = $path
+      return $path
+    }
+  }
+  $unique = @($candidates | Where-Object { $_ } | Select-Object -Unique)
+  if (-not $unique -or $unique.Count -eq 0) {
+    $unique = @('C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe')
+  }
+  throw "LVCompare.exe not found at canonical path(s): $([string]::Join(', ', $unique))"
 }
 
 function Format-LoopDuration([double]$Seconds) {
