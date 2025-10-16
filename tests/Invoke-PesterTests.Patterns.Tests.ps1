@@ -5,8 +5,10 @@ Describe 'Invoke-PesterTests Include/Exclude patterns' -Tag 'Unit' {
   BeforeAll {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
     $script:dispatcher = Join-Path $repoRoot 'Invoke-PesterTests.ps1'
-    $script:fixtureTestsRoot = Join-Path $TestDrive 'fixture-tests'
-    New-Item -ItemType Directory -Force -Path $script:fixtureTestsRoot | Out-Null
+    $fixtureTestsRootPs = Join-Path $TestDrive 'fixture-tests'
+    New-Item -ItemType Directory -Force -Path $fixtureTestsRootPs | Out-Null
+    $script:fixtureTestsRoot = (Resolve-Path -LiteralPath $fixtureTestsRootPs).Path
+    $script:testDriveRoot = Split-Path -Parent $script:fixtureTestsRoot
 
     Import-Module (Join-Path $repoRoot 'tests' '_helpers' 'DispatcherTestHelper.psm1') -Force
 
@@ -18,8 +20,6 @@ Describe 'Invoke-PesterTests Include/Exclude patterns' -Tag 'Unit' {
       $script:pwshAvailable = $false
       $script:skipReason = 'pwsh executable not available on PATH'
     }
-
-    $script:fixtureTestsRootResolved = (Resolve-Path -LiteralPath $script:fixtureTestsRoot).Path
 
     $testTemplate = @'
 Describe "{0}" {{
@@ -44,10 +44,11 @@ Describe "{0}" {{
       return
     }
 
-    $resultsDir = Join-Path $TestDrive 'results-inc'
+    $resultsDir = Join-Path $script:testDriveRoot 'results-inc'
     if (Test-Path -LiteralPath $resultsDir) {
       Remove-Item -LiteralPath $resultsDir -Recurse -Force
     }
+    New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
     $inc = 'Alpha*.ps1'
     $res = Invoke-DispatcherSafe -DispatcherPath $script:dispatcher -ResultsPath $resultsDir -IncludePatterns $inc -TestsPath $script:fixtureTestsRoot -AdditionalArgs @('-IntegrationMode', 'exclude')
     $res.TimedOut | Should -BeFalse
@@ -63,7 +64,7 @@ Describe "{0}" {{
     $resolved | Should -Be @($script:expectedAlpha)
     $leafs = $resolved | ForEach-Object { Split-Path -Leaf $_ }
     $leafs | Should -Be @('Alpha.Unit.Tests.ps1')
-    $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRootResolved))
+    $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRoot))
   }
 
   It 'honors ExcludePatterns to remove files' {
@@ -72,10 +73,11 @@ Describe "{0}" {{
       return
     }
 
-    $resultsDir = Join-Path $TestDrive 'results-exc'
+    $resultsDir = Join-Path $script:testDriveRoot 'results-exc'
     if (Test-Path -LiteralPath $resultsDir) {
       Remove-Item -LiteralPath $resultsDir -Recurse -Force
     }
+    New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
     $exc = '*Helper.ps1'
     $res = Invoke-DispatcherSafe -DispatcherPath $script:dispatcher -ResultsPath $resultsDir -TestsPath $script:fixtureTestsRoot -AdditionalArgs @('-ExcludePatterns', $exc, '-IntegrationMode', 'exclude')
     $res.TimedOut | Should -BeFalse
@@ -93,6 +95,6 @@ Describe "{0}" {{
     $leafs = $resolved | ForEach-Object { Split-Path -Leaf $_ }
     $leafs | Should -Not -Contain 'Gamma.Helper.ps1'
     ($leafs | Sort-Object) | Should -Be @('Alpha.Unit.Tests.ps1', 'Beta.Unit.Tests.ps1')
-    $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRootResolved))
+    $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRoot))
   }
 }
