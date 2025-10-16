@@ -350,6 +350,38 @@ export const cliProcsSchema = z.object({
     labviewPids: z.array(nonNegativeInteger),
     lvcomparePids: z.array(nonNegativeInteger),
 });
+const cliOperationsDefaultValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+export const cliOperationsParameterSchema = z
+    .object({
+    id: z.string().min(1),
+    type: z.string().min(1).optional(),
+    required: z.boolean().optional(),
+    env: z.array(z.string().min(1)).optional(),
+    default: cliOperationsDefaultValue.optional(),
+    description: z.string().optional(),
+})
+    .passthrough();
+export const cliOperationsSchema = z
+    .object({
+    schema: z.literal('comparevi-cli/operations@v1'),
+    operationCount: nonNegativeInteger,
+    operations: z
+        .array(z
+        .object({
+        name: z.string().min(1),
+        parameters: z.array(cliOperationsParameterSchema).optional(),
+    })
+        .passthrough())
+        .min(1),
+})
+    .superRefine((value, ctx) => {
+    if (value.operationCount !== value.operations.length) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'operationCount must equal operations.length',
+        });
+    }
+});
 const cliArtifactFileSchema = z.object({
     path: z.string().min(1),
     sha256: hexSha256,
@@ -464,6 +496,12 @@ export const schemas = [
         fileName: 'cli-procs.schema.json',
         description: 'Output emitted by comparevi-cli procs.',
         schema: cliProcsSchema,
+    },
+    {
+        id: 'cli-operations',
+        fileName: 'cli-operations.schema.json',
+        description: 'Operations catalog exposed by comparevi-cli operations.',
+        schema: cliOperationsSchema,
     },
     {
         id: 'cli-artifact-meta',
