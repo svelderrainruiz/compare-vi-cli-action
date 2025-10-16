@@ -1,0 +1,35 @@
+{
+  "schema": "lvcompare-capture-v1",
+  "timestamp": "2025-10-17T19:22:40.187Z",
+  "base": "C:/workspace/compare-vi-cli-action/VI1.vi",
+  "head": "C:/workspace/compare-vi-cli-action/VI2.vi",
+  "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
+  "args": [
+    "--%",
+    "CreateComparisonReport",
+    "--Base",
+    "C:/workspace/compare-vi-cli-action/VI1.vi",
+    "--Head",
+    "C:/workspace/compare-vi-cli-action/VI2.vi",
+    "--Flags",
+    "-nobdcosm -nofppos -noattr",
+    "--ReportPath",
+    "C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/cli-report.html"
+  ],
+  "exitCode": 1,
+  "seconds": 0.187,
+  "stdoutLen": 0,
+  "stderrLen": 0,
+  "command": "\"C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe\" --% CreateComparisonReport --Base C:/workspace/compare-vi-cli-action/VI1.vi --Head C:/workspace/compare-vi-cli-action/VI2.vi --Flags '-nobdcosm -nofppos -noattr' --ReportPath C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/cli-report.html",
+  "stdout": null,
+  "stderr": null,
+  "environment": {
+    "compareMode": "labview-cli",
+    "comparePolicy": "cli-only",
+    "cli": {
+      "path": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
+      "status": "error",
+      "message": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli"
+    }
+  }
+}

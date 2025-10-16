@@ -9,6 +9,12 @@
     "events": "compare/compare-events.ndjson",
     "capture": "compare/lvcompare-capture.json",
     "report": false,
+    "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
+    "cli": {
+      "path": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
+      "status": "error",
+      "message": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli"
+    },
     "policy": "cli-only",
     "mode": "labview-cli",
     "autoCli": false,
