@@ -1,0 +1,72 @@
+{
+  "$ref": "#/definitions/cli-providers",
+  "definitions": {
+    "cli-providers": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "comparevi-cli/providers@v1"
+        },
+        "providerCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "binary": {
+                "type": "object",
+                "properties": {
+                  "env": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "additionalProperties": true
+              },
+              "operations": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": true
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema",
+        "providerCount",
+        "providers"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Providers catalog exposed by comparevi-cli providers.",
+  "$id": "urn:compare-vi-cli-action:schema:cli-providers"
+}
