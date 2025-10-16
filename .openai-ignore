@@ -1,0 +1,12 @@
+# Paths to skip when loading context for Codex – these files are large or machine-generated
+node_modules/
+logs/
+tmp-agg/
+tmp-orch/
+tmp-rc-pester-results/
+artifacts/
+backup-original-vis/
+job-*.log
+tmp-win-drift.log
+tmp_predefined.html
+*.zip

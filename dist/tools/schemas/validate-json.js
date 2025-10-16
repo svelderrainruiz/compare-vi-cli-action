@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ArgumentParser } from 'argparse';
-import glob from 'glob';
+import fg from 'fast-glob';
 import Ajv from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
@@ -39,8 +39,13 @@ function main() {
     addFormats(ajv);
     const validate = ajv.compile(schema);
     let matched = 0;
+    const globOptions = {
+        cwd: process.cwd(),
+        absolute: true,
+        onlyFiles: true,
+    };
     for (const pattern of args.data) {
-        const files = glob.sync(pattern, { cwd: process.cwd(), absolute: true, nodir: true });
+        const files = fg.sync(pattern, globOptions);
         if (files.length === 0) {
             if (!args.optional) {
                 // eslint-disable-next-line no-console

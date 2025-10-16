@@ -9,6 +9,15 @@ function sh(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: 'utf8', shell: false, ...opts });
 }
 
+function ensureCommand(result, cmd) {
+  if (result?.error?.code === 'ENOENT') {
+    const err = new Error(`Command not found: ${cmd}`);
+    err.code = 'ENOENT';
+    throw err;
+  }
+  return result;
+}
+
 function gitRoot() {
   const r = sh('git', ['rev-parse', '--show-toplevel']);
   if (r.status !== 0) throw new Error('git rev-parse failed');
@@ -26,6 +35,19 @@ function readJson(file) {
 function writeJson(file, obj) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+}
+
+function loadSnapshot(repoRoot, number) {
+  if (!number) return null;
+  const snapshotPath = path.join(
+    repoRoot,
+    'tests',
+    'results',
+    '_agent',
+    'issue',
+    `${number}.json`
+  );
+  return readJson(snapshotPath);
 }
 
 export function hashObject(value) {
@@ -157,13 +179,20 @@ function resolveStandingPriorityNumber(repoRoot) {
   }
 
   try {
-    const query = sh('gh', ['issue', 'list', '--label', 'standing-priority', '--state', 'open', '--limit', '1', '--json', 'number']);
+    const query = ensureCommand(
+      sh('gh', ['issue', 'list', '--label', 'standing-priority', '--state', 'open', '--limit', '1', '--json', 'number']),
+      'gh'
+    );
     if (query.status === 0 && query.stdout.trim()) {
       const parsed = JSON.parse(query.stdout);
       const first = Array.isArray(parsed) ? parsed[0] : parsed;
       if (first?.number) return Number(first.number);
     }
-  } catch {}
+  } catch (err) {
+    if (err?.code === 'ENOENT') {
+      console.warn('[priority] gh CLI not found; falling back to cached standing-priority issue number');
+    }
+  }
 
   const cache = readJson(path.join(repoRoot, '.agent_priority_cache.json'));
   if (cache?.number != null) return Number(cache.number);
@@ -172,21 +201,29 @@ function resolveStandingPriorityNumber(repoRoot) {
 
 function fetchIssue(number) {
   let result = null;
+  let lastGhResult = null;
   if (process.env.GITHUB_REPOSITORY) {
     const fetchArgs = ['api', `repos/${process.env.GITHUB_REPOSITORY}/issues/${number}`, '--jq', `. | {number,title,state,updatedAt,html_url:.html_url,url:.url,labels,assignees,milestone,comments,body}`];
-    const r = sh('gh', fetchArgs);
+    const r = ensureCommand(sh('gh', fetchArgs), 'gh');
+    lastGhResult = r;
     if (r.status === 0 && r.stdout.trim()) {
       result = JSON.parse(r.stdout);
     }
   }
   if (!result) {
     const fields = ['number','title','state','updatedAt','url','labels','assignees','milestone','comments','body'];
-    const r2 = sh('gh', ['issue', 'view', String(number), '--json', fields.join(',')]);
+    const r2 = ensureCommand(sh('gh', ['issue', 'view', String(number), '--json', fields.join(',')]), 'gh');
+    lastGhResult = r2;
     if (r2.status === 0 && r2.stdout.trim()) {
       result = JSON.parse(r2.stdout);
     }
   }
-  if (!result) throw new Error(`Failed to fetch issue #${number} via gh CLI`);
+  if (!result) {
+    const messageParts = [`Failed to fetch issue #${number} via gh CLI`];
+    const details = [lastGhResult?.stderr, lastGhResult?.stdout].find((part) => part && part.trim());
+    if (details) messageParts.push(`(${details.trim()})`);
+    throw new Error(messageParts.join(' '));
+  }
 
   const labels = normalizeList((result.labels || []).map((l) => l.name || l));
   const assignees = normalizeList((result.assignees || []).map((a) => a.login || a));
@@ -224,21 +261,26 @@ export function main() {
   console.log(`[priority] Standing issue: #${number}`);
 
   let issue;
+  let fetchSource = 'live';
+  let fetchError = null;
   try {
     issue = fetchIssue(number);
   } catch (err) {
     console.warn(`[priority] Fetch failed: ${err.message}`);
+    fetchSource = 'cache';
+    fetchError = err?.message || null;
     if (cache.number !== number) throw err;
+    const fallbackSnapshot = loadSnapshot(repoRoot, number) || {};
     issue = {
       number: cache.number,
-      title: cache.title || null,
-      state: cache.state || 'unknown',
-      updatedAt: cache.lastSeenUpdatedAt || null,
-      url: cache.url || null,
-      labels: cache.labels || [],
-      assignees: cache.assignees || [],
-      milestone: cache.milestone || null,
-      commentCount: null,
+      title: cache.title || fallbackSnapshot.title || null,
+      state: cache.state || fallbackSnapshot.state || 'unknown',
+      updatedAt: cache.lastSeenUpdatedAt || fallbackSnapshot.updatedAt || null,
+      url: cache.url || fallbackSnapshot.url || null,
+      labels: cache.labels || fallbackSnapshot.labels || [],
+      assignees: cache.assignees || fallbackSnapshot.assignees || [],
+      milestone: cache.milestone || fallbackSnapshot.milestone || null,
+      commentCount: cache.commentCount ?? fallbackSnapshot.commentCount ?? null,
       body: null
     };
   }
@@ -254,26 +296,39 @@ export function main() {
   const newCache = {
     ...cache,
     number,
-    title: snapshot.title || cache.title,
-    url: snapshot.url || cache.url,
-    state: snapshot.state || cache.state,
-    lastSeenUpdatedAt: snapshot.updatedAt,
-    issueDigest: snapshot.digest
+    title: snapshot.title || cache.title || null,
+    url: snapshot.url || cache.url || null,
+    state: snapshot.state || cache.state || null,
+    labels: Array.isArray(snapshot.labels) ? snapshot.labels : cache.labels || [],
+    assignees: Array.isArray(snapshot.assignees) ? snapshot.assignees : cache.assignees || [],
+    milestone: snapshot.milestone ?? cache.milestone ?? null,
+    commentCount: snapshot.commentCount ?? cache.commentCount ?? null,
+    lastSeenUpdatedAt: snapshot.updatedAt || cache.lastSeenUpdatedAt || null,
+    issueDigest: snapshot.digest,
+    bodyDigest: snapshot.bodyDigest ?? cache.bodyDigest ?? null,
+    cachedAtUtc: new Date().toISOString(),
+    lastFetchSource: fetchSource,
+    lastFetchError: fetchError
   };
   writeJson(cachePath, newCache);
 
   const topActions = router.actions.slice(0, 3).map((a) => a.key).join(', ') || 'n/a';
+  const sourceLine =
+    fetchSource === 'live'
+      ? '- Source: live fetch'
+      : `- Source: cache fallback${fetchError ? ` (${fetchError})` : ''}`;
   const summaryLines = [
     '### Standing Priority Snapshot',
     `- Issue: #${snapshot.number} — ${snapshot.title || '(no title)'}`,
     `- State: ${snapshot.state || 'n/a'}  Updated: ${snapshot.updatedAt || 'n/a'}`,
     `- Digest: \`${snapshot.digest}\``,
     `- Labels: ${(snapshot.labels || []).join(', ') || 'none'}`,
-    `- Top actions: ${topActions}`
+    `- Top actions: ${topActions}`,
+    sourceLine
   ];
   stepSummaryAppend(summaryLines);
 
-  return { snapshot, router };
+  return { snapshot, router, fetchSource, fetchError };
 }
 
 const modulePath = path.resolve(fileURLToPath(import.meta.url));

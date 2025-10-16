@@ -7,8 +7,10 @@ This document summarizes the expectations for automation agents working in the
 
 ## Primary directive
 
-- Issue **#127** is the standing priority. Treat progress on #127 as the top objective for edits,
-  CI runs, and PRs.
+- The standing priority is whichever issue carries the `standing-priority` label. Run
+  `npm run priority:sync` at session start so `.agent_priority_cache.json` and
+  `tests/results/_agent/issue/` reflect the latest snapshot; treat that issue as the top objective for
+  edits, CI runs, and PRs.
 - The human operator is signed in with an admin GitHub token; assume privileged operations
   (labels, reruns, merges) are allowed when safe.
 - Default behaviour:
@@ -16,9 +18,22 @@ This document summarizes the expectations for automation agents working in the
   - Keep workflows deterministic and green.
   - Reference `#127` in commit and PR descriptions.
 - First actions in a session:
-  1. Pull #127 details (tasks, acceptance, linked PRs).
-  2. Create or sync a working branch (`issue/127-<slug>`), push minimal changes, dispatch CI.
-  3. Open or update the PR, apply required labels, monitor to green, merge when acceptance is met.
+  1. `npm run priority:sync` to refresh the standing-priority snapshot and router artifacts.
+  2. Review `.agent_priority_cache.json` / `tests/results/_agent/issue/` for tasks, acceptance, and
+     linked PRs on the standing issue.
+  3. Create or sync a working branch (`issue/<standing-number>-<slug>`), push minimal changes,
+     dispatch CI, update the PR (reference `#<standing-number>`), monitor to green, merge when
+     acceptance is met.
+
+## Streaming guardrails
+
+- Heavy log archives and binary fixtures previously pushed this workspace over Codex streaming limits. We
+  trimmed the checked-in payloads (`logs/2025-10-09`, `job-*.log`, `tmp-win-drift.log`, `tmp_predefined.html`,
+  drift artifact zips) so future agents start below the ceiling.
+- Keep bulky diagnostics out of source. When capturing long logs, prefer short repro snippets or attach
+  artifacts to issues instead of committing them.
+- `.openai-ignore` enumerates directories/files Codex should skip to stay under streaming limits. Update that
+  list if new large assets appear (and remove the assets from git when possible).
 
 ## Repository layout
 
@@ -36,6 +51,8 @@ This document summarizes the expectations for automation agents working in the
 - Pattern filter: `./Invoke-PesterTests.ps1 -IncludePatterns 'CompareVI.*'`
 - Quick smoke: `./tools/Quick-DispatcherSmoke.ps1 -Keep`
 - Containerized non-LV checks: `pwsh -File tools/Run-NonLVChecksInDocker.ps1`
+- Compare harnesses default to headless CLI runs (`LVCI_COMPARE_POLICY=cli-only`). Override with `lv-only` only when you
+  explicitly need the LVCompare UI; otherwise leave it unset to avoid prompts and stuck LabVIEW instances.
 
 ## Coding style
 
@@ -184,6 +201,8 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
 
 - Prefer the REST watcher when monitoring workflows: `npm run ci:watch:rest -- --run-id <id>` streams job status and exits non-zero if
   the run fails. Passing `--branch <name>` auto-selects the latest run. The VS Code task “CI Watch (REST)” prompts for a run id.
+- The watcher now aborts with `conclusion: watcher-error` after repeated 404s or other API failures (90s / 120s grace by default), still
+  writing `watcher-rest.json` so session-index telemetry isn’t lost.
 - Use the Docker watcher (`tools/Watch-InDocker.ps1`) when you need dispatcher logs or artifact download mirrors. Both watchers honor
   `GH_TOKEN`/`GITHUB_TOKEN` and fall back to `C:\github_token.txt` on Windows.
 - Keep watcher summaries in `tests/results/_agent/` up to date so downstream agents inherit telemetry context.

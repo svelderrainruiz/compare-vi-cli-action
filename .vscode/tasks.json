@@ -23,6 +23,63 @@
       }
     },
     {
+      "label": "CI Watch (REST, robust) [Run Id]",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Watch-OrchestratedRest.ps1",
+        "-RunId",
+        "${input:runId}"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "CI Watch (REST, robust) [Branch]",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Watch-OrchestratedRest.ps1",
+        "-Branch",
+        "${input:branchName}"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+    {
+      "label": "Package VS Code Extension (VSIX)",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Build-VSCExtension.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Package + Install VS Code Extension",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Build-VSCExtension.ps1",
+        "-Install"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
       "label": "Handoff: Apply Toggles + Telemetry",
       "type": "shell",
       "command": "pwsh",
@@ -359,6 +416,12 @@
       "type": "promptString",
       "description": "Enter GitHub workflow run id to follow",
       "default": ""
+    },
+    {
+      "id": "branchName",
+      "type": "promptString",
+      "description": "Branch to watch the latest orchestrated run",
+      "default": "develop"
     },
     {
       "id": "lvYear",

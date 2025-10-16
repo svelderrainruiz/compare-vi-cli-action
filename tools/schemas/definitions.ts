@@ -81,6 +81,16 @@ const cliArtifactsSchema = z
   })
   .passthrough();
 
+const cliInfoSchema = z.object({
+  path: z.string().min(1).optional(),
+  version: z.string().min(1).optional(),
+  reportType: z.string().min(1).optional(),
+  reportPath: z.string().min(1).optional(),
+  status: z.string().min(1).optional(),
+  message: z.string().min(1).optional(),
+  artifacts: cliArtifactsSchema.optional(),
+});
+
 const lvCompareEnvironmentSchema = z
   .object({
     lvcompareVersion: z.string().min(1).optional(),
@@ -90,17 +100,7 @@ const lvCompareEnvironmentSchema = z
     arch: z.string().min(1).optional(),
     compareMode: z.string().min(1).optional(),
     comparePolicy: z.string().min(1).optional(),
-    cli: z
-      .object({
-        path: z.string().min(1).optional(),
-        version: z.string().min(1).optional(),
-        reportType: z.string().min(1).optional(),
-        reportPath: z.string().min(1).optional(),
-        status: z.string().min(1).optional(),
-        message: z.string().min(1).optional(),
-        artifacts: cliArtifactsSchema.optional(),
-      })
-      .optional(),
+    cli: cliInfoSchema.optional(),
     runner: z
       .object({
         labels: z.array(z.string().min(1)).optional(),
@@ -296,17 +296,32 @@ const dispatcherResultsGuardSchema = z
   })
   .passthrough();
 
+const warmupModeSchema = z.enum(['detect', 'spawn', 'skip']);
+const warmupEventsSchema = z.union([z.string().min(1), z.null()]);
+
+const compareCliSchema = cliInfoSchema;
+
+const comparePolicySchema = z.enum(['lv-first', 'cli-first', 'cli-only', 'lv-only']);
+
 const testStandCompareSessionSchema = z.object({
   schema: z.literal('teststand-compare-session/v1'),
   at: isoString,
   warmup: z.object({
-    events: z.string().min(1),
+    mode: warmupModeSchema,
+    events: warmupEventsSchema,
   }),
   compare: z.object({
     events: z.string().min(1),
-    capture: z.string().min(1),
+    capture: z.union([z.string().min(1), z.null()]),
     report: z.boolean(),
+    command: z.string().min(1).optional(),
     cliPath: z.string().min(1).optional(),
+    cli: compareCliSchema.optional(),
+    policy: comparePolicySchema.optional(),
+    mode: z.string().min(1).optional(),
+    autoCli: z.boolean().optional(),
+    sameName: z.boolean().optional(),
+    timeoutSeconds: z.number().min(0).optional(),
   }),
   outcome: z
     .object({
@@ -316,7 +331,7 @@ const testStandCompareSessionSchema = z.object({
       diff: z.boolean().optional(),
     })
     .nullable(),
-  error: z.string().optional(),
+  error: z.union([z.string().min(1), z.null()]).optional(),
 });
 
 const invokerEventSchema = z.object({
@@ -359,10 +374,52 @@ export const cliTokenizeSchema = z.object({
   normalized: z.array(z.string()),
 });
 
+export const cliQuoteSchema = z.object({
+  input: z.string().nullable(),
+  quoted: z.string(),
+});
+
 export const cliProcsSchema = z.object({
   labviewPids: z.array(nonNegativeInteger),
   lvcomparePids: z.array(nonNegativeInteger),
 });
+
+const cliOperationsDefaultValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+export const cliOperationsParameterSchema = z
+  .object({
+    id: z.string().min(1),
+    type: z.string().min(1).optional(),
+    required: z.boolean().optional(),
+    env: z.array(z.string().min(1)).optional(),
+    default: cliOperationsDefaultValue.optional(),
+    description: z.string().optional(),
+  })
+  .passthrough();
+
+export const cliOperationsSchema = z
+  .object({
+    schema: z.literal('comparevi-cli/operations@v1'),
+    operationCount: nonNegativeInteger,
+    operations: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            parameters: z.array(cliOperationsParameterSchema).optional(),
+          })
+          .passthrough(),
+      )
+      .min(1),
+  })
+  .superRefine((value, ctx) => {
+    if (value.operationCount !== value.operations.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'operationCount must equal operations.length',
+      });
+    }
+  });
 
 const cliArtifactFileSchema = z.object({
   path: z.string().min(1),
@@ -473,10 +530,22 @@ export const schemas = [
     schema: cliTokenizeSchema,
   },
   {
+    id: 'cli-quote',
+    fileName: 'cli-quote.schema.json',
+    description: 'Output emitted by comparevi-cli quote.',
+    schema: cliQuoteSchema,
+  },
+  {
     id: 'cli-procs',
     fileName: 'cli-procs.schema.json',
     description: 'Output emitted by comparevi-cli procs.',
     schema: cliProcsSchema,
+  },
+  {
+    id: 'cli-operations',
+    fileName: 'cli-operations.schema.json',
+    description: 'Operations catalog exposed by comparevi-cli operations.',
+    schema: cliOperationsSchema,
   },
   {
     id: 'cli-artifact-meta',

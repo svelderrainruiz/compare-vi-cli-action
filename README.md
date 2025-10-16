@@ -73,12 +73,17 @@ LVCompare path as the required comparator; the CLI path is delivered via the new
 `LVCI_CLI_EXTRA_ARGS` for additional flags (for example `--noDependencies`), and honors
 `LVCI_CLI_TIMEOUT_SECONDS` (default 120).
 
-Use `LVCI_COMPARE_POLICY` to direct how automation chooses between LVCompare and LabVIEW CLI:
+Use `LVCI_COMPARE_POLICY` to direct how automation chooses between LVCompare and LabVIEW CLI. The automation now
+defaults to `cli-only` when the variable is unset so the compare flow remains headless. Set the variable explicitly if
+you need a different behaviour.
 
-- `lv-first` (default) – legacy behavior; only run CLI when explicitly requested via `LVCI_COMPARE_MODE`.
+- `cli-only` (default) – run via LabVIEW CLI and fail if CLI capture fails.
 - `cli-first` – attempt CLI first, fall back to LVCompare on recoverable CLI failures (missing report, parse errors).
-- `cli-only` – require CLI success; do not fall back.
+- `lv-first` – prefer LVCompare; only run CLI when explicitly requested via `LVCI_COMPARE_MODE`.
 - `lv-only` – enforce LVCompare only.
+
+When the base and head VIs share the same filename (typical commit-to-commit compares), automation continues to use the
+CLI path (unless `lv-only` is explicitly configured) and skips warmup to avoid launching LabVIEW UI windows.
 
 CLI-only quick start (64-bit Windows):
 
@@ -154,6 +159,8 @@ Tips:
   - Local validation matrix (see below) keeps local runs aligned with CI stages.
 - Prefer the REST watcher for GitHub status: `npm run ci:watch:rest -- --run-id <id>` streams job conclusions without relying on the
   `gh` CLI. Passing `--branch <name>` auto-selects the latest run. A VS Code task named “CI Watch (REST)” prompts for the run id.
+- Repeated 404s or other API errors cause the watcher to exit with `conclusion: watcher-error` after the built-in grace window
+  (90s for “run not found”, 120s for other failures) while still writing `watcher-rest.json` to keep telemetry flowing.
 - The REST watcher writes `watcher-rest.json` into the job’s results directory; `tools/Update-SessionIndexWatcher.ps1` merges the data
   into `session-index.json` so CI telemetry reflects the final GitHub status alongside Pester results.
 - The watcher prunes old run directories (`.tmp/watch-run`) automatically and warns if
@@ -364,6 +371,8 @@ publish helper to build per-RID archives and checksums for distribution.
 
 - Quick smoke
   - `./comparevi-cli version`
-  - `./comparevi-cli tokenize --input 'foo -x=1 "bar baz"'`
-  - `./comparevi-cli procs`
+- `./comparevi-cli tokenize --input 'foo -x=1 "bar baz"'`
+- `./comparevi-cli quote --path 'C:/Program Files/National Instruments/LabVIEW 2025/LabVIEW.exe'`
+- `./comparevi-cli procs`
+- `./comparevi-cli operations`
 
