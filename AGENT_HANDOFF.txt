@@ -1,14 +1,17 @@
 # Agent Handoff - Compare VI CLI Action
 
 ## Context Snapshot
-- Re-ran `node tools/npm/run-script.mjs priority:sync`; without `gh` or a GitHub token available the
-  script fell back to the cached standing issue (#134) and logged the missing CLI error. The cache now
-  records the unauthenticated attempt timestamped 2025-10-16T17:16Z.
-- REST fallback attempts failed unauthenticated (`TypeError: fetch failed`).
+- Ran `node tools/npm/run-script.mjs priority:sync` after installing GitHub CLI; authentication is
+  still missing so the script fell back to cached metadata for standing issue #134 and recorded the
+  failed unauthenticated attempt (see `.agent_priority_cache.json`).
+- Installed GitHub CLI 2.45.0 via `apt-get` so future sessions can authenticate without reinstalling.
+- `gh auth status` confirms no token is configured yet; REST fallback calls also fail without
+  credentials.
+- Attempted to install PowerShell (`pwsh`) with `apt-get install powershell`, but the package is not
+  available in the default Ubuntu repositories configured here, so dispatcher and guard scripts
+  remain blocked pending a manual installation path.
 - Working tree remains on branch `work`; no topic branch (for example `issue/134-cli-companion`) is
   present locally.
-- Neither GitHub CLI nor PowerShell (`pwsh`) are installed in this container right now, so dispatcher
-  or guard scripts cannot be invoked until those prerequisites are restored.
 - No dispatcher reruns happened this session. The previously referenced
   `tests/results/_diagnostics/guard.json` file is absent, so the prior guard-loop diagnostics are no
   longer available in-tree.
@@ -18,22 +21,23 @@
   described in issue #134.
 
 ## Status & Known Gaps
-1. GitHub CLI is missing entirely, so standing-priority syncs cannot reach GitHub until `gh` is
-   installed and authenticated.
-2. Dispatcher coverage is still outstanding. No recent runs exist and the last guard diagnostics are
+1. GitHub CLI is now installed but unauthenticated, so standing-priority syncs still cannot reach
+   GitHub until credentials are configured (`gh auth login` or `GH_TOKEN`).
+2. PowerShell 7+ (with Pester) remains absent because the Ubuntu repositories in this container do
+   not offer the `powershell` package; dispatcher executions and guard sweeps remain blocked.
+3. Dispatcher coverage is still outstanding. No recent runs exist and the last guard diagnostics are
    gone, so the failure mode needs to be recreated before we can debug it.
-3. PowerShell 7+ (with Pester) is absent, blocking dispatcher executions and guard sweeps inside this
-   container.
 4. TestStand session artifacts (`tests/results/teststand-session/`) and `tests/results/cli-only/`
    still contain placeholder data; real LabVIEW runs remain required.
 5. Issue/PR #134 lacks refreshed notes summarizing CLI auth state, dispatcher attempts, and artifact
    provenance.
 
 ## Suggested Next Actions
-1. Install GitHub CLI, authenticate (`gh auth login` or set `GH_TOKEN`), and rerun
+1. Authenticate GitHub CLI (`gh auth login` or set `GH_TOKEN`) and rerun
    `node tools/npm/run-script.mjs priority:sync` to refresh `.agent_priority_cache.json` with live
    metadata.
-2. Restore PowerShell 7 (plus Pester) so dispatcher/guard tooling is available again.
+2. Restore PowerShell 7 (plus Pester) using the Microsoft package feed or manual install so
+   dispatcher/guard tooling is available again.
 3. Recreate the dispatcher guard failure by running `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode
    exclude`; capture any new guard artifacts (such as `_diagnostics/guard.json`) for analysis and clear
    blockers so a full run can complete.
@@ -43,9 +47,9 @@
    provenance.
 
 ## First Actions for the Next Agent
-1. Install and authenticate GitHub CLI, then rerun `node tools/npm/run-script.mjs priority:sync` so the
+1. Authenticate GitHub CLI (now installed) and rerun `node tools/npm/run-script.mjs priority:sync` so the
    standing-priority cache reflects live metadata.
-2. Reinstall PowerShell 7 + Pester (or confirm availability) and rerun the dispatcher with guard
+2. Reinstall PowerShell 7 + Pester (or confirm availability via Microsoft feed) and rerun the dispatcher with guard
    diagnostics enabled to reproduce the prior loop and gather artifacts.
 3. Replace the placeholder `tests/results/teststand-session/` and `tests/results/cli-only/` payloads
    with real outputs from a LabVIEW-capable host, validating them against the published schemas.
@@ -53,8 +57,10 @@
    with the refreshed context.
 
 ## Notes for Next Agent
-- GitHub CLI and PowerShell are currently absent; plan to reinstall before attempting dispatcher or
-  guard commands.
+- GitHub CLI 2.45.0 is installed but unauthenticated; plan to configure credentials before attempting
+  dispatcher or guard commands that require API access.
+- PowerShell is still missing; the default Ubuntu feeds here do not expose the `powershell` package so
+  manual installation (Microsoft feed or direct package) is required.
 - `tests/results/_agent/handoff/test-summary.json` records the 2025-10-16T15:48Z
   `priority:handoff-tests` run; nothing newer exists.
 - No watcher telemetry exists for this session; `_agent/handoff/` watcher assets remain empty.
