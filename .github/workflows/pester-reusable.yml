@@ -600,10 +600,14 @@ jobs:
             $workflowPath = $Matches['path']
           }
           $repo = '${{ github.repository }}'
-          $lines = @('### Re-run With Same Inputs','',"- Command: `$command`")
+          $lines = @(
+            '### Re-run With Same Inputs',
+            '',
+            ('- Command: `{0}`' -f $command)
+          )
           if (-not $sampleId) { $lines += '- sample_id omitted; workflow will auto-generate if supported.' }
           if ($workflowPath) {
-            $lines += ("- Workflow: https://github.com/{0}/actions/workflows/{1}" -f $repo, $workflowPath)
+            $lines += ('- Workflow: https://github.com/{0}/actions/workflows/{1}' -f $repo, $workflowPath)
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
