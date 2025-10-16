@@ -8,7 +8,11 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import {
   cliArtifactMetaSchema,
+  cliOperationNamesSchema,
   cliOperationsSchema,
+  cliProviderNamesSchema,
+  cliProviderSchema,
+  cliProvidersSchema,
   cliQuoteSchema,
   cliProcsSchema,
   cliTokenizeSchema,
@@ -110,6 +114,26 @@ function main() {
     zodToJsonSchema(cliOperationsSchema, { target: 'jsonSchema7', name: 'cli-operations' }) as Record<string, unknown>,
   );
 
+  const operationNamesValidator = compileValidator(
+    'cli-operation-names',
+    zodToJsonSchema(cliOperationNamesSchema, { target: 'jsonSchema7', name: 'cli-operation-names' }) as Record<string, unknown>,
+  );
+
+  const providersValidator = compileValidator(
+    'cli-providers',
+    zodToJsonSchema(cliProvidersSchema, { target: 'jsonSchema7', name: 'cli-providers' }) as Record<string, unknown>,
+  );
+
+  const providerValidator = compileValidator(
+    'cli-provider',
+    zodToJsonSchema(cliProviderSchema, { target: 'jsonSchema7', name: 'cli-provider' }) as Record<string, unknown>,
+  );
+
+  const providerNamesValidator = compileValidator(
+    'cli-provider-names',
+    zodToJsonSchema(cliProviderNamesSchema, { target: 'jsonSchema7', name: 'cli-provider-names' }) as Record<string, unknown>,
+  );
+
   const versionData = runCli(dll, ['version']);
   validate('comparevi-cli version', versionData, versionValidator);
 
@@ -124,6 +148,41 @@ function main() {
 
   const operationsData = runCli(dll, ['operations']);
   validate('comparevi-cli operations', operationsData, operationsValidator);
+
+  const operationsNamesData = runCli(dll, ['operations', '--names-only']);
+  validate('comparevi-cli operations --names-only', operationsNamesData, operationNamesValidator);
+
+  const providersData = runCli(dll, ['providers']);
+  validate('comparevi-cli providers', providersData, providersValidator);
+
+  const providerNamesData = runCli(dll, ['providers', '--names-only']);
+  validate('comparevi-cli providers --names-only', providerNamesData, providerNamesValidator);
+
+  const providerNames =
+    providerNamesData &&
+    typeof providerNamesData === 'object' &&
+    Array.isArray((providerNamesData as { names?: unknown }).names)
+      ? ((providerNamesData as { names?: unknown[] }).names as unknown[])
+      : [];
+
+  let providerId = providerNames.find((name): name is string => typeof name === 'string' && name.length > 0);
+
+  if (!providerId &&
+      providersData &&
+      typeof providersData === 'object' &&
+      Array.isArray((providersData as { providers?: unknown }).providers)) {
+    const firstProvider = (providersData as { providers?: unknown[] }).providers?.[0];
+    if (firstProvider && typeof firstProvider === 'object' && typeof (firstProvider as { id?: unknown }).id === 'string') {
+      providerId = (firstProvider as { id: string }).id;
+    }
+  }
+
+  if (!providerId) {
+    throw new Error('comparevi-cli providers did not return any provider identifiers to validate.');
+  }
+
+  const providerData = runCli(dll, ['providers', '--name', providerId]);
+  validate(`comparevi-cli providers --name ${providerId}`, providerData, providerValidator);
 
   const metaData = readArtifactMeta();
   if (metaData) {
