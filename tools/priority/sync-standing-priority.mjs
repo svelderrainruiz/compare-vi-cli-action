@@ -58,12 +58,23 @@ export function hashObject(value) {
 }
 
 function normalizeList(values) {
-  return Array.from(new Set((values || []).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  const seen = new Set();
+  const normalized = [];
+  for (const value of values || []) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(key);
+  }
+  return normalized.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
 export function createSnapshot(issue) {
-  const labels = normalizeList(issue.labels).map((l) => l.toLowerCase());
-  const assignees = normalizeList(issue.assignees).map((a) => a.toLowerCase());
+  const labels = normalizeList(issue.labels);
+  const assignees = normalizeList(issue.assignees);
   const milestone = issue.milestone != null ? String(issue.milestone) : null;
   const commentCount = issue.commentCount != null ? Number(issue.commentCount) : null;
   const bodyDigest = issue.body ? hashObject(String(issue.body)) : null;
@@ -72,8 +83,8 @@ export function createSnapshot(issue) {
     title: issue.title ?? null,
     state: issue.state ?? null,
     updatedAt: issue.updatedAt ?? null,
-    labels: labels.map(l => l.toLowerCase()),
-    assignees: assignees.map(a => a.toLowerCase()),
+    labels,
+    assignees,
     milestone: milestone ? milestone.toLowerCase() : null,
     commentCount
   };

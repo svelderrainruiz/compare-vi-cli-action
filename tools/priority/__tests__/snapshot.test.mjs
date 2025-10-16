@@ -13,8 +13,8 @@ test('createSnapshot normalizes lists and produces stable digest', () => {
     state: 'open',
     updatedAt: '2025-10-13T00:00:00Z',
     url: 'https://example.test/issues/127',
-    labels: ['docs', 'CI', 'docs'],
-    assignees: ['bob', 'alice'],
+    labels: ['docs', 'CI', 'Docs'],
+    assignees: ['bob', 'alice', 'ALICE'],
     milestone: 'M1',
     commentCount: 5,
     body: 'Test body'
