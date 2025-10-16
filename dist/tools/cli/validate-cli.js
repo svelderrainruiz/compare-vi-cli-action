@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { cliArtifactMetaSchema, cliProcsSchema, cliTokenizeSchema, cliVersionSchema, } from '../schemas/definitions.js';
+import { cliArtifactMetaSchema, cliQuoteSchema, cliProcsSchema, cliTokenizeSchema, cliVersionSchema, } from '../schemas/definitions.js';
 function resolveCliDll() {
     const override = process.env.CLI_DLL;
     if (override) {
@@ -65,11 +65,14 @@ function main() {
     const dll = resolveCliDll();
     const versionValidator = compileValidator('cli-version', zodToJsonSchema(cliVersionSchema, { target: 'jsonSchema7', name: 'cli-version' }));
     const tokenizeValidator = compileValidator('cli-tokenize', zodToJsonSchema(cliTokenizeSchema, { target: 'jsonSchema7', name: 'cli-tokenize' }));
+    const quoteValidator = compileValidator('cli-quote', zodToJsonSchema(cliQuoteSchema, { target: 'jsonSchema7', name: 'cli-quote' }));
     const procsValidator = compileValidator('cli-procs', zodToJsonSchema(cliProcsSchema, { target: 'jsonSchema7', name: 'cli-procs' }));
     const versionData = runCli(dll, ['version']);
     validate('comparevi-cli version', versionData, versionValidator);
     const tokenizeData = runCli(dll, ['tokenize', '--input', 'foo -x=1 "bar baz"']);
     validate('comparevi-cli tokenize', tokenizeData, tokenizeValidator);
+    const quoteData = runCli(dll, ['quote', '--path', 'C:/Program Files/National Instruments/LabVIEW 2025/LabVIEW.exe']);
+    validate('comparevi-cli quote', quoteData, quoteValidator);
     const procsData = runCli(dll, ['procs']);
     validate('comparevi-cli procs', procsData, procsValidator);
     const metaData = readArtifactMeta();

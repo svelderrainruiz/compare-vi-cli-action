@@ -374,6 +374,11 @@ export const cliTokenizeSchema = z.object({
   normalized: z.array(z.string()),
 });
 
+export const cliQuoteSchema = z.object({
+  input: z.string().nullable(),
+  quoted: z.string(),
+});
+
 export const cliProcsSchema = z.object({
   labviewPids: z.array(nonNegativeInteger),
   lvcomparePids: z.array(nonNegativeInteger),
@@ -486,6 +491,12 @@ export const schemas = [
     fileName: 'cli-tokenize.schema.json',
     description: 'Output emitted by comparevi-cli tokenize.',
     schema: cliTokenizeSchema,
+  },
+  {
+    id: 'cli-quote',
+    fileName: 'cli-quote.schema.json',
+    description: 'Output emitted by comparevi-cli quote.',
+    schema: cliQuoteSchema,
   },
   {
     id: 'cli-procs',
