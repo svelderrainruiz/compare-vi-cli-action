@@ -1921,9 +1921,7 @@ class ViCompareViewProvider {
         runBtn.disabled = !canRun;
         compareActiveBtn.disabled = !canRun;
         runCommitBtn.disabled = !canRun;
-        if (!canRun) {
-          runProfileBtn.disabled = true;
-        }
+        runProfileBtn.disabled = !canRun;
         testHintEl.textContent = payload.testSummary || (payload.testConfigured ? '' : 'Configure comparevi.panel.testTask or comparevi.panel.testCommand to enable Run Tests.');
         const d = payload.diag || {};
         renderDiag(!!d.baseExists, diagBaseIcon, diagBaseText, 'Base VI exists', d.basePath ? '(' + d.basePath + ')' : '');
