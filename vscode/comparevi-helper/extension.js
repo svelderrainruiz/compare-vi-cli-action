@@ -13,6 +13,7 @@ const {
 } = require('./lib/core');
 const git = require('./lib/git');
 const telemetry = require('./lib/telemetry');
+const { createProviderSwitcher } = require('./lib/providerSwitcher');
 const providerRegistry = require('./providers');
 const {
   registerProvider,
@@ -22,7 +23,7 @@ const {
   listProviderMetadata,
   getActiveProvider,
   getActiveProviderId,
-  setActiveProvider,
+  setActiveProvider: registrySetActiveProvider,
   onDidChangeActiveProvider
 } = providerRegistry;
 const createGcliProvider = require('./providers/gcli');
@@ -79,6 +80,13 @@ async function recordTelemetry(event, data = {}) {
   };
   await telemetry.writeEvent(event, payload);
 }
+
+const setActiveProvider = createProviderSwitcher({
+  setActiveProvider: registrySetActiveProvider,
+  listProviderMetadata,
+  getActiveProviderId,
+  recordTelemetry
+});
 
 function getNonce() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -1102,7 +1110,8 @@ class ViCompareViewProvider {
           vscode.window.showWarningMessage('Provider id was empty.');
           return;
         }
-        if (!setActiveProvider(providerId)) {
+        const changed = await setActiveProvider(providerId, { recordTelemetry: true, telemetryReason: 'panel' });
+        if (!changed) {
           vscode.window.showWarningMessage(`Provider '${providerId}' is not available.`);
         } else {
           this.refresh();
@@ -1411,8 +1420,8 @@ class ViCompareViewProvider {
       if (parameters.length >= 4) break;
     }
     const defaults = Array.isArray(config.get('comparevi.flags')) ? config.get('comparevi.flags') : [];
-    const last = Array.isArray(workspaceState?.get('comparevi.lastFlags')) ? workspaceState.get('comparevi.lastFlags') : undefined;
-    const source = (Array.isArray(last) && last.length) ? last : defaults;
+    const lastFlagsState = Array.isArray(workspaceState?.get('comparevi.lastFlags')) ? workspaceState.get('comparevi.lastFlags') : undefined;
+    const source = (Array.isArray(lastFlagsState) && lastFlagsState.length) ? lastFlagsState : defaults;
     const selected = (Array.isArray(source) ? source : []).filter((flag) => parameters.includes(flag));
     const testTask = config.get('comparevi.panel.testTask');
     const testCommand = config.get('comparevi.panel.testCommand');
@@ -2094,7 +2103,7 @@ function createCompareVIProvider() {
   };
 }
 
-function activate(context) {
+async function activate(context) {
   compareVIProviderRegistration = createCompareVIProvider();
   gcliProviderRegistration = createGcliProvider();
 
@@ -2114,7 +2123,7 @@ function activate(context) {
   const initialProviderId = (savedProviderId && getProvider(savedProviderId))
     ? savedProviderId
     : compareVIProviderRegistration.id;
-  setActiveProvider(initialProviderId);
+  await setActiveProvider(initialProviderId);
   persistActiveProviderId(getActiveProviderId());
 
   const providerWatcher = onDidChangeActiveProvider((activeId) => {
