@@ -179,18 +179,20 @@ export function buildRouter(issue, policy) {
 
 export function parseGitRemoteUrl(remoteUrl) {
   if (!remoteUrl) return null;
-  const trimmed = remoteUrl.trim();
+  const trimmed = String(remoteUrl).trim();
   if (!trimmed) return null;
+
+  const sanitized = trimmed.replace(/^git\+/i, '');
 
   const withoutGitSuffix = (slug) => slug.replace(/\.git$/i, '');
 
-  const sshMatch = trimmed.match(/^git@[^:]+:(.+)$/i);
+  const sshMatch = sanitized.match(/^git@[^:]+:(.+)$/i);
   if (sshMatch) {
     return withoutGitSuffix(sshMatch[1]);
   }
 
   try {
-    const parsed = new URL(trimmed);
+    const parsed = new URL(sanitized);
     if (parsed.hostname && parsed.pathname) {
       const slug = parsed.pathname.replace(/^\/+/, '');
       if (slug) return withoutGitSuffix(slug);
@@ -213,8 +215,30 @@ function resolveRepositorySlug(repoRoot) {
   }
 
   const remote = sh('git', ['config', '--get', 'remote.origin.url']);
-  if (remote.status !== 0) return null;
-  return parseGitRemoteUrl(remote.stdout);
+  if (remote.status === 0) {
+    const slug = parseGitRemoteUrl(remote.stdout);
+    if (slug) return slug;
+  }
+
+  const packagePath = path.join(repoRoot, 'package.json');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    const repository = pkg?.repository;
+    const candidates = [];
+    if (typeof repository === 'string') {
+      candidates.push(repository);
+    } else if (repository && typeof repository === 'object') {
+      if (repository.url) candidates.push(repository.url);
+      if (repository.path) candidates.push(repository.path);
+      if (repository.directory) candidates.push(repository.directory);
+    }
+    for (const candidate of candidates) {
+      const slug = parseGitRemoteUrl(candidate);
+      if (slug) return slug;
+    }
+  } catch {}
+
+  return null;
 }
 
 function resolveGitHubToken() {
@@ -238,9 +262,9 @@ async function requestGitHubJson(url, token) {
   return response.json();
 }
 
-async function fetchStandingPriorityNumberViaRest(repoRoot) {
-  const slug = resolveRepositorySlug(repoRoot);
-  if (!slug) {
+async function fetchStandingPriorityNumberViaRest(repoRoot, slug) {
+  const resolvedSlug = slug ?? resolveRepositorySlug(repoRoot);
+  if (!resolvedSlug) {
     console.warn('[priority] Unable to resolve repository slug for REST fallback');
     return null;
   }
@@ -250,7 +274,7 @@ async function fetchStandingPriorityNumberViaRest(repoRoot) {
     console.warn('[priority] No GitHub token available for REST fallback; attempting unauthenticated request');
   }
 
-  const url = new URL(`https://api.github.com/repos/${slug}/issues`);
+  const url = new URL(`https://api.github.com/repos/${resolvedSlug}/issues`);
   url.searchParams.set('labels', 'standing-priority');
   url.searchParams.set('state', 'open');
   url.searchParams.set('per_page', '1');
@@ -268,9 +292,9 @@ async function fetchStandingPriorityNumberViaRest(repoRoot) {
   return null;
 }
 
-async function fetchIssueViaRest(repoRoot, number) {
-  const slug = resolveRepositorySlug(repoRoot);
-  if (!slug) {
+async function fetchIssueViaRest(repoRoot, number, slug) {
+  const resolvedSlug = slug ?? resolveRepositorySlug(repoRoot);
+  if (!resolvedSlug) {
     console.warn('[priority] Unable to resolve repository slug for REST fallback');
     return null;
   }
@@ -281,7 +305,7 @@ async function fetchIssueViaRest(repoRoot, number) {
   }
 
   try {
-    const data = await requestGitHubJson(`https://api.github.com/repos/${slug}/issues/${number}`, token);
+    const data = await requestGitHubJson(`https://api.github.com/repos/${resolvedSlug}/issues/${number}`, token);
     return data;
   } catch (err) {
     console.warn(`[priority] REST fallback failed: ${err.message}`);
@@ -289,7 +313,7 @@ async function fetchIssueViaRest(repoRoot, number) {
   }
 }
 
-async function resolveStandingPriorityNumber(repoRoot) {
+async function resolveStandingPriorityNumber(repoRoot, slug) {
   const override = process.env.AGENT_PRIORITY_OVERRIDE;
   if (override) {
     try {
@@ -326,7 +350,7 @@ async function resolveStandingPriorityNumber(repoRoot) {
     ghErrorMessage = err?.message || ghErrorMessage;
   }
 
-  const restNumber = await fetchStandingPriorityNumberViaRest(repoRoot);
+  const restNumber = await fetchStandingPriorityNumberViaRest(repoRoot, slug);
   if (restNumber != null) return restNumber;
 
   const cache = readJson(path.join(repoRoot, '.agent_priority_cache.json'));
@@ -360,7 +384,7 @@ function normalizeIssueResult(result) {
   };
 }
 
-async function fetchIssue(number, repoRoot) {
+async function fetchIssue(number, repoRoot, slug) {
   let result = null;
   let lastGhResult = null;
   let ghMissing = false;
@@ -403,7 +427,7 @@ async function fetchIssue(number, repoRoot) {
   }
 
   if (!result) {
-    const restResult = await fetchIssueViaRest(repoRoot, number);
+    const restResult = await fetchIssueViaRest(repoRoot, number, slug);
     if (restResult) {
       result = restResult;
     }
@@ -429,19 +453,20 @@ function stepSummaryAppend(lines) {
 
 export async function main() {
   const repoRoot = gitRoot();
+  const slug = resolveRepositorySlug(repoRoot);
   const cachePath = path.join(repoRoot, '.agent_priority_cache.json');
   const cache = readJson(cachePath) || {};
   const resultsDir = path.join(repoRoot, 'tests', 'results', '_agent', 'issue');
   fs.mkdirSync(resultsDir, { recursive: true });
 
-  const number = await resolveStandingPriorityNumber(repoRoot);
+  const number = await resolveStandingPriorityNumber(repoRoot, slug);
   console.log(`[priority] Standing issue: #${number}`);
 
   let issue;
   let fetchSource = 'live';
   let fetchError = null;
   try {
-    issue = await fetchIssue(number, repoRoot);
+    issue = await fetchIssue(number, repoRoot, slug);
   } catch (err) {
     console.warn(`[priority] Fetch failed: ${err.message}`);
     fetchSource = 'cache';
