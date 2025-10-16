@@ -5,25 +5,6 @@ function Get-PwshExePath {
   try { return (Get-Command -Name 'pwsh' -ErrorAction Stop).Source } catch { return 'pwsh' }
 }
 
-function Get-PwshProcessIds {
-  try { return @((Get-Process -Name 'pwsh' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)) } catch { return @() }
-}
-
-function Stop-NewPwshProcesses {
-  param(
-    [int[]]$Baseline,
-    [datetime]$NotBefore
-  )
-  try {
-    $current = @(Get-Process -Name 'pwsh' -ErrorAction SilentlyContinue)
-    foreach ($p in $current) {
-      if ($Baseline -and ($Baseline -contains $p.Id)) { continue }
-      if ($NotBefore -and $p.StartTime -lt $NotBefore) { continue }
-      try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
-    }
-  } catch {}
-}
-
 function Invoke-DispatcherSafe {
   <#
   .SYNOPSIS
@@ -38,6 +19,8 @@ function Invoke-DispatcherSafe {
     Max seconds to allow child to run before forced kill.
   .PARAMETER AdditionalArgs
     Extra arguments passed through to the dispatcher.
+  .PARAMETER TestsPath
+    Tests root passed to the dispatcher (defaults to the repository tests directory).
   .OUTPUTS
     PSCustomObject with ExitCode, TimedOut, StdOut, StdErr
   #>
@@ -47,11 +30,12 @@ function Invoke-DispatcherSafe {
     [Parameter(Mandatory)][string]$ResultsPath,
     [string]$IncludePatterns,
     [int]$TimeoutSeconds = 30,
-    [string[]]$AdditionalArgs
+    [string[]]$AdditionalArgs,
+    [string]$TestsPath = 'tests'
   )
 
   $pwsh = Get-PwshExePath
-  $args = @('-NoLogo','-NoProfile','-File', $DispatcherPath, '-TestsPath', 'tests', '-ResultsPath', $ResultsPath)
+  $args = @('-NoLogo','-NoProfile','-File', $DispatcherPath, '-TestsPath', $TestsPath, '-ResultsPath', $ResultsPath)
   if ($IncludePatterns) { $args += @('-IncludePatterns', $IncludePatterns) }
   if ($AdditionalArgs -and $AdditionalArgs.Count -gt 0) { $args += $AdditionalArgs }
 
@@ -70,9 +54,6 @@ function Invoke-DispatcherSafe {
   $psi.EnvironmentVariables['SINGLE_INVOKER']       = '1'
   $psi.EnvironmentVariables['SUPPRESS_NESTED_DISCOVERY'] = '1'
   $psi.EnvironmentVariables['STUCK_GUARD']          = '0'
-
-  $baseline  = Get-PwshProcessIds
-  $startedAt = Get-Date
 
   $proc   = $null
   $stdout = ''
