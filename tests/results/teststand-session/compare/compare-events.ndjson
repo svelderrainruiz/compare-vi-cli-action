@@ -1,0 +1,2 @@
+{"timestamp":"2025-10-16T00:52:24.000Z","type":"spawn","schema":"prime-lvcompare-v1","details":"Requested LabVIEW CLI compare (cli-only policy)"}
+{"timestamp":"2025-10-16T00:52:24.050Z","type":"error","schema":"prime-lvcompare-v1","message":"LabVIEW CLI not available on this Linux container image","exitCode":1}
