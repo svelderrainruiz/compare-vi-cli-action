@@ -19,8 +19,21 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force
 
-$canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+$canonicalPrimary = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+$canonicalSecondary = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+$canonicalCandidates = [System.Collections.Generic.List[string]]::new()
+if ($canonicalPrimary) { [void]$canonicalCandidates.Add($canonicalPrimary) }
+if ($canonicalSecondary -and -not ($canonicalSecondary -eq $canonicalPrimary)) { [void]$canonicalCandidates.Add($canonicalSecondary) }
+try {
+  $resolvedCanonical = Resolve-LVComparePath
+  if ($resolvedCanonical -and -not ($canonicalCandidates | Where-Object { $_ -ieq $resolvedCanonical })) {
+    [void]$canonicalCandidates.Insert(0, $resolvedCanonical)
+  }
+} catch {}
+$canonicalList = @($canonicalCandidates | Where-Object { $_ } | Select-Object -Unique)
+$canonicalDisplay = [string]::Join('; ', $canonicalList)
 $labviewCli64 = 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEWCLI.exe'
 $labviewCli32 = 'C:\Program Files (x86)\National Instruments\LabVIEW 2025\LabVIEWCLI.exe'
 
@@ -31,7 +44,17 @@ function Test-FilePresent($path) {
   }
 }
 
-$lvCompare = Test-FilePresent $canonical
+$lvCompareCandidate = $canonicalList | Select-Object -First 1
+if (-not $lvCompareCandidate) { $lvCompareCandidate = $canonicalPrimary }
+$lvCompare = Test-FilePresent $lvCompareCandidate
+if (-not $lvCompare.Exists -and $canonicalList.Count -gt 1) {
+  foreach ($candidate in $canonicalList) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+      $lvCompare = Test-FilePresent $candidate
+      break
+    }
+  }
+}
 $cliCandidate = Test-FilePresent $labviewCli64
 if (-not $cliCandidate.Exists) { $cliCandidate = Test-FilePresent $labviewCli32 }
 
@@ -47,7 +70,7 @@ $prereqsOk = $lvCompare.Exists -and $baseOk -and $headOk
 
 $result = [pscustomobject]@{
   TimestampUtc            = (Get-Date).ToUniversalTime().ToString('o')
-  CanonicalLVComparePath  = $canonical
+  CanonicalLVComparePath  = $canonicalDisplay
   LVComparePresent        = $lvCompare.Exists
   LabVIEWCLIPath          = if ($cliCandidate.Exists) { $cliCandidate.Path } else { $null }
   LabVIEWCLIPresent       = $cliCandidate.Exists
@@ -59,7 +82,7 @@ $result = [pscustomobject]@{
 }
 
 Write-Host '=== CompareVI Integration Environment Check ===' -ForegroundColor Cyan
-Write-Host ('LVCompare canonical path : {0} ({1})' -f $canonical, $(if ($lvCompare.Exists) { 'FOUND' } else { 'MISSING' }))
+Write-Host ('LVCompare canonical path : {0} ({1})' -f $canonicalDisplay, $(if ($lvCompare.Exists) { 'FOUND' } else { 'MISSING' }))
 Write-Host ('LabVIEWCLI path         : {0}' -f $(if ($cliCandidate.Exists) { $cliCandidate.Path } else { '[not found]' }))
 Write-Host ('LV_BASE_VI              : {0} ({1})' -f ($(if ($baseEnv) { $baseEnv } else { '[unset]' })), $(if ($baseOk) { 'OK' } else { 'MISSING' }))
 Write-Host ('LV_HEAD_VI              : {0} ({1})' -f ($(if ($headEnv) { $headEnv } else { '[unset]' })), $(if ($headOk) { 'OK' } else { 'MISSING' }))

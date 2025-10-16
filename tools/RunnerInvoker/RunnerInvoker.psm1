@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'VendorTools.psm1') -Force
 
 function Write-JsonFile([string]$Path, [object]$Obj) {
   $dir = Split-Path -Path $Path -Parent
@@ -267,7 +268,9 @@ function Start-InvokerLoop {
               $headPath = [string]$reqArgs['head']
               if ([string]::IsNullOrWhiteSpace($basePath) -or -not (Test-Path -LiteralPath $basePath)) { throw "preview base path not found: $basePath" }
               if ([string]::IsNullOrWhiteSpace($headPath) -or -not (Test-Path -LiteralPath $headPath)) { throw "preview head path not found: $headPath" }
-              $resolvedCli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+              $resolvedCli = $null
+              try { $resolvedCli = Resolve-LVComparePath } catch {}
+              if (-not $resolvedCli) { $resolvedCli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe' }
               $resolvedBase = (Resolve-Path -LiteralPath $basePath).Path
               $resolvedHead = (Resolve-Path -LiteralPath $headPath).Path
               $command = '"{0}" "{1}" "{2}"' -f $resolvedCli,($resolvedBase -replace '"','\"'),($resolvedHead -replace '"','\"')
