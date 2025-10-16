@@ -373,4 +373,8 @@ publish helper to build per-RID archives and checksums for distribution.
 - `./comparevi-cli quote --path 'C:/Program Files/National Instruments/LabVIEW 2025/LabVIEW.exe'`
 - `./comparevi-cli procs`
 - `./comparevi-cli operations`
+- `./comparevi-cli operations --names-only`
+- `./comparevi-cli providers`
+- `./comparevi-cli providers --names-only`
+- `./comparevi-cli providers --name labviewcli`
 
