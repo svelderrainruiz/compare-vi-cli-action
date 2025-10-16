@@ -264,6 +264,13 @@ suite('CompareVI extension', () => {
     expect(state.activeProviderId).to.equal('gcli');
   });
 
+  test('active provider selection persists in workspace state', () => {
+    testingApi.setActiveProvider('gcli');
+    expect(testingApi.getStoredActiveProviderId()).to.equal('gcli');
+    testingApi.setActiveProvider('comparevi');
+    expect(testingApi.getStoredActiveProviderId()).to.equal('comparevi');
+  });
+
   test('toggle diff as success command updates setting and status bar', async () => {
     const config = vscode.workspace.getConfiguration();
     await config.update('comparevi.diffAsSuccess', false, vscode.ConfigurationTarget.Workspace);
