@@ -48,6 +48,9 @@ param(
 
   [Parameter(Mandatory = $false)]
   [switch]$EmitFailuresJsonAlways,
+  # Internal helper to clear dispatcher guard crumbs without running Pester
+  [Parameter(Mandatory = $false)]
+  [switch]$GuardResetOnly,
   # Use a Node/TypeScript-backed discovery manifest (falls back to PS scan);
   # when Integration is excluded, pre-filters files marked with Integration tags
   [Parameter(Mandatory = $false)]
@@ -469,6 +472,22 @@ function Test-ResultsDirectoryWritable {
   }
 }
 
+function Clear-DispatcherGuardCrumb {
+  param(
+    [Parameter(Mandatory)][string]$Root
+  )
+  try {
+    $guardDir = Join-Path $Root 'tests/results/_diagnostics'
+    $guardPath = Join-Path $guardDir 'guard.json'
+    if (Test-Path -LiteralPath $guardPath -PathType Leaf) {
+      Remove-Item -LiteralPath $guardPath -Force -ErrorAction Stop
+      Write-Host "[guard] Cleared stale dispatcher guard crumb: $guardPath" -ForegroundColor DarkGray
+    }
+  } catch {
+    Write-Warning ("[guard] Failed to clear stale dispatcher guard crumb: {0}" -f $_.Exception.Message)
+  }
+}
+
 function Write-ArtifactManifest {
   param(
     [Parameter(Mandatory)] [string]$Directory,
@@ -764,6 +783,13 @@ if ([System.IO.Path]::IsPathRooted($ResultsPath)) {
   $resultsDir = $ResultsPath
 } else {
   $resultsDir = Join-Path $root $ResultsPath
+}
+
+Clear-DispatcherGuardCrumb -Root $root
+
+if ($GuardResetOnly) {
+  Write-Host '[guard] Guard reset only mode requested; exiting before dispatcher startup.' -ForegroundColor DarkGray
+  exit 0
 }
 
 try {

@@ -32,5 +32,44 @@ Describe 'Dispatcher results path guard (file case)' -Tag 'Unit' {
     $pattern = [regex]::Escape($resultsFile)
     $crumb.message | Should -Match $pattern
   }
+
+  It 'clears a stale guard crumb before launching the dispatcher' {
+    $crumbPath = Join-Path $script:repoRoot 'tests/results/_diagnostics/guard.json'
+    $crumbDir = Split-Path -Parent $crumbPath
+    if (-not (Test-Path -LiteralPath $crumbDir -PathType Container)) {
+      New-Item -ItemType Directory -Path $crumbDir -Force | Out-Null
+    }
+
+    $previousCrumb = $null
+    $hadCrumb = $false
+    if (Test-Path -LiteralPath $crumbPath -PathType Leaf) {
+      $previousCrumb = Get-Content -LiteralPath $crumbPath -Raw
+      $hadCrumb = $true
+    }
+
+    try {
+      # Seed a stale crumb to simulate a prior guarded failure.
+      $stale = '{"schema":"dispatcher-results-guard/v1","message":"stale"}'
+      Set-Content -LiteralPath $crumbPath -Value $stale -Encoding utf8
+
+      $resultsDir = Join-Path $TestDrive 'clean-results'
+      $stdout = & pwsh -NoLogo -NoProfile -File $script:dispatcherPath -ResultsPath $resultsDir -GuardResetOnly 2>&1
+      $exitCode = $LASTEXITCODE
+
+      $exitCode | Should -Be 0
+      ($stdout -join [Environment]::NewLine) | Should -Match '\[guard\] Cleared stale dispatcher guard crumb'
+
+      Test-Path -LiteralPath $crumbPath | Should -BeFalse
+    } finally {
+      if ($hadCrumb) {
+        if (-not (Test-Path -LiteralPath $crumbDir -PathType Container)) {
+          New-Item -ItemType Directory -Path $crumbDir -Force | Out-Null
+        }
+        Set-Content -LiteralPath $crumbPath -Value $previousCrumb -Encoding utf8
+      } elseif (Test-Path -LiteralPath $crumbPath) {
+        Remove-Item -LiteralPath $crumbPath -Force
+      }
+    }
+  }
 }
 
