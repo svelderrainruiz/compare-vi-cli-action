@@ -1,31 +1,98 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 Describe 'Invoke-PesterTests Include/Exclude patterns' -Tag 'Unit' {
   BeforeAll {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
     $script:dispatcher = Join-Path $repoRoot 'Invoke-PesterTests.ps1'
+    $script:fixtureTestsRoot = Join-Path $TestDrive 'fixture-tests'
+    New-Item -ItemType Directory -Force -Path $script:fixtureTestsRoot | Out-Null
+
+    Import-Module (Join-Path $repoRoot 'tests' '_helpers' 'DispatcherTestHelper.psm1') -Force
+
+    $script:pwshPath = Get-PwshExePath
+    if ($script:pwshPath) {
+      $script:pwshAvailable = $true
+      $script:skipReason = $null
+    } else {
+      $script:pwshAvailable = $false
+      $script:skipReason = 'pwsh executable not available on PATH'
+    }
+
+    $script:fixtureTestsRootResolved = (Resolve-Path -LiteralPath $script:fixtureTestsRoot).Path
+
+    $testTemplate = @'
+Describe "{0}" {{
+  It "passes" {{
+    1 | Should -Be 1
+  }}
+}}
+'@
+
+    foreach ($name in @('Alpha.Unit.Tests.ps1', 'Beta.Unit.Tests.ps1', 'Gamma.Helper.ps1')) {
+      $content = [string]::Format($testTemplate, $name)
+      Set-Content -LiteralPath (Join-Path $script:fixtureTestsRoot $name) -Value $content -Encoding utf8
+    }
+
+    $script:expectedAlpha = (Resolve-Path -LiteralPath (Join-Path $script:fixtureTestsRoot 'Alpha.Unit.Tests.ps1')).Path
+    $script:expectedBeta  = (Resolve-Path -LiteralPath (Join-Path $script:fixtureTestsRoot 'Beta.Unit.Tests.ps1')).Path
   }
 
   It 'honors IncludePatterns for a single file' {
+    if (-not $script:pwshAvailable) {
+      Set-ItResult -Skipped -Because $script:skipReason
+      return
+    }
+
     $resultsDir = Join-Path $TestDrive 'results-inc'
-    $inc = @('Invoke-PesterTests.*.ps1')
-    pwsh -File $script:dispatcher -TestsPath (Join-Path $repoRoot 'tests') -ResultsPath $resultsDir -IncludePatterns $inc -IntegrationMode exclude | Out-Null
+    if (Test-Path -LiteralPath $resultsDir) {
+      Remove-Item -LiteralPath $resultsDir -Recurse -Force
+    }
+    $inc = 'Alpha*.ps1'
+    $res = Invoke-DispatcherSafe -DispatcherPath $script:dispatcher -ResultsPath $resultsDir -IncludePatterns $inc -TestsPath $script:fixtureTestsRoot -AdditionalArgs @('-IntegrationMode', 'exclude')
+    $res.TimedOut | Should -BeFalse
+    $res.ExitCode | Should -Be 0
+    $res.StdErr.Trim() | Should -BeNullOrEmpty
     $sel = Join-Path $resultsDir 'pester-selected-files.txt'
     Test-Path $sel | Should -BeTrue
-    $lines = @(Get-Content -LiteralPath $sel)
-    ($lines.Count -ge 1) | Should -BeTrue
-    $allMatch = $true
-    foreach ($l in $lines) { if (-not ($l -like '*Invoke-PesterTests.*.ps1')) { $allMatch = $false; break } }
-    $allMatch | Should -BeTrue
+    $lines = @(Get-Content -LiteralPath $sel | Where-Object {
+      $_ -and $_.Trim().Length -gt 0
+    })
+    $lines.Count | Should -Be 1
+    $resolved = $lines | ForEach-Object { (Resolve-Path -LiteralPath $_).Path }
+    $resolved | Should -Be @($script:expectedAlpha)
+    $leafs = $resolved | ForEach-Object { Split-Path -Leaf $_ }
+    $leafs | Should -Be @('Alpha.Unit.Tests.ps1')
+    $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRootResolved))
   }
 
   It 'honors ExcludePatterns to remove files' {
+    if (-not $script:pwshAvailable) {
+      Set-ItResult -Skipped -Because $script:skipReason
+      return
+    }
+
     $resultsDir = Join-Path $TestDrive 'results-exc'
-    $exc = @('PesterSummary.*.ps1')
-    pwsh -File $script:dispatcher -TestsPath (Join-Path $repoRoot 'tests') -ResultsPath $resultsDir -ExcludePatterns $exc -IntegrationMode exclude | Out-Null
+    if (Test-Path -LiteralPath $resultsDir) {
+      Remove-Item -LiteralPath $resultsDir -Recurse -Force
+    }
+    $exc = '*Helper.ps1'
+    $res = Invoke-DispatcherSafe -DispatcherPath $script:dispatcher -ResultsPath $resultsDir -TestsPath $script:fixtureTestsRoot -AdditionalArgs @('-ExcludePatterns', $exc, '-IntegrationMode', 'exclude')
+    $res.TimedOut | Should -BeFalse
+    $res.ExitCode | Should -Be 0
+    $res.StdErr.Trim() | Should -BeNullOrEmpty
     $sel = Join-Path $resultsDir 'pester-selected-files.txt'
     Test-Path $sel | Should -BeTrue
-    $lines = @(Get-Content -LiteralPath $sel)
-    $noneExcluded = $true
-    foreach ($l in $lines) { if ($l -like '*PesterSummary.*.ps1') { $noneExcluded = $false; break } }
-    $noneExcluded | Should -BeTrue
+    $lines = @(Get-Content -LiteralPath $sel | Where-Object {
+      $_ -and $_.Trim().Length -gt 0
+    })
+    $lines.Count | Should -Be 2
+    $resolved = $lines | ForEach-Object { (Resolve-Path -LiteralPath $_).Path }
+    $expected = @($script:expectedAlpha, $script:expectedBeta) | Sort-Object
+    ($resolved | Sort-Object) | Should -Be $expected
+    $leafs = $resolved | ForEach-Object { Split-Path -Leaf $_ }
+    $leafs | Should -Not -Contain 'Gamma.Helper.ps1'
+    ($leafs | Sort-Object) | Should -Be @('Alpha.Unit.Tests.ps1', 'Beta.Unit.Tests.ps1')
+    $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRootResolved))
   }
 }

@@ -9,9 +9,23 @@ Describe 'Dispatcher results path guard (file case)' -Tag 'Unit' {
     $script:dispatcherPath = Join-Path $root 'Invoke-PesterTests.ps1'
     Test-Path -LiteralPath $script:dispatcherPath | Should -BeTrue
     Import-Module (Join-Path $root 'tests' '_helpers' 'DispatcherTestHelper.psm1') -Force
+
+    $script:pwshPath = Get-PwshExePath
+    if ($script:pwshPath) {
+      $script:pwshAvailable = $true
+      $script:skipReason = $null
+    } else {
+      $script:pwshAvailable = $false
+      $script:skipReason = 'pwsh executable not available on PATH'
+    }
   }
 
   It 'fails and emits a guard crumb when ResultsPath points to a file' {
+    if (-not $script:pwshAvailable) {
+      Set-ItResult -Skipped -Because $script:skipReason
+      return
+    }
+
     $resultsFile = Join-Path $TestDrive 'blocked-results.txt'
     Set-Content -LiteralPath $resultsFile -Value 'blocked' -Encoding ascii
 
@@ -34,6 +48,11 @@ Describe 'Dispatcher results path guard (file case)' -Tag 'Unit' {
   }
 
   It 'clears a stale guard crumb before launching the dispatcher' {
+    if (-not $script:pwshAvailable) {
+      Set-ItResult -Skipped -Because $script:skipReason
+      return
+    }
+
     $crumbPath = Join-Path $script:repoRoot 'tests/results/_diagnostics/guard.json'
     $crumbDir = Split-Path -Parent $crumbPath
     if (-not (Test-Path -LiteralPath $crumbDir -PathType Container)) {
@@ -53,7 +72,7 @@ Describe 'Dispatcher results path guard (file case)' -Tag 'Unit' {
       Set-Content -LiteralPath $crumbPath -Value $stale -Encoding utf8
 
       $resultsDir = Join-Path $TestDrive 'clean-results'
-      $stdout = & pwsh -NoLogo -NoProfile -File $script:dispatcherPath -ResultsPath $resultsDir -GuardResetOnly 2>&1
+      $stdout = & $script:pwshPath -NoLogo -NoProfile -File $script:dispatcherPath -ResultsPath $resultsDir -GuardResetOnly 2>&1
       $exitCode = $LASTEXITCODE
 
       $exitCode | Should -Be 0

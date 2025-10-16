@@ -9,9 +9,23 @@ Describe 'Dispatcher results path guard (read-only directory)' -Tag 'Unit' {
     $script:dispatcherPath = Join-Path $root 'Invoke-PesterTests.ps1'
     Test-Path -LiteralPath $script:dispatcherPath | Should -BeTrue
     Import-Module (Join-Path $root 'tests' '_helpers' 'DispatcherTestHelper.psm1') -Force
+
+    $script:pwshPath = Get-PwshExePath
+    if ($script:pwshPath) {
+      $script:pwshAvailable = $true
+      $script:skipReason = $null
+    } else {
+      $script:pwshAvailable = $false
+      $script:skipReason = 'pwsh executable not available on PATH'
+    }
   }
 
   It 'fails and emits a guard crumb when ResultsPath is a read-only directory' {
+    if (-not $script:pwshAvailable) {
+      Set-ItResult -Skipped -Because $script:skipReason
+      return
+    }
+
     $resultsDir = Join-Path $TestDrive 'blocked-dir'
     New-Item -ItemType Directory -Path $resultsDir | Out-Null
     # Make the directory non-writable for the current user using an explicit DENY ACL rule

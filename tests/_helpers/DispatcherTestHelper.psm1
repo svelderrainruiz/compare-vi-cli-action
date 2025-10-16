@@ -2,7 +2,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Get-PwshExePath {
-  try { return (Get-Command -Name 'pwsh' -ErrorAction Stop).Source } catch { return 'pwsh' }
+  try {
+    $cmd = Get-Command -Name 'pwsh' -ErrorAction Stop
+    if ($cmd -and $cmd.Source) {
+      return $cmd.Source
+    }
+  } catch {
+    return $null
+  }
+
+  return $null
 }
 
 function Get-PwshProcessIds {
@@ -38,6 +47,8 @@ function Invoke-DispatcherSafe {
     Max seconds to allow child to run before forced kill.
   .PARAMETER AdditionalArgs
     Extra arguments passed through to the dispatcher.
+  .PARAMETER TestsPath
+    Tests root passed to the dispatcher (defaults to the repository tests directory).
   .OUTPUTS
     PSCustomObject with ExitCode, TimedOut, StdOut, StdErr
   #>
@@ -47,11 +58,16 @@ function Invoke-DispatcherSafe {
     [Parameter(Mandatory)][string]$ResultsPath,
     [string]$IncludePatterns,
     [int]$TimeoutSeconds = 30,
-    [string[]]$AdditionalArgs
+    [string[]]$AdditionalArgs,
+    [string]$TestsPath = 'tests'
   )
 
   $pwsh = Get-PwshExePath
-  $args = @('-NoLogo','-NoProfile','-File', $DispatcherPath, '-TestsPath', 'tests', '-ResultsPath', $ResultsPath)
+  if (-not $pwsh) {
+    throw 'pwsh executable not found on PATH; dispatcher cannot run.'
+  }
+
+  $args = @('-NoLogo','-NoProfile','-File', $DispatcherPath, '-TestsPath', $TestsPath, '-ResultsPath', $ResultsPath)
   if ($IncludePatterns) { $args += @('-IncludePatterns', $IncludePatterns) }
   if ($AdditionalArgs -and $AdditionalArgs.Count -gt 0) { $args += $AdditionalArgs }
 
@@ -96,7 +112,7 @@ function Invoke-DispatcherSafe {
     [pscustomobject]@{ ExitCode=$code; TimedOut=$timedOut; StdOut=$stdout; StdErr=$stderr }
   } finally {
     try { if ($proc) { $proc.Dispose() } } catch {}
-    # Narrow cleanup scope: recursively terminate pwsh descendants of the launched process only
+    $childCleanupSucceeded = $false
     try {
       if ($proc -and $proc.Id) {
         # Snapshot all processes with parent linkage in one go
@@ -130,10 +146,17 @@ function Invoke-DispatcherSafe {
           foreach ($pid in ($killList | Sort-Object -Unique)) {
             try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch {}
           }
+          $childCleanupSucceeded = $true
         }
       }
-    } catch {}
-    # Do NOT blanket kill new pwsh processes anymore; we intentionally avoid the broad baseline sweep.
+    } catch {
+      $childCleanupSucceeded = $false
+    }
+
+    if (-not $childCleanupSucceeded) {
+      try { Stop-NewPwshProcesses -Baseline $baseline -NotBefore $startedAt } catch {}
+    }
+    # Do NOT blanket kill new pwsh processes anymore; we intentionally avoid the broad baseline sweep unless fallback executes.
   }
 }
 
