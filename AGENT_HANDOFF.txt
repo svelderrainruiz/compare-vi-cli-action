@@ -4,7 +4,7 @@
 - Standing priority refreshed via `npm run priority:sync`; cache still points to issue #134
   (`Standing priority: evolve CompareVI helper into N-provider CLI companion`). The sync fell back
   to cached metadata because the GitHub CLI (`gh`) is not installed.
-- Working branch: `issue/134-cli-companion` (local only in this container).
+- Working branch now synced to `issue/134-cli-companion` in this container.
 - LabVIEW safety toggles exported in this shell (`LV_SUPPRESS_UI=1`, `LV_NO_ACTIVATE=1`,
   `LV_CURSOR_RESTORE=1`, `LV_IDLE_WAIT_SECONDS=2`, `LV_IDLE_MAX_WAIT_SECONDS=5`).
 - PowerShell (`pwsh`) remains unavailable, so LabVIEW guard/rogue scans and Pester orchestration are
@@ -13,10 +13,12 @@
   installing PowerShell through the package manager is currently blocked.
 - `npm run priority:handoff-tests` fails immediately (`pwsh: not found`), so no automated
   hook/semver coverage captured yet in this workspace.
-- Schema validation attempted with `node dist/tools/schemas/validate-json.js --schema
-  docs/schema/generated/teststand-compare-session.schema.json --data
-  tests/results/teststand-session/session-index.json`; command succeeds but reports `No files matched`
-  because `tests/results/teststand-session/` is absent locally.
+- A placeholder TestStand session folder (`tests/results/teststand-session/`) now exists; it currently
+  mirrors the committed fixture so schema validation commands can execute, but it still needs to be
+  replaced with freshly captured artifacts from a real run.
+- Schema validation re-run with the placeholder data via `node dist/tools/schemas/validate-json.js
+  --schema docs/schema/generated/teststand-compare-session.schema.json --data
+  tests/results/teststand-session/session-index.json`; command succeeds locally.
 - Updated handoff telemetry recorded in `tests/results/_agent/handoff/test-summary.json`
   (`agent-handoff/test-results@v1`) capturing the blocked handoff script, schema attempt, and apt
   failure details.
@@ -39,8 +41,9 @@
    Once available, re-run the LabVIEW safety helper: `pwsh -File tools/Print-AgentHandoff.ps1
    -ApplyToggles -AutoTrim` (or at minimum `tools/Detect-RogueLV.ps1`).
 2. Generate or copy fresh CLI-only and TestStand session artifacts on a host with LabVIEW CLI
-   access; populate `tests/results/cli-only/` and `tests/results/teststand-session/` locally.
-3. Re-run the schema validator once artifacts exist:
+   access; replace the placeholder content under `tests/results/teststand-session/` and populate the
+   missing `tests/results/cli-only/` directory locally.
+3. Re-run the schema validator once real artifacts exist:
    ```
    node dist/tools/schemas/validate-json.js \
      --schema docs/schema/generated/teststand-compare-session.schema.json \
@@ -49,17 +52,20 @@
 4. Execute dispatcher coverage once PowerShell is available:
    - `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude`
    - Optionally `pwsh -File Invoke-PesterTests.ps1 -TestsPath tests/TestStand-CompareHarness.Tests.ps1`
-5. Update issue/PR #134 with regenerated artifact notes, schema validation outcomes, and refreshed
-   handoff/test summaries once tooling and artifacts are restored.
+5. Update issue/PR #134 with regenerated artifact notes, schema validation outcomes (call out when
+   placeholder data is replaced), and refreshed handoff/test summaries once tooling and artifacts are
+   restored.
 
 ## First Actions for the Next Agent
 1. Restore package manager connectivity (or provide an alternative installer) so PowerShell 7+
    is available, then rerun `tools/Print-AgentHandoff.ps1 -ApplyToggles` (or equivalent) to capture
    a clean rogue scan before proceeding with LabVIEW compares.
 2. Fetch or regenerate the missing `tests/results/teststand-session/` and `tests/results/cli-only/`
-   directories so schema validation and documentation review can resume.
+   directories so schema validation and documentation review can resume; replace the current
+   placeholder TestStand session copy with genuine output.
 3. Re-run `node dist/tools/schemas/validate-json.js ...` against the restored session index and
-   record the outcome in `tests/results/_agent/handoff/test-summary.json`.
+   record the outcome in `tests/results/_agent/handoff/test-summary.json` (note when placeholder data
+   gets swapped out).
 4. Kick off `pwsh -File Invoke-PesterTests.ps1 -IntegrationMode exclude` and archive the resulting
    summaries (`tests/results/pester-summary.json`, XML report) for PR context once PowerShell is
    operational.
