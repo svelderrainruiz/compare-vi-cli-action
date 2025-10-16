@@ -5,30 +5,25 @@
   "head": "C:/workspace/compare-vi-cli-action/VI2.vi",
   "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
   "args": [
-    "--%",
+    "-OperationName",
     "CreateComparisonReport",
-    "--Base",
+    "-vi1",
     "C:/workspace/compare-vi-cli-action/VI1.vi",
-    "--Head",
-    "C:/workspace/compare-vi-cli-action/VI2.vi",
-    "--Flags",
-    "-nobdcosm -nofppos -noattr",
-    "--ReportPath",
-    "C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/cli-report.html"
+    "-vi2",
+    "C:/workspace/compare-vi-cli-action/VI2.vi"
   ],
   "exitCode": 1,
   "seconds": 0.187,
   "stdoutLen": 0,
-  "stderrLen": 0,
-  "command": "\"C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe\" --% CreateComparisonReport --Base C:/workspace/compare-vi-cli-action/VI1.vi --Head C:/workspace/compare-vi-cli-action/VI2.vi --Flags '-nobdcosm -nofppos -noattr' --ReportPath C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/cli-report.html",
-  "stdout": null,
-  "stderr": null,
+  "stderrLen": 90,
+  "command": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe -OperationName CreateComparisonReport -vi1 C:/workspace/compare-vi-cli-action/VI1.vi -vi2 C:/workspace/compare-vi-cli-action/VI2.vi",
+  "stdout": "",
+  "stderr": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli",
   "environment": {
     "compareMode": "labview-cli",
     "comparePolicy": "cli-only",
     "cli": {
       "path": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
-      "status": "error",
       "message": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli"
     }
   }

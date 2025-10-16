@@ -6,13 +6,13 @@
     "events": null
   },
   "compare": {
-    "events": "compare/compare-events.ndjson",
-    "capture": "compare/lvcompare-capture.json",
+    "events": "C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/compare-events.ndjson",
+    "capture": "C:/workspace/compare-vi-cli-action/tests/results/teststand-session/compare/lvcompare-capture.json",
     "report": false,
+    "command": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe -OperationName CreateComparisonReport -vi1 C:/workspace/compare-vi-cli-action/VI1.vi -vi2 C:/workspace/compare-vi-cli-action/VI2.vi",
     "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
     "cli": {
       "path": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
-      "status": "error",
       "message": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli"
     },
     "policy": "cli-only",
@@ -21,6 +21,11 @@
     "sameName": false,
     "timeoutSeconds": 600
   },
-  "outcome": null,
+  "outcome": {
+    "exitCode": 1,
+    "seconds": 0.187,
+    "command": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe -OperationName CreateComparisonReport -vi1 C:/workspace/compare-vi-cli-action/VI1.vi -vi2 C:/workspace/compare-vi-cli-action/VI2.vi",
+    "diff": true
+  },
   "error": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli"
 }
