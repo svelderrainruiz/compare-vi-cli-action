@@ -9,23 +9,12 @@
     "events": "compare/compare-events.ndjson",
     "capture": "compare/lvcompare-capture.json",
     "report": false,
-    "command": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe -OperationName CreateComparisonReport -vi1 C:/workspace/compare-vi-cli-action/VI1.vi -vi2 C:/workspace/compare-vi-cli-action/VI2.vi",
-    "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
-    "cli": {
-      "path": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
-      "message": "LabVIEWCLI.exe could not be located. Set LABVIEWCLI_PATH or install the LabVIEW CLI component."
-    },
     "policy": "cli-only",
     "mode": "labview-cli",
     "autoCli": false,
     "sameName": false,
     "timeoutSeconds": 600
   },
-  "outcome": {
-    "exitCode": 87,
-    "seconds": 0.187,
-    "command": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe -OperationName CreateComparisonReport -vi1 C:/workspace/compare-vi-cli-action/VI1.vi -vi2 C:/workspace/compare-vi-cli-action/VI2.vi",
-    "diff": false
-  },
-  "error": "LabVIEWCLI.exe could not be located. Set LABVIEWCLI_PATH or install the LabVIEW CLI component."
+  "outcome": null,
+  "error": "No registered provider can execute operation 'CreateComparisonReport'. Checked: labviewcli"
 }
