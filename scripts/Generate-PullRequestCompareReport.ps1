@@ -23,9 +23,9 @@
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
-if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) { throw "LVCompare not found at canonical path: $canonical" }
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+Import-Module (Join-Path $repoRoot 'scripts' 'CompareVI.psm1') -Force
+$canonical = Resolve-Cli
 
 # Resolve base/head input paths if provided, else default to repo-root VI1/VI2
 if ($BasePath) {
@@ -43,8 +43,6 @@ foreach ($p in @($baseVi,$headVi)) {
   $len = (Get-Item -LiteralPath $p).Length
   if ($len -lt 1024) { Write-Warning "VI file $p is unusually small ($len bytes) – ensure this is a real LabVIEW .vi binary." }
 }
-Import-Module (Join-Path $repoRoot 'scripts' 'CompareVI.psm1') -Force
-
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 if ($LoopMode) {

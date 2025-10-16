@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 # Import shared tokenization pattern
 Import-Module (Join-Path $PSScriptRoot 'ArgTokenization.psm1') -Force
+Import-Module (Join-Path (Split-Path -Parent $PSScriptRoot) 'tools' 'VendorTools.psm1') -Force
 
 # Native helpers for idle and window activation control
 if (-not ([System.Management.Automation.PSTypeName]'User32').Type) {
@@ -33,30 +34,63 @@ function Get-UserIdleSeconds {
 function Get-CursorPos { try { $pt = New-Object POINT; [void][User32]::GetCursorPos([ref]$pt); return $pt } catch { $null } }
 function Set-CursorPosXY([int]$x,[int]$y) { try { [void][User32]::SetCursorPos($x,$y) } catch {} }
 
+function Get-CanonicalCliCandidates {
+  $primary = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+  $secondary = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+  $candidates = New-Object System.Collections.Generic.List[string]
+  if ($primary) { $null = $candidates.Add($primary) }
+  if ($secondary -and -not ($secondary -eq $primary)) { $null = $candidates.Add($secondary) }
+  try {
+    $resolved = Resolve-LVComparePath
+    if ($resolved) {
+      if (-not ($candidates | Where-Object { $_ -ieq $resolved })) {
+        $null = $candidates.Insert(0, $resolved)
+      }
+    }
+  } catch {}
+  return @($candidates | Where-Object { $_ } | Select-Object -Unique)
+}
+
 function Resolve-Cli {
   param(
     [string]$Explicit
   )
-  $canonical = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+  $candidates = Get-CanonicalCliCandidates
+
+  function Normalize-Path([string]$PathValue) {
+    if ([string]::IsNullOrWhiteSpace($PathValue)) { return $PathValue }
+    try { return (Resolve-Path -LiteralPath $PathValue -ErrorAction Stop).Path } catch { return $PathValue }
+  }
+
+  $formattedList = [string]::Join(', ', $candidates)
 
   if ($Explicit) {
-    $resolved = try { (Resolve-Path -LiteralPath $Explicit -ErrorAction Stop).Path } catch { $Explicit }
-    if ($resolved -ieq $canonical) {
-      if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $canonical" }
-      return $canonical
-    } else { throw "Only the canonical LVCompare path is supported: $canonical" }
+    $resolvedExplicit = Normalize-Path $Explicit
+    $match = $candidates | Where-Object { $_ -ieq $resolvedExplicit }
+    if ($match) {
+      $target = $match[0]
+      if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $target" }
+      return $target
+    }
+    throw "Only canonical LVCompare path(s) are supported: $formattedList"
   }
 
   if ($env:LVCOMPARE_PATH) {
-    $resolvedEnv = try { (Resolve-Path -LiteralPath $env:LVCOMPARE_PATH -ErrorAction Stop).Path } catch { $env:LVCOMPARE_PATH }
-    if ($resolvedEnv -ieq $canonical) {
-      if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $canonical" }
-      return $canonical
-    } else { throw "Only the canonical LVCompare path is supported via LVCOMPARE_PATH: $canonical" }
+    $resolvedEnv = Normalize-Path $env:LVCOMPARE_PATH
+    $matchEnv = $candidates | Where-Object { $_ -ieq $resolvedEnv }
+    if ($matchEnv) {
+      $targetEnv = $matchEnv[0]
+      if (-not (Test-Path -LiteralPath $targetEnv -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $targetEnv" }
+      return $targetEnv
+    }
+    throw "Only canonical LVCompare path(s) are supported via LVCOMPARE_PATH: $formattedList"
   }
 
-  if (Test-Path -LiteralPath $canonical -PathType Leaf) { return $canonical }
-  throw "LVCompare.exe not found. Install at: $canonical"
+  foreach ($candidate in $candidates) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) { return $candidate }
+  }
+
+  throw "LVCompare.exe not found. Install at one of: $formattedList"
 }
 
 function Quote($s) {
