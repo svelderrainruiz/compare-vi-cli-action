@@ -1,2 +1,2 @@
-{"timestamp":"2025-10-16T00:52:24.000Z","type":"spawn","schema":"prime-lvcompare-v1","details":"Requested LabVIEW CLI compare (cli-only policy)"}
-{"timestamp":"2025-10-16T00:52:24.050Z","type":"error","schema":"prime-lvcompare-v1","message":"LabVIEW CLI not available on this Linux container image","exitCode":1}
+{"timestamp":"2025-10-16T00:52:24.000Z","type":"plan","schema":"prime-lvcompare-v1","base":"VI1.vi","head":"VI2.vi","lvpath":"C:/Program Files/National Instruments/LabVIEW 2025/LabVIEW.exe","lvcompare":null,"flags":"-nobdcosm -nofppos -noattr","out":"tests/results/teststand-session/compare","report":false,"policy":"cli-only","mode":"labview-cli","sameName":false,"autoCli":false}
+{"timestamp":"2025-10-16T00:52:24.050Z","type":"error","schema":"prime-lvcompare-v1","stage":"cli-capture","message":"LabVIEWCLI.exe could not be located. Set LABVIEWCLI_PATH or install the LabVIEW CLI component.","exitCode":87}

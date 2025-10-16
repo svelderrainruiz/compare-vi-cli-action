@@ -3,43 +3,43 @@
   "timestamp": "2025-10-16T00:52:24.050Z",
   "base": "VI1.vi",
   "head": "VI2.vi",
-  "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW Compare/LVCompare.exe",
+  "cliPath": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
   "args": [
-    "--diff",
-    "--nobdcosm",
-    "--nofppos",
-    "--noattr",
+    "-OperationName",
+    "CreateComparisonReport",
+    "-vi1",
     "VI1.vi",
+    "-vi2",
     "VI2.vi"
   ],
-  "exitCode": 1,
-  "seconds": 0.02,
+  "exitCode": 87,
+  "seconds": 0.05,
   "stdoutLen": 0,
-  "stderrLen": 88,
-  "command": "\"C:/Program Files/National Instruments/Shared/LabVIEW Compare/LVCompare.exe\" --diff --nobdcosm --nofppos --noattr VI1.vi VI2.vi",
+  "stderrLen": 94,
+  "command": "\"C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe\" -OperationName CreateComparisonReport -vi1 VI1.vi -vi2 VI2.vi",
   "stdout": "",
-  "stderr": "LabVIEW CLI not available on this Linux container image. Set LVCOMPARE_PATH to override.",
+  "stderr": "LabVIEWCLI.exe could not be located. Set LABVIEWCLI_PATH or install the LabVIEW CLI component.",
   "environment": {
     "lvcompareVersion": "unavailable",
     "labviewVersion": "unavailable",
     "bitness": "x64",
-    "osVersion": "Debian GNU/Linux 12 (bookworm)",
+    "osVersion": "Windows Server 2022 (10.0.20348)",
     "arch": "x86_64",
     "compareMode": "labview-cli",
     "comparePolicy": "cli-only",
     "cli": {
-      "path": "LabVIEWCLI.exe",
+      "path": "C:/Program Files/National Instruments/Shared/LabVIEW CLI/LabVIEWCLI.exe",
       "version": "unavailable",
       "reportType": "none",
       "reportPath": "not-generated",
       "status": "error",
-      "message": "LabVIEW CLI missing; compare aborted"
+      "message": "LabVIEWCLI.exe could not be located. Set LABVIEWCLI_PATH or install the LabVIEW CLI component."
     },
     "runner": {
       "labels": [
-        "container",
-        "linux",
-        "no-pwsh"
+        "windows",
+        "self-hosted",
+        "no-cli"
       ],
       "identityHash": "sha256:container-local"
     }
