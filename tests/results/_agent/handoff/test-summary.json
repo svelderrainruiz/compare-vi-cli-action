@@ -1,37 +1,63 @@
 {
   "schema": "agent-handoff/test-results@v1",
-  "generatedAt": "2025-10-16T00:37:54.570Z",
-  "status": "passed",
-  "total": 3,
-  "failureCount": 0,
+  "generatedAt": "2025-10-16T00:55:16.117Z",
+  "status": "failed",
+  "total": 6,
+  "failureCount": 1,
   "results": [
+    {
+      "command": "npm run priority:handoff-tests",
+      "exitCode": 127,
+      "stdout": "\n> compare-vi-cli-action@0.5.0 priority:handoff-tests\n> pwsh -NoLogo -NoProfile -File tools/priority/Run-HandoffTests.ps1\n\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nsh: 1: pwsh: not found\n",
+      "startedAt": "2025-10-16T00:55:12.349Z",
+      "completedAt": "2025-10-16T00:55:12.673Z",
+      "durationMs": 313.809
+    },
     {
       "command": "npm run priority:test",
       "exitCode": 0,
-      "stdout": "\n> compare-vi-cli-action@0.5.0 priority:test\n> node --test \"tools/priority/__tests__/*.mjs\"\n\nTAP version 13\n# Subtest: handoff issue summary matches schema\nok 1 - handoff issue summary matches schema\n  ---\n  duration_ms: 156.380628\n  type: 'test'\n  ...\n# Subtest: handoff router matches schema\nok 2 - handoff router matches schema\n  ---\n  duration_ms: 49.651981\n  type: 'test'\n  ...\n# Subtest: handoff hook summary matches schema\nok 3 - handoff hook summary matches schema\n  ---\n  duration_ms: 38.768399\n  type: 'test'\n  ...\n# Subtest: handoff release summary matches schema\nok 4 - handoff release summary matches schema\n  ---\n  duration_ms: 23.994638\n  type: 'test'\n  ...\n# Subtest: handoff test summary matches schema\nok 5 - handoff test summary matches schema\n  ---\n  duration_ms: 41.363854\n  type: 'test'\n  ...\n# Subtest: handoff session capsule matches schema\nok 6 - handoff session capsule matches schema\n  ---\n  duration_ms: 24.772756\n  type: 'test'\n  ...\n# Subtest: createSnapshot normalizes lists and produces stable digest\nok 7 - createSnapshot normalizes lists and produces stable digest\n  ---\n  duration_ms: 18.237177\n  type: 'test'\n  ...\n# Subtest: buildRouter honours policy map and default actions\nok 8 - buildRouter honours policy map and default actions\n  ---\n  duration_ms: 1.527822\n  type: 'test'\n  ...\n# Subtest: buildRouter adds fallback validation action when needed\nok 9 - buildRouter adds fallback validation action when needed\n  ---\n  duration_ms: 0.448333\n  type: 'test'\n  ...\n1..9\n# tests 9\n# suites 0\n# pass 9\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 773.242682",
-      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.",
-      "startedAt": "2025-10-16T00:37:52.262Z",
-      "completedAt": "2025-10-16T00:37:53.437Z",
-      "durationMs": 1175
+      "stdout": "\n> compare-vi-cli-action@0.5.0 priority:test\n> node --test \"tools/priority/__tests__/*.mjs\"\n\nTAP version 13\n# Subtest: handoff issue summary matches schema\nok 1 - handoff issue summary matches schema\n  ---\n  duration_ms: 172.788345\n  type: 'test'\n  ...\n# Subtest: handoff router matches schema\nok 2 - handoff router matches schema\n  ---\n  duration_ms: 54.136376\n  type: 'test'\n  ...\n# Subtest: handoff hook summary matches schema\nok 3 - handoff hook summary matches schema\n  ---\n  duration_ms: 44.211252\n  type: 'test'\n  ...\n# Subtest: handoff release summary matches schema\nok 4 - handoff release summary matches schema\n  ---\n  duration_ms: 30.601186\n  type: 'test'\n  ...\n# Subtest: handoff test summary matches schema\nok 5 - handoff test summary matches schema\n  ---\n  duration_ms: 32.493556\n  type: 'test'\n  ...\n# Subtest: handoff session capsule matches schema\nok 6 - handoff session capsule matches schema\n  ---\n  duration_ms: 29.83788\n  type: 'test'\n  ...\n# Subtest: createSnapshot normalizes lists and produces stable digest\nok 7 - createSnapshot normalizes lists and produces stable digest\n  ---\n  duration_ms: 21.193341\n  type: 'test'\n  ...\n# Subtest: buildRouter honours policy map and default actions\nok 8 - buildRouter honours policy map and default actions\n  ---\n  duration_ms: 1.5156\n  type: 'test'\n  ...\n# Subtest: buildRouter adds fallback validation action when needed\nok 9 - buildRouter adds fallback validation action when needed\n  ---\n  duration_ms: 0.632151\n  type: 'test'\n  ...\n1..9\n# tests 9\n# suites 0\n# pass 9\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 848.766842\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n",
+      "startedAt": "2025-10-16T00:55:12.675Z",
+      "completedAt": "2025-10-16T00:55:13.954Z",
+      "durationMs": 1271.33
     },
     {
       "command": "npm run hooks:test",
       "exitCode": 0,
-      "stdout": "\n> compare-vi-cli-action@0.5.0 hooks:test\n> node --test \"tools/hooks/__tests__/*.mjs\"\n\nTAP version 13\n# Subtest: detectPlane detects GitHub Ubuntu\nok 1 - detectPlane detects GitHub Ubuntu\n  ---\n  duration_ms: 7.400245\n  type: 'test'\n  ...\n# Subtest: detectPlane detects GitHub Windows\nok 2 - detectPlane detects GitHub Windows\n  ---\n  duration_ms: 0.326988\n  type: 'test'\n  ...\n# Subtest: detectPlane detects WSL\nok 3 - detectPlane detects WSL\n  ---\n  duration_ms: 0.45341\n  type: 'test'\n  ...\n# Subtest: detectPlane detects macOS\nok 4 - detectPlane detects macOS\n  ---\n  duration_ms: 0.2526\n  type: 'test'\n  ...\n# Subtest: detectPlane defaults to linux bash\nok 5 - detectPlane defaults to linux bash\n  ---\n  duration_ms: 0.285782\n  type: 'test'\n  ...\n# Subtest: resolveEnforcement respects explicit env\nok 6 - resolveEnforcement respects explicit env\n  ---\n  duration_ms: 0.315248\n  type: 'test'\n  ...\n# Subtest: resolveEnforcement defaults to fail on CI\nok 7 - resolveEnforcement defaults to fail on CI\n  ---\n  duration_ms: 0.484574\n  type: 'test'\n  ...\n# Subtest: resolveEnforcement defaults to warn locally\nok 8 - resolveEnforcement defaults to warn locally\n  ---\n  duration_ms: 0.211244\n  type: 'test'\n  ...\n# Subtest: normalizeSummary zeroes timestamp and duration and sorts steps\nok 9 - normalizeSummary zeroes timestamp and duration and sorts steps\n  ---\n  duration_ms: 2.296222\n  type: 'test'\n  ...\n1..9\n# tests 9\n# suites 0\n# pass 9\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 351.540372",
-      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.",
-      "startedAt": "2025-10-16T00:37:53.438Z",
-      "completedAt": "2025-10-16T00:37:54.180Z",
-      "durationMs": 742
+      "stdout": "\n> compare-vi-cli-action@0.5.0 hooks:test\n> node --test \"tools/hooks/__tests__/*.mjs\"\n\nTAP version 13\n# Subtest: detectPlane detects GitHub Ubuntu\nok 1 - detectPlane detects GitHub Ubuntu\n  ---\n  duration_ms: 7.889354\n  type: 'test'\n  ...\n# Subtest: detectPlane detects GitHub Windows\nok 2 - detectPlane detects GitHub Windows\n  ---\n  duration_ms: 0.407907\n  type: 'test'\n  ...\n# Subtest: detectPlane detects WSL\nok 3 - detectPlane detects WSL\n  ---\n  duration_ms: 0.459097\n  type: 'test'\n  ...\n# Subtest: detectPlane detects macOS\nok 4 - detectPlane detects macOS\n  ---\n  duration_ms: 0.317118\n  type: 'test'\n  ...\n# Subtest: detectPlane defaults to linux bash\nok 5 - detectPlane defaults to linux bash\n  ---\n  duration_ms: 0.355736\n  type: 'test'\n  ...\n# Subtest: resolveEnforcement respects explicit env\nok 6 - resolveEnforcement respects explicit env\n  ---\n  duration_ms: 0.381171\n  type: 'test'\n  ...\n# Subtest: resolveEnforcement defaults to fail on CI\nok 7 - resolveEnforcement defaults to fail on CI\n  ---\n  duration_ms: 0.495056\n  type: 'test'\n  ...\n# Subtest: resolveEnforcement defaults to warn locally\nok 8 - resolveEnforcement defaults to warn locally\n  ---\n  duration_ms: 0.216354\n  type: 'test'\n  ...\n# Subtest: normalizeSummary zeroes timestamp and duration and sorts steps\nok 9 - normalizeSummary zeroes timestamp and duration and sorts steps\n  ---\n  duration_ms: 2.611451\n  type: 'test'\n  ...\n1..9\n# tests 9\n# suites 0\n# pass 9\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 401.066601\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n",
+      "startedAt": "2025-10-16T00:55:13.954Z",
+      "completedAt": "2025-10-16T00:55:14.797Z",
+      "durationMs": 834.96
     },
     {
       "command": "npm run semver:check",
       "exitCode": 0,
-      "stdout": "\n> compare-vi-cli-action@0.5.0 semver:check\n> node tools/priority/validate-semver.mjs\n\n{\n  \"schema\": \"priority/semver-check@v1\",\n  \"version\": \"0.5.0\",\n  \"valid\": true,\n  \"issues\": [],\n  \"checkedAt\": \"2025-10-16T00:37:54.529Z\"\n}",
-      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.",
-      "startedAt": "2025-10-16T00:37:54.180Z",
-      "completedAt": "2025-10-16T00:37:54.568Z",
-      "durationMs": 388
+      "stdout": "\n> compare-vi-cli-action@0.5.0 semver:check\n> node tools/priority/validate-semver.mjs\n\n{\n  \"schema\": \"priority/semver-check@v1\",\n  \"version\": \"0.5.0\",\n  \"valid\": true,\n  \"issues\": [],\n  \"checkedAt\": \"2025-10-16T00:55:15.178Z\"\n}\n",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n",
+      "startedAt": "2025-10-16T00:55:14.797Z",
+      "completedAt": "2025-10-16T00:55:15.226Z",
+      "durationMs": 422.517
+    },
+    {
+      "command": "node dist/tools/schemas/validate-json.js --schema docs/schema/generated/teststand-compare-session.schema.json --data tests/results/teststand-session/session-index.json",
+      "exitCode": 0,
+      "stdout": "[schema] Validated 1 file(s) against /workspace/compare-vi-cli-action/docs/schema/generated/teststand-compare-session.schema.json.\n",
+      "stderr": "",
+      "startedAt": "2025-10-16T00:55:15.226Z",
+      "completedAt": "2025-10-16T00:55:15.687Z",
+      "durationMs": 452.593
+    },
+    {
+      "command": "node dist/tools/schemas/validate-json.js --schema docs/schema/generated/lvcompare-capture.schema.json --data tests/results/teststand-session/compare/lvcompare-capture.json",
+      "exitCode": 0,
+      "stdout": "[schema] Validated 1 file(s) against /workspace/compare-vi-cli-action/docs/schema/generated/lvcompare-capture.schema.json.\n",
+      "stderr": "",
+      "startedAt": "2025-10-16T00:55:15.687Z",
+      "completedAt": "2025-10-16T00:55:16.117Z",
+      "durationMs": 422.292
     }
-  ],
-  "runner": {}
+  ]
 }
