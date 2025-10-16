@@ -14,6 +14,7 @@ const {
 const git = require('./lib/git');
 const telemetry = require('./lib/telemetry');
 const { createProviderSwitcher } = require('./lib/providerSwitcher');
+const { pickInitialProviderId } = require('./lib/providerSelection');
 const providerRegistry = require('./providers');
 const {
   registerProvider,
@@ -2118,11 +2119,19 @@ async function activate(context) {
   compareVIProviderRegistration.activate(context);
   gcliProviderRegistration.activate?.(context);
   const savedProviderId = getSavedActiveProviderId();
-  const initialProviderId = (savedProviderId && getProvider(savedProviderId))
-    ? savedProviderId
-    : compareVIProviderRegistration.id;
+  const providersMeta = listProviderMetadata();
+  const { id: initialProviderId, fallbackReason } = pickInitialProviderId(
+    savedProviderId,
+    providersMeta,
+    compareVIProviderRegistration.id
+  );
   await setActiveProvider(initialProviderId);
   persistActiveProviderId(getActiveProviderId());
+  if (savedProviderId && savedProviderId !== initialProviderId && fallbackReason) {
+    vscode.window.showWarningMessage(
+      `Provider '${savedProviderId}' is unavailable (${fallbackReason}). Using '${initialProviderId}'.`
+    );
+  }
 
   const providerWatcher = onDidChangeActiveProvider((activeId) => {
     persistActiveProviderId(activeId);
@@ -2164,7 +2173,8 @@ module.exports = {
     getProvider,
     setActiveProvider,
     getActiveProviderId,
-    getStoredActiveProviderId: () => getSavedActiveProviderId()
+    getStoredActiveProviderId: () => getSavedActiveProviderId(),
+    pickInitialProviderId
   }
 };
 
