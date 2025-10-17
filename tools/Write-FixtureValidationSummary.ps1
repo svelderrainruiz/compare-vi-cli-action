@@ -16,15 +16,28 @@ $delta = Get-JsonContent $DeltaJson
 if (-not $SummaryPath) { Write-Host 'No GITHUB_STEP_SUMMARY set; printing summary instead.' }
 
 $verbose = ($env:SUMMARY_VERBOSE -eq 'true')
-$lines = @('# Fixture Validation Summary')
+$lines = @('<!-- markdownlint-disable-next-line MD041 -->', '# Fixture Validation Summary')
 if ($validation) {
   $lines += ''
   $lines += '## Current Snapshot'
-  if ($validation.ok) { $lines += 'Status: OK' } else { $lines += 'Status: Issues Detected' }
+  if ($validation.ok) {
+    $lines += '- **Status:** OK'
+  } else {
+    $lines += '- **Status:** Issues Detected'
+  }
   if ($validation.summaryCounts) {
     $sc = $validation.summaryCounts
-    $lines += ('Counts: missing={0} untracked={1} tooSmall={2} hashMismatch={3} manifestError={4} duplicate={5} schema={6}' -f `
-      $sc.missing,$sc.untracked,$sc.tooSmall,$sc.hashMismatch,$sc.manifestError,$sc.duplicate,$sc.schema)
+    $lines += '- **Counts:**'
+    $lines += ('  - missing: {0}' -f $sc.missing)
+    $lines += ('  - untracked: {0}' -f $sc.untracked)
+    $lines += ('  - tooSmall: {0}' -f $sc.tooSmall)
+    if ($sc.PSObject.Properties.Name -contains 'sizeMismatch') {
+      $lines += ('  - sizeMismatch: {0}' -f $sc.sizeMismatch)
+    }
+    $lines += ('  - hashMismatch: {0}' -f $sc.hashMismatch)
+    $lines += ('  - manifestError: {0}' -f $sc.manifestError)
+    $lines += ('  - duplicate: {0}' -f $sc.duplicate)
+    $lines += ('  - schema: {0}' -f $sc.schema)
   }
 }
 if ($delta) {
@@ -33,12 +46,16 @@ if ($delta) {
   if ($delta.deltaCounts) {
     $pairs = @()
     foreach ($prop in $delta.deltaCounts.PSObject.Properties) { $pairs += ("{0}={1}" -f $prop.Name,$prop.Value) }
-    $lines += ('Changed Categories: ' + ($pairs -join ', '))
+    if ($pairs.Count -gt 0) {
+      $lines += ('- **Changed Categories:** ' + ($pairs -join ', '))
+    } else {
+      $lines += '- **Changed Categories:** _(none)_'
+    }
   } else {
-    $lines += 'Changed Categories: (none)'
+    $lines += '- **Changed Categories:** _(none)_'
   }
-  $lines += ('New Structural Issues: ' + $delta.newStructuralIssues.Count)
-  $lines += ('Will Fail: ' + $delta.willFail)
+  $lines += ('- **New Structural Issues:** {0}' -f $delta.newStructuralIssues.Count)
+  $lines += ('- **Will Fail:** {0}' -f $delta.willFail)
   if ($verbose -and $delta.newStructuralIssues.Count -gt 0) {
     $lines += ''
     $lines += '### New Structural Issues Detail'
