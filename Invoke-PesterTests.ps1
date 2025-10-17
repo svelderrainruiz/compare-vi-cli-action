@@ -183,6 +183,7 @@ if (-not $ArtifactGlobs -and $env:ARTIFACT_GLOBS) { $ArtifactGlobs = ($env:ARTIF
 if (-not $DetectLeaks) { $DetectLeaks = ($env:DETECT_LEAKS -eq '1') }
 
 [string]$__SingleInvokerRequested = if ($SingleInvoker) { '1' } elseif ($env:SINGLE_INVOKER -eq '1') { '1' } else { '0' }
+$disableSingleInvoker = Test-EnvTruthy $env:DISABLE_SINGLE_INVOKER
 if (-not $FailOnLeaks) { $FailOnLeaks = ($env:FAIL_ON_LEAKS -eq '1') }
 if (-not $LeakProcessPatterns -and $env:LEAK_PROCESS_PATTERNS) { $LeakProcessPatterns = ($env:LEAK_PROCESS_PATTERNS -split ';|,') }
 if ($env:LEAK_GRACE_SECONDS) {
@@ -711,7 +712,13 @@ if ($DetectLeaks) {
 }
 Write-Host ""
 
-if ($__SingleInvokerRequested -eq '1') {
+if ($disableSingleInvoker) {
+  if ($__SingleInvokerRequested -eq '1' -or $localDispatcherMode) {
+    Write-Host '::notice::Single-invoker disabled via DISABLE_SINGLE_INVOKER=1.' -ForegroundColor DarkGray
+  }
+  $script:UseSingleInvoker = $false
+}
+elseif ($__SingleInvokerRequested -eq '1') {
   try {
     $modPath = Join-Path $PSScriptRoot 'scripts/Pester-Invoker.psm1'
     if (-not (Test-Path -LiteralPath $modPath -PathType Leaf)) { $modPath = Join-Path $PSScriptRoot 'Pester-Invoker.psm1' }
