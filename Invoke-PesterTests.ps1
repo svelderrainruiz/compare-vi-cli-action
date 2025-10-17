@@ -155,6 +155,11 @@ param(
   [switch]$EmitIts
 )
 
+$dispatcherSelectionModule = Join-Path $PSScriptRoot 'tools' 'Dispatcher' 'TestSelection.psm1'
+if (Test-Path -LiteralPath $dispatcherSelectionModule) {
+  Import-Module $dispatcherSelectionModule -Force
+}
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -1318,28 +1323,23 @@ if ($limitToSingle) {
     $removedTag = $beforeTag - $testFiles.Count
     if ($removedTag -gt 0) { Write-Host ("Content pre-excluded {0} Integration-tagged file(s)." -f $removedTag) -ForegroundColor Cyan }
   }
-  # Apply IncludePatterns/ExcludePatterns if provided
-  function _Match-AnyPattern([IO.FileInfo]$file,[string[]]$patterns){
-    if (-not $patterns -or $patterns.Count -eq 0) { return $false }
-    foreach ($pat in $patterns) {
-      if (-not $pat) { continue }
-      $target = if ($pat -match '[\\/]') { $file.FullName } else { $file.Name }
-      if ($target -like $pat) { return $true }
-    }
-    return $false
+  # Apply IncludePatterns/ExcludePatterns if provided using shared selector logic
+  $patternFilters = Invoke-DispatcherIncludeExcludeFilter `
+    -Files $testFiles `
+    -IncludePatterns $IncludePatterns `
+    -ExcludePatterns $ExcludePatterns
+  $testFiles = @($patternFilters.Files)
+  if ($patternFilters.Include.Applied) {
+    $includePatternsText = if ($patternFilters.Include.Patterns) { ($patternFilters.Include.Patterns -join ', ') } else { '' }
+    Write-Host (
+      "Applied IncludePatterns ({0}) -> kept {1}/{2} file(s)" -f $includePatternsText, $patternFilters.Include.After, $patternFilters.Include.Before
+    ) -ForegroundColor DarkGray
   }
-  if ($IncludePatterns -and $IncludePatterns.Count -gt 0) {
-    $before = $testFiles.Count
-    $testFiles = @($testFiles | Where-Object { _Match-AnyPattern $_ $IncludePatterns })
-    $kept = $testFiles.Count
-    Write-Host ("Applied IncludePatterns ({0}) -> kept {1}/{2} file(s)" -f ($IncludePatterns -join ', '), $kept, $before) -ForegroundColor DarkGray
-  }
-  if ($ExcludePatterns -and $ExcludePatterns.Count -gt 0) {
-    $before = $testFiles.Count
-    $testFiles = @($testFiles | Where-Object { -not (_Match-AnyPattern $_ $ExcludePatterns) })
-    $kept = $testFiles.Count
-    $removed = $before - $kept
-    if ($removed -gt 0) { Write-Host ("Applied ExcludePatterns ({0}) -> removed {1} file(s)" -f ($ExcludePatterns -join ', '), $removed) -ForegroundColor DarkGray }
+  if ($patternFilters.Exclude.Applied -and $patternFilters.Exclude.Removed -gt 0) {
+    $excludePatternsText = if ($patternFilters.Exclude.Patterns) { ($patternFilters.Exclude.Patterns -join ', ') } else { '' }
+    Write-Host (
+      "Applied ExcludePatterns ({0}) -> removed {1} file(s)" -f $excludePatternsText, $patternFilters.Exclude.Removed
+    ) -ForegroundColor DarkGray
   }
   Write-Host "Found $originalTestFileCount test file(s) in tests directory" -ForegroundColor Green
   if ($MaxTestFiles -gt 0 -and $testFiles.Count -gt $MaxTestFiles) {
@@ -1351,6 +1351,39 @@ if ($limitToSingle) {
   $maxTestFilesApplied = ($MaxTestFiles -gt 0 -and $originalTestFileCount -gt $selectedTestFileCount)
 }
 
+$patternSelfTestSuppressed = $false
+$suppressPatternSelfTest = Test-EnvTruthy $env:SUPPRESS_PATTERN_SELFTEST
+if ($suppressPatternSelfTest)
+{
+  $patternSelfTestLeaf = 'Invoke-PesterTests.Patterns.Tests.ps1'
+  if (-not (Get-Variable -Name originalTestFileCount -Scope Script -ErrorAction SilentlyContinue))
+  {
+    $originalTestFileCount = $testFiles.Count
+  }
+
+  $suppressionResult = Invoke-DispatcherPatternSelfTestSuppression -Files $testFiles -PatternSelfTestLeaf $patternSelfTestLeaf -SingleTestFile $singleTestFile -LimitToSingle:$limitToSingle
+  $testFiles = @($suppressionResult.Files)
+  $removedBySuppress = $suppressionResult.Removed
+  if ($removedBySuppress -gt 0)
+  {
+    $patternSelfTestSuppressed = $true
+    Write-Host (
+      "[patterns] SUPPRESS_PATTERN_SELFTEST=1 removed {0} pattern self-test file(s) from execution." -f $removedBySuppress
+    ) -ForegroundColor DarkGray
+
+    if ($suppressionResult.SingleCleared)
+    {
+      Write-Host '[patterns] Clearing single-test selection for pattern self-test (suppressed).' -ForegroundColor DarkGray
+      $limitToSingle = $false
+      $singleTestFile = $null
+    }
+  }
+}
+
+if (-not (Get-Variable -Name maxTestFilesApplied -ErrorAction SilentlyContinue)) {
+  $maxTestFilesApplied = $false
+}
+
 if (-not (Get-Variable -Name originalTestFileCount -Scope Script -ErrorAction SilentlyContinue)) {
   $originalTestFileCount = $testFiles.Count
 }
@@ -1360,6 +1393,7 @@ if ($IncludePatterns -and $IncludePatterns.Count -gt 0) { [void]$selectionReason
 if ($ExcludePatterns -and $ExcludePatterns.Count -gt 0) { [void]$selectionReasons.Add('ExcludePatterns') }
 if ($maxTestFilesApplied) { [void]$selectionReasons.Add('MaxTestFiles') }
 if ($selectedTestPaths.Count -lt $originalTestFileCount) { [void]$selectionReasons.Add('SelectionReduced') }
+if ($patternSelfTestSuppressed) { [void]$selectionReasons.Add('SuppressPatternSelfTest') }
 
 # Early exit path when zero tests discovered: emit minimal artifacts for stable downstream handling
 if ($testFiles.Count -eq 0) {
