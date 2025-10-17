@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using CompareVi.Shared;
 
 internal static class Program
 {
+    private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
+
     private static int Main(string[] args)
     {
         try
@@ -74,7 +77,7 @@ internal static class Program
             ["framework"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             ["os"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
         };
-        Console.WriteLine(JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine(JsonSerializer.Serialize(obj, SerializerOptions));
         return 0;
     }
 
@@ -97,7 +100,7 @@ internal static class Program
             ["raw"] = tokens,
             ["normalized"] = normalized,
         };
-        Console.WriteLine(JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine(JsonSerializer.Serialize(obj, SerializerOptions));
         return 0;
     }
 
@@ -111,7 +114,7 @@ internal static class Program
             ["labviewCliPids"] = snap.LabViewCliPids,
             ["gcliPids"] = snap.GcliPids,
         };
-        Console.WriteLine(JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine(JsonSerializer.Serialize(obj, SerializerOptions));
         return 0;
     }
 
@@ -132,7 +135,7 @@ internal static class Program
             ["input"] = path,
             ["quoted"] = quoted,
         };
-        Console.WriteLine(JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine(JsonSerializer.Serialize(obj, SerializerOptions));
         return 0;
     }
 
@@ -167,20 +170,20 @@ internal static class Program
         if (namesOnly)
         {
             var payload = OperationCatalogFormatter.CreateOperationNamesPayload();
-            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(payload.ToJsonString(SerializerOptions));
             return 0;
         }
 
         if (string.IsNullOrEmpty(operationName))
         {
             var payload = OperationCatalogFormatter.CreateOperationsListPayload();
-            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(payload.ToJsonString(SerializerOptions));
             return 0;
         }
 
         if (OperationCatalogFormatter.TryCreateOperationPayload(operationName!, out var operationPayload))
         {
-            Console.WriteLine(operationPayload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(operationPayload.ToJsonString(SerializerOptions));
             return 0;
         }
 
@@ -220,24 +223,35 @@ internal static class Program
         if (namesOnly)
         {
             var payload = ProviderCatalogFormatter.CreateProviderNamesPayload();
-            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(payload.ToJsonString(SerializerOptions));
             return 0;
         }
 
         if (string.IsNullOrEmpty(providerName))
         {
             var payload = ProviderCatalogFormatter.CreateProvidersListPayload();
-            Console.WriteLine(payload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(payload.ToJsonString(SerializerOptions));
             return 0;
         }
 
         if (ProviderCatalogFormatter.TryCreateProviderPayload(providerName!, out var providerPayload))
         {
-            Console.WriteLine(providerPayload.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine(providerPayload.ToJsonString(SerializerOptions));
             return 0;
         }
 
         Console.Error.WriteLine($"Provider '{providerName}' was not found in the providers catalog.");
         return 3;
+    }
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            TypeInfoResolver = JsonTypeInfoResolver.Combine(new DefaultJsonTypeInfoResolver()),
+        };
+
+        return options;
     }
 }
