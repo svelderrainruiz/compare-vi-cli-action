@@ -64,6 +64,7 @@ Describe "{0}" {{
     $resolved | Should -Be @($script:expectedAlpha)
     $leafs = $resolved | ForEach-Object { Split-Path -Leaf $_ }
     $leafs | Should -Be @('Alpha.Unit.Tests.ps1')
+    $res.StdOut | Should -Not -Match 'Single-invoker mode'
     $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRoot))
   }
 
@@ -95,6 +96,7 @@ Describe "{0}" {{
     $leafs = $resolved | ForEach-Object { Split-Path -Leaf $_ }
     $leafs | Should -Not -Contain 'Gamma.Helper.ps1'
     ($leafs | Sort-Object) | Should -Be @('Alpha.Unit.Tests.ps1', 'Beta.Unit.Tests.ps1')
+    $res.StdOut | Should -Not -Match 'Single-invoker mode'
     $res.StdOut | Should -Match ([regex]::Escape($script:fixtureTestsRoot))
   }
 }

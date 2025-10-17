@@ -1,5 +1,7 @@
 # Paths to skip when loading context for Codex – these files are large or machine-generated
 node_modules/
+# VS Code helper extension bundles its own node_modules tree (keep Codex stream below limits)
+vscode/comparevi-helper/node_modules/
 logs/
 tmp-agg/
 tmp-orch/
