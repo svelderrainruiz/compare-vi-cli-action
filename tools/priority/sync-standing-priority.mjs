@@ -5,8 +5,139 @@ import * as path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { ProxyAgent } from 'undici';
 
 const USER_AGENT = 'compare-vi-cli-action/priority-sync';
+const PROXY_AGENT_CACHE = new Map();
+
+function toUrl(input) {
+  if (!input) return null;
+  if (input instanceof URL) return input;
+  try {
+    return new URL(String(input));
+  } catch {
+    return null;
+  }
+}
+
+function defaultPortForProtocol(protocol) {
+  if (protocol === 'http:') return '80';
+  if (protocol === 'https:') return '443';
+  return '';
+}
+
+function parseNoProxyList(value) {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.toLowerCase());
+}
+
+function extractHostAndPort(pattern) {
+  if (!pattern) return { host: '', port: null };
+  let host = pattern;
+  let port = null;
+
+  if (host.startsWith('[')) {
+    const closing = host.indexOf(']');
+    if (closing !== -1) {
+      const remainder = host.slice(closing + 1);
+      if (remainder.startsWith(':')) {
+        port = remainder.slice(1);
+      }
+      host = host.slice(1, closing);
+    }
+  } else {
+    const parts = host.split(':');
+    if (parts.length === 2) {
+      host = parts[0];
+      port = parts[1];
+    }
+  }
+
+  return { host: host.toLowerCase(), port: port ? port.trim() : null };
+}
+
+export function shouldBypassProxy(target) {
+  const url = toUrl(target);
+  if (!url) return false;
+
+  const rawNoProxy = process.env.NO_PROXY || process.env.no_proxy;
+  const entries = parseNoProxyList(rawNoProxy);
+  if (entries.length === 0) return false;
+
+  let hostname = url.hostname.toLowerCase();
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    hostname = hostname.slice(1, -1);
+  }
+  const port = url.port || defaultPortForProtocol(url.protocol);
+
+  for (const entry of entries) {
+    if (entry === '*') {
+      return true;
+    }
+
+    const { host: patternHost, port: patternPort } = extractHostAndPort(entry);
+    if (!patternHost) continue;
+
+    if (patternPort && patternPort !== port) {
+      continue;
+    }
+
+    if (patternHost.startsWith('.')) {
+      const suffix = patternHost.slice(1);
+      if (!suffix) continue;
+      if (hostname === suffix || hostname.endsWith(`.${suffix}`)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (hostname === patternHost) {
+      return true;
+    }
+
+    if (hostname.endsWith(`.${patternHost}`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function resolveProxyUrl(target) {
+  const url = toUrl(target);
+  if (!url) return null;
+  if (shouldBypassProxy(url)) return null;
+
+  const protocol = url.protocol;
+  const candidates =
+    protocol === 'http:'
+      ? ['HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy']
+      : protocol === 'https:'
+        ? ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy']
+        : ['ALL_PROXY', 'all_proxy', 'HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy'];
+
+  for (const key of candidates) {
+    const value = process.env[key];
+    if (value && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function getProxyDispatcher(target) {
+  const proxyUrl = resolveProxyUrl(target);
+  if (!proxyUrl) return null;
+  if (!PROXY_AGENT_CACHE.has(proxyUrl)) {
+    PROXY_AGENT_CACHE.set(proxyUrl, new ProxyAgent(proxyUrl));
+  }
+  return PROXY_AGENT_CACHE.get(proxyUrl);
+}
 
 function sh(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: 'utf8', shell: false, ...opts });
@@ -254,7 +385,12 @@ async function requestGitHubJson(url, token) {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(url, { headers });
+  if (typeof fetch !== 'function') {
+    throw new Error('Global fetch API unavailable in this Node.js runtime');
+  }
+
+  const dispatcher = getProxyDispatcher(url);
+  const response = await fetch(url, dispatcher ? { headers, dispatcher } : { headers });
   if (!response.ok) {
     const body = await response.text();
     const details = body?.trim() ? `: ${body.trim()}` : '';

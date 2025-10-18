@@ -107,6 +107,7 @@
     "slash": "^5.1.0",
     "to-regex-range": "^5.0.1",
     "uc.micro": "^2.1.0",
+    "undici": "^6.22.0",
     "undici-types": "^5.26.5",
     "unicorn-magic": "^0.1.0",
     "zod": "^3.25.76",
