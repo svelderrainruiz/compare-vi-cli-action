@@ -328,6 +328,8 @@ our workflows execute, so local runs mirror CI behaviour.
   `C:\github_token.txt`); the helper forwards it to the container without
   logging. Include this when prepping offline runs so
   `.agent_priority_cache.json` stays fresh without host dependencies.
+  Set `COMPAREVI_TOOLS_IMAGE=ghcr.io/labview-community-ci-cd/comparevi-tools:latest`
+  to use the published image instead of building locally.
 - **Integration (Standing Priority): Auto Push + Start + Watch**:
   `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` mirrors the
   `ci-orchestrated` standing-priority dispatcher + watcher; it pushes with the

@@ -26,7 +26,8 @@ line buffers).
      - `node tools/npm/run-script.mjs priority:sync:docker`
      Ensure a GitHub token is supplied via `GH_TOKEN`/`GITHUB_TOKEN` or `GH_TOKEN_FILE`
      (default `C:\github_token.txt`). The helper injects the token into the container
-     without writing it to logs.
+     without writing it to logs. Set `COMPAREVI_TOOLS_IMAGE=ghcr.io/labview-community-ci-cd/comparevi-tools:latest`
+     to use the published tools image instead of building locally.
   2. Review `.agent_priority_cache.json` / `tests/results/_agent/issue/` for tasks, acceptance, and
      linked PRs on the standing issue.
   3. Create or sync a working branch (`issue/<standing-number>-<slug>`), push minimal changes,
