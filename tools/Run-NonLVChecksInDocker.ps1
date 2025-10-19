@@ -23,6 +23,8 @@
   Skip the workflow drift check.
 .PARAMETER SkipDotnetCliBuild
   Skip building the CompareVI .NET CLI inside the dotnet SDK container (outputs to dist/comparevi-cli by default).
+.PARAMETER PrioritySync
+  Run standing-priority sync inside the tools container (requires GH_TOKEN or cached priority artifacts).
 .PARAMETER ExcludeWorkflowPaths
   Paths to omit from the workflow drift check (subset of the default targets).
 #>
@@ -33,6 +35,7 @@ param(
   [switch]$SkipWorkflow,
   [switch]$FailOnWorkflowDrift,
   [switch]$SkipDotnetCliBuild,
+  [switch]$PrioritySync,
   [string]$ToolsImageTag,
   [switch]$UseToolsImage,
   [string[]]$ExcludeWorkflowPaths
@@ -59,6 +62,13 @@ function Get-DockerHostPath {
 $hostPath = Get-DockerHostPath '.'
 $volumeSpec = "${hostPath}:/work"
 $commonArgs = @('--rm','-v', $volumeSpec,'-w','/work')
+$forwardKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($key in @('GH_TOKEN','GITHUB_TOKEN','HTTP_PROXY','HTTPS_PROXY','NO_PROXY','http_proxy','https_proxy','no_proxy')) {
+  $value = [Environment]::GetEnvironmentVariable($key)
+  if (-not [string]::IsNullOrWhiteSpace($value) -and $forwardKeys.Add($key)) {
+    $commonArgs += @('-e', "${key}=${value}")
+  }
+}
 # Forward git SHA when available for traceability
 $buildSha = $null
 try { $buildSha = (git rev-parse HEAD).Trim() } catch { $buildSha = $null }
@@ -132,16 +142,16 @@ if (-not $SkipDotnetCliBuild) {
     if (Test-Path -LiteralPath $cliOutput) {
       Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
     }
-    $publishCommand = @'
-rm -rf src/CompareVi.Shared/obj src/CompareVi.Tools.Cli/obj || true
-if [ -n "$BUILD_GIT_SHA" ]; then
-  IV="0.1.0+${BUILD_GIT_SHA}"
-else
-  IV="0.1.0+local"
-fi
-'@
-    $pubLine = 'dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:InformationalVersion="$IV"'
-    $publishCommand = $publishCommand + "`n" + $pubLine
+    $publishLines = @(
+      'rm -rf src/CompareVi.Shared/obj src/CompareVi.Tools.Cli/obj || true',
+      'if [ -n "$BUILD_GIT_SHA" ]; then',
+      '  IV="0.1.0+${BUILD_GIT_SHA}"',
+      'else',
+      '  IV="0.1.0+local"',
+      'fi',
+      ('dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:InformationalVersion="$IV"')
+    )
+    $publishCommand = ($publishLines -join "`n")
     # Build with official .NET SDK container to avoid file-permission quirks in tools image
     Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
       -Arguments @('bash','-lc',$publishCommand) `
@@ -202,6 +212,23 @@ python tools/workflows/update_workflows.py --check $targetsText
       Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
       exit 3
     }
+  }
+}
+
+if ($PrioritySync) {
+  $syncScript = 'git config --global --add safe.directory /work >/dev/null 2>&1 || true; node tools/npm/run-script.mjs priority:sync'
+  $ran = $false
+  if ($UseToolsImage -and $ToolsImageTag) {
+    $imageCheck = & docker image inspect $ToolsImageTag 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync (tools)' | Out-Null
+      $ran = $true
+    } else {
+      Write-Warning "Tools image '$ToolsImageTag' not found; falling back to node:20 for priority sync." 
+    }
+  }
+  if (-not $ran) {
+    Invoke-Container -Image 'node:20' -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync' | Out-Null
   }
 }
 

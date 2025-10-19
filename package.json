@@ -44,6 +44,7 @@
     "priority:bootstrap": "pwsh -NoLogo -NoProfile -File tools/priority/bootstrap.ps1",
     "priority:handoff": "pwsh -NoLogo -NoProfile -File tools/priority/Import-HandoffState.ps1",
     "priority:handoff-tests": "node tools/priority/run-handoff-tests.mjs",
+    "priority:sync:docker": "pwsh -NoLogo -NoProfile -File tools/Run-NonLVChecksInDocker.ps1 -ToolsImageTag comparevi-tools:local -UseToolsImage -PrioritySync -SkipActionlint -SkipMarkdown -SkipDocs -SkipWorkflow -SkipDotnetCliBuild",
     "priority:release": "pwsh -NoLogo -NoProfile -File tools/priority/Simulate-Release.ps1",
     "semver:check": "node tools/priority/validate-semver.mjs",
     "hooks:test": "node --test \"tools/hooks/__tests__/*.mjs\"",
