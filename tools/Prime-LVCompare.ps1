@@ -178,6 +178,24 @@ function Write-JsonFile {
   }
 }
 
+function Stop-NewProcessInstances {
+  param(
+    [Parameter(Mandatory)][string]$Name,
+    [int[]]$Baseline
+  )
+  try {
+    $current = @(Get-Process -Name $Name -ErrorAction SilentlyContinue)
+    foreach ($proc in $current) {
+      if ($Baseline -and ($Baseline -contains $proc.Id)) { continue }
+      try {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        try { $proc.WaitForExit(500) } catch {}
+        Write-Host ("Prime-LVCompare: stopped lingering {0}.exe PID {1}." -f $Name, $proc.Id) -ForegroundColor DarkGray
+      } catch {}
+    }
+  } catch {}
+}
+
 if ($IsWindows -ne $true) {
   Write-JsonEvent 'skip' @{ reason = 'non-windows' }
   return
@@ -201,6 +219,13 @@ if (-not [System.IO.Path]::IsPathRooted($trackerBaseDir)) {
 }
 $labviewPidTrackerPath = Join-Path $trackerBaseDir '_agent' 'labview-pid.json'
 Initialize-LabVIEWPidTracker
+
+$baselineLabVIEW = @()
+$baselineLVCompare = @()
+try { $baselineLabVIEW = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch { $baselineLabVIEW = @() }
+try { $baselineLVCompare = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch { $baselineLVCompare = @() }
+
+try {
 
 if (-not $BaseVi) {
   $BaseVi = if ($env:LV_BASE_VI) { $env:LV_BASE_VI } else { Join-Path $repoRoot 'VI1.vi' }
@@ -352,3 +377,7 @@ if ($labviewPidTrackerPath) {
 
 $result
 exit $exitCode
+} finally {
+  Stop-NewProcessInstances -Name 'LVCompare' -Baseline $baselineLVCompare
+  Stop-NewProcessInstances -Name 'LabVIEW' -Baseline $baselineLabVIEW
+}

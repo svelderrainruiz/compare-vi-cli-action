@@ -248,6 +248,8 @@ function Invoke-RunnerRequest {
           foreach ($prop in $req.args.PSObject.Properties) { $reqArgs[$prop.Name] = $prop.Value }
         }
       }
+      $removeSentinelAfterResponse = $null
+      $queueSentinelRemoval = $false
       $rspPath = Join-Path $rspDir ("{0}.json" -f $id)
       $handled = $false
       try {
@@ -459,7 +461,8 @@ function Invoke-RunnerRequest {
                   Add-Content -LiteralPath $reqLog -Value $autoNote2 -Encoding UTF8
                 } catch {}
                 $autoStopped = $true
-                try { Remove-Item -LiteralPath $SentinelPath -Force } catch {}
+                $removeSentinelAfterResponse = $SentinelPath
+                $queueSentinelRemoval = $true
                 try {
                   $autoFile2 = Join-Path $baseDir 'single-compare-autostop.json'
                   $autoObj2 = [pscustomobject]@{ schema='invoker-autostop/v1'; preview=$false; at=(Get-Date).ToUniversalTime().ToString('o') }
@@ -495,7 +498,10 @@ function Invoke-RunnerRequest {
             }
             'PhaseDone'     {
               $result = [pscustomobject]@{ done = $true }
-              if ($SentinelPath) { try { Remove-Item -LiteralPath $SentinelPath -Force } catch {} }
+              if ($SentinelPath) {
+                $removeSentinelAfterResponse = $SentinelPath
+                $queueSentinelRemoval = $true
+              }
               if ($writeTrackerContext) {
                 $phaseCtx = [ordered]@{
                   verb   = 'PhaseDone'
@@ -517,23 +523,27 @@ function Invoke-RunnerRequest {
           $completedEntry = @{ at=(Get-Date).ToUniversalTime().ToString('o'); verb=$verb; ok=$true; stage='completed' } | ConvertTo-Json -Compress
           Add-Content -LiteralPath $reqLog -Value $completedEntry -Encoding UTF8
         } catch {}
-        } catch {
-          Write-JsonFile -Path $rspPath -Obj @{ ok=$false; id=$id; verb=$verb; error=($_.ToString()) }
-          try {
-            $failedEntry = @{ at=(Get-Date).ToUniversalTime().ToString('o'); verb=$verb; ok=$false; stage='failed'; error=$_.ToString() } | ConvertTo-Json -Compress
-            Add-Content -LiteralPath $reqLog -Value $failedEntry -Encoding UTF8
-          } catch {}
-          if ($writeTrackerContext) {
-            $errorCtx = [ordered]@{
-              verb  = $verb
-              error = $_.ToString()
-            }
-            try { & $writeTrackerContext 'invoker:error' $errorCtx } catch {}
+      } catch {
+        Write-JsonFile -Path $rspPath -Obj @{ ok=$false; id=$id; verb=$verb; error=($_.ToString()) }
+        try {
+          $failedEntry = @{ at=(Get-Date).ToUniversalTime().ToString('o'); verb=$verb; ok=$false; stage='failed'; error=$_.ToString() } | ConvertTo-Json -Compress
+          Add-Content -LiteralPath $reqLog -Value $failedEntry -Encoding UTF8
+        } catch {}
+        if ($writeTrackerContext) {
+          $errorCtx = [ordered]@{
+            verb  = $verb
+            error = $_.ToString()
           }
-        } finally {
-          try { Remove-Item -LiteralPath $reqPath -Force } catch {}
+          try { & $writeTrackerContext 'invoker:error' $errorCtx } catch {}
+        }
+        $queueSentinelRemoval = $false
+      } finally {
+        try { Remove-Item -LiteralPath $reqPath -Force } catch {}
+        if ($queueSentinelRemoval -and $removeSentinelAfterResponse) {
+          try { Remove-Item -LiteralPath $removeSentinelAfterResponse -Force } catch {}
         }
       }
+    }
     Start-Sleep -Milliseconds $PollIntervalMs
   }
 }

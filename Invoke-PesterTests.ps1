@@ -3103,14 +3103,25 @@ try {
   } catch {}
   if ($candidates.Count -gt 0) {
     $latest = $candidates | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
-    # Copy the latest to the canonical filename
-    try { Copy-Item -LiteralPath $latest.FullName -Destination $destReport -Force; Write-Host ("Compare report copied to: {0}" -f $destReport) -ForegroundColor Gray } catch { Write-Warning "Failed to copy compare report: $_" }
+    # Copy the latest to the canonical filename (skip if it's already the canonical file)
+    try {
+      $destFullPath   = [System.IO.Path]::GetFullPath($destReport)
+      $latestFullPath = [System.IO.Path]::GetFullPath($latest.FullName)
+      if (-not [string]::Equals($latestFullPath, $destFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Copy-Item -LiteralPath $latest.FullName -Destination $destReport -Force
+        Write-Host ("Compare report copied to: {0}" -f $destReport) -ForegroundColor Gray
+      }
+    } catch { Write-Warning "Failed to copy compare report: $_" }
     # Also copy all candidates preserving their base filenames to the results directory
     foreach ($cand in ($candidates | Sort-Object LastWriteTimeUtc)) {
       try {
         $destName = (Split-Path -Leaf $cand.FullName)
         $destFull = Join-Path $resultsDir $destName
-        Copy-Item -LiteralPath $cand.FullName -Destination $destFull -Force -ErrorAction SilentlyContinue
+        $destFullPath   = [System.IO.Path]::GetFullPath($destFull)
+        $candFullPath   = [System.IO.Path]::GetFullPath($cand.FullName)
+        if (-not [string]::Equals($destFullPath, $candFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+          Copy-Item -LiteralPath $cand.FullName -Destination $destFull -Force -ErrorAction SilentlyContinue
+        }
       } catch { Write-Host "(warn) failed to copy extra report '$($cand.FullName)': $_" -ForegroundColor DarkYellow }
     }
     # Generate a small deterministic index HTML linking to all report variants
