@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "derive:env": "node dist/src/env/derive-env.js --json",
     "schema:validate": "tsc -p tsconfig.cli.json && node dist/tools/schemas/validate-json.js",
-    "schema:watcher:validate": "npm run schema:validate -- --schema docs/schema/watcher-telemetry.v1.schema.json --data tests/results/_agent/handoff/watcher-telemetry.json --optional",
+    "schema:watcher:validate": "npm run schema:validate -- --schema docs/schemas/watcher-telemetry.v1.schema.json --data tests/results/_agent/handoff/watcher-telemetry.json --optional",
     "session:teststand:validate": "npm run schema:validate -- --schema docs/schema/generated/teststand-compare-session.schema.json --data fixtures/teststand-session/session-index.json --data tests/results/teststand-session/session-index.json --optional",
     "generate:outputs": "node dist/generate-action-outputs.js",
     "schemas:generate": "tsc -p tsconfig.cli.json && node dist/tools/schemas/generate-schemas.js",

@@ -70,6 +70,12 @@ Notes:
 - Dedicated shim entry points follow the versioned pattern documented in
   [`docs/LabVIEWCliShimPattern.md`](./LabVIEWCliShimPattern.md) (current version: 1.0).
 
+## Schema locations
+
+- Static JSON Schemas live under `docs/schemas/` (including watcher telemetry at
+  `docs/schemas/watcher-telemetry.v1.schema.json`).
+- Generated schemas remain under `docs/schema/generated/`.
+
 ## Runbook & fixture reporting
 
 | Variable | Purpose |

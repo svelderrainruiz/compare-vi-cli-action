@@ -55,6 +55,8 @@ line buffers).
 - Containerized non-LV checks: `pwsh -File tools/Run-NonLVChecksInDocker.ps1`
 - Compare harnesses default to headless CLI runs (`LVCI_COMPARE_POLICY=cli-only`). Override with `lv-only` only when you
   explicitly need the LVCompare UI; otherwise leave it unset to avoid prompts and stuck LabVIEW instances.
+  - Note (scope): `LVCI_COMPARE_MODE`/`LVCI_COMPARE_POLICY` apply to harness/workflow helpers only. The composite
+    action always invokes LVCompare directly and does not honor these toggles.
 
 ## Coding style
 
@@ -113,15 +115,18 @@ line buffers).
 
 ## Required checks (develop)
 
-- Set `Validate` as a required status on `develop`. Optionally apply the same requirement to `main` per repository
-  policy.
+- Enforce the required statuses listed in `tools/policy/branch-required-checks.json` (contract source of truth). At
+  present these are: `Validate / lint`, `Validate / fixtures`, and `Validate / session-index`. Optionally apply the
+  same requirement to `main` per repository policy.
 - One-time GitHub CLI snippet (admin only):
 
   ```bash
   gh api repos/$REPO/branches/develop/protection \
     -X PUT \
     -f required_status_checks.strict=true \
-    -f required_status_checks.contexts[]=Validate \
+    -f required_status_checks.contexts[]='Validate / lint' \
+    -f required_status_checks.contexts[]='Validate / fixtures' \
+    -f required_status_checks.contexts[]='Validate / session-index' \
     -H "Accept: application/vnd.github+json"
   ```
 
