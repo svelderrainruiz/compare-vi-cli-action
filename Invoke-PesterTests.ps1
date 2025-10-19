@@ -3106,26 +3106,70 @@ try {
     # Copy the latest to the canonical filename (skip if it's already the canonical file)
     try {
       $normalizePath = {
-        param([string]$Path)
+        param(
+          [string]$Path,
+          [string]$BasePath = $null
+        )
+
         if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-        try {
-          $full = [System.IO.Path]::GetFullPath($Path)
-        } catch {
-          return $Path
+
+        $candidate = $Path
+        $basePath = if ([string]::IsNullOrWhiteSpace($BasePath)) { (Get-Location).ProviderPath } else { $BasePath }
+
+        if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+          try {
+            $candidate = [System.IO.Path]::Combine($basePath, $candidate)
+          } catch {
+            return $candidate
+          }
         }
-        if ($full.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
-          return ('\' + $full.Substring(7))
+
+        $attempts = @($candidate)
+        if (-not $candidate.StartsWith('\?\', [System.StringComparison]::OrdinalIgnoreCase)) {
+          if ($candidate.StartsWith('\', [System.StringComparison]::Ordinal)) {
+            $attempts += ('\?\UNC\' + $candidate.Substring(2))
+          } else {
+            $attempts += ('\?\' + $candidate)
+          }
         }
-        if ($full.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase)) {
-          return $full.Substring(4)
+
+        foreach ($probe in $attempts) {
+          try {
+            $full = [System.IO.Path]::GetFullPath($probe)
+            if ($full.StartsWith('\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+              return ('\' + $full.Substring(8))
+            }
+            if ($full.StartsWith('\?\', [System.StringComparison]::OrdinalIgnoreCase)) {
+              return $full.Substring(4)
+            }
+            return $full
+          } catch {
+          }
         }
-        return $full
+
+        return $candidate
       }
-      $destFullPath   = & $normalizePath $destReport
-      $latestFullPath = & $normalizePath $latest.FullName
-      if ($latestFullPath -and $destFullPath -and -not [string]::Equals($latestFullPath, $destFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-        Copy-Item -LiteralPath $latest.FullName -Destination $destReport -Force
-        Write-Host ("Compare report copied to: {0}" -f $destReport) -ForegroundColor Gray
+
+      $destFullPath   = & $normalizePath $destReport $root
+      $latestFullPath = & $normalizePath $latest.FullName $root
+      $shouldCopyLatest = $true
+      if ($latestFullPath -and $destFullPath) {
+        if ([string]::Equals($latestFullPath, $destFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+          $shouldCopyLatest = $false
+        }
+      }
+
+      if ($shouldCopyLatest) {
+        try {
+          Copy-Item -LiteralPath $latest.FullName -Destination $destReport -Force -ErrorAction Stop
+          Write-Host ("Compare report copied to: {0}" -f $destReport) -ForegroundColor Gray
+        } catch {
+          if ($_.Exception -and $_.Exception.Message -match 'Cannot overwrite .+ with itself') {
+            Write-Verbose 'Compare report already present at destination; skipping copy.'
+          } else {
+            Write-Warning "Failed to copy compare report: $_"
+          }
+        }
       }
     } catch { Write-Warning "Failed to copy compare report: $_" }
     # Also copy all candidates preserving their base filenames to the results directory
@@ -3133,10 +3177,24 @@ try {
       try {
         $destName = (Split-Path -Leaf $cand.FullName)
         $destFull = Join-Path $resultsDir $destName
-        $destFullPath   = & $normalizePath $destFull
-        $candFullPath   = & $normalizePath $cand.FullName
-        if ($destFullPath -and $candFullPath -and -not [string]::Equals($destFullPath, $candFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-          Copy-Item -LiteralPath $cand.FullName -Destination $destFull -Force -ErrorAction SilentlyContinue
+        $destFullPath   = & $normalizePath $destFull $root
+        $candFullPath   = & $normalizePath $cand.FullName $root
+        $shouldCopyCandidate = $true
+        if ($destFullPath -and $candFullPath) {
+          if ([string]::Equals($destFullPath, $candFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $shouldCopyCandidate = $false
+          }
+        }
+
+        if ($shouldCopyCandidate) {
+          try {
+            Copy-Item -LiteralPath $cand.FullName -Destination $destFull -Force -ErrorAction Stop
+          } catch {
+            if ($_.Exception -and $_.Exception.Message -match 'Cannot overwrite .+ with itself') {
+              continue
+            }
+            Write-Host "(warn) failed to copy extra report '$($cand.FullName)': $_" -ForegroundColor DarkYellow
+          }
         }
       } catch { Write-Host "(warn) failed to copy extra report '$($cand.FullName)': $_" -ForegroundColor DarkYellow }
     }
