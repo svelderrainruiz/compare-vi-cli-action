@@ -23,6 +23,8 @@
   Skip the workflow drift check.
 .PARAMETER SkipDotnetCliBuild
   Skip building the CompareVI .NET CLI inside the dotnet SDK container (outputs to dist/comparevi-cli by default).
+.PARAMETER PrioritySync
+  Run standing-priority sync inside the tools container (requires GH_TOKEN or cached priority artifacts).
 .PARAMETER ExcludeWorkflowPaths
   Paths to omit from the workflow drift check (subset of the default targets).
 #>
@@ -33,6 +35,7 @@ param(
   [switch]$SkipWorkflow,
   [switch]$FailOnWorkflowDrift,
   [switch]$SkipDotnetCliBuild,
+  [switch]$PrioritySync,
   [string]$ToolsImageTag,
   [switch]$UseToolsImage,
   [string[]]$ExcludeWorkflowPaths
@@ -43,6 +46,51 @@ $ErrorActionPreference = 'Stop'
 
 if (-not (Get-Command -Name 'docker' -ErrorAction SilentlyContinue)) {
   throw "Docker CLI not found. Install Docker Desktop or Docker Engine to run containerized checks."
+}
+
+function Resolve-GitHubToken {
+  $envToken = $env:GH_TOKEN
+  if (-not [string]::IsNullOrWhiteSpace($envToken)) { return $envToken.Trim() }
+
+  $envToken = $env:GITHUB_TOKEN
+  if (-not [string]::IsNullOrWhiteSpace($envToken)) { return $envToken.Trim() }
+
+  $candidatePaths = [System.Collections.Generic.List[string]]::new()
+  if (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN_FILE)) {
+    $candidatePaths.Add($env:GH_TOKEN_FILE)
+  }
+
+  if ($IsWindows) {
+    $candidatePaths.Add('C:\github_token.txt')
+  }
+
+  $userProfile = [Environment]::GetFolderPath('UserProfile')
+  if (-not [string]::IsNullOrWhiteSpace($userProfile)) {
+    $candidatePaths.Add((Join-Path $userProfile '.config/github-token'))
+    $candidatePaths.Add((Join-Path $userProfile '.github_token'))
+  }
+
+  $home = [Environment]::GetEnvironmentVariable('HOME')
+  if (-not [string]::IsNullOrWhiteSpace($home) -and $home -ne $userProfile) {
+    $candidatePaths.Add((Join-Path $home '.config/github-token'))
+    $candidatePaths.Add((Join-Path $home '.github_token'))
+  }
+
+  foreach ($path in $candidatePaths) {
+    if ([string]::IsNullOrWhiteSpace($path)) { continue }
+    try {
+      if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+      $line = Get-Content -LiteralPath $path -ErrorAction Stop | Where-Object { $_ -match '\S' } | Select-Object -First 1
+      if (-not [string]::IsNullOrWhiteSpace($line)) {
+        Write-Verbose ("[priority] Loaded GitHub token from {0}" -f $path)
+        return $line.Trim()
+      }
+    } catch {
+      Write-Verbose ("[priority] Failed to read token file {0}: {1}" -f $path, $_.Exception.Message)
+    }
+  }
+
+  return $null
 }
 
 function Get-DockerHostPath {
@@ -59,6 +107,18 @@ function Get-DockerHostPath {
 $hostPath = Get-DockerHostPath '.'
 $volumeSpec = "${hostPath}:/work"
 $commonArgs = @('--rm','-v', $volumeSpec,'-w','/work')
+$forwardKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($key in @('GH_TOKEN','GITHUB_TOKEN','HTTP_PROXY','HTTPS_PROXY','NO_PROXY','http_proxy','https_proxy','no_proxy')) {
+  $value = [Environment]::GetEnvironmentVariable($key)
+  if (-not [string]::IsNullOrWhiteSpace($value) -and $forwardKeys.Add($key)) {
+    $commonArgs += @('-e', "${key}=${value}")
+  }
+}
+$resolvedGitHubToken = Resolve-GitHubToken
+if (-not [string]::IsNullOrWhiteSpace($resolvedGitHubToken)) {
+  if ($forwardKeys.Add('GH_TOKEN')) { $commonArgs += @('-e', "GH_TOKEN=$resolvedGitHubToken") }
+  if ($forwardKeys.Add('GITHUB_TOKEN')) { $commonArgs += @('-e', "GITHUB_TOKEN=$resolvedGitHubToken") }
+}
 # Forward git SHA when available for traceability
 $buildSha = $null
 try { $buildSha = (git rev-parse HEAD).Trim() } catch { $buildSha = $null }
@@ -132,16 +192,16 @@ if (-not $SkipDotnetCliBuild) {
     if (Test-Path -LiteralPath $cliOutput) {
       Remove-Item -LiteralPath $cliOutput -Recurse -Force -ErrorAction SilentlyContinue
     }
-    $publishCommand = @'
-rm -rf src/CompareVi.Shared/obj src/CompareVi.Tools.Cli/obj || true
-if [ -n "$BUILD_GIT_SHA" ]; then
-  IV="0.1.0+${BUILD_GIT_SHA}"
-else
-  IV="0.1.0+local"
-fi
-'@
-    $pubLine = 'dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:InformationalVersion="$IV"'
-    $publishCommand = $publishCommand + "`n" + $pubLine
+    $publishLines = @(
+      'rm -rf src/CompareVi.Shared/obj src/CompareVi.Tools.Cli/obj || true',
+      'if [ -n "$BUILD_GIT_SHA" ]; then',
+      '  IV="0.1.0+${BUILD_GIT_SHA}"',
+      'else',
+      '  IV="0.1.0+local"',
+      'fi',
+      ('dotnet publish "' + $projectPath + '" -c Release -nologo -o "' + $cliOutput + '" -p:UseAppHost=false -p:InformationalVersion="$IV"')
+    )
+    $publishCommand = ($publishLines -join "`n")
     # Build with official .NET SDK container to avoid file-permission quirks in tools image
     Invoke-Container -Image 'mcr.microsoft.com/dotnet/sdk:8.0' `
       -Arguments @('bash','-lc',$publishCommand) `
@@ -202,6 +262,15 @@ python tools/workflows/update_workflows.py --check $targetsText
       Write-Host 'Workflow drift detected (enforced).' -ForegroundColor Red
       exit 3
     }
+  }
+}
+
+if ($PrioritySync) {
+  $syncScript = 'git config --global --add safe.directory /work >/dev/null 2>&1 || true; node tools/npm/run-script.mjs priority:sync'
+  if ($UseToolsImage -and $ToolsImageTag) {
+    Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync (tools)' | Out-Null
+  } else {
+    Invoke-Container -Image 'node:20' -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync' | Out-Null
   }
 }
 

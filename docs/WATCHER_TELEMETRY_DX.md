@@ -41,7 +41,7 @@ Design notes describing how automation (agents, scripts, CI summaries) should su
 - **Handoff JSON snapshot**
   - Persist the raw status payload to `tests/results/_agent/handoff/watcher-telemetry.json`.
   - Include the command timestamp and any trim action metadata for downstream tools.
-  - Validate against `docs/schema/watcher-telemetry.v1.schema.json` when running schema checks.
+  - Validate against `docs/schemas/watcher-telemetry.v1.schema.json` when running schema checks.
 
 ## Response Template
 
