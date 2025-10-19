@@ -321,8 +321,13 @@ our workflows execute, so local runs mirror CI behaviour.
   the same job using per-tool containers when the unified image is unavailable.
 - **Run Priority Sync (Tools Image)**: `node tools/npm/run-script.mjs
   priority:sync:docker` executes the standing-priority sync inside the tools
-  container (for planes without Node). Include this when prepping offline runs
-  so `.agent_priority_cache.json` stays fresh without host dependencies.
+  container (for planes without Node). Build the tools image first
+  (`tools/Build-ToolsImage.ps1`) so gh CLI is available; the helper falls back
+  to `node:20` automatically if the image is missing. Ensure a token is
+  available via `GH_TOKEN`/`GITHUB_TOKEN` or `GH_TOKEN_FILE` (default
+  `C:\github_token.txt`); the helper forwards it to the container without
+  logging. Include this when prepping offline runs so
+  `.agent_priority_cache.json` stays fresh without host dependencies.
 - **Integration (Standing Priority): Auto Push + Start + Watch**:
   `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` mirrors the
   `ci-orchestrated` standing-priority dispatcher + watcher; it pushes with the

@@ -56,12 +56,13 @@ function Resolve-GitHubToken {
   if (-not [string]::IsNullOrWhiteSpace($envToken)) { return $envToken.Trim() }
 
   $candidatePaths = [System.Collections.Generic.List[string]]::new()
+
   if (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN_FILE)) {
     $candidatePaths.Add($env:GH_TOKEN_FILE)
   }
 
   if ($IsWindows) {
-    $candidatePaths.Add('C:\github_token.txt')
+    $candidatePaths.Add('C:\\github_token.txt')
   }
 
   $userProfile = [Environment]::GetFolderPath('UserProfile')
@@ -70,23 +71,27 @@ function Resolve-GitHubToken {
     $candidatePaths.Add((Join-Path $userProfile '.github_token'))
   }
 
-  $home = [Environment]::GetEnvironmentVariable('HOME')
-  if (-not [string]::IsNullOrWhiteSpace($home) -and $home -ne $userProfile) {
-    $candidatePaths.Add((Join-Path $home '.config/github-token'))
-    $candidatePaths.Add((Join-Path $home '.github_token'))
+  $homePath = [Environment]::GetEnvironmentVariable('HOME')
+  if (-not [string]::IsNullOrWhiteSpace($homePath) -and $homePath -ne $userProfile) {
+    $candidatePaths.Add((Join-Path $homePath '.config/github-token'))
+    $candidatePaths.Add((Join-Path $homePath '.github_token'))
   }
 
-  foreach ($path in $candidatePaths) {
-    if ([string]::IsNullOrWhiteSpace($path)) { continue }
+  foreach ($candidate in $candidatePaths) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
     try {
-      if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
-      $line = Get-Content -LiteralPath $path -ErrorAction Stop | Where-Object { $_ -match '\S' } | Select-Object -First 1
+      if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+      $line = Get-Content -LiteralPath $candidate -ErrorAction Stop |
+        Where-Object { $_ -match '\S' } |
+        Select-Object -First 1
       if (-not [string]::IsNullOrWhiteSpace($line)) {
-        Write-Verbose ("[priority] Loaded GitHub token from {0}" -f $path)
+        Write-Verbose ("[priority] Loaded GitHub token from {0}" -f $candidate)
         return $line.Trim()
       }
     } catch {
-      Write-Verbose ("[priority] Failed to read token file {0}: {1}" -f $path, $_.Exception.Message)
+      if ($_.Exception -isnot [System.IO.FileNotFoundException]) {
+        Write-Verbose ("[priority] Failed to read token file {0}: {1}" -f $candidate, $_.Exception.Message)
+      }
     }
   }
 
@@ -168,7 +173,22 @@ function Invoke-Container {
   $labelText = if ($Label) { $Label } else { $Image }
   Write-Host ("[docker] {0}" -f $labelText) -ForegroundColor Cyan
   $cmd = @('docker','run') + $commonArgs + @($Image) + $Arguments
-  Write-Host ("`t" + ($cmd -join ' ')) -ForegroundColor DarkGray
+  $displayCmd = New-Object System.Collections.Generic.List[string]
+  for ($i = 0; $i -lt $cmd.Count; $i++) {
+    $arg = $cmd[$i]
+    if ($arg -eq '-e' -and $i + 1 -lt $cmd.Count) {
+      $next = $cmd[$i + 1]
+      if ($next -like 'GH_TOKEN=*' -or $next -like 'GITHUB_TOKEN=*') {
+        $displayCmd.Add($arg)
+        $prefix = $next.Split('=')[0]
+        $displayCmd.Add("$prefix=***")
+        $i++
+        continue
+      }
+    }
+    $displayCmd.Add($arg)
+  }
+  Write-Host ("`t" + ($displayCmd.ToArray() -join ' ')) -ForegroundColor DarkGray
   & docker run @commonArgs $Image @Arguments
   $code = $LASTEXITCODE
   if ($AcceptExitCodes -notcontains $code) {
@@ -267,9 +287,17 @@ python tools/workflows/update_workflows.py --check $targetsText
 
 if ($PrioritySync) {
   $syncScript = 'git config --global --add safe.directory /work >/dev/null 2>&1 || true; node tools/npm/run-script.mjs priority:sync'
+  $ran = $false
   if ($UseToolsImage -and $ToolsImageTag) {
-    Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync (tools)' | Out-Null
-  } else {
+    $imageCheck = & docker image inspect $ToolsImageTag 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      Invoke-Container -Image $ToolsImageTag -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync (tools)' | Out-Null
+      $ran = $true
+    } else {
+      Write-Warning "Tools image '$ToolsImageTag' not found; falling back to node:20 for priority sync." 
+    }
+  }
+  if (-not $ran) {
     Invoke-Container -Image 'node:20' -Arguments @('bash','-lc',$syncScript) -Label 'priority-sync' | Out-Null
   }
 }
