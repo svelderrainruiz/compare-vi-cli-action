@@ -24,6 +24,9 @@ line buffers).
      - `pwsh -NoLogo -NoProfile -File tools/Run-NonLVChecksInDocker.ps1 -ToolsImageTag comparevi-tools:local
        -UseToolsImage -PrioritySync -SkipActionlint -SkipMarkdown -SkipDocs -SkipWorkflow -SkipDotnetCliBuild`
      - `node tools/npm/run-script.mjs priority:sync:docker`
+     Ensure a GitHub token is supplied via `GH_TOKEN`/`GITHUB_TOKEN` or `GH_TOKEN_FILE`
+     (default `C:\github_token.txt`). The helper injects the token into the container
+     without writing it to logs.
   2. Review `.agent_priority_cache.json` / `tests/results/_agent/issue/` for tasks, acceptance, and
      linked PRs on the standing issue.
   3. Create or sync a working branch (`issue/<standing-number>-<slug>`), push minimal changes,
