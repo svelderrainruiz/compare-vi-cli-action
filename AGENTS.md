@@ -17,7 +17,7 @@ line buffers).
 - Default behaviour:
   - Operate inside this repository unless the human asks otherwise.
   - Keep workflows deterministic and green.
-  - Reference `#127` in commit and PR descriptions.
+  - Reference the current standing-priority issue (e.g., `#<standing-number>`) in commit and PR descriptions.
 - First actions in a session:
   1. `node tools/npm/run-script.mjs priority:sync` to refresh the standing-priority snapshot and router
      artifacts.
@@ -60,7 +60,9 @@ line buffers).
 
 - PowerShell 7+, Pester v5+. Match surrounding indentation (2–4 spaces).
 - Avoid nested `pwsh`; use in-process execution or `ProcessStartInfo` with `UseShellExecute=false`.
-- Call **LVCompare** only (canonical path under Program Files). Do not launch `LabVIEW.exe` directly.
+- For local scripts and non-harness flows, call **LVCompare** (canonical path under Program Files). Do not launch
+  `LabVIEW.exe` directly. The automation defaults to the LabVIEW CLI path for headless capture; avoid starting the
+  LabVIEW UI.
 - CI is non-interactive; avoid prompts and pop-ups.
 
 ## Testing guidelines
@@ -85,7 +87,7 @@ line buffers).
 
 ## Commits & PRs
 
-- Keep commits focused; include `#127` in subjects.
+- Keep commits focused; include `#<standing-number>` in subjects.
 - PRs should describe rationale, list affected workflows, and link to artifacts.
 - Ensure CI is green (lint + Pester). Verify no lingering processes on self-hosted runners.
 
@@ -107,7 +109,7 @@ line buffers).
   - Warns on inline `-f` and dot-sourcing.
   - Blocks on analyzer errors.
 - `tools/hooks/commit-msg.sample`
-  - Enforces subject ≤100 characters and issue reference (e.g., `(#127)`) unless `WIP`.
+  - Enforces subject ≤100 characters and an issue reference (e.g., `(#123)`) unless `WIP`.
 
 ## Required checks (develop/main)
 
@@ -187,7 +189,7 @@ Use `tools/workflows/update_workflows.py` for mechanical updates (comment-preser
   `priority:test`, `hooks:test`, and `semver:check`, then writes `tests/results/_agent/handoff/test-summary.json` so
   subsequent agents (or CI summaries) can replay the outcomes.
 
-## Fast path for issue #127
+## Fast path for standing-priority flows (historical: #127)
 
 - PR comment dispatch: `/run orchestrated single include_integration=true sample_id=<id>`
 - CLI dispatch: `pwsh -File tools/Dispatch-WithSample.ps1 ci-orchestrated.yml -Ref develop -IncludeIntegration true`

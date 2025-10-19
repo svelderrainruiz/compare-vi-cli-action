@@ -50,7 +50,7 @@ Artefacts: `tests/results/pester-leak-report.json`, `tests/results/pester-artifa
 | Variable | Purpose |
 | -------- | ------- |
 | `LVCI_COMPARE_MODE` | Select compare mechanism: `labview-cli` or `lvcompare` |
-| `LVCI_COMPARE_POLICY` | Mode policy: `lv-first` (default), `cli-first`, `cli-only`, `lv-only` |
+| `LVCI_COMPARE_POLICY` | Mode policy: `cli-only` (default), `cli-first`, `lv-first`, `lv-only` |
 | `LABVIEW_CLI_PATH` | Optional override for `LabVIEWCLI.exe` (defaults below) |
 
 Notes:

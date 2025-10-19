@@ -1,0 +1,71 @@
+name: LabVIEW CLI Compare
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_on_diff:
+        description: 'Fail the job when differences are detected'
+        required: false
+        default: 'true'
+        type: choice
+        options: ['true','false']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli-compare:
+    runs-on: [self-hosted, Windows, X64]
+    env:
+      # Headless + safe UI behaviour
+      LV_SUPPRESS_UI: '1'
+      LV_NO_ACTIVATE: '1'
+      LV_CURSOR_RESTORE: '1'
+      # Prefer CLI capture for deterministic, headless compare
+      LVCI_COMPARE_MODE: labview-cli
+      LVCI_COMPARE_POLICY: cli-only
+      # Enable cleanup at the end of the job
+      UNBLOCK_GUARD: '1'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate LabVIEW CLI presence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $defaultCli = 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
+          $cli = $env:LABVIEW_CLI_PATH
+          if ([string]::IsNullOrWhiteSpace($cli)) { $cli = $defaultCli }
+          if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
+            Write-Host "::error::LabVIEWCLI.exe not found. Checked: $cli"
+            Write-Host 'Install LabVIEW 2025 Q3 or later (includes LabVIEW CLI), or set LABVIEW_CLI_PATH.'
+            exit 1
+          }
+          "cli=$cli" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run LabVIEW CLI Compare
+        id: compare
+        uses: ./
+        with:
+          base: VI1.vi
+          head: VI2.vi
+          fail-on-diff: ${{ inputs.fail_on_diff || 'true' }}
+
+      - name: Runner Unblock Guard
+        if: always()
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/runner-unblock-snapshot.json
+          cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
+
+      - name: Echo outputs
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "diff      = ${{ steps.compare.outputs.diff }}"
+          Write-Host "exitCode  = ${{ steps.compare.outputs.exitCode }}"
+          Write-Host "cliPath   = ${{ steps.compare.outputs.cliPath }}"
+          Write-Host "command   = ${{ steps.compare.outputs.command }}"
+

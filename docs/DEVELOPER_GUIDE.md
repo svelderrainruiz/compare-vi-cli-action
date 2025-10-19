@@ -21,7 +21,7 @@ Artifacts land in `tests/results/` (JSON summaries, XML, loop logs).
 ## Building & linting
 
 ```powershell
-npm ci
+node tools/npm/cli.mjs ci
 node tools/npm/run-script.mjs build
 node tools/npm/run-script.mjs generate:outputs
 node tools/npm/run-script.mjs lint            # markdownlint + custom checks

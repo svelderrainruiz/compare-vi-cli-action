@@ -250,10 +250,9 @@ then rerun the VS Code task to verify fixes.
 - **Fixture Drift** - verifies fixture manifests and retains comparison evidence.
 - **VI Binary Gate** - ensures LabVIEW binaries remain normalized.
 - **Markdownlint** - runs `node tools/npm/run-script.mjs lint:md:changed` with the trimmed configuration below.
-- **UI/Dispatcher Smoke** - non-required quick pass of dispatcher/UI paths without invoking LVCompare (label `ui-smoke`
-  or manual dispatch).
-- **LabVIEW CLI Compare** - non-required experiment that invokes LabVIEW CLI `CreateComparisonReport` with canonical
-  fixtures (requires LabVIEW 2025+).
+- **Smoke (label)** - quick PR-label-triggered compare using canonical fixtures; see `.github/workflows/smoke-on-label.yml`.
+- **LabVIEW CLI Compare** - manually triggered experiment that invokes LabVIEW CLI `CreateComparisonReport` with
+  canonical fixtures (requires LabVIEW 2025+); see `.github/workflows/labview-cli-compare.yml`.
 
 Explore `.github/workflows` for matrices, inputs, and dispatch helpers.
 
@@ -275,14 +274,14 @@ node tools/npm/run-script.mjs lint:md:changed
 | Action usage | `docs/USAGE_GUIDE.md` |
 | Fixture drift | `docs/FIXTURE_DRIFT.md` |
 | Loop mode | `docs/COMPARE_LOOP_MODULE.md` |
-| Preflight validator & UI smoke | See README (this section) and `.github/workflows/ui-smoke.yml` |
+| Preflight validator & smoke | See README (this section) and `.github/workflows/smoke-on-label.yml` |
 | Integration runbook | `docs/INTEGRATION_RUNBOOK.md` |
 | Troubleshooting | `docs/TROUBLESHOOTING.md` |
 | Traceability (requirements ↔ tests) | `docs/TRACEABILITY_GUIDE.md` |
 
 ## Contributing
 
-1. Branch from `develop`, run `npm ci`.
+1. Branch from `develop`, run `node tools/npm/cli.mjs ci`.
 2. Execute tests (`./Invoke-PesterTests.ps1` or watcher-assisted workflows).
 3. Lint (`node tools/npm/run-script.mjs lint:md:changed`, `tools/Check-ClangFormat.ps1` if relevant).
 4. Submit a PR referencing the standing-priority issue and include rationale plus artifacts.
@@ -315,7 +314,7 @@ our workflows execute, so local runs mirror CI behaviour.
 - **Integration (Standing Priority): Auto Push + Start + Watch**:
   `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` mirrors the
   `ci-orchestrated` standing-priority dispatcher + watcher; it pushes with the
-  admin token, resolves issue [#127](https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/127),
+  admin token, resolves the current standing-priority issue,
   dispatches, then streams logs via the Docker watcher.
 
 Keeping these green locally prevents surprises when Validate or the orchestrated pipeline runs in CI.
