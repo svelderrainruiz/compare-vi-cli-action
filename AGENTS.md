@@ -20,7 +20,10 @@ line buffers).
   - Reference the current standing-priority issue (e.g., `#<standing-number>`) in commit and PR descriptions.
 - First actions in a session:
   1. `node tools/npm/run-script.mjs priority:sync` to refresh the standing-priority snapshot and router
-     artifacts.
+     artifacts. When Node isn't available on the host plane, use the Docker fallback:
+     - `pwsh -NoLogo -NoProfile -File tools/Run-NonLVChecksInDocker.ps1 -PrioritySync -SkipActionlint
+       -SkipMarkdown -SkipDocs -SkipWorkflow -SkipDotnetCliBuild`
+     - `node tools/npm/run-script.mjs priority:sync:docker`
   2. Review `.agent_priority_cache.json` / `tests/results/_agent/issue/` for tasks, acceptance, and
      linked PRs on the standing issue.
   3. Create or sync a working branch (`issue/<standing-number>-<slug>`), push minimal changes,
