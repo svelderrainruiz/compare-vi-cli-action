@@ -53,13 +53,42 @@ function Get-CanonicalCliCandidates {
 
 function Resolve-Cli {
   param(
-    [string]$Explicit
+    [string]$Explicit,
+    [ValidateSet('Auto','x64','x86')] [string]$PreferredBitness = 'Auto'
   )
+  $preference = $PreferredBitness
+  if ($preference -eq 'Auto' -and $env:LVCOMPARE_BITNESS) {
+    $envPref = $env:LVCOMPARE_BITNESS.Trim()
+    if ($envPref) {
+      switch -Regex ($envPref) {
+        '^(?i:(x86|32))$' { $preference = 'x86'; break }
+        '^(?i:(x64|64))$' { $preference = 'x64'; break }
+      }
+    }
+  }
   $candidates = Get-CanonicalCliCandidates
 
   function Normalize-Path([string]$PathValue) {
     if ([string]::IsNullOrWhiteSpace($PathValue)) { return $PathValue }
     try { return (Resolve-Path -LiteralPath $PathValue -ErrorAction Stop).Path } catch { return $PathValue }
+  }
+
+  $isX86Path = {
+    param($path)
+    if ([string]::IsNullOrWhiteSpace($path)) { return $false }
+    return ($path -match '(?i)\\Program Files \(x86\)\\')
+  }
+
+  if ($preference -eq 'x86') {
+    $preferred = @($candidates | Where-Object { & $isX86Path $_ })
+    $fallback = @($candidates | Where-Object { -not (& $isX86Path $_) })
+    $combined = @($preferred + $fallback)
+    $candidates = @($combined | Select-Object -Unique)
+  } elseif ($preference -eq 'x64') {
+    $preferred = @($candidates | Where-Object { -not (& $isX86Path $_) })
+    $fallback = @($candidates | Where-Object { & $isX86Path $_ })
+    $combined = @($preferred + $fallback)
+    $candidates = @($combined | Select-Object -Unique)
   }
 
   $formattedList = [string]::Join(', ', $candidates)
@@ -68,7 +97,7 @@ function Resolve-Cli {
     $resolvedExplicit = Normalize-Path $Explicit
     $match = $candidates | Where-Object { $_ -ieq $resolvedExplicit }
     if ($match) {
-      $target = $match[0]
+      $target = @($match)[0]
       if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $target" }
       return $target
     }
@@ -79,7 +108,7 @@ function Resolve-Cli {
     $resolvedEnv = Normalize-Path $env:LVCOMPARE_PATH
     $matchEnv = $candidates | Where-Object { $_ -ieq $resolvedEnv }
     if ($matchEnv) {
-      $targetEnv = $matchEnv[0]
+      $targetEnv = @($matchEnv)[0]
       if (-not (Test-Path -LiteralPath $targetEnv -PathType Leaf)) { throw "LVCompare.exe not found at canonical path: $targetEnv" }
       return $targetEnv
     }
@@ -219,6 +248,7 @@ function Invoke-CompareVI {
     [Parameter(Mandatory)] [string] $Base,
     [Parameter(Mandatory)] [string] $Head,
     [string] $LvComparePath,
+    [ValidateSet('Auto','x64','x86')] [string] $LvCompareBitness = 'Auto',
     [string] $LvCompareArgs = '',
     [string] $WorkingDirectory = '',
     [bool] $FailOnDiff = $true,
@@ -230,6 +260,7 @@ function Invoke-CompareVI {
   )
 
   $pushed = $false
+  $bitnessPreference = $LvCompareBitness
   if ($WorkingDirectory) {
     if (-not (Test-Path -LiteralPath $WorkingDirectory)) { throw "working-directory not found: $WorkingDirectory" }
     Push-Location -LiteralPath $WorkingDirectory; $pushed = $true
@@ -238,6 +269,7 @@ function Invoke-CompareVI {
   $lvcomparePid = $null
 
   try {
+    $cwd = (Get-Location).Path
     if ([string]::IsNullOrWhiteSpace($Base)) { throw "Input 'base' is required and cannot be empty" }
     if ([string]::IsNullOrWhiteSpace($Head)) { throw "Input 'head' is required and cannot be empty" }
     if (-not (Test-Path -LiteralPath $Base -PathType Any)) { throw "Base path not found: $Base" }
@@ -257,11 +289,52 @@ function Invoke-CompareVI {
     $headLeaf = Split-Path -Leaf $headAbs
     if ($baseLeaf -ieq $headLeaf -and $baseAbs -ne $headAbs) { throw "LVCompare limitation: Cannot compare two VIs sharing the same filename '$baseLeaf' located in different directories. Rename one copy or provide distinct filenames. Base=$baseAbs Head=$headAbs" }
 
+    if ($baseAbs -eq $headAbs) {
+      $result = [pscustomobject]@{
+        Base                        = $baseAbs
+        Head                        = $headAbs
+        Cwd                         = $cwd
+        CliPath                     = ''
+        Command                     = ''
+        ExitCode                    = 0
+        Diff                        = $false
+        CompareDurationSeconds      = 0
+        CompareDurationNanoseconds  = 0
+        ShortCircuitedIdenticalPath = $true
+      }
+      if ($GitHubOutputPath) {
+        "exitCode=0" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+        "cliPath="   | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+        "command="   | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+        "diff=false" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+        "shortCircuitedIdentical=true" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+        "compareDurationSeconds=0" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+        "compareDurationNanoseconds=0" | Out-File -FilePath $GitHubOutputPath -Append -Encoding utf8
+      }
+      if ($GitHubStepSummaryPath) {
+        $summaryLines = @(
+          '### Compare VI',
+          "- Working directory: $cwd",
+          "- Base: $baseAbs",
+          "- Head: $headAbs",
+          "- CLI: (short-circuited)",
+          "- Command: (short-circuited)",
+          "- Exit code: 0",
+          "- Diff: false",
+          "- Duration (s): 0",
+          "- Duration (ns): 0",
+          "- Short-circuited: true"
+        )
+        ($summaryLines -join "`n") | Out-File -FilePath $GitHubStepSummaryPath -Append -Encoding utf8
+      }
+      return $result
+    }
+
     # Resolve LVCompare path. In preview mode, bypass file existence checks to allow unit tests
     if ($PreviewArgs) {
       $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
     } else {
-      $cli = if ($LvComparePath) { (Resolve-Cli -Explicit $LvComparePath) } else { (Resolve-Cli) }
+      $cli = if ($LvComparePath) { (Resolve-Cli -Explicit $LvComparePath -PreferredBitness $bitnessPreference) } else { (Resolve-Cli -PreferredBitness $bitnessPreference) }
     }
     $cliArgs = @()
     if ($LvCompareArgs) {
@@ -277,19 +350,37 @@ function Invoke-CompareVI {
       }
     } catch {}
 
-    # Validate only flags that require a value; allow other flags to pass through
+    # Validate flags: allow a known set of LVCompare switches; enforce value where required
     $argsArr = @($cliArgs)
     if ($argsArr -and $argsArr.Count -gt 0) {
+      $flagPolicy = @{
+        '-noattr'   = 'none'
+        '-nofp'     = 'none'
+        '-nofppos'  = 'none'
+        '-nobd'     = 'none'
+        '-nobdcosm' = 'none'
+        '-lvpath'   = 'value'
+        '--flag'    = 'value'
+        '--a'       = 'value'
+        '--b'       = 'value'
+        '--c'       = 'none'
+        '--log'     = 'value'
+      }
       for ($i = 0; $i -lt $argsArr.Count; $i++) {
         $tok = [string]$argsArr[$i]
         if (-not $tok) { continue }
         if ($tok.StartsWith('-')) {
           # Ignore Pester-injected scaffolding tokens that can surface in ForEach name expansion
           if ($tok -match '^-_+Pester:') { continue }
-          if ($tok -ieq '-lvpath') {
-            if ($i -ge $argsArr.Count - 1) { throw "Invalid LVCompare args: -lvpath requires a following path value" }
+          $policyKey = $tok.ToLowerInvariant()
+          if (-not $flagPolicy.ContainsKey($policyKey)) { throw ("Invalid LVCompare flag: {0}" -f $tok) }
+          $policy = $flagPolicy[$policyKey]
+          if ($policy -eq 'value') {
+            $requiresMessage = if ($policyKey -eq '-lvpath') { "Invalid LVCompare args: -lvpath requires a following path value" } else { "Invalid LVCompare args: {0} requires a following value" -f $tok }
+            $mustFollowMessage = if ($policyKey -eq '-lvpath') { "Invalid LVCompare args: -lvpath must be followed by a path value" } else { "Invalid LVCompare args: {0} must be followed by a value" -f $tok }
+            if ($i -ge $argsArr.Count - 1) { throw $requiresMessage }
             $next = [string]$argsArr[$i+1]
-            if (-not $next -or $next.StartsWith('-')) { throw "Invalid LVCompare args: -lvpath must be followed by a path value" }
+            if (-not $next -or $next.StartsWith('-')) { throw $mustFollowMessage }
             $i++
           }
         }
@@ -300,7 +391,6 @@ function Invoke-CompareVI {
     if ($argsArr -and $argsArr.Count -gt 0) { $cmdline += ' ' + (($argsArr | ForEach-Object { Quote $_ }) -join ' ') }
     if ($PreviewArgs) { return $cmdline }
 
-    $cwd = (Get-Location).Path
     # Notice helper
     function Write-LVNotice([hashtable]$h) {
       try {
@@ -499,4 +589,4 @@ function Invoke-CompareVI {
   }
 }
 
-Export-ModuleMember -Function Invoke-CompareVI, Resolve-Cli
+Export-ModuleMember -Function Invoke-CompareVI, Resolve-Cli, Get-CanonicalCliCandidates
