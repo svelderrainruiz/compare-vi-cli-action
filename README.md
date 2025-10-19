@@ -62,23 +62,27 @@ jobs:
 
 ### Optional: LabVIEW CLI compare mode
 
+Note (scope): The composite action always invokes LVCompare directly and does not honor `LVCI_COMPARE_MODE` or
+`LVCI_COMPARE_POLICY`. The LabVIEW CLI path and policy selection apply to the harness/workflow helpers (for example,
+`cli-compare.yml`, TestStand/dispatcher wrappers), not to the composite action itself.
+
 Set `LVCI_COMPARE_MODE=labview-cli` (and `LABVIEW_CLI_PATH` if the CLI isn't on the canonical path) to invoke
 `LabVIEWCLI.exe CreateComparisonReport` instead of the standalone LVCompare executable. The action keeps the LVCompare
 path as the required comparator; the CLI path is delivered via the new non-required `cli-compare.yml` workflow for
 experimental runs. The CLI wrapper accepts `LVCI_CLI_FORMAT` (XML/HTML/TXT/DOCX), `LVCI_CLI_EXTRA_ARGS` for additional
 flags (for example `--noDependencies`), and honors `LVCI_CLI_TIMEOUT_SECONDS` (default 120).
 
-Use `LVCI_COMPARE_POLICY` to direct how automation chooses between LVCompare and LabVIEW CLI. The automation now
-defaults to `cli-only` when the variable is unset so the compare flow remains headless. Set the variable explicitly if
-you need a different behaviour.
+Use `LVCI_COMPARE_POLICY` to direct how the harness chooses between LVCompare and LabVIEW CLI. When using harness flows,
+the default is `cli-only` so compares remain headless. Set the variable explicitly if you need a different behaviour.
 
 - `cli-only` (default) – run via LabVIEW CLI and fail if CLI capture fails.
 - `cli-first` – attempt CLI first, fall back to LVCompare on recoverable CLI failures (missing report, parse errors).
 - `lv-first` – prefer LVCompare; only run CLI when explicitly requested via `LVCI_COMPARE_MODE`.
 - `lv-only` – enforce LVCompare only.
 
-When the base and head VIs share the same filename (typical commit-to-commit compares), automation continues to use the
-CLI path (unless `lv-only` is explicitly configured) and skips warmup to avoid launching LabVIEW UI windows.
+When the base and head VIs share the same filename (typical commit-to-commit compares), use the CLI-based harness
+flows. The composite action does not support comparing two different files that share the same filename; LVCompare will
+reject that case.
 
 CLI-only quick start (64-bit Windows):
 
@@ -218,18 +222,22 @@ Prompts:
 - Include integration: `true`/`false`.
 - Ref: `develop` (default) or current branch.
 
-#### Deterministic two-phase pipeline
+#### Orchestrated pipeline (current)
 
-`ci-orchestrated.yml` executes as a deterministic two-phase flow:
+`ci-orchestrated.yml` runs a deterministic chain with guarded branches:
 
-1. `phase-vars` (self-hosted Windows) writes `tests/results/_phase/vars.json` with a digest (`tools/Write-
-   PhaseVars.ps1`).
-2. `pester-unit` consumes the manifest and runs Unit-only tests with `DETERMINISTIC=1` (no retries or cleanup).
-3. `pester-integration` runs Integration-only tests (gated on unit success and the include flag) using
-   `-OnlyIntegration`.
+1. `normalize` (ubuntu) – normalizes inputs (e.g., `include_integration`) and writes run provenance.
+2. `lint` (ubuntu) – actionlint, docs lint, non‑LV checks in Docker; builds/validates the CLI when present; emits
+   watcher sanity and checksums.
+3. `preflight` (windows‑latest) – hosted Windows health/notice gate; LVCompare presence is informational here.
+4. `probe` (self‑hosted Windows) – interactivity probe to decide single vs. matrix fallback.
+5. `pester-category` (self‑hosted Windows, matrix) – runs category suites with leak/artifact tracking and merges
+   watcher/session index summaries.
+6. `windows-single` (self‑hosted Windows, conditional) – interactive single‑job path that warms up LabVIEW, runs the
+   categories serially, generates a traceability matrix, executes fixture drift, and posts session index/closure
+   crumbs.
 
-The manifest is validated with `tools/Validate-PhaseVars.ps1` and exported through `tools/Export-PhaseVars.ps1`. Each
-phase uploads dedicated artifacts (`pester-unit-*`, `pester-integration-*`, `invoker-boot-*`).
+Explore `.github/workflows/ci-orchestrated.yml` for full details and parameters.
 
 #### Docker-based lint/validation
 
@@ -376,14 +384,17 @@ Key features:
 
 For local development:
 
-1. Run `npm install` inside `vscode/comparevi-helper`.
+1. Inside this repository, prefer the sanitized wrapper to install dependencies: `node tools/npm/cli.mjs install` (or
+   `node tools/npm/cli.mjs --prefix vscode/comparevi-helper install`). This avoids proxy warnings from
+   `npm_config_http_proxy`. If you are working outside this repo, `npm install` is fine.
 2. From VS Code, run **Debug: Start Debugging** on the extension to launch a dev host.
 3. `node tools/npm/run-script.mjs test:unit` and `node tools/npm/run-script.mjs test:ext` validate provider registry
    behaviour, telemetry, multi-root flows, and UI wiring.
 
 Packaging notes:
 
-1. Development: run `npm install` then press `F5` (Debug: Start Debugging) from VS Code to side-load the extension.
+1. Development: use `node tools/npm/cli.mjs install` (or `--prefix vscode/comparevi-helper`) then press `F5`
+   (Debug: Start Debugging) from VS Code to side‑load the extension.
 2. Optional VSIX: install `vsce` locally and run `node tools/npm/run-script.mjs --prefix vscode/comparevi-helper
    package`; install the resulting VSIX via “Extensions: Install from VSIX...” if you prefer a self-contained bundle
    instead of running the debug host.

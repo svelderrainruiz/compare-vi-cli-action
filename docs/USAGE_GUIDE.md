@@ -125,3 +125,11 @@ Short-circuit detection (`base == head`):
 - [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) – leak detection, recovery, environment setup.
 - [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE.md) – local testing and build commands.
 - [`ENVIRONMENT.md`](./ENVIRONMENT.md) – environment variables for loop mode, leaks, fixtures.
+
+## Composite action limitations
+
+- The composite action always invokes LVCompare directly; it does not honor `LVCI_COMPARE_MODE` or
+  `LVCI_COMPARE_POLICY`. Those toggles apply to harness/workflow helpers only.
+- LVCompare cannot compare two different files that share the same filename (e.g., `.../A/Thing.vi` vs
+  `.../B/Thing.vi`). The composite action will surface this limitation. Use the CLI‑based harness workflows if you need
+  to handle same‑filename compares (they generate an HTML report via LabVIEW CLI).

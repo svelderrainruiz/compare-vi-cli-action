@@ -55,6 +55,8 @@ Artefacts: `tests/results/pester-leak-report.json`, `tests/results/pester-artifa
 
 Notes:
 
+- Scope: these toggles apply to harness and workflow helpers (e.g., `cli-compare.yml`, TestStand/dispatcher wrappers)
+  and do not affect the composite action. The composite action always invokes LVCompare.
 - On 64-bit Windows hosts, automation defaults the CLI path to:
   `C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe` when
   no CLI path overrides are set.

@@ -12,7 +12,9 @@ the entire workspace repeatedly until the stream cap trips.
 ## Evidence
 
 - The VS Code helper extension depends on the local action via `"compare-vi-cli-action": "file:../.."` in
-  `vscode/comparevi-helper/package.json`. `npm install` materialises that dependency as a symlink that
+  `vscode/comparevi-helper/package.json`. When working inside this repository, prefer
+  `node tools/npm/cli.mjs install` to materialise dependencies (avoids proxy warnings); `npm install` remains fine
+  outside this repo. The install creates a symlink that
   targets the repository root.
 - Inspecting the installed package shows the symlink:
 
@@ -33,7 +35,7 @@ the entire workspace repeatedly until the stream cap trips.
   the `vscode/comparevi-helper/node_modules/compare-vi-cli-action/` symlink. This prevents Codex from attempting
   to resolve the loop during workspace ingestion.
 - If Codex still follows the symlink despite the ignore list, temporarily remove or rename the dependency link
-  before starting Codex (`rm vscode/comparevi-helper/node_modules/compare-vi-cli-action`). Re-run
-  `npm install` after the Codex session to restore the local package link.
+  before starting Codex (`rm vscode/comparevi-helper/node_modules/compare-vi-cli-action`). Re‑run
+  `node tools/npm/cli.mjs install` (or `npm install`) after the Codex session to restore the local package link.
 - Longer term, replace the file-based dependency with a published tarball or workspace protocol once the helper
   extension is stable. Eliminating the symlink removes the recursion hazard entirely.

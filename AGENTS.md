@@ -111,9 +111,10 @@ line buffers).
 - `tools/hooks/commit-msg.sample`
   - Enforces subject ≤100 characters and an issue reference (e.g., `(#123)`) unless `WIP`.
 
-## Required checks (develop/main)
+## Required checks (develop)
 
-- Set `Validate` as a required status on `develop`.
+- Set `Validate` as a required status on `develop`. Optionally apply the same requirement to `main` per repository
+  policy.
 - One-time GitHub CLI snippet (admin only):
 
   ```bash
