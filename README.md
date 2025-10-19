@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run LVCompare
-        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@main
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.5.0
         with:
           base: fixtures/VI1.vi
           head: fixtures/VI2.vi
@@ -319,6 +319,10 @@ our workflows execute, so local runs mirror CI behaviour.
   environment while building the CLI artifact.
 - **Run Non-LV Checks (Docker)**: `tools/Run-NonLVChecksInDocker.ps1` mirrors
   the same job using per-tool containers when the unified image is unavailable.
+- **Run Priority Sync (Tools Image)**: `node tools/npm/run-script.mjs
+  priority:sync:docker` executes the standing-priority sync inside the tools
+  container (for planes without Node). Include this when prepping offline runs
+  so `.agent_priority_cache.json` stays fresh without host dependencies.
 - **Integration (Standing Priority): Auto Push + Start + Watch**:
   `tools/Start-IntegrationGated.ps1 -AutoPush -Start -Watch` mirrors the
   `ci-orchestrated` standing-priority dispatcher + watcher; it pushes with the

@@ -1,27 +1,78 @@
 # syntax=docker/dockerfile:1
-# Unified tools image for non-LV checks and CLI build
-# Base: .NET SDK 8 (Debian), then add Node + markdownlint-cli2, Python 3 + ruamel.yaml, PowerShell 7, actionlint, jq
+# Unified tools image for non-LV checks, CLI build, and standing-priority sync flows.
+# Base: .NET SDK 8 (Debian). Adds Node 20, PowerShell 7, Python + ruamel.yaml, actionlint,
+# markdownlint tooling, GitHub CLI, jq, curl/git, and pre-populated NuGet caches for offline builds.
+
+ARG NODE_VERSION=20.18.0
+ARG ACTIONLINT_VERSION=1.7.7
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS restore
+WORKDIR /tmp/restore
+COPY Directory.Build.props ./
+COPY src/CompareVi.Shared/CompareVi.Shared.csproj src/CompareVi.Shared/
+COPY src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj src/CompareVi.Tools.Cli/
+RUN dotnet restore src/CompareVi.Tools.Cli/CompareVi.Tools.Cli.csproj
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS base
 
+ARG NODE_VERSION
+ARG ACTIONLINT_VERSION
+
 ENV DEBIAN_FRONTEND=noninteractive \
-    ACTIONLINT_VERSION=1.7.7
+    NODE_VERSION=${NODE_VERSION} \
+    ACTIONLINT_VERSION=${ACTIONLINT_VERSION}
+
+COPY --from=restore /root/.nuget /root/.nuget
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-    curl ca-certificates gnupg apt-transport-https \
-    python3 python3-pip jq \
-    nodejs npm \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
+    jq \
+    python3 \
+    python3-pip \
+    unzip \
+    xz-utils \
  && rm -rf /var/lib/apt/lists/* \
  && ln -s /usr/bin/python3 /usr/local/bin/python
 
+# Install Node.js (pinned) from official binaries
+RUN set -eux; \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz; \
+    mkdir -p /usr/local/lib/nodejs; \
+    tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs; \
+    ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin/node /usr/local/bin/node; \
+    ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin/npm /usr/local/bin/npm; \
+    ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin/npx /usr/local/bin/npx; \
+    rm -f /tmp/node.tar.xz
+
+# Install GitHub CLI
+RUN set -eux; \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | tee /usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gh; \
+    rm -rf /var/lib/apt/lists/*
+
 # Install PowerShell 7 (Microsoft repo)
 RUN set -eux; \
-    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/microsoft.gpg >/dev/null; \
-    echo "deb [arch=amd64] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/microsoft-prod.list; \
-    apt-get update && apt-get install -y --no-install-recommends powershell && rm -rf /var/lib/apt/lists/*
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor \
+      | tee /etc/apt/trusted.gpg.d/microsoft.gpg >/dev/null; \
+    echo "deb [arch=amd64] https://packages.microsoft.com/debian/12/prod bookworm main" \
+      > /etc/apt/sources.list.d/microsoft-prod.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends powershell; \
+    rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g markdownlint-cli2@0.12.1 markdownlint-cli@0.31.1
+# Global npm tooling for markdown linting
+RUN npm install -g markdownlint-cli2@0.14.0 markdownlint-cli@0.31.1 \
+ && ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin/markdownlint /usr/local/bin/markdownlint \
+ && ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin/markdownlint-cli2 /usr/local/bin/markdownlint-cli2
 
 # Python ruamel.yaml for workflow drift checks
 RUN python3 -m pip install --break-system-packages --no-cache-dir --upgrade pip \
@@ -39,6 +90,8 @@ RUN set -eux; \
     tar -C /usr/local/bin -xzf /tmp/actionlint.tar.gz actionlint; \
     rm -f /tmp/actionlint.tar.gz; \
     actionlint -version
+
+ENV PATH="/usr/local/lib/nodejs/node-v${NODE_VERSION}-linux-x64/bin:${PATH}"
 
 WORKDIR /work
 RUN useradd -m -u 1000 dev || true
