@@ -70,6 +70,12 @@ Notes:
 - Dedicated shim entry points follow the versioned pattern documented in
   [`docs/LabVIEWCliShimPattern.md`](./LabVIEWCliShimPattern.md) (current version: 1.0).
 
+## Tooling helpers
+
+| Variable | Purpose |
+| -------- | ------- |
+| `COMPAREVI_TOOLS_IMAGE` | Default image tag for `tools/Run-NonLVChecksInDocker.ps1` when `-UseToolsImage` is supplied without `-ToolsImageTag` (for example, `ghcr.io/labview-community-ci-cd/comparevi-tools:latest`). |
+
 ## Schema locations
 
 - Static JSON Schemas live under `docs/schemas/` (including watcher telemetry at

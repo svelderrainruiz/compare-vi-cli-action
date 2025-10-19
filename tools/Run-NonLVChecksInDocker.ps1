@@ -25,6 +25,9 @@
   Skip building the CompareVI .NET CLI inside the dotnet SDK container (outputs to dist/comparevi-cli by default).
 .PARAMETER PrioritySync
   Run standing-priority sync inside the tools container (requires GH_TOKEN or cached priority artifacts).
+.NOTES
+  Environment variables:
+    - COMPAREVI_TOOLS_IMAGE: Default image tag when -UseToolsImage is supplied without -ToolsImageTag.
 .PARAMETER ExcludeWorkflowPaths
   Paths to omit from the workflow drift check (subset of the default targets).
 #>
@@ -227,6 +230,10 @@ if (-not $SkipDotnetCliBuild) {
       -Arguments @('bash','-lc',$publishCommand) `
       -Label 'dotnet-cli-build (sdk)'
   }
+}
+
+if ($UseToolsImage -and -not $ToolsImageTag -and $env:COMPAREVI_TOOLS_IMAGE) {
+  $ToolsImageTag = $env:COMPAREVI_TOOLS_IMAGE
 }
 
 if ($UseToolsImage -and $ToolsImageTag) {
