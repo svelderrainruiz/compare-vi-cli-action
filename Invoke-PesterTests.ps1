@@ -3105,9 +3105,25 @@ try {
     $latest = $candidates | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
     # Copy the latest to the canonical filename (skip if it's already the canonical file)
     try {
-      $destFullPath   = [System.IO.Path]::GetFullPath($destReport)
-      $latestFullPath = [System.IO.Path]::GetFullPath($latest.FullName)
-      if (-not [string]::Equals($latestFullPath, $destFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+      $normalizePath = {
+        param([string]$Path)
+        if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+        try {
+          $full = [System.IO.Path]::GetFullPath($Path)
+        } catch {
+          return $Path
+        }
+        if ($full.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase)) {
+          return ('\' + $full.Substring(7))
+        }
+        if ($full.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase)) {
+          return $full.Substring(4)
+        }
+        return $full
+      }
+      $destFullPath   = & $normalizePath $destReport
+      $latestFullPath = & $normalizePath $latest.FullName
+      if ($latestFullPath -and $destFullPath -and -not [string]::Equals($latestFullPath, $destFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
         Copy-Item -LiteralPath $latest.FullName -Destination $destReport -Force
         Write-Host ("Compare report copied to: {0}" -f $destReport) -ForegroundColor Gray
       }
@@ -3117,9 +3133,9 @@ try {
       try {
         $destName = (Split-Path -Leaf $cand.FullName)
         $destFull = Join-Path $resultsDir $destName
-        $destFullPath   = [System.IO.Path]::GetFullPath($destFull)
-        $candFullPath   = [System.IO.Path]::GetFullPath($cand.FullName)
-        if (-not [string]::Equals($destFullPath, $candFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $destFullPath   = & $normalizePath $destFull
+        $candFullPath   = & $normalizePath $cand.FullName
+        if ($destFullPath -and $candFullPath -and -not [string]::Equals($destFullPath, $candFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
           Copy-Item -LiteralPath $cand.FullName -Destination $destFull -Force -ErrorAction SilentlyContinue
         }
       } catch { Write-Host "(warn) failed to copy extra report '$($cand.FullName)': $_" -ForegroundColor DarkYellow }
