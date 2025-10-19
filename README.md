@@ -3,6 +3,7 @@
 
 [![Validate][badge-validate]][workflow-validate] [![Smoke][badge-smoke]][workflow-smoke]
 [![Mock Tests][badge-mock]][workflow-test-mock] [![Docs][badge-docs]][environment-docs]
+[![Tools Image][badge-tools-image]][package-tools-image]
 
 [badge-validate]: https://img.shields.io/github/actions/workflow/status/LabVIEW-Community-CI-CD/compare-vi-cli-action/validate.yml?label=Validate
 [workflow-validate]: https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/validate.yml
@@ -12,6 +13,8 @@
 [workflow-test-mock]: https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/workflows/test-mock.yml
 [badge-docs]: https://img.shields.io/badge/docs-Environment%20Vars-6A5ACD
 [environment-docs]: ./docs/ENVIRONMENT.md
+[badge-tools-image]: https://img.shields.io/badge/tools%20image-ghcr.io%2Flabview--community--ci--cd%2Fcomparevi--tools-6A5ACD
+[package-tools-image]: https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/pkgs/container/comparevi-tools
 
 ## Overview
 
