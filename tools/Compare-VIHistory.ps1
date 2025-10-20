@@ -7,6 +7,7 @@ param(
   [string]$InvokeScriptPath,
   [switch]$FailOnDiff,
   [switch]$IncludeIdenticalPairs,
+  [ValidateSet('skip','abort')][string]$MissingStrategy = 'skip',
   [switch]$Quiet
 )
 
@@ -128,6 +129,18 @@ function Resolve-ViRelativePath {
   return $chosen
 }
 
+function Get-ViPathOptional {
+  param(
+    [Parameter(Mandatory = $true)][string]$ViName,
+    [Parameter(Mandatory = $true)][string]$Ref
+  )
+  try {
+    return Resolve-ViRelativePath -ViName $ViName -Refs @($Ref)
+  } catch {
+    return $null
+  }
+}
+
 $repoRoot = (Get-Location).Path
 $compareScript = Join-Path $repoRoot 'tools' 'Compare-RefsToTemp.ps1'
 if (-not (Test-Path -LiteralPath $compareScript -PathType Leaf)) {
@@ -136,10 +149,16 @@ if (-not (Test-Path -LiteralPath $compareScript -PathType Leaf)) {
 
 Invoke-Git -Arguments @('rev-parse', '--is-inside-work-tree') > $null
 
-$resolvedPath = Resolve-ViRelativePath -ViName $ViName -Refs @($Branch)
-Write-Verbose "Resolved VI path: $resolvedPath"
+$branchPath = Get-ViPathOptional -ViName $ViName -Ref $Branch
+if (-not $branchPath) {
+  $message = "VI '$ViName' not found on branch/ref '$Branch'."
+  if ($MissingStrategy -eq 'abort') { throw $message }
+  Write-Host "$message Nothing to compare."
+  exit 0
+}
+Write-Verbose "Resolved VI path at branch tip: $branchPath"
 
-$logArgs = @('log', '--follow', '--format=%H', $Branch, '--', $resolvedPath)
+$logArgs = @('log', '--follow', '--format=%H', $Branch, '--', $branchPath)
 $commitList = @(Invoke-Git -Arguments $logArgs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 Write-Verbose ("Commit hashes (newest first): {0}" -f ($commitList -join ', '))
 $commitCount = Get-ItemCount $commitList
@@ -150,22 +169,50 @@ if ($commitCount -lt 2) {
 }
 
 if ($MaxPairs -lt 1) { $MaxPairs = 1 }
-$desiredCount = [Math]::Min((Get-ItemCount $commitList), $MaxPairs + 1)
-$commitTotal = Get-ItemCount $commitList
-if (-not $Quiet) {
-  Write-Host "Found $commitTotal commits touching $ViName (using last $desiredCount for history scan)."
+$targetPairs = $MaxPairs
+$desiredCommits = $targetPairs + 1
+$commitInfo = @()
+$commitsWithVi = @()
+
+foreach ($sha in $commitList) {
+  $pathOpt = Get-ViPathOptional -ViName $ViName -Ref $sha
+  $info = [pscustomobject]@{
+    Commit = $sha
+    Path   = $pathOpt
+    HasVi  = [bool]$pathOpt
+  }
+  $commitInfo += $info
+  if ($info.HasVi) { $commitsWithVi += $info }
+  if ($commitsWithVi.Count -ge $desiredCommits) { break }
 }
-$recentCommits = @($commitList | Select-Object -Last $desiredCount)
-[array]::Reverse($recentCommits)
+
+if ($MissingStrategy -eq 'abort' -and ($commitInfo | Where-Object { -not $_.HasVi }).Count -gt 0) {
+  throw "Missing VI '$ViName' detected in commit window (strategy=abort)."
+}
+
+if (-not $Quiet) {
+  $windowSha = $commitInfo | ForEach-Object { $_.Commit }
+  Write-Host ("Evaluated commit window (newest->oldest): {0}" -f ($windowSha -join ', '))
+}
+
+$commitsWithViChrono = @($commitsWithVi.Clone())
+[array]::Reverse($commitsWithViChrono)
+Write-Verbose ("Commits with VI (oldest->newest): {0}" -f ($commitsWithViChrono.Commit -join ', '))
+
+if ($commitsWithViChrono.Count -lt 2) {
+  Write-Host "No commit pairs with '$ViName' present; nothing to compare."
+  exit 0
+}
+
+$commitsWithViChrono = $commitsWithViChrono | Select-Object -First $desiredCommits
 $pairs = @()
-$recentCommitCount = Get-ItemCount $recentCommits
-Write-Verbose ("Recent commit window (oldest->newest): {0}" -f ($recentCommits -join ', '))
-Write-Verbose ("Recent commit count: {0}" -f $recentCommitCount)
-for ($i = 0; $i -lt $recentCommitCount - 1; $i++) {
+for ($i = 0; $i -lt $commitsWithViChrono.Count - 1; $i++) {
   $pairs += [pscustomobject]@{
     Index = $i
-    RefA  = $recentCommits[$i]
-    RefB  = $recentCommits[$i + 1]
+    RefA  = $commitsWithViChrono[$i].Commit
+    PathA = $commitsWithViChrono[$i].Path
+    RefB  = $commitsWithViChrono[$i + 1].Commit
+    PathB = $commitsWithViChrono[$i + 1].Path
   }
 }
 
@@ -174,6 +221,42 @@ if (-not $Quiet) { Write-Host "Generated pair count: $pairCount" }
 if ($pairCount -eq 0) {
   Write-Host "No commit pairs found for $ViName."
   exit 0
+}
+
+$commitInfoChrono = @($commitInfo.Clone())
+[array]::Reverse($commitInfoChrono)
+$missingSegments = @()
+$currentSegment = $null
+foreach ($info in $commitInfoChrono) {
+  if ($info.HasVi) {
+    if ($currentSegment) {
+      $missingSegments += $currentSegment
+      $currentSegment = $null
+    }
+  } else {
+    if (-not $currentSegment) {
+      $currentSegment = [ordered]@{
+        startCommit = $info.Commit
+        count       = 0
+      }
+    }
+    $currentSegment.count++
+  }
+}
+if ($currentSegment) { $missingSegments += $currentSegment }
+
+$commitWindow = $commitInfoChrono | ForEach-Object {
+  [ordered]@{
+    commit = $_.Commit
+    hasVi  = $_.HasVi
+    path   = $_.Path
+  }
+}
+$missingSegmentsSummary = $missingSegments | ForEach-Object {
+  [ordered]@{
+    startCommit = $_.startCommit
+    count       = $_.count
+  }
 }
 
 $resultsRoot = if ([System.IO.Path]::IsPathRooted($ResultsDir)) { $ResultsDir } else { Join-Path $repoRoot $ResultsDir }
@@ -202,41 +285,8 @@ foreach ($pair in $pairs) {
   $index = $pair.Index
   $pairLabel = "{0:D2}-{1:D2}" -f $index, ($index + 1)
 
-  $pathA = $null
-  $pathB = $null
-  $pathError = $null
-  try {
-    $pathA = Resolve-ViRelativePath -ViName $ViName -Refs @($refA)
-  } catch {
-    $pathError = "Ref $refA missing ${ViName}: $($_.Exception.Message)"
-  }
-  if (-not $pathError) {
-    try {
-      $pathB = Resolve-ViRelativePath -ViName $ViName -Refs @($refB)
-    } catch {
-      $pathError = "Ref $refB missing ${ViName}: $($_.Exception.Message)"
-    }
-  }
-  if ($pathError) {
-    $summaryItems += [ordered]@{
-      refA             = $refA
-      refB             = $refB
-      pair             = $pairLabel
-      skippedIdentical = $false
-      skippedMissing   = $true
-      skipReason       = $pathError
-      diff             = $false
-      exitCode         = $null
-      summaryJson      = $null
-      reportHtml       = $null
-      highlights       = @()
-      blobA            = $null
-      blobB            = $null
-      lvcompare        = $null
-    }
-    $markdownRows += "| $pairLabel | Skipped (missing VI) | - | $pathError |"
-    continue
-  }
+  $pathA = $pair.PathA
+  $pathB = $pair.PathB
   $blobA = Get-BlobIdForPath -Ref $refA -Path $pathA
   $blobB = Get-BlobIdForPath -Ref $refB -Path $pathB
   $identical = ($blobA -ne $null -and $blobA -eq $blobB)
@@ -246,6 +296,8 @@ foreach ($pair in $pairs) {
       refA              = $refA
       refB              = $refB
       pair              = $pairLabel
+      pathA             = $pathA
+      pathB             = $pathB
       skippedIdentical  = $true
       skippedMissing    = $false
       skipReason        = $null
@@ -319,6 +371,8 @@ foreach ($pair in $pairs) {
     refA             = $refA
     refB             = $refB
     pair             = $pairLabel
+    pathA            = $pathA
+    pathB            = $pathB
     skippedIdentical = $false
     skippedMissing   = $false
     skipReason       = $null
@@ -333,6 +387,10 @@ foreach ($pair in $pairs) {
   }
 
   $status = if ($diffResult) { 'Diff' } elseif ($exitCode -eq 0) { 'No diff' } else { "Error ($exitCode)" }
+  if ($diffResult -and -not $firstDiffLogged) {
+    $status = "$status ⭐"
+    $firstDiffLogged = $true
+  }
   $highlightText = if (Get-ItemCount $highlights -gt 0) { ($highlights | Select-Object -First 2) -join '; ' } else { '' }
   $mkNotes = if ($highlightText) { $highlightText } elseif ($reportFile) { (Split-Path $reportFile -Leaf) } else { '' }
   $markdownRows += "| $pairLabel | $status | $exitCode | $mkNotes |"
@@ -343,11 +401,14 @@ $historySummary = [ordered]@{
   generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
   viName         = $ViName
   branch         = $Branch
-  resolvedPath   = $resolvedPath
+  resolvedPath   = $branchPath
   maxPairs       = $MaxPairs
   lvcompareArgs  = $flagTokens
   includeIdentical = [bool]$IncludeIdenticalPairs
+  missingStrategy  = $MissingStrategy
   resultsDir     = $resultsRoot
+  commitWindow   = $commitWindow
+  missingSegments = $missingSegmentsSummary
   pairs          = $summaryItems
 }
 
@@ -369,6 +430,13 @@ if ($env:GITHUB_STEP_SUMMARY) {
     $lines += $markdownRows
   } else {
     $lines += "| - | - | - | - |"
+  }
+  if (Get-ItemCount $missingSegmentsSummary -gt 0) {
+    $lines += ''
+    $lines += '#### Missing segments'
+    foreach ($segment in $missingSegmentsSummary) {
+      $lines += ("- {0} commit(s) before {1} lacked {2}" -f $segment.count, $segment.startCommit, $ViName)
+    }
   }
   $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }

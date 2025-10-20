@@ -89,11 +89,17 @@ reject that case.
 
 ### VI history comparisons
 
-	ools/Compare-VIHistory.ps1 walks the git log for a VI, compares each adjacent commit pair with Compare-RefsToTemp.ps1 in detailed mode, and emits a consolidated history summary. The manual workflow .github/workflows/vi-history-compare.yml wraps the script for self-serve dispatch.
+`tools/Compare-VIHistory.ps1` walks the git log for a VI, compares each adjacent commit pair with
+`Compare-RefsToTemp.ps1` in detailed mode, and emits a consolidated history summary. The manual workflow
+`.github/workflows/vi-history-compare.yml` wraps the script for self-serve dispatch.
 
-- Always-on artifacts: every pair produces `lvcompare-capture.json`, `compare-exec.json`, stdout/stderr, and an HTML report (no suppression, even for identical VIs).
-- Aggregated metadata: `tests/results/ref-compare-history/history-summary.json` (`schema: vi-history-compare/v1`) captures LVCompare exit codes, highlights (for example, block-diagram vs. attribute-only changes), skip reasons, and report locations.
-- Step summary table: the workflow appends a Markdown grid showing each pair, diff status, exit code, and links to the generated reports.
+- Always-on artifacts: every pair produces `lvcompare-capture.json`, `compare-exec.json`, stdout/stderr, and an HTML
+  report (no suppression, even for identical VIs).
+- Aggregated metadata: `tests/results/ref-compare-history/history-summary.json` (`schema: vi-history-compare/v1`)
+  captures LVCompare exit codes, highlights (for example, block-diagram vs. attribute-only changes), skip reasons, and
+  report locations. Missing commit stretches are grouped into a compact summary.
+- Step summary table: the workflow appends a Markdown grid showing each pair, diff status (with a ⭐ marker on the first
+  detected diff), exit code, and links to the generated reports.
 
 Workflow inputs mirror the script:
 
@@ -102,8 +108,10 @@ Workflow inputs mirror the script:
 - `max_pairs` – adjacent commit pairs to evaluate (latest first)
 - LVCompare flags (`-nobdcosm`, `-nofppos`, `-noattr`) plus optional `additional_flags`
 - `fail_on_diff` – optionally fail the job when LVCompare detects a difference
+- `missing_strategy` – `skip` (default) ignores commits where the VI is absent; `abort` fails when the file disappears
 
-> Tip: leave `fail_on_diff` set to `false` for the first pass, review the history summary, and rerun with `true` once you are ready to gate on differences.
+> Tip: leave `fail_on_diff` set to `false` for the first pass, review the history summary, and rerun with `true` once
+> you are ready to gate on differences.
 
 CLI-only quick start (64-bit Windows):
 

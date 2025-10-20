@@ -48,6 +48,12 @@ on:
         default: 'false'
         type: choice
         options: ['true', 'false']
+      missing_strategy:
+        description: 'When commits lack the VI: skip (default) or abort'
+        required: false
+        default: 'skip'
+        type: choice
+        options: ['skip', 'abort']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.inputs.sample_id || github.ref }}
@@ -84,6 +90,7 @@ jobs:
       FLAG_NOATTR: ${{ inputs.flag_noattr }}
       EXTRA_FLAGS: ${{ inputs.additional_flags }}
       FAIL_ON_DIFF: ${{ inputs.fail_on_diff || 'false' }}
+      MISSING_STRATEGY: ${{ inputs.missing_strategy || 'skip' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -117,6 +124,10 @@ jobs:
             $args += ($flags -join ' ')
           }
           if ($env:FAIL_ON_DIFF -eq 'true') { $args += '-FailOnDiff' }
+          if ($env:MISSING_STRATEGY) {
+            $args += '-MissingStrategy'
+            $args += $env:MISSING_STRATEGY
+          }
           pwsh @args
           $summaryPath = Join-Path $env:GITHUB_WORKSPACE 'tests/results/ref-compare-history/history-summary.json'
           if (Test-Path -LiteralPath $summaryPath) {

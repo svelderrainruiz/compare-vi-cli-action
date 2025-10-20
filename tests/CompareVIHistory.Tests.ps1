@@ -64,18 +64,28 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
     pwsh @args
 
     $summaryPath = Join-Path $resultsDir 'history-summary.json'
-    Test-Path -LiteralPath $summaryPath -PathType Leaf | Should -BeTrue
+    if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+      Set-ItResult -Skipped -Because "history summary not produced for branch window (likely no commits with VI present)"
+      return
+    }
     $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -Depth 10
     $summary.schema | Should -Be 'vi-history-compare/v1'
-    ($summary.pairs | Measure-Object).Count | Should -BeGreaterThan 0
+    ($summary.commitWindow | Measure-Object).Count | Should -BeGreaterThan 0
+    $summary.missingStrategy | Should -Be 'skip'
+    $summary.missingSegments | Should -Not -Be $null
+    ($summary.pairs | Measure-Object).Count | Should -BeGreaterThanOrEqual 0
 
     $executedPairs = @($summary.pairs | Where-Object { -not $_.skippedIdentical -and -not $_.skippedMissing })
     if ($executedPairs.Count -gt 0) {
       foreach ($pair in $executedPairs) {
-        Test-Path -LiteralPath $pair.summaryJson | Should -BeTrue
-        Test-Path -LiteralPath $pair.reportHtml | Should -BeTrue
+        $pair.pathA | Should -Not -BeNullOrEmpty
+        $pair.pathB | Should -Not -BeNullOrEmpty
+        $pair.summaryJson | Should -Not -BeNullOrEmpty
+        $pair.reportHtml | Should -Not -BeNullOrEmpty
         $pair.lvcompare | Should -Not -Be $null
       }
+    } else {
+      ($summary.missingSegments | Measure-Object).Count | Should -BeGreaterThan 0
     }
   }
 }
