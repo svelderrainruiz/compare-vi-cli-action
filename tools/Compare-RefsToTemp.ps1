@@ -1,9 +1,10 @@
 param(
-  [Parameter(Mandatory=$true)][string]$Path,
-  [Parameter(Mandatory=$true)][string]$RefA,
-  [Parameter(Mandatory=$true)][string]$RefB,
+  [Parameter(ParameterSetName='ByPath', Mandatory=$true)][string]$Path,
+  [Parameter(ParameterSetName='ByName', Mandatory=$true)][string]$ViName,
+  [Parameter(ParameterSetName='ByPath', Mandatory=$true)][Parameter(ParameterSetName='ByName', Mandatory=$true)][string]$RefA,
+  [Parameter(ParameterSetName='ByPath', Mandatory=$true)][Parameter(ParameterSetName='ByName', Mandatory=$true)][string]$RefB,
   [string]$ResultsDir = 'tests/results/ref-compare',
-  [string]$OutName = 'vi1_vs_vi1',
+  [string]$OutName,
   [switch]$Quiet,
   [switch]$Detailed,
   [switch]$RenderReport,
@@ -21,8 +22,6 @@ $ErrorActionPreference = 'Stop'
 try { git --version | Out-Null } catch { throw 'git is required on PATH to fetch file content at refs.' }
 
 $repoRoot = (Get-Location).Path
-$absPath = Join-Path $repoRoot $Path
-if (-not (Test-Path -LiteralPath $absPath)) { throw "Path not found in repo: $Path" }
 
 function Split-ArgString {
   param([string]$Value)
@@ -41,6 +40,35 @@ function Normalize-ExistingPath {
   param([string]$Candidate)
   if ([string]::IsNullOrWhiteSpace($Candidate)) { return $null }
   try { return (Resolve-Path -LiteralPath $Candidate -ErrorAction Stop).Path } catch { return $Candidate }
+}
+
+function Resolve-ViRelativePath {
+  param(
+    [Parameter(Mandatory=$true)][string]$ViName,
+    [Parameter(Mandatory=$true)][string[]]$Refs
+  )
+
+  $viLeaf = $ViName.Trim()
+  if ([string]::IsNullOrWhiteSpace($viLeaf)) { throw "VI name cannot be empty." }
+  $viLeafLower = $viLeaf.ToLowerInvariant()
+  $matches = @()
+  foreach ($ref in $Refs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
+    $ls = & git ls-tree -r --name-only $ref 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $ls) { continue }
+    foreach ($entry in @($ls)) {
+      if (-not $entry) { continue }
+      $leaf = (Split-Path $entry -Leaf)
+      if ($leaf -and $leaf.ToLowerInvariant() -eq $viLeafLower) { $matches += $entry }
+    }
+  }
+  $unique = @($matches | Select-Object -Unique)
+  if ($unique.Count -eq 0) {
+    throw "VI '$ViName' not found in refs: $($Refs -join ', ')"
+  }
+  if ($unique.Count -gt 1) {
+    throw "Multiple matches found for VI '$ViName': $($unique -join ', '). Provide the relative path instead."
+  }
+  return $unique[0]
 }
 
 function Get-FileAtRef([string]$ref,[string]$relPath,[string]$dest){
@@ -99,6 +127,22 @@ function Invoke-PwshProcess {
     StdOut   = $stdout
     StdErr   = $stderr
   }
+}
+
+$candidateRefs = @($RefA, $RefB)
+if ($PSCmdlet.ParameterSetName -eq 'ByName') {
+  $resolvedFromRefs = Resolve-ViRelativePath -ViName $ViName -Refs $candidateRefs
+  $Path = $resolvedFromRefs
+}
+
+$Path = ($Path -replace '\\','/').Trim('/')
+if ([string]::IsNullOrWhiteSpace($Path)) { throw "Unable to resolve VI path for comparison." }
+if (-not $ViName) { $ViName = (Split-Path $Path -Leaf) }
+
+if (-not $OutName) {
+  $nameToken = if ($ViName) { $ViName } else { $Path }
+  $OutName = $nameToken -replace '[^A-Za-z0-9._-]+','_'
+  if ([string]::IsNullOrWhiteSpace($OutName)) { $OutName = 'vi-compare' }
 }
 
 $detailRequested = $Detailed.IsPresent -or $RenderReport.IsPresent
@@ -293,6 +337,7 @@ if ($cliArtifacts) { $cliSummary.artifacts = $cliArtifacts }
 $sum = [ordered]@{
   schema = 'ref-compare-summary/v1'
   generatedAt = (Get-Date).ToString('o')
+  name = $ViName
   path = $Path
   refA = $RefA
   refB = $RefB
@@ -310,7 +355,8 @@ $sum = [ordered]@{
 $sum | ConvertTo-Json -Depth 8 | Out-File -FilePath $sumPath -Encoding utf8
 
 if (-not $Quiet) {
-  Write-Host "Ref compare complete: $Path ($RefA vs $RefB)"
+  $displayId = if ($ViName) { "$ViName ($Path)" } else { $Path }
+  Write-Host "Ref compare complete: $displayId ($RefA vs $RefB)"
   Write-Host "- Exec: $execPath"
   Write-Host "- Summary: $sumPath"
   if ($artifactDir) { Write-Host "- Artifacts: $artifactDir" }

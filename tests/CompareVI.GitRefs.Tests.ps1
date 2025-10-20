@@ -52,6 +52,7 @@ Describe 'CompareVI with Git refs (same path at two commits)' -Tag 'Integration'
     (Split-Path -Leaf $e.base) | Should -Be 'Base.vi'
     (Split-Path -Leaf $e.head) | Should -Be 'Head.vi'
     $s.schema | Should -Be 'ref-compare-summary/v1'
+    $s.name   | Should -Be (Split-Path -Leaf $_target)
 
     # Print brief info for test logs
     "refs: A=$($pair.A) B=$($pair.B) expectDiff=$($s.computed.expectDiff) cliDiff=$($s.cli.diff) exit=$($s.cli.exitCode)" | Write-Host
@@ -143,7 +144,7 @@ exit 1
     $rd = Join-Path $TestDrive 'ref-compare-detail'
     New-Item -ItemType Directory -Path $rd -Force | Out-Null
     & pwsh -NoLogo -NoProfile -File (Join-Path $_repo 'tools/Compare-RefsToTemp.ps1') `
-      -Path $_target `
+      -ViName (Split-Path -Leaf $_target) `
       -RefA $pair.A `
       -RefB $pair.B `
       -ResultsDir $rd `

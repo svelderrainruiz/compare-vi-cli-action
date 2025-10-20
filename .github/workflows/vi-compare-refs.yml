@@ -7,22 +7,38 @@ on:
         description: 'Optional sample id for concurrency grouping'
         required: false
         type: string
-      vi_path:
-        description: 'Repository-relative path to the VI (e.g. VIs/MyVI.vi)'
+      vi_name:
+        description: 'VI filename (e.g. VI1.vi)'
         required: true
+        default: 'VI1.vi'
         type: string
-      base_ref:
-        description: 'Base git ref or commit (e.g. main or 123abc)'
+      base_commit:
+        description: 'Base git commit/ref'
         required: true
         default: 'f953572a18194b58ca4d05383c2795c56cc24865'
         type: string
-      head_ref:
-        description: 'Head git ref or commit'
+      head_commit:
+        description: 'Head git commit/ref'
         required: true
         default: 'd173970c182842b39b21ff1ec14821496191b9a7'
         type: string
-      lv_compare_args:
-        description: 'Optional LVCompare flags (space-delimited)'
+      flag_nobdcosm:
+        description: 'Ignore block diagram cosmetic changes (-nobdcosm)'
+        required: false
+        type: boolean
+        default: true
+      flag_nofppos:
+        description: 'Ignore front panel position changes (-nofppos)'
+        required: false
+        type: boolean
+        default: true
+      flag_noattr:
+        description: 'Ignore VI attributes (-noattr)'
+        required: false
+        type: boolean
+        default: true
+      additional_flags:
+        description: 'Extra LVCompare flags (optional, space-delimited)'
         required: false
         default: ''
         type: string
@@ -74,21 +90,31 @@ jobs:
         id: compare
         shell: pwsh
         env:
-          VI_PATH: ${{ inputs.vi_path }}
-          BASE_REF: ${{ inputs.base_ref }}
-          HEAD_REF: ${{ inputs.head_ref }}
-          LV_ARGS: ${{ inputs.lv_compare_args }}
+          VI_NAME: ${{ inputs.vi_name }}
+          BASE_REF: ${{ inputs.base_commit }}
+          HEAD_REF: ${{ inputs.head_commit }}
+          FLAG_NOBDCOSM: ${{ inputs.flag_nobdcosm }}
+          FLAG_NOFPPOS: ${{ inputs.flag_nofppos }}
+          FLAG_NOATTR: ${{ inputs.flag_noattr }}
+          EXTRA_FLAGS: ${{ inputs.additional_flags }}
           FAIL_ON_DIFF: ${{ inputs.fail_on_diff }}
         run: |
           $ErrorActionPreference = 'Stop'
           $resultsDir = Join-Path $env:GITHUB_WORKSPACE 'tests/results/ref-compare'
           New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
-          $outName = $env:VI_PATH -replace '[\\/:]+','_'
+          $outName = $env:VI_NAME -replace '[\\/:]+','_'
           if ([string]::IsNullOrWhiteSpace($outName)) { $outName = 'vi-compare' }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'tools/Compare-RefsToTemp.ps1'
+          $flagList = @()
+          if ($env:FLAG_NOBDCOSM -eq 'true') { $flagList += '-nobdcosm' }
+          if ($env:FLAG_NOFPPOS -eq 'true') { $flagList += '-nofppos' }
+          if ($env:FLAG_NOATTR -eq 'true') { $flagList += '-noattr' }
+          if (-not [string]::IsNullOrWhiteSpace($env:EXTRA_FLAGS)) {
+            $flagList += $env:EXTRA_FLAGS
+          }
           $args = @(
             '-NoLogo','-NoProfile','-File', $scriptPath,
-            '-Path', $env:VI_PATH,
+            '-ViName', $env:VI_NAME,
             '-RefA', $env:BASE_REF,
             '-RefB', $env:HEAD_REF,
             '-ResultsDir', $resultsDir,
@@ -97,9 +123,9 @@ jobs:
             '-RenderReport',
             '-Quiet'
           )
-          if (-not [string]::IsNullOrWhiteSpace($env:LV_ARGS)) {
+          if ($flagList.Count -gt 0) {
             $args += '-LvCompareArgs'
-            $args += $env:LV_ARGS
+            $args += ($flagList -join ' ')
           }
           if ($env:FAIL_ON_DIFF -eq 'true') { $args += '-FailOnDiff' }
           $proc = Start-Process -FilePath 'pwsh' -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
@@ -123,7 +149,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $summary = Get-Content -LiteralPath $env:SUMMARY_PATH -Raw | ConvertFrom-Json
           $lines = @('### LVCompare Ref Diff','')
-          $lines += "- VI: $($summary.path)"
+          $lines += "- VI: $($summary.name)"
+          $lines += "- Path: $($summary.path)"
           $lines += "- Base ref: $($summary.refA)"
           $lines += "- Head ref: $($summary.refB)"
           $lines += "- Diff detected: $($summary.cli.diff)"
