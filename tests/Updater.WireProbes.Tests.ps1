@@ -80,7 +80,7 @@ jobs:
     $p = Join-Path $TestDrive 'ci-orchestrated.yml'
     Set-Content -LiteralPath $p -Value $wf -Encoding UTF8
     # Apply updater
-    Invoke-TestPython -Arguments @($script:upd,'--write',$p)
+    Invoke-TestPython -Arguments @($script:upd,'--write',$p) | Out-Null
     $doc = Get-Content -LiteralPath $p -Raw | ConvertFrom-Yaml
     $getName = {
       param($step)
@@ -143,8 +143,8 @@ jobs:
     $p = Join-Path $TestDrive 'validate.yml'
     Set-Content -LiteralPath $p -Value $wf -Encoding UTF8
     # Run twice to ensure no duplicates
-    Invoke-TestPython -Arguments @($script:upd,'--write',$p)
-    Invoke-TestPython -Arguments @($script:upd,'--write',$p)
+    Invoke-TestPython -Arguments @($script:upd,'--write',$p) | Out-Null
+    Invoke-TestPython -Arguments @($script:upd,'--write',$p) | Out-Null
     $doc = Get-Content -LiteralPath $p -Raw | ConvertFrom-Yaml
     $getName = {
       param($step)
