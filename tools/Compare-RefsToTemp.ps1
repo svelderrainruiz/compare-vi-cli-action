@@ -51,24 +51,62 @@ function Resolve-ViRelativePath {
   $viLeaf = $ViName.Trim()
   if ([string]::IsNullOrWhiteSpace($viLeaf)) { throw "VI name cannot be empty." }
   $viLeafLower = $viLeaf.ToLowerInvariant()
-  $matches = @()
+  $refMatches = [ordered]@{}
+  $pathLookup = @{}
   foreach ($ref in $Refs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) {
+    $pathsForRef = @()
     $ls = & git ls-tree -r --name-only $ref 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $ls) { continue }
     foreach ($entry in @($ls)) {
       if (-not $entry) { continue }
       $leaf = (Split-Path $entry -Leaf)
-      if ($leaf -and $leaf.ToLowerInvariant() -eq $viLeafLower) { $matches += $entry }
+      if ($leaf -and $leaf.ToLowerInvariant() -eq $viLeafLower) {
+        $pathsForRef += $entry
+        $lower = $entry.ToLowerInvariant()
+        if (-not $pathLookup.ContainsKey($lower)) { $pathLookup[$lower] = $entry }
+      }
     }
+    if ($pathsForRef.Count -gt 0) { $refMatches[$ref] = $pathsForRef }
   }
-  $unique = @($matches | Select-Object -Unique)
-  if ($unique.Count -eq 0) {
+  if ($refMatches.Count -eq 0) {
     throw "VI '$ViName' not found in refs: $($Refs -join ', ')"
   }
-  if ($unique.Count -gt 1) {
-    throw "Multiple matches found for VI '$ViName': $($unique -join ', '). Provide the relative path instead."
+
+  $lowerLists = @()
+  foreach ($pair in $refMatches.GetEnumerator()) {
+    $lowerLists += ,(@($pair.Value | ForEach-Object { $_.ToLowerInvariant() }))
   }
-  return $unique[0]
+  $commonLower = $lowerLists[0]
+  for ($i = 1; $i -lt $lowerLists.Count; $i++) {
+    $current = $lowerLists[$i]
+    $commonLower = @($commonLower | Where-Object { $current -contains $_ })
+  }
+  $commonLower = @($commonLower | Select-Object -Unique)
+  $commonPaths = @($commonLower | ForEach-Object { $pathLookup[$_] })
+
+  $allLower = @($pathLookup.Keys)
+  $allPaths = @($allLower | ForEach-Object { $pathLookup[$_] })
+
+  $pathScore = {
+    param([string]$PathValue)
+    $score = 0
+    if ($PathValue -match '^tmp-commit') { $score += 200 }
+    elseif ($PathValue -match '^tmp') { $score += 150 }
+    if ($PathValue -match '^tests/') { $score += 100 }
+    $depth = (($PathValue -split '/').Count - 1)
+    if ($depth -gt 0) { $score += ($depth * 25) }
+    $score += [Math]::Min([int]$PathValue.Length, 500) / 10
+    return $score
+  }
+
+  $candidates = if ($commonPaths.Count -gt 0) { $commonPaths } else { $allPaths }
+  $ordered = $candidates | Sort-Object @{ Expression = { & $pathScore $_ } }, @{ Expression = { $_ } }
+  $chosen = $ordered | Select-Object -First 1
+  if (-not $chosen) { throw "Unable to resolve VI path for '$ViName'." }
+  if ($candidates.Count -gt 1) {
+    Write-Verbose ("[Compare-RefsToTemp] Multiple candidates for '{0}'; selected '{1}'" -f $ViName, $chosen)
+  }
+  return $chosen
 }
 
 function Get-FileAtRef([string]$ref,[string]$relPath,[string]$dest){

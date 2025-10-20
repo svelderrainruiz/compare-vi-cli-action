@@ -52,6 +52,7 @@ Describe 'CompareVI with Git refs (same path at two commits)' -Tag 'Integration'
     (Split-Path -Leaf $e.base) | Should -Be 'Base.vi'
     (Split-Path -Leaf $e.head) | Should -Be 'Head.vi'
     $s.schema | Should -Be 'ref-compare-summary/v1'
+    $s.path   | Should -Be $_target
     $s.name   | Should -Be (Split-Path -Leaf $_target)
 
     # Print brief info for test logs
@@ -164,6 +165,7 @@ exit 1
     $s.cli.diff | Should -BeTrue
     ($s.out.captureJson -as [string]) | Should -Match 'lvcompare-capture.json'
     ($s.out.reportHtml -as [string])  | Should -Match 'compare-report.html'
+    $s.path | Should -Be $_target
     $s.cli.highlights | Should -Contain 'Block Diagram Differences detected.'
     $s.cli.artifacts.imageCount | Should -Be 1
   }
