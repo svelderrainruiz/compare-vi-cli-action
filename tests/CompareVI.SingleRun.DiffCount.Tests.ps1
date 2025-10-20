@@ -23,7 +23,7 @@ Describe 'CompareVI single-run diff details' -Tag 'Unit' {
       schema      = 'compare-exec/v1'
       generatedAt = (Get-Date).ToString('o')
       cliPath     = 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe'
-      command     = 'LVCompare.exe "C:\\tmp\\base.vi" "C:\\tmp\\head.vi" -nobdcosm -nofppos -noattr'
+      command     = 'LVCompare.exe "C:\\tmp\\base.vi" "C:\\tmp\\head.vi" -noattr -nofp -nofppos -nobd -nobdcosm'
       exitCode    = 1
       diff        = $true
       cwd         = $td

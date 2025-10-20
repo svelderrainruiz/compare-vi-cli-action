@@ -215,7 +215,7 @@ function Invoke-PhaseCompare {
     if (-not (Test-Path -LiteralPath $mod)) { throw "CompareVI module not found at expected locations." }
     if (-not (Get-Command -Name Invoke-CompareVI -ErrorAction SilentlyContinue)) { Import-Module $mod -Force }
     try {
-      $compare = Invoke-CompareVI -Base $ctx.basePath -Head $ctx.headPath -LvCompareArgs '-nobdcosm -nofppos -noattr' -FailOnDiff:$false
+      $compare = Invoke-CompareVI -Base $ctx.basePath -Head $ctx.headPath -LvCompareArgs '-noattr -nofp -nofppos -nobd -nobdcosm' -FailOnDiff:$false
       $ctx.compareResult = $compare
       $r.details.exitCode = $compare.ExitCode
       $r.details.diff = $compare.Diff
@@ -306,7 +306,7 @@ function Invoke-PhaseDiagnostics {
     if (-not (Get-Command -Name Invoke-CompareVI -ErrorAction SilentlyContinue)) {
       . $compareScript
     }
-    $res = Invoke-CompareVI -Base $ctx.basePath -Head $ctx.headPath -LvComparePath $cli -LvCompareArgs '-nobdcosm -nofppos -noattr' -FailOnDiff:$false
+    $res = Invoke-CompareVI -Base $ctx.basePath -Head $ctx.headPath -LvComparePath $cli -LvCompareArgs '-noattr -nofp -nofppos -nobd -nobdcosm' -FailOnDiff:$false
     # Write minimal diag artifacts for parity
     "${res.ExitCode}" | Set-Content runbook-diag-exitcode.txt -Encoding utf8
     '' | Set-Content runbook-diag-stdout.txt -Encoding utf8

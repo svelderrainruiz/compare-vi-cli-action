@@ -57,7 +57,7 @@
 - **BaseVi** and **HeadVi** (string, required).
 - **Flags** (string[]) with **ReplaceFlags** (switch) customize LVCompare
   arguments in addition to `-lvpath`. Defaults include
-  `-nobdcosm -nofppos -noattr` when `ReplaceFlags` is not supplied.
+  `-noattr -nofp -nofppos -nobd -nobdcosm` when `ReplaceFlags` is not supplied.
 - **OutputDir** (string, default `tests/results/single-compare`):
   artifacts written here.
 - **RenderReport** (switch), **JsonLogPath** (NDJSON crumb log),

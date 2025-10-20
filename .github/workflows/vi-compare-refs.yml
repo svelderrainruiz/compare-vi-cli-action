@@ -22,8 +22,13 @@ on:
         required: true
         default: 'd173970c182842b39b21ff1ec14821496191b9a7'
         type: string
-      flag_nobdcosm:
-        description: 'Ignore block diagram cosmetic changes (-nobdcosm)'
+      flag_noattr:
+        description: 'Ignore VI attributes (-noattr)'
+        required: false
+        type: boolean
+        default: true
+      flag_nofp:
+        description: 'Ignore front panel (-nofp)'
         required: false
         type: boolean
         default: true
@@ -32,8 +37,8 @@ on:
         required: false
         type: boolean
         default: true
-      flag_noattr:
-        description: 'Ignore VI attributes (-noattr)'
+      flag_nobdcosm:
+        description: 'Ignore block diagram cosmetic changes (-nobdcosm)'
         required: false
         type: boolean
         default: true
@@ -93,9 +98,10 @@ jobs:
           VI_NAME: ${{ inputs.vi_name }}
           BASE_REF: ${{ inputs.base_commit }}
           HEAD_REF: ${{ inputs.head_commit }}
-          FLAG_NOBDCOSM: ${{ inputs.flag_nobdcosm }}
-          FLAG_NOFPPOS: ${{ inputs.flag_nofppos }}
           FLAG_NOATTR: ${{ inputs.flag_noattr }}
+          FLAG_NOFP: ${{ inputs.flag_nofp }}
+          FLAG_NOFPPOS: ${{ inputs.flag_nofppos }}
+          FLAG_NOBDCOSM: ${{ inputs.flag_nobdcosm }}
           EXTRA_FLAGS: ${{ inputs.additional_flags }}
           FAIL_ON_DIFF: ${{ inputs.fail_on_diff }}
         run: |
@@ -106,12 +112,14 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($outName)) { $outName = 'vi-compare' }
           $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'tools/Compare-RefsToTemp.ps1'
           $flagList = @()
-          if ($env:FLAG_NOBDCOSM -eq 'true') { $flagList += '-nobdcosm' }
-          if ($env:FLAG_NOFPPOS -eq 'true') { $flagList += '-nofppos' }
           if ($env:FLAG_NOATTR -eq 'true') { $flagList += '-noattr' }
+          if ($env:FLAG_NOFP -eq 'true') { $flagList += '-nofp' }
+          if ($env:FLAG_NOFPPOS -eq 'true') { $flagList += '-nofppos' }
+          if ($env:FLAG_NOBDCOSM -eq 'true') { $flagList += '-nobdcosm' }
           if (-not [string]::IsNullOrWhiteSpace($env:EXTRA_FLAGS)) {
             $flagList += $env:EXTRA_FLAGS
           }
+          if ($flagList -notcontains '-nobd') { $flagList = @('-nobd') + $flagList }
           $args = @(
             '-NoLogo','-NoProfile','-File', $scriptPath,
             '-ViName', $env:VI_NAME,

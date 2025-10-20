@@ -26,14 +26,16 @@ Open **Command Prompt** and run (edit the two VI paths first):
 "C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe" ^
   "C:\path\to\old.vi" "C:\path\to\new.vi" ^
   -lvpath "C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe" ^
-  -nobdcosm -nofppos -noattr
+  -noattr -nofp -nofppos -nobd -nobdcosm
 ```
 If LVCompare launches and shows the diff, you’re good.
 
 **What the flags do (noise filters):**
-- `-nobdcosm` — ignore cosmetic changes on the block diagram (position/size/appearance)
-- `-nofppos` — ignore object position/size changes on the front panel
-- `-noattr` — ignore VI attribute changes
+- `-noattr` — do not compare VI attributes
+- `-nofp` — do not compare the front panel
+- `-nofppos` — do not compare front panel object position/size
+- `-nobd` — do not compare the block diagram
+- `-nobdcosm` — do not compare block diagram object cosmetics
 
 ---
 
@@ -46,7 +48,7 @@ git config --global difftool.lvcompare.cmd ^
  ""C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe" ^
   "$LOCAL" "$REMOTE" ^
   -lvpath "C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe" ^
-  -nobdcosm -nofppos -noattr"
+  -noattr -nofp -nofppos -nobd -nobdcosm"
 git config --global diff.tool lvcompare
 git config --global difftool.prompt false
 git config --global difftool.trustExitCode true
@@ -58,7 +60,7 @@ git config --global difftool.lvcompare.cmd `
  '"C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe" `
   "$LOCAL" "$REMOTE" `
   -lvpath "C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe" `
-  -nobdcosm -nofppos -noattr'
+  -noattr -nofp -nofppos -nobd -nobdcosm'
 git config --global diff.tool lvcompare
 git config --global difftool.prompt false
 git config --global difftool.trustExitCode true
@@ -66,7 +68,7 @@ git config --global difftool.trustExitCode true
 
 ### 2.3 Git Bash
 ```bash
-git config --global difftool.lvcompare.cmd ""/c/Program Files/National Instruments/Shared/LabVIEW Compare/LVCompare.exe" "$LOCAL" "$REMOTE" -lvpath "/c/Program Files/National Instruments/LabVIEW 2025/LabVIEW.exe" -nobdcosm -nofppos -noattr"
+git config --global difftool.lvcompare.cmd ""/c/Program Files/National Instruments/Shared/LabVIEW Compare/LVCompare.exe" "$LOCAL" "$REMOTE" -lvpath "/c/Program Files/National Instruments/LabVIEW 2025/LabVIEW.exe" -noattr -nofp -nofppos -nobd -nobdcosm"
 git config --global diff.tool lvcompare
 git config --global difftool.prompt false
 git config --global difftool.trustExitCode true
@@ -121,7 +123,7 @@ If you have **LabVIEWCLI** installed, you can generate a single‑file HTML repo
 LabVIEWCLI -OperationName CreateComparisonReport ^
     -VI1 "C:\path\to\old.vi" -VI2 "C:\path\to\new.vi" ^
     -ReportType HTMLSingleFile -ReportPath "C:\path\to\CompareReport.html" ^
-  -nobdcosm -nofppos -noattr
+  -noattr -nofp -nofppos -nobd -nobdcosm
 ```
 
 ---

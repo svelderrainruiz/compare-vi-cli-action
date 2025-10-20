@@ -1,14 +1,16 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Describe 'LVCompare flags (knowledgebase combinations)' -Tag 'Unit' {
+Describe 'LVCompare flags (canonical combinations)' -Tag 'Unit' {
   BeforeAll {
     $here = Split-Path -Parent $PSCommandPath
     $root = Resolve-Path (Join-Path $here '..')
     Import-Module (Join-Path $root 'scripts' 'CompareVI.psm1') -Force
 
     # Always mock Resolve-Cli to avoid environment coupling
-    Mock -CommandName Resolve-Cli -ModuleName CompareVI -MockWith { param($Explicit,$PreferredBitness) 'C:\\Program Files\\National Instruments\\Shared\\LabVIEW Compare\\LVCompare.exe' }
+    Mock -CommandName Resolve-Cli -ModuleName CompareVI -MockWith { param($Explicit,$PreferredBitness) 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe' }
+
+    Set-Variable -Name CanonicalFlags -Scope Script -Value @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm') -Force
 
     function New-ExecWithArgs([string]$argSpec) {
       $work = Join-Path $TestDrive ('flags-' + [guid]::NewGuid().ToString('N'))
@@ -24,42 +26,45 @@ Describe 'LVCompare flags (knowledgebase combinations)' -Tag 'Unit' {
     }
   }
 
-  It 'accepts singleton flags: -nobdcosm, -nofppos, -noattr' -ForEach @(
-    @{ args = '-nobdcosm' ; flag='-nobdcosm' },
-    @{ args = '-nofppos'  ; flag='-nofppos'  },
-    @{ args = '-noattr'   ; flag='-noattr'   }
-  ) {
-    param($argSpec, $flag)
-    $exec = New-ExecWithArgs -argSpec $argSpec
-    $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($flag))
-    @($exec.args) | Should -Contain $flag
+  It 'accepts singleton canonical flags' {
+    foreach ($flag in $script:CanonicalFlags) {
+      $exec = New-ExecWithArgs -argSpec $flag
+      $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($flag))
+      @($exec.args) | Should -Contain $flag
+    }
   }
 
-  It 'accepts pair combinations of knowledgebase flags' -ForEach @(
-    @{ args = '-nobdcosm -nofppos' ; a='-nobdcosm'; b='-nofppos' },
-    @{ args = '-nobdcosm -noattr'  ; a='-nobdcosm'; b='-noattr'  },
-    @{ args = '-nofppos -noattr'   ; a='-nofppos' ; b='-noattr'  }
-  ) {
-    param($argSpec,$a,$b)
-    $exec = New-ExecWithArgs -argSpec $argSpec
-    $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($a))
-    $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($b))
-    @($exec.args) | Should -Contain $a
-    @($exec.args) | Should -Contain $b
+  It 'accepts pair combinations of canonical flags' {
+    $cases = @(
+      @{ args = '-noattr -nofp'      ; a='-noattr'  ; b='-nofp' },
+      @{ args = '-noattr -nofppos'   ; a='-noattr'  ; b='-nofppos' },
+      @{ args = '-noattr -nobd'      ; a='-noattr'  ; b='-nobd' },
+      @{ args = '-noattr -nobdcosm'  ; a='-noattr'  ; b='-nobdcosm' },
+      @{ args = '-nofp -nobd'        ; a='-nofp'    ; b='-nobd' },
+      @{ args = '-nofppos -nobdcosm' ; a='-nofppos' ; b='-nobdcosm' }
+    )
+    foreach ($case in $cases) {
+      $exec = New-ExecWithArgs -argSpec $case.args
+      $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($case.a))
+      $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($case.b))
+      @($exec.args) | Should -Contain $case.a
+      @($exec.args) | Should -Contain $case.b
+    }
   }
 
-  It 'accepts triple combination: -nobdcosm -nofppos -noattr' {
-    $exec = New-ExecWithArgs -argSpec '-nobdcosm -nofppos -noattr'
-    foreach ($f in @('-nobdcosm','-nofppos','-noattr')) {
+  It 'accepts canonical combination: -noattr -nofp -nofppos -nobd -nobdcosm' {
+    $combo = $script:CanonicalFlags -join ' '
+    $exec = New-ExecWithArgs -argSpec $combo
+    foreach ($f in $script:CanonicalFlags) {
       $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($f))
       @($exec.args) | Should -Contain $f
     }
   }
 
-  It 'allows mixing -lvpath with noise-filter flags' {
-    $lv = 'C:\\Path With Space\\LabVIEW.exe'
-    $exec = New-ExecWithArgs -argSpec ("-nobdcosm -nofppos -noattr -lvpath `"$lv`"")
-    foreach ($f in @('-nobdcosm','-nofppos','-noattr','-lvpath')) {
+  It 'allows mixing -lvpath with canonical flags' {
+    $lv = 'C:\Path With Space\LabVIEW.exe'
+    $exec = New-ExecWithArgs -argSpec (("{0} -lvpath `"{1}`"" -f ($script:CanonicalFlags -join ' '), $lv))
+    foreach ($f in ($script:CanonicalFlags + @('-lvpath'))) {
       $exec.command | Should -Match ("(^|\s){0}(\s|$)" -f [regex]::Escape($f))
     }
     # Verify tokens preserve -lvpath value

@@ -367,6 +367,23 @@ $exitPath   = Join-Path $OutputDir 'lvcompare-exitcode.txt'
 $jsonPath   = Join-Path $OutputDir 'lvcompare-capture.json'
 $reportPath = Join-Path $OutputDir 'compare-report.html'
 
+# Clear stale CLI artifacts so CreateComparisonReport does not fail on existing files
+try {
+	if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+		Remove-Item -LiteralPath $reportPath -Force -ErrorAction Stop
+	}
+} catch {
+	if (-not $Quiet) { Write-Warning ("Failed to purge stale report {0}: {1}" -f $reportPath, $_.Exception.Message) }
+}
+$cliImagesDir = Join-Path $OutputDir 'cli-images'
+try {
+	if (Test-Path -LiteralPath $cliImagesDir -PathType Container) {
+		Remove-Item -LiteralPath $cliImagesDir -Recurse -Force -ErrorAction Stop
+	}
+} catch {
+	if (-not $Quiet) { Write-Warning ("Failed to purge stale CLI images {0}: {1}" -f $cliImagesDir, $_.Exception.Message) }
+}
+
 # Build process start info
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = $cliPath

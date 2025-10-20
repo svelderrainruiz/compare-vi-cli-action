@@ -174,7 +174,7 @@
 
 
 
-  Additional args for LVCompare (default: -nobdcosm -nofppos -noattr).
+  Additional args for LVCompare (default: -noattr -nofp -nofppos -nobd -nobdcosm).
 
 
 
@@ -294,7 +294,7 @@ param(
 
 
 
-  [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
+  [string]$LvCompareArgs = '-noattr -nofp -nofppos -nobd -nobdcosm',
 
 
 

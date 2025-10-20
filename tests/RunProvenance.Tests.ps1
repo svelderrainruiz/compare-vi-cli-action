@@ -22,6 +22,11 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
       ImageOS             = $env:ImageOS
       ImageVersion        = $env:ImageVersion
     }
+
+    function Clear-ProvenanceEnv([string]$Name) {
+      Remove-Item Env:$Name -ErrorAction SilentlyContinue
+      [System.Environment]::SetEnvironmentVariable($Name, $null, 'Process')
+    }
   }
 
   BeforeEach {
@@ -46,8 +51,8 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
     $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
     $env:GITHUB_REF        = 'refs/heads/feature/fallback'
     $env:GITHUB_REF_NAME   = 'feature/fallback'
-    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
-    Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
+    Clear-ProvenanceEnv 'GITHUB_HEAD_REF'
+    Clear-ProvenanceEnv 'GITHUB_BASE_REF'
     $env:GITHUB_REPOSITORY = 'owner/repo'
     $env:GITHUB_RUN_ID = '1234'
     $env:GITHUB_RUN_ATTEMPT = '1'
@@ -76,8 +81,8 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
     $evtPath = Join-Path $TestDrive 'event.json'
     Set-Content -LiteralPath $evtPath -Value $evt -Encoding UTF8
     $env:GITHUB_EVENT_PATH = $evtPath
-    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
-    Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
+    Clear-ProvenanceEnv 'GITHUB_HEAD_REF'
+    Clear-ProvenanceEnv 'GITHUB_BASE_REF'
 
     $outDir = Join-Path $TestDrive 'results2'
     $root = (Get-Location).Path
@@ -92,9 +97,9 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
     $env:GITHUB_EVENT_NAME = 'push'
     $env:GITHUB_REF        = 'refs/heads/feature/push-case'
     $env:GITHUB_REF_NAME   = 'feature/push-case'
-    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
-    Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
-    Remove-Item Env:GITHUB_EVENT_PATH -ErrorAction SilentlyContinue
+    Clear-ProvenanceEnv 'GITHUB_HEAD_REF'
+    Clear-ProvenanceEnv 'GITHUB_BASE_REF'
+    Clear-ProvenanceEnv 'GITHUB_EVENT_PATH'
 
     $outDir = Join-Path $TestDrive 'results3'
     $root = (Get-Location).Path
@@ -110,8 +115,8 @@ Describe 'Write-RunProvenance' -Tag 'Unit' {
     $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
     $env:GITHUB_REF        = 'refs/heads/feature/strategy-case'
     $env:GITHUB_REF_NAME   = 'feature/strategy-case'
-    Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
-    Remove-Item Env:GITHUB_BASE_REF -ErrorAction SilentlyContinue
+    Clear-ProvenanceEnv 'GITHUB_HEAD_REF'
+    Clear-ProvenanceEnv 'GITHUB_BASE_REF'
     $env:EV_STRATEGY = 'single'
     $env:EV_INCLUDE_INTEGRATION = 'false'
 

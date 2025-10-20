@@ -3,7 +3,7 @@
   Runs LVCompare.exe against two VIs to validate CLI readiness and emit diff breadcrumbs.
 
 .DESCRIPTION
-  Executes LVCompare.exe with deterministic defaults (-nobdcosm -nofppos -noattr), captures
+  Executes LVCompare.exe with deterministic defaults (-noattr -nofp -nofppos -nobd -nobdcosm), captures
   exit code/duration, optionally enforces expectations about diff presence, and emits NDJSON
   events for downstream observability. Intended as a lightweight readiness probe before
   expensive orchestrations or as a sample compare to generate baseline artifacts.
@@ -58,7 +58,7 @@ param(
   [ValidateSet('32','64')][string]$LabVIEWBitness = '64',
   [string]$BaseVi,
   [string]$HeadVi,
-  [string[]]$DiffArguments = @('-nobdcosm','-nofppos','-noattr'),
+  [string[]]$DiffArguments = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm'),
   [int]$TimeoutSeconds = 60,
   [switch]$ExpectDiff,
   [switch]$ExpectNoDiff,

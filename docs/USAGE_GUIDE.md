@@ -11,7 +11,7 @@ Quotes and spaces are preserved.
 Common noise filters:
 
 ```yaml
-lvCompareArgs: "-nobdcosm -nofppos -noattr"
+lvCompareArgs: "-noattr -nofp -nofppos -nobd -nobdcosm"
 ```
 
 - `-nobdcosm` – ignore block diagram cosmetic changes.
@@ -43,7 +43,7 @@ If your VIs live under a subfolder, set `working-directory` to avoid long relati
     working-directory: my-project
     base: src/VI1.vi
     head: src/VI2.vi
-    lvCompareArgs: "-nobdcosm -nofppos -noattr"
+    lvCompareArgs: "-noattr -nofp -nofppos -nobd -nobdcosm"
 ```
 
 ## Path resolution tips
@@ -61,7 +61,7 @@ Generate a standalone HTML diff via LabVIEWCLI (LabVIEW 2025 Q3+):
 LabVIEWCLI -OperationName CreateComparisonReport `
     -VI1 "C:\path\VI1.vi" -VI2 "C:\path\VI2.vi" `
     -ReportType HTMLSingleFile -ReportPath "CompareReport.html" `
-  -nobdcosm -nofppos -noattr
+  -noattr -nofp -nofppos -nobd -nobdcosm
 ```
 
 Benefits: artefact-friendly, visual review, honours noise filters.

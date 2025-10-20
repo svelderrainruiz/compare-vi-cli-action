@@ -173,18 +173,18 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
     $html | Should -Match 'Exit code.*1'
   }
 
-  It 'accepts recommended knowledgebase CLI flags: -nobdcosm -nofppos -noattr' -Skip:(-not $script:CompareVIPrereqsAvailable) {
-    # Test with recommended noise filters from knowledgebase
-    $cliArgs = '-nobdcosm -nofppos -noattr'
+  It 'accepts canonical CLI flags: -noattr -nofp -nofppos -nobd -nobdcosm' -Skip:(-not $script:CompareVIPrereqsAvailable) {
+    # Test with canonical noise filters
+    $cliArgs = '-noattr -nofp -nofppos -nobd -nobdcosm'
     $res = Invoke-CompareVI -Base $BaseVi -Head $HeadVi -LvComparePath $Canonical -LvCompareArgs $cliArgs -FailOnDiff:$false
-    
+
     # Should execute successfully with these flags
     $res.ExitCode | Should -BeIn @(0, 1)
-    
+
     # Verify flags are in the command
-    $res.Command | Should -Match '-nobdcosm'
-    $res.Command | Should -Match '-nofppos'
-    $res.Command | Should -Match '-noattr'
+    foreach ($flag in @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')) {
+      $res.Command | Should -Match [regex]::Escape($flag)
+    }
   }
 
   It 'handles -lvpath flag from knowledgebase for LabVIEW version selection' -Skip:(-not $script:CompareVIPrereqsAvailable) {
@@ -207,7 +207,7 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
   It 'handles complex flag combinations from knowledgebase' -Skip:(-not $script:CompareVIPrereqsAvailable) {
     # Combine multiple recommended flags
     $lvPath = 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe'
-  $cliArgs = "-lvpath `"$lvPath`" -nobdcosm -nofppos -noattr"
+  $cliArgs = "-lvpath `"$lvPath`" -noattr -nofp -nofppos -nobd -nobdcosm"
     
   $res = Invoke-CompareVI -Base $BaseVi -Head $HeadVi -LvComparePath $Canonical -LvCompareArgs $cliArgs -FailOnDiff:$false
     if ($res.ShortCircuitedIdenticalPath) {
@@ -217,9 +217,9 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
     
     # Verify all flags are in the command
     $res.Command | Should -Match '-lvpath'
-    $res.Command | Should -Match '-nobdcosm'
-    $res.Command | Should -Match '-nofppos'
-    $res.Command | Should -Match '-noattr'
+    foreach ($flag in @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')) {
+      $res.Command | Should -Match [regex]::Escape($flag)
+    }
   }
 }
 

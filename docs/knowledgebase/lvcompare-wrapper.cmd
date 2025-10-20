@@ -34,8 +34,8 @@ if not exist "%LV_COMPARE%" (
 )
 
 if exist "%LV_EXE%" (
-  "%LV_COMPARE%" "%VI1%" "%VI2%" -lvpath "%LV_EXE%" -nobdcosm -nofppos -noattr %*
+  "%LV_COMPARE%" "%VI1%" "%VI2%" -lvpath "%LV_EXE%" -noattr -nofp -nofppos -nobd -nobdcosm %*
 ) else (
   echo [WARN] LabVIEW.exe not found at the default location; using registered LabVIEW.
-  "%LV_COMPARE%" "%VI1%" "%VI2%" -nobdcosm -nofppos -noattr %*
+  "%LV_COMPARE%" "%VI1%" "%VI2%" -noattr -nofp -nofppos -nobd -nobdcosm %*
 )

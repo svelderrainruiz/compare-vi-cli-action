@@ -25,7 +25,7 @@
   Optional explicit LVCompare.exe path. Defaults to canonical install or LVCOMPARE_PATH when omitted.
 
 .PARAMETER Flags
-  Additional LVCompare flags. Defaults to -nobdcosm -nofppos -noattr unless
+  Additional LVCompare flags. Defaults to -noattr -nofp -nofppos -nobd -nobdcosm unless
   -ReplaceFlags is used.
 
 .PARAMETER ReplaceFlags
@@ -511,8 +511,8 @@ if (-not $LabVIEWExePath -or -not (Test-Path -LiteralPath $LabVIEWExePath -PathT
   exit 2
 }
 
-# Compose flags list: -lvpath then normalization flags
-$defaultFlags = @('-nobdcosm','-nofppos','-noattr')
+  # Compose flags list: -lvpath then normalization flags
+$defaultFlags = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')
 $effectiveFlags = @()
 if ($LabVIEWExePath) { $effectiveFlags += @('-lvpath', $LabVIEWExePath) }
 if ($ReplaceFlags.IsPresent) {

@@ -86,7 +86,7 @@ Describe 'Invoke-CompareVI core behavior' -Tag 'Unit' {
   }
 
   It 'parses quoted args and reconstructs the command' {
-    $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs '--flag "C:\\Temp\\Spaced Path\\x"' -FailOnDiff:$false -Executor $mockExecutor
+    $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs '--log "C:\\Temp\\Spaced Path\\x"' -FailOnDiff:$false -Executor $mockExecutor
     # The command will contain the quoted argument with escaped backslashes
     $res.Command | Should -BeLike '*"C:\\Temp\\Spaced Path\\x"*'
   }
