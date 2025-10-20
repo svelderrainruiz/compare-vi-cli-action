@@ -6,9 +6,43 @@ Describe 'Updater wire probes single-path injection' -Tag 'Unit' {
     $root = Resolve-Path (Join-Path $PSScriptRoot '..')
     $script:Updater = (Join-Path $root 'tools' 'workflows' 'update_workflows.py')
     if (-not (Test-Path -LiteralPath $script:Updater)) { throw "Updater script not found: $script:Updater" }
+    $pythonCmd = $null
+    $python = Get-Command -Name python -ErrorAction SilentlyContinue
+    if ($python -and $python.Source -and ($python.Source -notmatch 'WindowsApps\\python.exe$')) {
+      $pythonCmd = @('python')
+    } elseif ($python -and $python.Source -and ($python.Source -match 'WindowsApps\\python.exe$')) {
+      $pythonCmd = $null
+    }
+    if (-not $pythonCmd) {
+      $pyLauncher = Get-Command -Name py -ErrorAction SilentlyContinue
+      if ($pyLauncher) { $pythonCmd = @('py','-3') }
+    }
+    function Invoke-TestPython {
+      param([Parameter(Mandatory)][string[]]$Arguments)
+      if (-not $script:pythonCmd -or $script:pythonCmd.Count -eq 0) {
+        throw 'Python command not configured'
+      }
+      $exe = $script:pythonCmd[0]
+      $prefix = @()
+      if ($script:pythonCmd.Count -gt 1) {
+        $prefix = $script:pythonCmd[1..($script:pythonCmd.Count-1)]
+      }
+      & $exe @prefix @Arguments
+    }
+    $script:pythonCmd = $pythonCmd
+    if ($script:pythonCmd) {
+      Invoke-TestPython -Arguments @('-c','import ruamel.yaml') | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        $script:pythonCmd = $null
+      }
+    }
   }
 
   It 'injects probes in windows-single job and remains idempotent' {
+    if (-not $script:pythonCmd) {
+      Set-ItResult -Skipped -Because 'Python 3 not available'
+      return
+    }
     $wf = @'
 name: CI Orchestrated (single synthetic)
 on: { workflow_dispatch: {} }
@@ -34,8 +68,8 @@ jobs:
 '@
     $tempPath = Join-Path $TestDrive 'ci-orchestrated.yml'
     Set-Content -LiteralPath $tempPath -Value $wf -Encoding UTF8
-    & python $script:Updater --write $tempPath | Out-Null
-    & python $script:Updater --write $tempPath | Out-Null
+    Invoke-TestPython -Arguments @($script:Updater,'--write',$tempPath) | Out-Null
+    Invoke-TestPython -Arguments @($script:Updater,'--write',$tempPath) | Out-Null
     $doc = Get-Content -LiteralPath $tempPath -Raw | ConvertFrom-Yaml
     $getName = {
       param($step)

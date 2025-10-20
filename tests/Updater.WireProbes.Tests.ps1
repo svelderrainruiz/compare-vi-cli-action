@@ -6,9 +6,44 @@ Describe 'Updater wire probes injection' -Tag 'Unit' {
     $root = Resolve-Path (Join-Path $PSScriptRoot '..')
     $script:upd = (Join-Path $root 'tools' 'workflows' 'update_workflows.py')
     if (-not (Test-Path -LiteralPath $script:upd)) { throw "Updater script not found: $script:upd" }
+    $pythonCmd = $null
+    $python = Get-Command -Name python -ErrorAction SilentlyContinue
+    if ($python -and $python.Source -and ($python.Source -notmatch 'WindowsApps\\python.exe$')) {
+      $pythonCmd = @('python')
+    } elseif ($python -and $python.Source -and ($python.Source -match 'WindowsApps\\python.exe$')) {
+      # Windows store shim is inaccessible to service accounts; treat as missing.
+      $pythonCmd = $null
+    }
+    if (-not $pythonCmd) {
+      $pyLauncher = Get-Command -Name py -ErrorAction SilentlyContinue
+      if ($pyLauncher) { $pythonCmd = @('py','-3') }
+    }
+    function Invoke-TestPython {
+      param([Parameter(Mandatory)][string[]]$Arguments)
+      if (-not $script:pythonCmd -or $script:pythonCmd.Count -eq 0) {
+        throw 'Python command not configured'
+      }
+      $exe = $script:pythonCmd[0]
+      $prefix = @()
+      if ($script:pythonCmd.Count -gt 1) {
+        $prefix = $script:pythonCmd[1..($script:pythonCmd.Count-1)]
+      }
+      & $exe @prefix @Arguments
+    }
+    $script:pythonCmd = $pythonCmd
+    if ($script:pythonCmd) {
+      Invoke-TestPython -Arguments @('-c','import ruamel.yaml') | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        $script:pythonCmd = $null
+      }
+    }
   }
 
   It 'injects J1/J2, T1, S1, C1/C2, I1/I2, G0/G1, P1 in ci-orchestrated.yml' {
+    if (-not $script:pythonCmd) {
+      Set-ItResult -Skipped -Because 'Python 3 not available'
+      return
+    }
     $wf = @'
 name: CI Orchestrated (deterministic chain)
 on: { workflow_dispatch: {} }
@@ -45,7 +80,7 @@ jobs:
     $p = Join-Path $TestDrive 'ci-orchestrated.yml'
     Set-Content -LiteralPath $p -Value $wf -Encoding UTF8
     # Apply updater
-    $null = & python $script:upd --write $p
+    Invoke-TestPython -Arguments @($script:upd,'--write',$p)
     $doc = Get-Content -LiteralPath $p -Raw | ConvertFrom-Yaml
     $getName = {
       param($step)
@@ -90,6 +125,10 @@ jobs:
   }
 
   It 'injects J1/J2 and S1 in validate.yml and is idempotent' {
+    if (-not $script:pythonCmd) {
+      Set-ItResult -Skipped -Because 'Python 3 not available'
+      return
+    }
     $wf = @'
 name: Validate
 on: { workflow_dispatch: {} }
@@ -104,8 +143,8 @@ jobs:
     $p = Join-Path $TestDrive 'validate.yml'
     Set-Content -LiteralPath $p -Value $wf -Encoding UTF8
     # Run twice to ensure no duplicates
-    $null = & python $script:upd --write $p
-    $null = & python $script:upd --write $p
+    Invoke-TestPython -Arguments @($script:upd,'--write',$p)
+    Invoke-TestPython -Arguments @($script:upd,'--write',$p)
     $doc = Get-Content -LiteralPath $p -Raw | ConvertFrom-Yaml
     $getName = {
       param($step)
