@@ -1,0 +1,153 @@
+name: Manual VI Compare (refs)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Optional sample id for concurrency grouping'
+        required: false
+        type: string
+      vi_path:
+        description: 'Repository-relative path to the VI (e.g. VIs/MyVI.vi)'
+        required: true
+        type: string
+      base_ref:
+        description: 'Base git ref or commit (e.g. main or 123abc)'
+        required: true
+        default: 'f953572a18194b58ca4d05383c2795c56cc24865'
+        type: string
+      head_ref:
+        description: 'Head git ref or commit'
+        required: true
+        default: 'd173970c182842b39b21ff1ec14821496191b9a7'
+        type: string
+      lv_compare_args:
+        description: 'Optional LVCompare flags (space-delimited)'
+        required: false
+        default: ''
+        type: string
+      fail_on_diff:
+        description: 'Fail the job when LVCompare reports differences'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true','false']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.inputs.sample_id || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify LVCompare and idle LabVIEW state
+        shell: pwsh
+        run: |
+          $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          if (-not (Test-Path -LiteralPath $cli)) {
+            Write-Host "::error::LVCompare.exe not found at canonical path: $cli"; exit 1
+          }
+          $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
+          if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
+          Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
+
+  compare:
+    runs-on: [self-hosted, Windows, X64]
+    needs: preflight
+    timeout-minutes: 30
+    env:
+      UNBLOCK_GUARD: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Ensure refs available
+        shell: pwsh
+        run: |
+          git fetch --all --prune --prune-tags --tags
+
+      - name: Compare VI between refs
+        id: compare
+        shell: pwsh
+        env:
+          VI_PATH: ${{ inputs.vi_path }}
+          BASE_REF: ${{ inputs.base_ref }}
+          HEAD_REF: ${{ inputs.head_ref }}
+          LV_ARGS: ${{ inputs.lv_compare_args }}
+          FAIL_ON_DIFF: ${{ inputs.fail_on_diff }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $resultsDir = Join-Path $env:GITHUB_WORKSPACE 'tests/results/ref-compare'
+          New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+          $outName = $env:VI_PATH -replace '[\\/:]+','_'
+          if ([string]::IsNullOrWhiteSpace($outName)) { $outName = 'vi-compare' }
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'tools/Compare-RefsToTemp.ps1'
+          $args = @(
+            '-NoLogo','-NoProfile','-File', $scriptPath,
+            '-Path', $env:VI_PATH,
+            '-RefA', $env:BASE_REF,
+            '-RefB', $env:HEAD_REF,
+            '-ResultsDir', $resultsDir,
+            '-OutName', $outName,
+            '-Detailed',
+            '-RenderReport',
+            '-Quiet'
+          )
+          if (-not [string]::IsNullOrWhiteSpace($env:LV_ARGS)) {
+            $args += '-LvCompareArgs'
+            $args += $env:LV_ARGS
+          }
+          if ($env:FAIL_ON_DIFF -eq 'true') { $args += '-FailOnDiff' }
+          $proc = Start-Process -FilePath 'pwsh' -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+          if ($proc.ExitCode -ne 0) {
+            throw "Compare-RefsToTemp.ps1 exited with $($proc.ExitCode). See logs for details."
+          }
+          $summaryPath = Join-Path $resultsDir ("{0}-summary.json" -f $outName)
+          if (-not (Test-Path -LiteralPath $summaryPath)) {
+            throw "Summary not found at $summaryPath"
+          }
+          "summaryPath=$summaryPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "resultsDir=$resultsDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "outName=$outName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Append summary
+        if: ${{ always() && steps.compare.outputs.summaryPath != '' }}
+        shell: pwsh
+        env:
+          SUMMARY_PATH: ${{ steps.compare.outputs.summaryPath }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $summary = Get-Content -LiteralPath $env:SUMMARY_PATH -Raw | ConvertFrom-Json
+          $lines = @('### LVCompare Ref Diff','')
+          $lines += "- VI: $($summary.path)"
+          $lines += "- Base ref: $($summary.refA)"
+          $lines += "- Head ref: $($summary.refB)"
+          $lines += "- Diff detected: $($summary.cli.diff)"
+          $lines += "- Exit code: $($summary.cli.exitCode)"
+          if ($summary.out.reportHtml) { $lines += "- Report: $($summary.out.reportHtml)" }
+          if ($summary.cli.highlights) {
+            $lines += ''
+            $lines += '#### Highlights'
+            foreach ($h in $summary.cli.highlights) { $lines += "- $h" }
+          }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vi-compare-refs
+          path: ${{ steps.compare.outputs.resultsDir }}/**
+          if-no-files-found: warn
+
+      - name: Runner Unblock Guard
+        if: always()
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/runner-unblock-snapshot.json
+          cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'

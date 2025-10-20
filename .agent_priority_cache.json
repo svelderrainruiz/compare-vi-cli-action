@@ -2,17 +2,17 @@
   "number": 134,
   "title": "Standing priority: evolve CompareVI helper into N-provider CLI companion",
   "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/134",
-  "state": "OPEN",
+  "state": "CLOSED",
   "labels": [
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
   "commentCount": 3,
-  "lastSeenUpdatedAt": "2025-10-19T13:51:13Z",
-  "issueDigest": "97e24f831c2d7fa22525859c1ea35bf82b1f515ac0273aaefc1f30426b37c36e",
+  "lastSeenUpdatedAt": "2025-10-19T23:34:50Z",
+  "issueDigest": "00f44dc1c28fb710874970d6ea5d0914332a9f4dc78b6d6b15e8a8ff7a690035",
   "bodyDigest": "171d05613064fb5a0a085cb76ca6871abbc7c9b902cc78a8d6387ec02e9cb03a",
-  "cachedAtUtc": "2025-10-19T14:42:50.538Z",
+  "cachedAtUtc": "2025-10-19T23:45:31.629Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
