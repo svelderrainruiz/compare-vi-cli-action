@@ -37,11 +37,6 @@ on:
         required: false
         type: boolean
         default: true
-      flag_nobd:
-        description: 'Ignore block diagram (-nobd)'
-        required: false
-        type: boolean
-        default: true
       flag_nobdcosm:
         description: 'Ignore block diagram cosmetic changes (-nobdcosm)'
         required: false
@@ -106,7 +101,6 @@ jobs:
           FLAG_NOATTR: ${{ inputs.flag_noattr }}
           FLAG_NOFP: ${{ inputs.flag_nofp }}
           FLAG_NOFPPOS: ${{ inputs.flag_nofppos }}
-          FLAG_NOBD: ${{ inputs.flag_nobd }}
           FLAG_NOBDCOSM: ${{ inputs.flag_nobdcosm }}
           EXTRA_FLAGS: ${{ inputs.additional_flags }}
           FAIL_ON_DIFF: ${{ inputs.fail_on_diff }}
@@ -121,11 +115,11 @@ jobs:
           if ($env:FLAG_NOATTR -eq 'true') { $flagList += '-noattr' }
           if ($env:FLAG_NOFP -eq 'true') { $flagList += '-nofp' }
           if ($env:FLAG_NOFPPOS -eq 'true') { $flagList += '-nofppos' }
-          if ($env:FLAG_NOBD -eq 'true') { $flagList += '-nobd' }
           if ($env:FLAG_NOBDCOSM -eq 'true') { $flagList += '-nobdcosm' }
           if (-not [string]::IsNullOrWhiteSpace($env:EXTRA_FLAGS)) {
             $flagList += $env:EXTRA_FLAGS
           }
+          if ($flagList -notcontains '-nobd') { $flagList = @('-nobd') + $flagList }
           $args = @(
             '-NoLogo','-NoProfile','-File', $scriptPath,
             '-ViName', $env:VI_NAME,
