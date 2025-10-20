@@ -334,7 +334,11 @@ foreach ($pair in $pairs) {
     $args += '-LvCompareArgs'
     $args += ($flagTokens -join ' ')
   }
-  $args += (if ($FailOnDiff) { '-FailOnDiff:$true' } else { '-FailOnDiff:$false' })
+  if ($FailOnDiff) {
+    $args += '-FailOnDiff:$true'
+  } else {
+    $args += '-FailOnDiff:$false'
+  }
 
   if (-not $Quiet) {
     Write-Host "Comparing $ViName for commits $refA -> $refB (pair $pairLabel)..."
