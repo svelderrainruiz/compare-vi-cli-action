@@ -37,14 +37,24 @@ $outPath = Join-Path $ResultsDir $FileName
 # Gather env with safe defaults
 $ref        = $env:GITHUB_REF
 $refName    = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } elseif ($ref -match 'refs/heads/(.+)$') { $Matches[1] } else { '' }
-$headRef    = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $refName }
-$baseRef    = if ($env:GITHUB_BASE_REF) { $env:GITHUB_BASE_REF } else { '' }
-$headSha    = $env:GITHUB_SHA
 $eventName  = $env:GITHUB_EVENT_NAME
 $repo       = $env:GITHUB_REPOSITORY
 $runId      = $env:GITHUB_RUN_ID
 $runAttempt = $env:GITHUB_RUN_ATTEMPT
 $workflow   = $env:GITHUB_WORKFLOW
+
+$headRefFromEnv = $env:GITHUB_HEAD_REF
+if ($eventName -eq 'workflow_dispatch') {
+  if ([string]::IsNullOrWhiteSpace($headRefFromEnv)) {
+    $headRef = $refName
+  } else {
+    $headRef = $headRefFromEnv
+  }
+} else {
+  $headRef = if ($headRefFromEnv) { $headRefFromEnv } else { $refName }
+}
+$baseRef    = if ($env:GITHUB_BASE_REF) { $env:GITHUB_BASE_REF } else { '' }
+$headSha    = $env:GITHUB_SHA
 
 # Best-effort runner profile (includes labels when available)
 $runnerProfile = $null
