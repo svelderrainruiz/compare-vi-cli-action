@@ -5,7 +5,7 @@
 .DESCRIPTION
   Mirrors the environment-first pattern used by Close-LabVIEW.ps1. The script resolves the LVCompare
   CLI path (default canonical install), derives the LabVIEW executable path from parameters or environment
-  variables, then launches LVCompare.exe with deterministic switches (`-nobdcosm -nofppos -noattr`). It waits
+  variables, then launches LVCompare.exe with deterministic switches (`-noattr -nofp -nofppos -nobd -nobdcosm`). It waits
   for the process to exit within the requested timeout, optionally killing the process on timeout, and emits
   a small result object summarising the invocation.
 
@@ -43,7 +43,7 @@
   Without this flag the script emits an error and leaves the process untouched.
 
 .PARAMETER SkipDefaultFlags
-  Disables automatic inclusion of `-nobdcosm -nofppos -noattr`.
+  Disables automatic inclusion of `-noattr -nofp -nofppos -nobd -nobdcosm`.
 
 .OUTPUTS
   Writes a PSCustomObject describing the invocation (`exitCode`, `lvComparePath`, `labVIEWPath`, `arguments`, `elapsedSeconds`).
@@ -154,7 +154,7 @@ if (-not (Test-Path -LiteralPath $HeadVi -PathType Leaf)) { throw "Head VI not f
 
 $arguments = @($BaseVi, $HeadVi, '-lvpath', $LabVIEWExePath)
 if (-not $SkipDefaultFlags) {
-  $arguments += @('-nobdcosm','-nofppos','-noattr')
+  $arguments += @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')
 }
 if ($AdditionalArguments) { $arguments += $AdditionalArguments }
 

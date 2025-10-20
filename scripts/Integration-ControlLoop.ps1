@@ -33,7 +33,7 @@
 .PARAMETER JsonLog
   Optional path to append JSON lines (one object per iteration) for later analysis.
 .PARAMETER LvCompareArgs
-  Optional string of extra LVCompare flags (space-delimited; quoting supported) e.g. "-nobdcosm -nofppos -noattr".
+  Optional string of extra LVCompare flags (space-delimited; quoting supported) e.g. "-noattr -nofp -nofppos -nobd -nobdcosm".
 .PARAMETER FailOnDiff
   When set, terminate the loop on the first detected diff (exit code 0 for clean termination or 2 on CLI error).
 .PARAMETER Quiet
@@ -44,7 +44,7 @@
   Skip canonical path check (used in unit-style tests or when CLI presence already assured externally).
 
 .EXAMPLE
-  pwsh -File ./scripts/Integration-ControlLoop.ps1 -Base 'C:\repos\main\ControlLoop.vi' -Head 'C:\repos\feature\ControlLoop.vi' -LvCompareArgs "-nobdcosm -nofppos -noattr" -SkipIfUnchanged -IntervalSeconds 3
+  pwsh -File ./scripts/Integration-ControlLoop.ps1 -Base 'C:\repos\main\ControlLoop.vi' -Head 'C:\repos\feature\ControlLoop.vi' -LvCompareArgs "-noattr -nofp -nofppos -nobd -nobdcosm" -SkipIfUnchanged -IntervalSeconds 3
 
 .EXAMPLE
   # Run until a diff occurs, failing immediately
@@ -58,7 +58,7 @@ param(
   [int]$MaxIterations = 0,
   [switch]$SkipIfUnchanged,
   [string]$JsonLog,
-  [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
+  [string]$LvCompareArgs = '-noattr -nofp -nofppos -nobd -nobdcosm',
   [ValidateSet('Auto','x64','x86')][string]$LvCompareBitness = 'Auto',
   [switch]$FailOnDiff,
   [switch]$Quiet,
@@ -102,7 +102,7 @@ function Invoke-ControlLoopScript {
     [int]$MaxIterations = 0,
     [switch]$SkipIfUnchanged,
     [string]$JsonLog,
-    [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
+    [string]$LvCompareArgs = '-noattr -nofp -nofppos -nobd -nobdcosm',
     [ValidateSet('Auto','x64','x86')][string]$LvCompareBitness = 'Auto',
     [switch]$FailOnDiff,
     [switch]$Quiet,

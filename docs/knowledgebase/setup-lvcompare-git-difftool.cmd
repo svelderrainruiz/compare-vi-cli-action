@@ -40,7 +40,7 @@ echo [INFO] Using LVCompare: "%LV_COMPARE%"
 if defined LV_ARG echo [INFO] Using LabVIEW:  "%LV_EXE%"
 
 :: Build the difftool command string with proper escaping
-set "CMD=\"%LV_COMPARE%\" \"$LOCAL\" \"$REMOTE\" %LV_ARG% -nobdcosm -nofppos -noattr"
+set "CMD=\"%LV_COMPARE%\" \"$LOCAL\" \"$REMOTE\" %LV_ARG% -noattr -nofp -nofppos -nobd -nobdcosm"
 
 echo.
 echo [INFO] Configuring Git difftool "lvcompare"...

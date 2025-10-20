@@ -9,7 +9,7 @@ Prerequisites and tips for running the Pester integration suite.
 - Environment variables:
   - `LV_BASE_VI`, `LV_HEAD_VI` – distinct fixtures.
   - Optional: `LV_PREVIEW=1` (preview args only), `CEILING_MS` (timing thresholds).
-- Recommended noise filters: `-nobdcosm -nofppos -noattr`.
+- Recommended noise filters: `-noattr -nofp -nofppos -nobd -nobdcosm`.
 
 ## Running locally
 

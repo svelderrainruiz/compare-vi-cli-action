@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 
   This script does NOT spawn LVCompare or any external processes.
 .EXAMPLE
-  pwsh -File scripts/Debug-Args.ps1 -Args "-nobdcosm -nofppos -noattr '--log C:\\a b\\z.txt' -lvpath=C:\\X\\LabVIEW.exe"
+  pwsh -File scripts/Debug-Args.ps1 -Args "-noattr -nofp -nofppos -nobd -nobdcosm '--log C:\\a b\\z.txt' -lvpath=C:\\X\\LabVIEW.exe"
 #>
 param(
   [Parameter(Mandatory=$true)]

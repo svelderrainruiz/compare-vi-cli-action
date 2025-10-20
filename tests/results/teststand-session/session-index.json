@@ -9,7 +9,7 @@
     "events": "C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\tests\\results\\teststand-session\\compare\\compare-events.ndjson",
     "capture": "C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\tests\\results\\teststand-session\\compare\\lvcompare-capture.json",
     "report": false,
-    "command": "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI\\LabVIEWCLI.exe -OperationName CreateComparisonReport -VI1 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI1.vi -VI2 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI2.vi -ReportPath C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\tests\\results\\teststand-session\\compare\\cli-report.html -ReportType HTMLSingleFile -nobdcosm -nofppos -noattr",
+    "command": "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI\\LabVIEWCLI.exe -OperationName CreateComparisonReport -VI1 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI1.vi -VI2 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI2.vi -ReportPath C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\tests\\results\\teststand-session\\compare\\cli-report.html -ReportType HTMLSingleFile -noattr -nofp -nofppos -nobd -nobdcosm",
     "cliPath": "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI\\LabVIEWCLI.exe",
     "cli": {
       "path": "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI\\LabVIEWCLI.exe",
@@ -341,8 +341,9 @@
   "outcome": {
     "diff": true,
     "seconds": 3.492,
-    "command": "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI\\LabVIEWCLI.exe -OperationName CreateComparisonReport -VI1 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI1.vi -VI2 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI2.vi -ReportPath C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\tests\\results\\teststand-session\\compare\\cli-report.html -ReportType HTMLSingleFile -nobdcosm -nofppos -noattr",
+    "command": "C:\\Program Files (x86)\\National Instruments\\Shared\\LabVIEW CLI\\LabVIEWCLI.exe -OperationName CreateComparisonReport -VI1 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI1.vi -VI2 C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\VI2.vi -ReportPath C:\\codex\\home\\runner\\work\\compare-vi-cli-action\\tests\\results\\teststand-session\\compare\\cli-report.html -ReportType HTMLSingleFile -noattr -nofp -nofppos -nobd -nobdcosm",
     "exitCode": 1
   },
   "error": null
 }
+

@@ -42,9 +42,9 @@ exit /b 0
     ($content.Contains($base)) | Should -BeTrue
     ($content.Contains($head)) | Should -BeTrue
     ($content -match '-lvpath\s+"?' + [regex]::Escape($labviewExe)) | Should -BeTrue
-    ($content.Contains('-nobdcosm')) | Should -BeTrue
-    ($content.Contains('-nofppos')) | Should -BeTrue
-    ($content.Contains('-noattr')) | Should -BeTrue
+    foreach ($flag in @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')) {
+      ($content.Contains($flag)) | Should -BeTrue
+    }
   }
 
   It 'fails when LabVIEW executable path is missing' {

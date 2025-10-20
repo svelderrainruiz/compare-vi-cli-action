@@ -46,18 +46,19 @@ Describe 'Invoke-CompareVI input and output validation (no CLI)' {
 
   It 'parses quoted lvCompareArgs and includes them in the reconstructed command' {
     $exec = { param($cli,$base,$head,$arr) return 0 }
-    $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs '--flag "C:\\Temp\\Spaced Path\\x"' -Executor $exec
+    $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs '--log "C:\Temp\Spaced Path\x"' -Executor $exec
     # Validate command contains the flag and the quoted path (robust match)
-    $res.Command | Should -Match '--flag\s+"C:.*Spaced Path.*x"'
+    $res.Command | Should -Match '--log\s+"C:.*Spaced Path.*x"'
   }
 
   It 'supports multiple lvCompareArgs including appended values with spaces' {
     $exec = { param($cli,$base,$head,$arr) return 0 }
-    $argLine = '--a 1 --b "two words" --c'
+    $argLine = '-noattr --log "two words" -lvpath "C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe" -nobd'
     $res = Invoke-CompareVI -Base $a -Head $b -LvCompareArgs $argLine -Executor $exec
-    $res.Command | Should -Match '--a\s+1'
-    $res.Command | Should -Match '--b\s+"two words"'
-    $res.Command | Should -Match '--c(\s|$)'
+    $res.Command | Should -Match '-noattr(\s|$)'
+    $res.Command | Should -Match '--log\s+"two words"'
+    $res.Command | Should -Match '-lvpath\s+"C:\\Program Files\\National Instruments\\LabVIEW 2025\\LabVIEW.exe"'
+    $res.Command | Should -Match '-nobd(\s|$)'
   }
 
   It 'writes outputs and summary for exit code 0 (diff=false)' {

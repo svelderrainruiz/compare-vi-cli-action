@@ -22,7 +22,7 @@ function Invoke-IntegrationCompareLoop {
     [int]$MaxIterations = 0,
     [switch]$SkipIfUnchanged,
     [string]$JsonLog,
-    [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
+    [string]$LvCompareArgs = '-noattr -nofp -nofppos -nobd -nobdcosm',
     [ValidateSet('Auto','x64','x86')][string]$LvCompareBitness = 'Auto',
     [switch]$FailOnDiff,
     [switch]$Quiet,

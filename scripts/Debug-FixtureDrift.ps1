@@ -42,7 +42,7 @@ param(
   [string]$OverrideJson,
   [string]$BasePath,
   [string]$HeadPath,
-  [string]$LvCompareArgs = '-nobdcosm -nofppos -noattr',
+  [string]$LvCompareArgs = '-noattr -nofp -nofppos -nobd -nobdcosm',
   [switch]$RenderReport,
   [switch]$SimulateCompare,
   [switch]$Clean,

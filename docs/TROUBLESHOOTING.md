@@ -34,7 +34,7 @@ Set `fail-on-diff: false` to treat code 1 as notice-only.
 
 ## Performance checklist
 
-- Use noise filters (`-nobdcosm -nofppos -noattr`).
+- Use noise filters (`-noattr -nofp -nofppos -nobd -nobdcosm`).
 - Shorten paths with `working-directory`.
 - For UNC/long paths, map a drive or enable long-path support.
 

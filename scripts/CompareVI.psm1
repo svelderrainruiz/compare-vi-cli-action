@@ -360,10 +360,6 @@ function Invoke-CompareVI {
         '-nobd'     = 'none'
         '-nobdcosm' = 'none'
         '-lvpath'   = 'value'
-        '--flag'    = 'value'
-        '--a'       = 'value'
-        '--b'       = 'value'
-        '--c'       = 'none'
         '--log'     = 'value'
       }
       for ($i = 0; $i -lt $argsArr.Count; $i++) {

@@ -42,6 +42,30 @@ function Normalize-ExistingPath {
   try { return (Resolve-Path -LiteralPath $Candidate -ErrorAction Stop).Path } catch { return $Candidate }
 }
 
+function Get-IncludedAttributesFromReport {
+  param([string]$ReportPath)
+  if ([string]::IsNullOrWhiteSpace($ReportPath)) { return @() }
+  if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) { return @() }
+  try {
+    $html = Get-Content -LiteralPath $ReportPath -Raw -ErrorAction Stop
+  } catch {
+    return @()
+  }
+  $matches = [regex]::Matches($html, '<li\s+class="(?<state>checked|unchecked)">(?<text>[^<]*)</li>', 'IgnoreCase')
+  $results = @()
+  foreach ($match in $matches) {
+    $state = $match.Groups['state'].Value
+    $text = $match.Groups['text'].Value
+    if ([string]::IsNullOrWhiteSpace($text)) { continue }
+    $name = [System.Net.WebUtility]::HtmlDecode($text.Trim())
+    $results += [pscustomobject]@{
+      name     = $name
+      included = ($state -eq 'checked')
+    }
+  }
+  return $results
+}
+
 function Resolve-ViRelativePath {
   param(
     [Parameter(Mandatory=$true)][string]$ViName,
@@ -237,6 +261,7 @@ $cliArtifacts = $null
 $cliHighlights = @()
 $cliStdoutPreview = @()
 $detailPaths = [ordered]@{}
+$includedAttributes = @()
 
 if ($detailRequested) {
   $invokeArgs = @('-NoLogo','-NoProfile','-File', $invokeScriptResolved, '-BaseVi', $base, '-HeadVi', $head, '-OutputDir', $artifactDir, '-Quiet')
@@ -321,8 +346,14 @@ if ($detailRequested) {
   if (Test-Path -LiteralPath $capturePath) { $detailPaths.captureJson = (Resolve-Path -LiteralPath $capturePath).Path }
   if (Test-Path -LiteralPath $stdoutPath)  { $detailPaths.stdout       = (Resolve-Path -LiteralPath $stdoutPath).Path }
   if (Test-Path -LiteralPath $stderrPath)  { $detailPaths.stderr       = (Resolve-Path -LiteralPath $stderrPath).Path }
-  if (Test-Path -LiteralPath $reportPath)  { $detailPaths.reportHtml   = (Resolve-Path -LiteralPath $reportPath).Path }
+  if (Test-Path -LiteralPath $reportPath)  {
+    $reportHtmlPath = (Resolve-Path -LiteralPath $reportPath).Path
+    $detailPaths.reportHtml = $reportHtmlPath
+  } else {
+    $reportHtmlPath = $null
+  }
   if (Test-Path -LiteralPath $imagesDir)   { $detailPaths.imagesDir    = (Resolve-Path -LiteralPath $imagesDir).Path }
+  if ($reportHtmlPath) { $includedAttributes = Get-IncludedAttributesFromReport -ReportPath $reportHtmlPath }
 
   $execObject = [ordered]@{
     schema      = 'compare-exec/v1'
@@ -374,6 +405,7 @@ if ($cliArgsRecorded -and $cliArgsRecorded.Length -gt 0) { $cliSummary.args = $c
 if ($cliHighlights -and $cliHighlights.Length -gt 0) { $cliSummary.highlights = $cliHighlights }
 if ($cliStdoutPreview -and $cliStdoutPreview.Length -gt 0) { $cliSummary.stdoutPreview = $cliStdoutPreview }
 if ($cliArtifacts) { $cliSummary.artifacts = $cliArtifacts }
+if ($includedAttributes -and $includedAttributes.Count -gt 0) { $cliSummary.includedAttributes = $includedAttributes }
 
 $sum = [ordered]@{
   schema = 'ref-compare-summary/v1'
@@ -402,6 +434,13 @@ if (-not $Quiet) {
   Write-Host "- Summary: $sumPath"
   if ($artifactDir) { Write-Host "- Artifacts: $artifactDir" }
   Write-Host ("- ExpectDiff={0} | cli.diff={1} | exitCode={2}" -f $expectDiff,([bool]$cliDiff),$cliExit)
+  if ($includedAttributes -and $includedAttributes.Count -gt 0) {
+    Write-Host "- Included attributes:"
+    foreach ($attr in $includedAttributes) {
+      $mark = if ($attr.included) { '[x]' } else { '[ ]' }
+      Write-Host ("  {0} {1}" -f $mark, $attr.name)
+    }
+  }
 }
 
 if ($FailOnDiff -and $cliDiff) {

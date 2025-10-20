@@ -26,12 +26,12 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
   
   It 'tokenizes comma-delimited flags and quoted values consistently' {
   # Use forward slashes for cross-platform compatibility in test data
-  $argSpec = "-nobdcosm,-nofppos,-noattr,'-lvpath C:/Path With Space/LabVIEW.exe','--log C:/t x/l.log'"
+  $argSpec = "-noattr,-nofp,-nofppos,-nobd,-nobdcosm,'-lvpath C:/Path With Space/LabVIEW.exe','--log C:/t x/l.log'"
 
   # CompareVI (direct tokenization pipeline)
   $cliArgs = Invoke-GetLVCompareArgTokens -Spec $argSpec
   $normalized = Invoke-ConvertArgTokenList -Tokens $cliArgs
-  $expected = @('-nobdcosm','-nofppos','-noattr','-lvpath','C:\Path With Space\LabVIEW.exe','--log','C:\t x\l.log')
+  $expected = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm','-lvpath','C:\Path With Space\LabVIEW.exe','--log','C:\t x\l.log')
   (Convert-TokensForAssert $normalized) | Should -Be (Convert-TokensForAssert $expected)
 
     # CompareLoop (DI path)
@@ -43,16 +43,16 @@ Describe 'LVCompare args tokenization' -Tag 'Unit' {
   $exec = { param($cli,$b,$h,$argv) $script:__cap = $argv; return 0 }
   $null = Invoke-IntegrationCompareLoop -Base $base -Head $head -LvCompareArgs $argSpec -CompareExecutor $exec -SkipValidation -PassThroughPaths -BypassCliValidation -Quiet -MaxIterations 1
   $argsSeen = $script:__cap
-  $expected2 = @('-nobdcosm','-nofppos','-noattr','-lvpath','C:\Path With Space\LabVIEW.exe','--log','C:\t x\l.log')
+  $expected2 = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm','-lvpath','C:\Path With Space\LabVIEW.exe','--log','C:\t x\l.log')
   (Convert-TokensForAssert @($argsSeen)) | Should -Be (Convert-TokensForAssert $expected2)
   }
 
   It 'tokenizes whitespace-delimited flags with double-quoted values' {
-  $argSpec = '-nobdcosm -nofppos -noattr "--log C:\a b\z.txt" -lvpath=C:\X\LabVIEW.exe "-lvpath C:\Y\LabVIEW.exe"'
+  $argSpec = '-noattr -nofp -nofppos -nobd -nobdcosm "--log C:\a b\z.txt" -lvpath=C:\X\LabVIEW.exe "-lvpath C:\Y\LabVIEW.exe"'
   # CompareVI (whitespace/equals pipeline only)
   $list2 = Invoke-GetLVCompareArgTokens -Spec $argSpec
   $norm2 = Invoke-ConvertArgTokenList -Tokens $list2
-  $expected3 = @('-nobdcosm','-nofppos','-noattr','--log','C:\a b\z.txt','-lvpath','C:\X\LabVIEW.exe','-lvpath','C:\Y\LabVIEW.exe')
+  $expected3 = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm','--log','C:\a b\z.txt','-lvpath','C:\X\LabVIEW.exe','-lvpath','C:\Y\LabVIEW.exe')
   (Convert-TokensForAssert $norm2) | Should -Be (Convert-TokensForAssert $expected3)
   }
 
