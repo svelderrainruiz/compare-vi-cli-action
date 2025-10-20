@@ -82,10 +82,9 @@ function Resolve-ViRelativePath {
     $commonLower = @($commonLower | Where-Object { $current -contains $_ })
   }
   $commonLower = @($commonLower | Select-Object -Unique)
-  $commonPaths = @($commonLower | ForEach-Object { $pathLookup[$_] })
-
+  $commonPaths = @($commonLower | ForEach-Object { $pathLookup[$_] }) | Where-Object { $_ }
   $allLower = @($pathLookup.Keys)
-  $allPaths = @($allLower | ForEach-Object { $pathLookup[$_] })
+  $allPaths = @($allLower | ForEach-Object { $pathLookup[$_] }) | Where-Object { $_ }
 
   $pathScore = {
     param([string]$PathValue)
@@ -99,7 +98,11 @@ function Resolve-ViRelativePath {
     return $score
   }
 
-  $candidates = if ($commonPaths.Count -gt 0) { $commonPaths } else { $allPaths }
+  $candidates = @($commonPaths)
+  if ($candidates.Count -eq 0) { $candidates = @($allPaths) }
+  if ($candidates.Count -eq 0) {
+    throw "Unable to resolve VI path for '$ViName'."
+  }
   $ordered = $candidates | Sort-Object @{ Expression = { & $pathScore $_ } }, @{ Expression = { $_ } }
   $chosen = $ordered | Select-Object -First 1
   if (-not $chosen) { throw "Unable to resolve VI path for '$ViName'." }
@@ -240,7 +243,7 @@ if ($detailRequested) {
   if ($renderReportRequested) { $invokeArgs += '-RenderReport' }
   if ($lvComparePathResolved) { $invokeArgs += '-LVComparePath'; $invokeArgs += $lvComparePathResolved }
   if ($labviewExeResolved) { $invokeArgs += '-LabVIEWExePath'; $invokeArgs += $labviewExeResolved }
-  if ($flagTokens.Count -gt 0) {
+  if ($flagTokens -and $flagTokens.Length -gt 0) {
     $invokeArgs += '-Flags'
     foreach ($token in $flagTokens) { $invokeArgs += $token }
   }
@@ -338,7 +341,7 @@ if ($detailRequested) {
   $execObject | ConvertTo-Json -Depth 6 | Out-File -FilePath $execPath -Encoding utf8
 }
 else {
-  $argsString = if ($flagTokens.Count -gt 0) { ($flagTokens -join ' ') } else { '' }
+  $argsString = if ($flagTokens -and $flagTokens.Length -gt 0) { ($flagTokens -join ' ') } else { '' }
   $result = Invoke-CompareVI -Base $base -Head $head -LvComparePath $lvComparePathResolved -LvCompareArgs $argsString -CompareExecJsonPath $execPath -FailOnDiff:$false
   $cliExit = [int]$result.ExitCode
   $cliDiff = [bool]$result.Diff
@@ -346,7 +349,7 @@ else {
   $cliPath = $result.CliPath
   $cliDurationSeconds = $result.CompareDurationSeconds
   $cliDurationNanoseconds = $result.CompareDurationNanoseconds
-  if ($flagTokens.Count -gt 0) { $cliArgsRecorded = $flagTokens }
+  if ($flagTokens -and $flagTokens.Length -gt 0) { $cliArgsRecorded = $flagTokens }
 }
 
 if (-not $cliDiff -and $cliExit -eq $null) { $cliExit = 0 }
@@ -367,9 +370,9 @@ $cliSummary = [ordered]@{
   cliPath     = $cliPath
 }
 if ($cliDurationNanoseconds -ne $null) { $cliSummary.duration_ns = $cliDurationNanoseconds }
-if ($cliArgsRecorded.Count -gt 0) { $cliSummary.args = $cliArgsRecorded }
-if ($cliHighlights.Count -gt 0) { $cliSummary.highlights = $cliHighlights }
-if ($cliStdoutPreview.Count -gt 0) { $cliSummary.stdoutPreview = $cliStdoutPreview }
+if ($cliArgsRecorded -and $cliArgsRecorded.Length -gt 0) { $cliSummary.args = $cliArgsRecorded }
+if ($cliHighlights -and $cliHighlights.Length -gt 0) { $cliSummary.highlights = $cliHighlights }
+if ($cliStdoutPreview -and $cliStdoutPreview.Length -gt 0) { $cliSummary.stdoutPreview = $cliStdoutPreview }
 if ($cliArtifacts) { $cliSummary.artifacts = $cliArtifacts }
 
 $sum = [ordered]@{
