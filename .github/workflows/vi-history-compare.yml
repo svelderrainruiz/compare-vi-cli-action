@@ -1,0 +1,140 @@
+name: VI History Compare
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_id:
+        description: 'Optional sample id for concurrency grouping'
+        required: false
+        type: string
+      vi_name:
+        description: 'VI filename (e.g. VI1.vi)'
+        required: true
+        default: 'VI1.vi'
+        type: string
+      branch:
+        description: 'Branch or ref to analyze (default HEAD)'
+        required: false
+        default: 'HEAD'
+        type: string
+      max_pairs:
+        description: 'Maximum adjacent commit pairs to compare'
+        required: false
+        default: 20
+        type: number
+      flag_nobdcosm:
+        description: 'Include -nobdcosm (ignore block diagram cosmetic changes)'
+        required: false
+        default: true
+        type: boolean
+      flag_nofppos:
+        description: 'Include -nofppos (ignore front-panel position changes)'
+        required: false
+        default: true
+        type: boolean
+      flag_noattr:
+        description: 'Include -noattr (ignore VI attribute differences)'
+        required: false
+        default: true
+        type: boolean
+      additional_flags:
+        description: 'Extra LVCompare flags (optional, space-delimited)'
+        required: false
+        default: ''
+        type: string
+      fail_on_diff:
+        description: 'Fail workflow when LVCompare reports differences'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.inputs.sample_id || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify LVCompare installation
+        shell: pwsh
+        run: |
+          $cli = 'C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe'
+          if (-not (Test-Path -LiteralPath $cli)) {
+            Write-Host "::error::LVCompare.exe not found at canonical path: $cli"; exit 1
+          }
+          $lv = Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue
+          if ($lv) { Write-Host "::error::LabVIEW.exe is running (PID(s): $($lv.Id -join ','))"; exit 1 }
+          Write-Host 'Preflight OK: LVCompare present; LabVIEW not running.'
+
+  compare-history:
+    runs-on: [self-hosted, Windows, X64]
+    needs: preflight
+    timeout-minutes: 60
+    env:
+      UNBLOCK_GUARD: '1'
+      VI_NAME: ${{ inputs.vi_name }}
+      TARGET_BRANCH: ${{ inputs.branch || 'HEAD' }}
+      MAX_PAIRS: ${{ inputs.max_pairs || 20 }}
+      FLAG_NOBDCOSM: ${{ inputs.flag_nobdcosm }}
+      FLAG_NOFPPOS: ${{ inputs.flag_nofppos }}
+      FLAG_NOATTR: ${{ inputs.flag_noattr }}
+      EXTRA_FLAGS: ${{ inputs.additional_flags }}
+      FAIL_ON_DIFF: ${{ inputs.fail_on_diff || 'false' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Ensure refs available
+        shell: pwsh
+        run: git fetch --all --prune --tags
+
+      - name: Run VI history compare
+        id: history
+        shell: pwsh
+        run: |
+          $flags = @()
+          if ($env:FLAG_NOBDCOSM -eq 'true') { $flags += '-nobdcosm' }
+          if ($env:FLAG_NOFPPOS -eq 'true') { $flags += '-nofppos' }
+          if ($env:FLAG_NOATTR -eq 'true') { $flags += '-noattr' }
+          if (-not [string]::IsNullOrWhiteSpace($env:EXTRA_FLAGS)) {
+            $extra = $env:EXTRA_FLAGS.Trim()
+            if ($extra) { $flags += $extra }
+          }
+          $args = @(
+            '-File', (Join-Path $env:GITHUB_WORKSPACE 'tools' 'Compare-VIHistory.ps1'),
+            '-ViName', $env:VI_NAME,
+            '-Branch', $env:TARGET_BRANCH,
+            '-MaxPairs', [int]$env:MAX_PAIRS,
+            '-ResultsDir', 'tests/results/ref-compare-history'
+          )
+          if ($flags.Count -gt 0) {
+            $args += '-LvCompareArgs'
+            $args += ($flags -join ' ')
+          }
+          if ($env:FAIL_ON_DIFF -eq 'true') { $args += '-FailOnDiff' }
+          pwsh @args
+          $summaryPath = Join-Path $env:GITHUB_WORKSPACE 'tests/results/ref-compare-history/history-summary.json'
+          if (Test-Path -LiteralPath $summaryPath) {
+            "historySummary=$summaryPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
+      - name: Upload history artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vi-history-compare
+          path: tests/results/ref-compare-history/**
+          if-no-files-found: warn
+
+      - name: Runner Unblock Guard
+        if: always()
+        uses: ./.github/actions/runner-unblock-guard
+        with:
+          snapshot-path: tests/results/runner-unblock-snapshot.json
+          cleanup: ${{ env.UNBLOCK_GUARD == '1' }}
+          process-names: 'conhost,pwsh,LabVIEW,LVCompare'
