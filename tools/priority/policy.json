@@ -7,6 +7,16 @@
     "delete_branch_on_merge": true
   },
   "branches": {
+    "main": {
+      "required_linear_history": true,
+      "required_status_checks": [
+        "guard",
+        "lint",
+        "fixtures",
+        "session-index",
+        "issue-snapshot"
+      ]
+    },
     "develop": {
       "required_linear_history": true,
       "required_status_checks": [
