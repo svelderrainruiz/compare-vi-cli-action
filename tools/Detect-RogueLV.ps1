@@ -41,6 +41,37 @@ function Diff-Rogue([int[]]$live, $noticedSet){
   return ,$rogue
 }
 
+function Get-ProcessDetails {
+  param(
+    [int[]]$ProcessIds
+  )
+  $details = @()
+  foreach ($processId in $ProcessIds) {
+    if ($processId -le 0) { continue }
+    try {
+      $proc = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
+      $details += [pscustomobject]@{
+        pid = $processId
+        name = $proc.Name
+        commandLine = $proc.CommandLine
+        executablePath = $proc.ExecutablePath
+        creationDate = if ($proc.CreationDate) { ([System.Management.ManagementDateTimeConverter]::ToDateTime($proc.CreationDate)).ToString('o') } else { $null }
+        error = $null
+      }
+    } catch {
+      $details += [pscustomobject]@{
+        pid = $processId
+        name = $null
+        commandLine = $null
+        executablePath = $null
+        creationDate = $null
+        error = $_.Exception.Message
+      }
+    }
+  }
+  return $details
+}
+
 $rogueLC = Diff-Rogue $liveLC $noticedLC
 $rogueLV = Diff-Rogue $liveLV $noticedLV
 
@@ -50,6 +81,10 @@ $out = [ordered]@{
   lookbackSeconds = $LookBackSeconds
   noticeDir = $noticeDir
   live = [ordered]@{ lvcompare = $liveLC; labview = $liveLV }
+  liveDetails = [ordered]@{
+    lvcompare = @(Get-ProcessDetails -ProcessIds $liveLC)
+    labview   = @(Get-ProcessDetails -ProcessIds $liveLV)
+  }
   noticed = [ordered]@{ lvcompare = @($noticedLC); labview = @($noticedLV) }
   rogue = [ordered]@{ lvcompare = $rogueLC; labview = $rogueLV }
 }
@@ -60,6 +95,41 @@ if (-not $Quiet) {
   $lines += ('- Live: LVCompare={0} LabVIEW={1}' -f ($liveLC -join ','), ($liveLV -join ','))
   $lines += ('- Noticed: LVCompare={0} LabVIEW={1}' -f ((@($noticedLC)) -join ','), ((@($noticedLV)) -join ','))
   $lines += ('- Rogue: LVCompare={0} LabVIEW={1}' -f ($rogueLC -join ','), ($rogueLV -join ','))
+  if ($out.liveDetails.lvcompare.Count -gt 0 -or $out.liveDetails.labview.Count -gt 0) {
+    $lines += ''
+    if ($out.liveDetails.lvcompare.Count -gt 0) {
+      $lines += '  Live LVCompare details:'
+      foreach ($entry in $out.liveDetails.lvcompare) {
+        $info = $null
+        if ($entry.PSObject.Properties['commandLine'] -and $entry.commandLine) {
+          $info = $entry.commandLine
+        } elseif ($entry.PSObject.Properties['executablePath'] -and $entry.executablePath) {
+          $info = $entry.executablePath
+        } elseif ($entry.PSObject.Properties['error'] -and $entry.error) {
+          $info = "error: $($entry.error)"
+        } else {
+          $info = '(no data)'
+        }
+        $lines += ('  - PID {0}: {1}' -f $entry.pid, $info)
+      }
+    }
+    if ($out.liveDetails.labview.Count -gt 0) {
+      $lines += '  Live LabVIEW details:'
+      foreach ($entry in $out.liveDetails.labview) {
+        $info = $null
+        if ($entry.PSObject.Properties['commandLine'] -and $entry.commandLine) {
+          $info = $entry.commandLine
+        } elseif ($entry.PSObject.Properties['executablePath'] -and $entry.executablePath) {
+          $info = $entry.executablePath
+        } elseif ($entry.PSObject.Properties['error'] -and $entry.error) {
+          $info = "error: $($entry.error)"
+        } else {
+          $info = '(no data)'
+        }
+        $lines += ('  - PID {0}: {1}' -f $entry.pid, $info)
+      }
+    }
+  }
   $txt = $lines -join [Environment]::NewLine
   Write-Host $txt
   if ($AppendToStepSummary -and $env:GITHUB_STEP_SUMMARY) { $txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
@@ -69,5 +139,3 @@ $json = $out | ConvertTo-Json -Depth 6
 Write-Output $json
 
 if ($FailOnRogue -and ($rogueLC.Count -gt 0 -or $rogueLV.Count -gt 0)) { exit 3 } else { exit 0 }
-
-
