@@ -91,7 +91,7 @@ async function run() {
   if (!available) {
     notes.push(availabilityMessage || 'npm wrapper check failed');
   } else {
-    const scripts = ['priority:test', 'hooks:test', 'semver:check'];
+    const scripts = ['priority:test', 'hooks:test', 'semver:check', 'priority:policy'];
     for (const script of scripts) {
       const args = [wrapperPath, script];
       const { exitCode, stdout, stderr, startedAt, completedAt, durationMs, error } = await runCommand(nodeExecPath, args);

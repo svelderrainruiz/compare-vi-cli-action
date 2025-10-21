@@ -42,6 +42,8 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
   commits land on `develop`/`main`.
 - Keep PRs focused and include the standing issue reference (`#<number>`) in the commit subject and PR description.
 - Ensure required checks (`validate`, `fixtures`, `session-index`) are green before merging; rerun as needed.
+- Run `npm run priority:policy` if you need to audit merge settings locally; the command also runs during
+  `priority:handoff-tests` and fails when repo/branch policy drifts.
 
 ## Dispatcher modules
 
