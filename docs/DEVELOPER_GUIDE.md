@@ -44,6 +44,9 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - Ensure required checks (`validate`, `fixtures`, `session-index`) are green before merging; rerun as needed.
 - Run `npm run priority:policy` if you need to audit merge settings locally; the command also runs during
   `priority:handoff-tests` and fails when repo/branch policy drifts.
+- Prefer opening PRs from your fork with `npm run priority:pr`; the helper pushes the current branch to `origin`
+  and calls `gh pr create --fill --repo <upstream> --base develop --head <fork>:branch`. Configure `origin` to point
+  at your fork before running the command.
 
 ## Dispatcher modules
 
