@@ -14,7 +14,8 @@
         "lint",
         "fixtures",
         "session-index",
-        "issue-snapshot"
+        "issue-snapshot",
+        "Workflows Lint / lint (pull_request)"
       ]
     },
     "develop": {
@@ -24,7 +25,8 @@
         "lint",
         "fixtures",
         "session-index",
-        "issue-snapshot"
+        "issue-snapshot",
+        "Workflows Lint / lint (pull_request)"
       ]
     },
     "release/*": {
@@ -34,7 +36,8 @@
         "lint",
         "fixtures",
         "session-index",
-        "issue-snapshot"
+        "issue-snapshot",
+        "Workflows Lint / lint (pull_request)"
       ],
       "stale_days": 30
     }
