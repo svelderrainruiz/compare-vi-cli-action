@@ -44,7 +44,7 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - Use short-lived `feature/<slug>` branches when parallel threads are needed. Rebase on `develop` frequently and
   open PRs with `npm run priority:pr`.
 - When preparing a release:
-  1. Create `release/<version>` from `develop` (helper script forthcoming).
+  1. Create `release/<version>` from `develop` ( `npm run release:branch` ).
   2. Finish release-only work on feature branches targeting `release/<version>`.
   3. Merge the release branch into `main`, tag, then fast-forward `develop` if additional commits landed.
 - Delete branches automatically after merging (GitHub setting) so the standing-priority flow starts clean each time.
