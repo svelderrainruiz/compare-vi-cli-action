@@ -163,18 +163,19 @@ try {
   Invoke-BackboneStep -Name 'LabVIEW cleanup buffer' -Action {
     $waitScript = Join-Path $repoRoot 'tools' 'Agent-Wait.ps1'
     $waitStarted = $false
+    $waitSeconds = 15
     if (Test-Path -LiteralPath $waitScript -PathType Leaf) {
       try {
         . $waitScript
         if (Get-Command -Name 'Start-AgentWait' -ErrorAction SilentlyContinue) {
           try {
-            Start-AgentWait -Reason 'labview shutdown buffer' -ExpectedSeconds 15 | Out-Null
+            Start-AgentWait -Reason 'labview shutdown buffer' -ExpectedSeconds $waitSeconds | Out-Null
             $waitStarted = $true
           } catch {}
         }
       } catch {}
     }
-    Start-Sleep -Seconds 15
+    Start-Sleep -Seconds $waitSeconds
     if ($waitStarted -and (Get-Command -Name 'End-AgentWait' -ErrorAction SilentlyContinue)) {
       try { End-AgentWait | Out-Null } catch {}
     }
@@ -193,7 +194,7 @@ try {
     if ($labviewProcs.Count -gt 0) {
       try {
         Stop-Process -Id $labviewProcs.Id -Force -ErrorAction Stop
-        Write-Host ("Backbone cleanup: forced LabVIEW.exe termination (PID(s) {0})." -f ($labviewProcs.Id -join ',')) -ForegroundColor Yellow
+        Write-Warning ("Backbone cleanup: forced LabVIEW.exe termination (PID(s) {0})." -f ($labviewProcs.Id -join ','))
       } catch {
         Write-Warning ("Backbone cleanup: Stop-Process failed: {0}" -f $_.Exception.Message)
       }
