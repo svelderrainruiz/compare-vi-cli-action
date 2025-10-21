@@ -163,7 +163,7 @@ try {
   Invoke-BackboneStep -Name 'LabVIEW cleanup buffer' -Action {
     $waitScript = Join-Path $repoRoot 'tools' 'Agent-Wait.ps1'
     $waitStarted = $false
-    $waitSeconds = 15
+    $waitSeconds = 2
     if (Test-Path -LiteralPath $waitScript -PathType Leaf) {
       try {
         . $waitScript
@@ -182,10 +182,17 @@ try {
 
     $closeScript = Join-Path $repoRoot 'tools' 'Close-LabVIEW.ps1'
     if (Test-Path -LiteralPath $closeScript -PathType Leaf) {
-      try {
-        & pwsh '-NoLogo' '-NoProfile' '-File' $closeScript | Out-Null
-      } catch {
-        Write-Warning ("Backbone cleanup: Close-LabVIEW.ps1 failed: {0}" -f $_.Exception.Message)
+      $closeExit = $null
+      for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        try {
+          & pwsh '-NoLogo' '-NoProfile' '-File' $closeScript | Out-Null
+          $closeExit = $LASTEXITCODE
+        } catch {
+          $closeExit = -1
+          Write-Warning ("Backbone cleanup: Close-LabVIEW.ps1 failed (attempt {0}): {1}" -f ($attempt + 1), $_.Exception.Message)
+        }
+        if ($closeExit -eq 0) { break }
+        Start-Sleep -Seconds 1
       }
     }
 
