@@ -160,6 +160,14 @@ try {
     Write-Host "Skipping PrePush-Checks as requested." -ForegroundColor Yellow
   }
 
+  Invoke-BackboneStep -Name 'Detect-RogueLV.ps1' -Action {
+    & pwsh '-NoLogo' '-NoProfile' '-File' (Join-Path $repoRoot 'tools' 'Detect-RogueLV.ps1') `
+      '-ResultsDir' (Join-Path $repoRoot 'tests' 'results') `
+      '-LookBackSeconds' 900 `
+      '-AppendToStepSummary' `
+      '-FailOnRogue'
+  } -SkipWhenDryRun
+
   Write-Host ""
   Write-Host "Local backbone completed successfully." -ForegroundColor Green
 }
