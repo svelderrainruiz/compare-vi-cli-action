@@ -73,17 +73,10 @@ function ensureGhCli() {
 }
 
 function resolveUpstream(repoRoot) {
-  try {
-    const upstreamUrl = run(
-      'git',
-      ['config', '--get', 'remote.upstream.url'],
-      { cwd: repoRoot }
-    );
-    const parsed = parseRemoteUrl(upstreamUrl);
-    if (parsed) {
-      return parsed;
-    }
-  } catch {}
+  const upstream = tryResolveRemote(repoRoot, 'upstream');
+  if (upstream?.parsed) {
+    return upstream.parsed;
+  }
 
   const envRepo = process.env.GITHUB_REPOSITORY;
   if (envRepo && envRepo.includes('/')) {
@@ -96,13 +89,50 @@ function resolveUpstream(repoRoot) {
   );
 }
 
-function resolveOrigin(repoRoot) {
-  const originUrl = run('git', ['config', '--get', 'remote.origin.url'], { cwd: repoRoot });
-  const parsed = parseRemoteUrl(originUrl);
-  if (!parsed) {
-    throw new Error(`Unable to parse origin remote URL: ${originUrl}`);
+function ensureOriginFork(repoRoot, upstream) {
+  let origin = tryResolveRemote(repoRoot, 'origin');
+
+  if (!origin?.parsed || origin.parsed.owner === upstream.owner) {
+    console.log('[priority:create-pr] origin remote missing or points to upstream. Creating fork via gh...');
+    const args = [
+      'repo',
+      'fork',
+      `${upstream.owner}/${upstream.repo}`,
+      '--remote',
+      '--remote-name',
+      'origin'
+    ];
+    const forkResult = spawnSync('gh', args, {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      encoding: 'utf8'
+    });
+    if (forkResult.status !== 0) {
+      throw new Error('Failed to fork repository or set origin remote.');
+    }
+    origin = tryResolveRemote(repoRoot, 'origin');
   }
-  return parsed;
+
+  if (!origin?.parsed) {
+    throw new Error('Unable to determine origin remote after attempting to fork.');
+  }
+
+  if (origin.parsed.owner === upstream.owner) {
+    throw new Error(
+      'Origin remote still points to upstream after attempting to fork. Confirm you have permission and rerun.'
+    );
+  }
+
+  return origin.parsed;
+}
+
+function tryResolveRemote(repoRoot, remoteName) {
+  try {
+    const url = run('git', ['config', '--get', `remote.${remoteName}.url`], { cwd: repoRoot });
+    return { url, parsed: parseRemoteUrl(url) };
+  } catch {
+    return null;
+  }
 }
 
 function getCurrentBranch(repoRoot) {
@@ -150,16 +180,11 @@ function runGhPrCreate(upstream, origin, branch, base, extraArgs = []) {
 function main() {
   const repoRoot = detectRepoRoot();
   const branch = getCurrentBranch(repoRoot);
-  const origin = resolveOrigin(repoRoot);
-  const upstream = resolveUpstream(repoRoot);
-
-  if (origin.owner === upstream.owner && origin.repo === upstream.repo) {
-    throw new Error(
-      'Origin remote matches upstream (not a fork). Configure a forked origin before using this script.'
-    );
-  }
 
   ensureGhCli();
+
+  const upstream = resolveUpstream(repoRoot);
+  const origin = ensureOriginFork(repoRoot, upstream);
 
   pushBranch(repoRoot, branch);
 
