@@ -118,7 +118,11 @@ try {
       Invoke-BackboneStep -Name 'Invoke-PesterTests.ps1' -Action {
         $args = @('-NoLogo', '-NoProfile', '-File', (Join-Path $repoRoot 'Invoke-PesterTests.ps1'))
         $args += '-IntegrationMode'
-        $args += (if ($IncludeIntegration) { 'include' } else { 'exclude' })
+        if ($IncludeIntegration) {
+          $args += 'include'
+        } else {
+          $args += 'exclude'
+        }
         & pwsh @args
       }
     }
@@ -155,6 +159,62 @@ try {
   } else {
     Write-Host "Skipping PrePush-Checks as requested." -ForegroundColor Yellow
   }
+
+  Invoke-BackboneStep -Name 'LabVIEW cleanup buffer' -Action {
+    $waitScript = Join-Path $repoRoot 'tools' 'Agent-Wait.ps1'
+    $waitStarted = $false
+    $waitSeconds = 2
+    if (Test-Path -LiteralPath $waitScript -PathType Leaf) {
+      try {
+        . $waitScript
+        if (Get-Command -Name 'Start-AgentWait' -ErrorAction SilentlyContinue) {
+          try {
+            Start-AgentWait -Reason 'labview shutdown buffer' -ExpectedSeconds $waitSeconds | Out-Null
+            $waitStarted = $true
+          } catch {}
+        }
+      } catch {}
+    }
+    Start-Sleep -Seconds $waitSeconds
+    if ($waitStarted -and (Get-Command -Name 'End-AgentWait' -ErrorAction SilentlyContinue)) {
+      try { End-AgentWait | Out-Null } catch {}
+    }
+
+    $closeScript = Join-Path $repoRoot 'tools' 'Close-LabVIEW.ps1'
+    if (Test-Path -LiteralPath $closeScript -PathType Leaf) {
+      $closeExit = $null
+      for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        try {
+          & pwsh '-NoLogo' '-NoProfile' '-File' $closeScript | Out-Null
+          $closeExit = $LASTEXITCODE
+        } catch {
+          $closeExit = -1
+          Write-Warning ("Backbone cleanup: Close-LabVIEW.ps1 failed (attempt {0}): {1}" -f ($attempt + 1), $_.Exception.Message)
+        }
+        if ($closeExit -eq 0) { break }
+        Start-Sleep -Seconds 1
+      }
+    }
+
+    $labviewProcs = @()
+    try { $labviewProcs = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue) } catch {}
+    if ($labviewProcs.Count -gt 0) {
+      try {
+        Stop-Process -Id $labviewProcs.Id -Force -ErrorAction Stop
+        Write-Warning ("Backbone cleanup: forced LabVIEW.exe termination (PID(s) {0})." -f ($labviewProcs.Id -join ','))
+      } catch {
+        Write-Warning ("Backbone cleanup: Stop-Process failed: {0}" -f $_.Exception.Message)
+      }
+    }
+  } -SkipWhenDryRun
+
+  Invoke-BackboneStep -Name 'Detect-RogueLV.ps1' -Action {
+    & pwsh '-NoLogo' '-NoProfile' '-File' (Join-Path $repoRoot 'tools' 'Detect-RogueLV.ps1') `
+      '-ResultsDir' (Join-Path $repoRoot 'tests' 'results') `
+      '-LookBackSeconds' 900 `
+      '-AppendToStepSummary' `
+      '-FailOnRogue'
+  } -SkipWhenDryRun
 
   Write-Host ""
   Write-Host "Local backbone completed successfully." -ForegroundColor Green

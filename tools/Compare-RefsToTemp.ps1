@@ -273,6 +273,8 @@ if ($detailRequested) {
     foreach ($token in $flagTokens) { $invokeArgs += $token }
   }
   if ($ReplaceFlags) { $invokeArgs += '-ReplaceFlags' }
+  $invokeArgs += '-LeakCheck:$true'
+  $invokeArgs += '-LeakGraceSeconds'; $invokeArgs += '1.5'
 
   $invokeResult = Invoke-PwshProcess -Arguments $invokeArgs -QuietOutput:$Quiet
   $capturePath = Join-Path $artifactDir 'lvcompare-capture.json'

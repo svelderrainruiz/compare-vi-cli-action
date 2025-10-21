@@ -636,21 +636,139 @@ $trackerStatus = switch ($exitCode) {
 }
 Finalize-LabVIEWPidTracker -Status $trackerStatus -ExitCode $exitCode -CompareExitCode $exitCode -ProcessExitCode $exitCode -Command $cap.command -CapturePath $capPath -ReportGenerated $reportExists -DiffDetected ($exitCode -eq 1) -Mode $mode -Policy $policy -AutoCli $autoCli -DidCli $didCli
 
+function Stop-LeakedLabVIEW {
+  param(
+    [string]$LabVIEWExePath,
+    [string]$Context
+  )
+  $existing = @()
+  try { $existing = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue) } catch {}
+  if ($existing.Count -eq 0) { return $false }
+
+  Write-JsonEvent 'info' @{
+    stage   = 'post-compare'
+    action  = 'close-labview'
+    context = $Context
+    pids    = @($existing.Id)
+  }
+
+  $closeSucceeded = $false
+  $params = @{}
+  if ($LabVIEWExePath) { $params.labviewPath = $LabVIEWExePath }
+
+  try {
+    $result = Invoke-LVOperation -Operation 'CloseLabVIEW' -Params $params
+    if ($result -and $result.PSObject.Properties['exitCode'] -and $result.exitCode -eq 0) {
+      $closeSucceeded = $true
+    }
+  } catch {
+    Write-Warning ("Invoke-LVCompare: CloseLabVIEW provider call failed ({0}). Falling back to Close-LabVIEW.ps1." -f $_.Exception.Message)
+  }
+
+  if (-not $closeSucceeded) {
+    $closeScript = Join-Path $repoRoot 'tools' 'Close-LabVIEW.ps1'
+    if (Test-Path -LiteralPath $closeScript -PathType Leaf) {
+      $scriptArgs = @()
+      if ($LabVIEWExePath) {
+        $scriptArgs += '-LabVIEWExePath'
+        $scriptArgs += $LabVIEWExePath
+      }
+      try {
+        & pwsh '-NoLogo' '-NoProfile' '-File' $closeScript @scriptArgs
+        $closeSucceeded = $true
+      } catch {
+        Write-Warning ("Invoke-LVCompare: Close-LabVIEW.ps1 fallback failed: {0}" -f $_.Exception.Message)
+      }
+    } else {
+      Write-Warning ("Invoke-LVCompare: Close-LabVIEW.ps1 fallback unavailable at {0}" -f $closeScript)
+    }
+  }
+
+  Start-Sleep -Milliseconds 250
+  $remaining = @()
+  try { $remaining = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue) } catch {}
+  if ($remaining.Count -gt 0) {
+    Write-Warning ("Invoke-LVCompare: LabVIEW.exe still running after close attempt (PIDs: {0}). Forcing termination." -f ($remaining.Id -join ','))
+    try {
+      Stop-Process -Id $remaining.Id -Force -ErrorAction Stop
+      Start-Sleep -Milliseconds 250
+      $remaining = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue)
+    } catch {
+      Write-Warning ("Invoke-LVCompare: Stop-Process failed: {0}" -f $_.Exception.Message)
+    }
+  }
+  if ($remaining.Count -gt 0) {
+    Write-Warning ("Invoke-LVCompare: LabVIEW.exe remains after forced termination attempt (PIDs: {0})." -f ($remaining.Id -join ','))
+    return $false
+  }
+  return $closeSucceeded
+}
+
+function Get-LeakProcessMetadata {
+  param([int[]]$ProcessIds)
+  $details = @()
+  foreach ($processId in $ProcessIds) {
+    if ($processId -le 0) { continue }
+    $record = [ordered]@{
+      pid = $processId
+      name = $null
+      commandLine = $null
+      executablePath = $null
+      creationDate = $null
+      creationDateRaw = $null
+      creationDateError = $null
+      error = $null
+    }
+    try {
+      $proc = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
+      if ($proc) {
+        $record.name = $proc.Name
+        $record.commandLine = $proc.CommandLine
+        $record.executablePath = $proc.ExecutablePath
+        if ($proc.CreationDate) {
+          $record.creationDateRaw = $proc.CreationDate
+          try {
+            $record.creationDate = [System.Management.ManagementDateTimeConverter]::ToDateTime($proc.CreationDate).ToString('o')
+          } catch {
+            $record.creationDateError = $_.Exception.Message
+          }
+        }
+      }
+    } catch {
+      $record.error = $_.Exception.Message
+    }
+    $details += [pscustomobject]$record
+  }
+  return $details
+}
+
+Stop-LeakedLabVIEW -LabVIEWExePath $LabVIEWExePath -Context 'post-summary'
+
 if ($LeakCheck) {
   if (-not $LeakJsonPath) { $LeakJsonPath = Join-Path $OutputDir 'compare-leak.json' }
   if ($LeakGraceSeconds -gt 0) { Start-Sleep -Seconds $LeakGraceSeconds }
   $lvcomparePids = @(); $labviewPids = @()
   try { $lvcomparePids = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch {}
   try { $labviewPids   = @(Get-Process -Name 'LabVIEW'   -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) } catch {}
+  $lvcompareDetails = if ($lvcomparePids.Count -gt 0) { Get-LeakProcessMetadata -ProcessIds $lvcomparePids } else { @() }
+  $labviewDetails   = if ($labviewPids.Count -gt 0) { Get-LeakProcessMetadata -ProcessIds $labviewPids } else { @() }
   $leak = [ordered]@{
     schema = 'prime-lvcompare-leak/v1'
     at     = (Get-Date).ToString('o')
-    lvcompare = @{ remaining=$lvcomparePids; count=($lvcomparePids|Measure-Object).Count }
-    labview   = @{ remaining=$labviewPids;   count=($labviewPids  |Measure-Object).Count }
+    lvcompare = @{
+      remaining = $lvcomparePids
+      count     = ($lvcomparePids|Measure-Object).Count
+      details   = $lvcompareDetails
+    }
+    labview   = @{
+      remaining = $labviewPids
+      count     = ($labviewPids|Measure-Object).Count
+      details   = $labviewDetails
+    }
   }
   $dir = Split-Path -Parent $LeakJsonPath; if ($dir -and -not (Test-Path $dir)) { New-DirIfMissing -Path $dir }
   $leak | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $LeakJsonPath -Encoding utf8
-  Write-JsonEvent 'leak-check' @{ lvcompareCount=$leak.lvcompare.count; labviewCount=$leak.labview.count; path=$LeakJsonPath }
+  Write-JsonEvent 'leak-check' @{ lvcompareCount=$leak.lvcompare.count; labviewCount=$leak.labview.count; path=$LeakJsonPath; lvcomparePids=$lvcomparePids; labviewPids=$labviewPids }
 }
 
 if ($Summary) {
