@@ -50,12 +50,26 @@ function Get-ProcessDetails {
     if ($processId -le 0) { continue }
     try {
       $proc = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
+      $creationDate = $null
+      $creationDateRaw = $null
+      $creationDateError = $null
+      if ($proc.CreationDate) {
+        $creationDateRaw = $proc.CreationDate
+        try {
+          $creationDate = [System.Management.ManagementDateTimeConverter]::ToDateTime($proc.CreationDate).ToString('o')
+        } catch {
+          $creationDateError = $_.Exception.Message
+        }
+      }
+
       $details += [pscustomobject]@{
         pid = $processId
         name = $proc.Name
         commandLine = $proc.CommandLine
         executablePath = $proc.ExecutablePath
-        creationDate = if ($proc.CreationDate) { ([System.Management.ManagementDateTimeConverter]::ToDateTime($proc.CreationDate)).ToString('o') } else { $null }
+        creationDate = $creationDate
+        creationDateRaw = $creationDateRaw
+        creationDateError = $creationDateError
         error = $null
       }
     } catch {
@@ -65,6 +79,8 @@ function Get-ProcessDetails {
         commandLine = $null
         executablePath = $null
         creationDate = $null
+        creationDateRaw = $null
+        creationDateError = $null
         error = $_.Exception.Message
       }
     }
@@ -100,33 +116,49 @@ if (-not $Quiet) {
     if ($out.liveDetails.lvcompare.Count -gt 0) {
       $lines += '  Live LVCompare details:'
       foreach ($entry in $out.liveDetails.lvcompare) {
-        $info = $null
+        $infoParts = @()
         if ($entry.PSObject.Properties['commandLine'] -and $entry.commandLine) {
-          $info = $entry.commandLine
+          $infoParts += "cmd=$($entry.commandLine)"
         } elseif ($entry.PSObject.Properties['executablePath'] -and $entry.executablePath) {
-          $info = $entry.executablePath
-        } elseif ($entry.PSObject.Properties['error'] -and $entry.error) {
-          $info = "error: $($entry.error)"
-        } else {
-          $info = '(no data)'
+          $infoParts += "path=$($entry.executablePath)"
         }
-        $lines += ('  - PID {0}: {1}' -f $entry.pid, $info)
+        if ($entry.PSObject.Properties['creationDate'] -and $entry.creationDate) {
+          $infoParts += "start=$($entry.creationDate)"
+        } elseif ($entry.PSObject.Properties['creationDateRaw'] -and $entry.creationDateRaw) {
+          $infoParts += "startRaw=$($entry.creationDateRaw)"
+        }
+        if ($entry.PSObject.Properties['creationDateError'] -and $entry.creationDateError) {
+          $infoParts += "startError=$($entry.creationDateError)"
+        }
+        if ($entry.PSObject.Properties['error'] -and $entry.error) {
+          $infoParts += "error=$($entry.error)"
+        }
+        if (-not $infoParts) { $infoParts = @('(no data)') }
+        $lines += ('  - PID {0}: {1}' -f $entry.pid, ($infoParts -join '; '))
       }
     }
     if ($out.liveDetails.labview.Count -gt 0) {
       $lines += '  Live LabVIEW details:'
       foreach ($entry in $out.liveDetails.labview) {
-        $info = $null
+        $infoParts = @()
         if ($entry.PSObject.Properties['commandLine'] -and $entry.commandLine) {
-          $info = $entry.commandLine
+          $infoParts += "cmd=$($entry.commandLine)"
         } elseif ($entry.PSObject.Properties['executablePath'] -and $entry.executablePath) {
-          $info = $entry.executablePath
-        } elseif ($entry.PSObject.Properties['error'] -and $entry.error) {
-          $info = "error: $($entry.error)"
-        } else {
-          $info = '(no data)'
+          $infoParts += "path=$($entry.executablePath)"
         }
-        $lines += ('  - PID {0}: {1}' -f $entry.pid, $info)
+        if ($entry.PSObject.Properties['creationDate'] -and $entry.creationDate) {
+          $infoParts += "start=$($entry.creationDate)"
+        } elseif ($entry.PSObject.Properties['creationDateRaw'] -and $entry.creationDateRaw) {
+          $infoParts += "startRaw=$($entry.creationDateRaw)"
+        }
+        if ($entry.PSObject.Properties['creationDateError'] -and $entry.creationDateError) {
+          $infoParts += "startError=$($entry.creationDateError)"
+        }
+        if ($entry.PSObject.Properties['error'] -and $entry.error) {
+          $infoParts += "error=$($entry.error)"
+        }
+        if (-not $infoParts) { $infoParts = @('(no data)') }
+        $lines += ('  - PID {0}: {1}' -f $entry.pid, ($infoParts -join '; '))
       }
     }
   }
