@@ -118,7 +118,11 @@ try {
       Invoke-BackboneStep -Name 'Invoke-PesterTests.ps1' -Action {
         $args = @('-NoLogo', '-NoProfile', '-File', (Join-Path $repoRoot 'Invoke-PesterTests.ps1'))
         $args += '-IntegrationMode'
-        $args += (if ($IncludeIntegration) { 'include' } else { 'exclude' })
+        if ($IncludeIntegration) {
+          $args += 'include'
+        } else {
+          $args += 'exclude'
+        }
         & pwsh @args
       }
     }
