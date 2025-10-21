@@ -26,6 +26,17 @@
         "session-index",
         "issue-snapshot"
       ]
+    },
+    "release/*": {
+      "required_linear_history": true,
+      "required_status_checks": [
+        "guard",
+        "lint",
+        "fixtures",
+        "session-index",
+        "issue-snapshot"
+      ],
+      "stale_days": 30
     }
   }
 }

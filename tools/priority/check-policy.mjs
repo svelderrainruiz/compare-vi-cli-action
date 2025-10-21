@@ -154,6 +154,34 @@ function compareBranchSettings(branch, expected, actualProtection) {
   return diffs;
 }
 
+const branchCache = {
+  all: null
+};
+
+async function fetchAllBranches(repoUrl, token) {
+  if (branchCache.all) {
+    return branchCache.all;
+  }
+
+  const branches = [];
+  let page = 1;
+  while (true) {
+    const url = `${repoUrl}/branches?per_page=100&page=${page}`;
+    const data = await fetchJson(url, token);
+    if (!Array.isArray(data) || data.length === 0) {
+      break;
+    }
+    branches.push(...data);
+    if (data.length < 100) {
+      break;
+    }
+    page += 1;
+  }
+
+  branchCache.all = branches;
+  return branches;
+}
+
 async function main() {
   const manifest = await loadManifest();
   const token = await resolveToken();
@@ -168,13 +196,69 @@ async function main() {
   const repoDiffs = compareRepoSettings(manifest.repo ?? {}, repoData);
 
   const branchDiffs = [];
-  for (const [branch, expectations] of Object.entries(manifest.branches ?? {})) {
+  const manifestBranches = manifest.branches ?? {};
+  const wildcardEntries = Object.entries(manifestBranches).filter(([branch]) => branch.includes('*'));
+  const regularEntries = Object.entries(manifestBranches).filter(([branch]) => !branch.includes('*'));
+
+  for (const [branch, expectations] of regularEntries) {
     try {
       const protectionUrl = `${repoUrl}/branches/${encodeURIComponent(branch)}/protection`;
       const protection = await fetchJson(protectionUrl, token);
       branchDiffs.push(...compareBranchSettings(branch, expectations, protection));
     } catch (error) {
       branchDiffs.push(`branch ${branch}: failed to load protection -> ${error.message}`);
+    }
+  }
+
+  if (wildcardEntries.length > 0) {
+    const allBranches = await fetchAllBranches(repoUrl, token);
+    for (const [pattern, expectations] of wildcardEntries) {
+      const prefix = pattern.replace('*', '');
+      const matches = allBranches.filter((branch) => branch.name.startsWith(prefix));
+      if (matches.length === 0) {
+        continue;
+      }
+      for (const match of matches) {
+        const branchProtected = match.protected && match.protection?.enabled !== false;
+        let committedDate = null;
+        try {
+          const commitData = await fetchJson(match.commit.url, token);
+          committedDate = commitData.commit?.committer?.date ?? commitData.commit?.author?.date ?? null;
+        } catch (error) {
+          branchDiffs.push(`branch ${match.name}: failed to read commit date -> ${error.message}`);
+        }
+
+        const maxAgeMs = expectations.stale_days ? expectations.stale_days * 24 * 60 * 60 * 1000 : null;
+        let isStale = false;
+        if (maxAgeMs && committedDate) {
+          const ageMs = Date.now() - new Date(committedDate).getTime();
+          if (ageMs > maxAgeMs) {
+            isStale = true;
+            const ageDays = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+            branchDiffs.push(
+              `branch ${match.name}: stale (${ageDays} days since last commit, threshold ${expectations.stale_days} days)`
+            );
+          }
+        }
+
+        if (!branchProtected) {
+          if (!isStale) {
+            branchDiffs.push(`branch ${match.name}: expected protection but branch is not protected`);
+          }
+          continue;
+        }
+
+        try {
+          const protectionUrl = `${repoUrl}/branches/${encodeURIComponent(match.name)}/protection`;
+          const protection = await fetchJson(protectionUrl, token);
+          branchDiffs.push(...compareBranchSettings(match.name, expectations, protection));
+        } catch (error) {
+          if (isStale && error.message.includes('404')) {
+            continue;
+          }
+          branchDiffs.push(`branch ${match.name}: failed to load protection -> ${error.message}`);
+        }
+      }
     }
   }
 
