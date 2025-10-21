@@ -918,6 +918,43 @@ try {
 }
 
 try {
+  $branchRaw = Invoke-Git -Arguments @('rev-parse','--abbrev-ref','HEAD')
+  $releaseBranchName = $null
+  if ($branchRaw) {
+    $branchValues = @($branchRaw)
+    if ($branchValues.Count -gt 0) {
+      $candidate = ($branchValues[0]).Trim()
+      if ($candidate -and $candidate -ne 'HEAD' -and $candidate -like 'release/*') {
+        $releaseBranchName = $candidate
+      }
+    }
+  }
+
+  if ($releaseBranchName) {
+    Write-Host ''
+    Write-Host '[Release Branch]' -ForegroundColor Cyan
+    Write-Host ("  branch  : {0}" -f $releaseBranchName)
+    Write-Host "  finalize: npm run release:finalize -- <version>"
+    Write-Host "  metadata: tests/results/_agent/release/"
+    Write-Host "  ci guard: release branch job runs priority:policy and metadata checks"
+
+    if ($env:GITHUB_STEP_SUMMARY) {
+      $releaseBranchLines = @(
+        '### Release Branch',
+        '',
+        ('- Branch: `{0}`' -f $releaseBranchName),
+        '- Finalize: `npm run release:finalize -- <version>`',
+        '- Metadata: `tests/results/_agent/release/`',
+        '- CI Guard: release branch job runs `priority:policy` and metadata verification'
+      )
+      ($releaseBranchLines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+  }
+} catch {
+  Write-Warning ("Failed to compute release branch guidance: {0}" -f $_.Exception.Message)
+}
+
+try {
   $testSummaryPath = Join-Path (Resolve-Path '.').Path 'tests/results/_agent/handoff/test-summary.json'
   if (Test-Path -LiteralPath $testSummaryPath -PathType Leaf) {
     $testSummaryRaw = Get-Content -LiteralPath $testSummaryPath -Raw | ConvertFrom-Json -ErrorAction Stop
