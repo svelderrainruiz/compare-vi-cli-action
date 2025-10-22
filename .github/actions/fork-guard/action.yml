@@ -1,0 +1,48 @@
+name: Fork Guard
+description: Detects when the workflow is running on a fork and emits summary notes.
+inputs:
+  expected-owner:
+    description: GitHub organization/user that is treated as canonical upstream.
+    required: false
+    default: LabVIEW-Community-CI-CD
+outputs:
+  is-fork:
+    description: 'true when repository owner differs from expected-owner'
+    value: ${{ steps.detect.outputs.is-fork }}
+runs:
+  using: composite
+  steps:
+    - id: detect
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected="${{ inputs.expected-owner }}"
+        owner="${GITHUB_REPOSITORY_OWNER:-}"
+        if [[ -z "$owner" && -n "${GITHUB_REPOSITORY:-}" ]]; then
+          owner="${GITHUB_REPOSITORY%%/*}"
+        fi
+
+        if [[ -z "$owner" ]]; then
+          echo "owner=unknown" >> "$GITHUB_OUTPUT"
+          echo "is-fork=true" >> "$GITHUB_OUTPUT"
+          echo "[fork-guard] Unable to determine repository owner; assuming fork."
+        elif [[ "${owner,,}" == "${expected,,}" ]]; then
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "is-fork=false" >> "$GITHUB_OUTPUT"
+          echo "[fork-guard] Repository owner matches expected upstream (${expected}); mutation steps enabled."
+          exit 0
+        else
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "is-fork=true" >> "$GITHUB_OUTPUT"
+          echo "[fork-guard] Detected fork context (${owner}); mutation steps will be skipped."
+        fi
+
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          {
+            echo '### Fork Guard'
+            echo ''
+            echo "- Expected owner: ${expected}"
+            echo "- Detected owner: ${owner:-unknown}"
+            echo '- Mutation steps skipped: yes'
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi

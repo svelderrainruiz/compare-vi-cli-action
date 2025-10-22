@@ -25,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
+    - name: Fork guard
+      id: fork_guard
+      uses: ./.github/actions/fork-guard
     - name: Check PR mergeability
       if: ${{ github.event_name == 'pull_request' }}
       shell: pwsh
@@ -253,7 +256,7 @@ jobs:
         }
 
     - name: Labels sync enforcement (main)
-      if: github.ref_name == 'main'
+      if: github.ref_name == 'main' && steps.fork_guard.outputs.is-fork != 'true'
       shell: pwsh
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
