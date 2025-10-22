@@ -1,11 +1,33 @@
 #!/usr/bin/env node
 
-import { readFile } from 'node:fs/promises';
-import { access } from 'node:fs/promises';
+import { readFile, access } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
-import process from 'node:process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const manifestPath = new URL('./policy.json', import.meta.url);
+
+function parseArgs(argv = process.argv) {
+  const args = argv.slice(2);
+  const options = {
+    apply: false,
+    help: false
+  };
+
+  for (const arg of args) {
+    if (arg === '--apply') {
+      options.apply = true;
+      continue;
+    }
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+    throw new Error(`Unknown option: ${arg}`);
+  }
+
+  return options;
+}
 
 async function loadManifest() {
   const raw = await readFile(manifestPath, 'utf8');
@@ -26,8 +48,8 @@ function parseRemoteUrl(url) {
   return { owner, repo };
 }
 
-function getRepoFromEnv() {
-  const envRepo = process.env.GITHUB_REPOSITORY;
+function getRepoFromEnv(env = process.env, execSyncFn = execSync) {
+  const envRepo = env.GITHUB_REPOSITORY;
   if (envRepo && envRepo.includes('/')) {
     const [owner, repo] = envRepo.split('/');
     return { owner, repo };
@@ -37,7 +59,7 @@ function getRepoFromEnv() {
     const remoteNames = ['upstream', 'origin'];
     for (const remoteName of remoteNames) {
       try {
-        const url = execSync(`git config --get remote.${remoteName}.url`, {
+        const url = execSyncFn(`git config --get remote.${remoteName}.url`, {
           stdio: ['ignore', 'pipe', 'ignore']
         })
           .toString()
@@ -57,14 +79,14 @@ function getRepoFromEnv() {
   throw new Error('Unable to determine repository owner/name. Set GITHUB_REPOSITORY or define an upstream remote.');
 }
 
-async function resolveToken() {
+async function resolveToken(env = process.env, { readFileFn = readFile, accessFn = access } = {}) {
   const envToken =
-    process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? process.env.GH_ENTERPRISE_TOKEN;
+    env.GITHUB_TOKEN ?? env.GH_TOKEN ?? env.GH_ENTERPRISE_TOKEN;
   if (envToken && envToken.trim()) {
     return envToken.trim();
   }
 
-  const candidates = [process.env.GH_TOKEN_FILE];
+  const candidates = [env.GH_TOKEN_FILE];
   if (process.platform === 'win32') {
     candidates.push('C:\\github_token.txt');
   }
@@ -74,8 +96,8 @@ async function resolveToken() {
       continue;
     }
     try {
-      await access(candidate);
-      const fileToken = (await readFile(candidate, 'utf8')).trim();
+      await accessFn(candidate);
+      const fileToken = (await readFileFn(candidate, 'utf8')).trim();
       if (fileToken) {
         return fileToken;
       }
@@ -87,13 +109,28 @@ async function resolveToken() {
   return null;
 }
 
-async function fetchJson(url, token) {
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'User-Agent': 'priority-policy-check',
-      Accept: 'application/vnd.github+json'
-    }
+async function requestJson(url, token, { method = 'GET', body, fetchFn } = {}) {
+  const fetchImpl = fetchFn ?? globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('Global fetch is not available; provide fetchFn.');
+  }
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'User-Agent': 'priority-policy-check',
+    Accept: 'application/vnd.github+json'
+  };
+  let payload = body;
+  if (body && typeof body !== 'string') {
+    payload = JSON.stringify(body);
+  }
+  if (payload) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetchImpl(url, {
+    method,
+    headers,
+    body: payload
   });
 
   if (!response.ok) {
@@ -101,7 +138,15 @@ async function fetchJson(url, token) {
     throw new Error(`GitHub API request failed: ${response.status} ${response.statusText} -> ${text}`);
   }
 
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
+}
+
+async function fetchJson(url, token, fetchFn) {
+  return requestJson(url, token, { fetchFn });
 }
 
 function compareRepoSettings(expected, actual) {
@@ -154,44 +199,509 @@ function compareBranchSettings(branch, expected, actualProtection) {
   return diffs;
 }
 
-async function main() {
+function compareSets(expectedArr = [], actualArr = []) {
+  const expected = [...new Set(expectedArr)];
+  const actual = [...new Set(actualArr)];
+  const missing = expected.filter((value) => !actual.includes(value));
+  const extra = actual.filter((value) => !expected.includes(value));
+  return { missing, extra };
+}
+
+function findRule(rules = [], type) {
+  if (!Array.isArray(rules)) {
+    return null;
+  }
+  return rules.find((rule) => rule?.type === type) ?? null;
+}
+
+function compareMergeQueue(expected, actualRule) {
+  const diffs = [];
+  if (!expected) {
+    if (actualRule) {
+      diffs.push('merge_queue: unexpected merge queue rule present');
+    }
+    return diffs;
+  }
+
+  if (!actualRule) {
+    diffs.push('merge_queue: rule missing');
+    return diffs;
+  }
+
+  const parameters = actualRule.parameters ?? {};
+  for (const [key, value] of Object.entries(expected)) {
+    if (parameters[key] !== value) {
+      diffs.push(`merge_queue.${key}: expected ${value}, actual ${parameters[key]}`);
+    }
+  }
+
+  return diffs;
+}
+
+function compareRulesetStatusChecks(expected = [], actualRule) {
+  if (!expected || expected.length === 0) {
+    return [];
+  }
+  if (!actualRule) {
+    return ['required_status_checks: rule missing'];
+  }
+
+  const actualContexts =
+    actualRule.parameters?.required_status_checks?.map((check) => check.context).filter(Boolean) ?? [];
+  const { missing, extra } = compareSets(expected, actualContexts);
+  const diffs = [];
+  if (missing.length > 0) {
+    diffs.push(`required_status_checks: missing [${missing.join(', ')}]`);
+  }
+  if (extra.length > 0) {
+    diffs.push(`required_status_checks: unexpected [${extra.join(', ')}]`);
+  }
+  return diffs;
+}
+
+function comparePullRequestRule(expected, actualRule) {
+  if (!expected) {
+    return [];
+  }
+  if (!actualRule) {
+    return ['pull_request: rule missing'];
+  }
+
+  const diffs = [];
+  const parameters = actualRule.parameters ?? {};
+  for (const [key, value] of Object.entries(expected)) {
+    if (key === 'allowed_merge_methods') {
+      const actualMethods = Array.isArray(parameters.allowed_merge_methods)
+        ? parameters.allowed_merge_methods
+        : [];
+      const { missing, extra } = compareSets(value, actualMethods);
+      if (missing.length > 0) {
+        diffs.push(`pull_request.allowed_merge_methods: missing [${missing.join(', ')}]`);
+      }
+      if (extra.length > 0) {
+        diffs.push(`pull_request.allowed_merge_methods: unexpected [${extra.join(', ')}]`);
+      }
+      continue;
+    }
+    if (parameters[key] !== value) {
+      diffs.push(`pull_request.${key}: expected ${value}, actual ${parameters[key]}`);
+    }
+  }
+  return diffs;
+}
+
+function compareRulesetIncludes(expected = [], actual = []) {
+  const { missing, extra } = compareSets(expected, actual);
+  const diffs = [];
+  if (missing.length > 0) {
+    diffs.push(`conditions.ref_name.include: missing [${missing.join(', ')}]`);
+  }
+  if (extra.length > 0) {
+    diffs.push(`conditions.ref_name.include: unexpected [${extra.join(', ')}]`);
+  }
+  return diffs;
+}
+
+function compareRuleset(id, expected, actual) {
+  if (!actual) {
+    return [`ruleset ${id}: not found`];
+  }
+  const diffs = [];
+
+  if (expected.name && actual.name !== expected.name) {
+    diffs.push(`ruleset ${id}: name mismatch (expected ${expected.name}, actual ${actual.name})`);
+  }
+
+  if (expected.target && actual.target !== expected.target) {
+    diffs.push(`ruleset ${id}: target mismatch (expected ${expected.target}, actual ${actual.target})`);
+  }
+
+  if (Array.isArray(expected.includes)) {
+    const actualIncludes = actual.conditions?.ref_name?.include ?? [];
+    diffs.push(
+      ...compareRulesetIncludes(expected.includes, Array.isArray(actualIncludes) ? actualIncludes : [])
+    );
+  }
+
+  const rules = actual.rules ?? [];
+
+  if (expected.required_linear_history) {
+    const linearRule = findRule(rules, 'required_linear_history');
+    if (!linearRule) {
+      diffs.push('required_linear_history: rule missing');
+    }
+  }
+
+  const mergeQueueRule = findRule(rules, 'merge_queue');
+  diffs.push(...compareMergeQueue(expected.merge_queue, mergeQueueRule));
+
+  const statusRule = findRule(rules, 'required_status_checks');
+  diffs.push(...compareRulesetStatusChecks(expected.required_status_checks, statusRule));
+
+  const prRule = findRule(rules, 'pull_request');
+  diffs.push(...comparePullRequestRule(expected.pull_request, prRule));
+
+  return diffs;
+}
+
+function toEnabledNode(value, fallback = false) {
+  if (value && typeof value.enabled === 'boolean') {
+    return { enabled: Boolean(value.enabled) };
+  }
+  return { enabled: fallback };
+}
+
+function buildBranchProtectionPayload(expected, actual) {
+  const expectedChecks = Array.isArray(expected.required_status_checks)
+    ? expected.required_status_checks
+    : [];
+  const actualStrict = actual?.required_status_checks?.strict ?? true;
+  const payload = {
+    required_status_checks: {
+      strict: actualStrict,
+      contexts: expectedChecks
+    },
+    enforce_admins: toEnabledNode(actual?.enforce_admins, false),
+    required_pull_request_reviews: actual?.required_pull_request_reviews ?? null,
+    restrictions: actual?.restrictions ?? null,
+    required_linear_history: {
+      enabled: expected.required_linear_history ?? false
+    },
+    allow_force_pushes: toEnabledNode(actual?.allow_force_pushes, false),
+    allow_deletions: toEnabledNode(actual?.allow_deletions, false),
+    block_creations: toEnabledNode(actual?.block_creations, false),
+    required_conversation_resolution: toEnabledNode(actual?.required_conversation_resolution, false),
+    lock_branch: toEnabledNode(actual?.lock_branch, false),
+    allow_fork_syncing: toEnabledNode(actual?.allow_fork_syncing, false)
+  };
+
+  return payload;
+}
+
+function sanitizeBypassActors(actors) {
+  if (!Array.isArray(actors)) {
+    return [];
+  }
+  return actors.map((actor) => ({
+    actor_id: actor.actor_id ?? null,
+    actor_type: actor.actor_type ?? null,
+    bypass_mode: actor.bypass_mode ?? 'always'
+  }));
+}
+
+function ensureRule(rules, type) {
+  const idx = rules.findIndex((rule) => rule?.type === type);
+  if (idx === -1) {
+    const rule = { type, parameters: {} };
+    rules.push(rule);
+    return rule;
+  }
+  if (!rules[idx].parameters || typeof rules[idx].parameters !== 'object') {
+    rules[idx].parameters = {};
+  }
+  return rules[idx];
+}
+
+function updateMergeQueueRule(rules, expected) {
+  const idx = rules.findIndex((rule) => rule?.type === 'merge_queue');
+  if (!expected) {
+    if (idx !== -1) {
+      rules.splice(idx, 1);
+    }
+    return;
+  }
+  const rule = ensureRule(rules, 'merge_queue');
+  rule.parameters = {
+    ...(rule.parameters ?? {}),
+    ...expected
+  };
+}
+
+function updateStatusRule(rules, expected, actualRule) {
+  if (!expected || expected.length === 0) {
+    return;
+  }
+  const rule = ensureRule(rules, 'required_status_checks');
+  const existingMap = new Map(
+    (actualRule?.parameters?.required_status_checks ?? []).map((check) => [
+      check.context,
+      check.integration_id ?? null
+    ])
+  );
+  rule.parameters = {
+    strict_required_status_checks_policy:
+      actualRule?.parameters?.strict_required_status_checks_policy ?? true,
+    do_not_enforce_on_create: actualRule?.parameters?.do_not_enforce_on_create ?? false,
+    required_status_checks: expected.map((context) => ({
+      context,
+      integration_id: existingMap.get(context) ?? null
+    }))
+  };
+}
+
+function updatePullRequestRule(rules, expected, actualRule) {
+  if (!expected) {
+    return;
+  }
+  const rule = ensureRule(rules, 'pull_request');
+  const parameters = { ...(actualRule?.parameters ?? {}) };
+  const keys = [
+    'required_approving_review_count',
+    'dismiss_stale_reviews_on_push',
+    'require_code_owner_review',
+    'require_last_push_approval',
+    'required_review_thread_resolution'
+  ];
+  for (const key of keys) {
+    if (expected[key] !== undefined) {
+      parameters[key] = expected[key];
+    }
+  }
+  rule.parameters = parameters;
+}
+
+function buildUpdatedRuleset(expectations, actual) {
+  if (!actual) {
+    throw new Error('Cannot apply ruleset changes: ruleset not found.');
+  }
+
+  const updated = {
+    name: actual.name,
+    target: actual.target,
+    enforcement: actual.enforcement,
+    conditions: structuredClone(actual.conditions ?? {}),
+    bypass_actors: sanitizeBypassActors(actual.bypass_actors),
+    rules: structuredClone(actual.rules ?? [])
+  };
+
+  if (Array.isArray(expectations.includes)) {
+    if (!updated.conditions.ref_name) {
+      updated.conditions.ref_name = { include: [], exclude: [] };
+    }
+    updated.conditions.ref_name.include = expectations.includes;
+  }
+
+  const existingQueueRule = updated.rules.find((rule) => rule?.type === 'merge_queue');
+  updateMergeQueueRule(updated.rules, expectations.merge_queue, existingQueueRule);
+
+  const existingStatusRule = updated.rules.find((rule) => rule?.type === 'required_status_checks');
+  updateStatusRule(
+    updated.rules,
+    expectations.required_status_checks ?? [],
+    existingStatusRule
+  );
+
+  const existingPullRequestRule = updated.rules.find((rule) => rule?.type === 'pull_request');
+  updatePullRequestRule(updated.rules, expectations.pull_request, existingPullRequestRule);
+
+  return {
+    name: updated.name,
+    target: updated.target,
+    enforcement: updated.enforcement,
+    conditions: updated.conditions,
+    bypass_actors: updated.bypass_actors,
+    rules: updated.rules
+  };
+}
+
+async function applyBranchProtection(repoUrl, token, branch, expected, actual, fetchFn, logFn = console.log) {
+  const protectionUrl = `${repoUrl}/branches/${encodeURIComponent(branch)}/protection`;
+  const payload = buildBranchProtectionPayload(expected, actual);
+  await requestJson(protectionUrl, token, { method: 'PUT', body: payload, fetchFn });
+  logFn(`[policy] branch ${branch}: applied protection settings.`);
+}
+
+async function applyRuleset(repoUrl, token, id, expectations, actual, fetchFn, logFn = console.log) {
+  const rulesetUrl = `${repoUrl}/rulesets/${id}`;
+  const payload = buildUpdatedRuleset(expectations, actual);
+  await requestJson(rulesetUrl, token, { method: 'PATCH', body: payload, fetchFn });
+  logFn(`[policy] ruleset ${id}: applied configuration.`);
+}
+
+async function collectState(manifest, repoUrl, token, fetchFn) {
+  const repoData = await fetchJson(repoUrl, token, fetchFn);
+
+  const branchStates = [];
+  for (const [branch, expectations] of Object.entries(manifest.branches ?? {})) {
+    const state = { branch, expectations, protection: null, error: null };
+    try {
+      const protectionUrl = `${repoUrl}/branches/${encodeURIComponent(branch)}/protection`;
+      state.protection = await fetchJson(protectionUrl, token, fetchFn);
+    } catch (error) {
+      state.error = error;
+    }
+    branchStates.push(state);
+  }
+
+  const rulesetStates = [];
+  for (const [rulesetId, expectations] of Object.entries(manifest.rulesets ?? {})) {
+    const numericId = Number(rulesetId);
+    const state = { id: numericId, expectations, ruleset: null, error: null };
+    if (Number.isNaN(numericId)) {
+      state.error = new Error('invalid id');
+      rulesetStates.push(state);
+    continue;
+  }
+  try {
+    const rulesetUrl = `${repoUrl}/rulesets/${numericId}`;
+    state.ruleset = await fetchJson(rulesetUrl, token, fetchFn);
+  } catch (error) {
+    state.error = error;
+  }
+    rulesetStates.push(state);
+  }
+
+  return { repoData, branchStates, rulesetStates };
+}
+
+function evaluateDiffs(manifest, state) {
+  const repoDiffs = compareRepoSettings(manifest.repo ?? {}, state.repoData ?? {});
+
+  const branchDiffs = [];
+  for (const entry of state.branchStates) {
+    if (entry.error) {
+      branchDiffs.push(`branch ${entry.branch}: failed to load protection -> ${entry.error.message}`);
+      continue;
+    }
+    branchDiffs.push(
+      ...compareBranchSettings(entry.branch, entry.expectations, entry.protection)
+    );
+  }
+
+  const rulesetDiffs = [];
+  for (const entry of state.rulesetStates) {
+    if (entry.error) {
+      rulesetDiffs.push(
+        `ruleset ${entry.id}: failed to load -> ${entry.error.message}`
+      );
+      continue;
+    }
+    rulesetDiffs.push(...compareRuleset(entry.id, entry.expectations, entry.ruleset));
+  }
+
+  return { repoDiffs, branchDiffs, rulesetDiffs };
+}
+
+export async function run({
+  argv = process.argv,
+  env = process.env,
+  fetchFn = globalThis.fetch,
+  execSyncFn = execSync,
+  log = console.log,
+  error = console.error
+} = {}) {
+  const options = parseArgs(argv);
+  if (options.help) {
+    log('Usage: node tools/priority/check-policy.mjs [--apply]');
+    return 0;
+  }
+
   const manifest = await loadManifest();
-  const token = await resolveToken();
+  const token = await resolveToken(env);
   if (!token) {
     throw new Error('GitHub token not found. Set GITHUB_TOKEN, GH_TOKEN, or GH_TOKEN_FILE.');
   }
-  const { owner, repo } = getRepoFromEnv();
 
+  const { owner, repo } = getRepoFromEnv(env, execSyncFn);
   const repoUrl = `https://api.github.com/repos/${owner}/${repo}`;
-  const repoData = await fetchJson(repoUrl, token);
 
-  const repoDiffs = compareRepoSettings(manifest.repo ?? {}, repoData);
+  const initialState = await collectState(manifest, repoUrl, token, fetchFn);
+  const initialDiffs = evaluateDiffs(manifest, initialState);
 
-  const branchDiffs = [];
-  for (const [branch, expectations] of Object.entries(manifest.branches ?? {})) {
-    try {
-      const protectionUrl = `${repoUrl}/branches/${encodeURIComponent(branch)}/protection`;
-      const protection = await fetchJson(protectionUrl, token);
-      branchDiffs.push(...compareBranchSettings(branch, expectations, protection));
-    } catch (error) {
-      branchDiffs.push(`branch ${branch}: failed to load protection -> ${error.message}`);
+  const allDiffs = [
+    ...initialDiffs.repoDiffs,
+    ...initialDiffs.branchDiffs,
+    ...initialDiffs.rulesetDiffs
+  ];
+
+  if (options.apply) {
+    const branchStatesNeedingUpdates = initialState.branchStates.filter((entry, index) => {
+      if (entry.error) {
+        return false;
+      }
+      const diffs = compareBranchSettings(
+        entry.branch,
+        entry.expectations,
+        entry.protection
+      );
+      return diffs.length > 0;
+    });
+
+    for (const entry of branchStatesNeedingUpdates) {
+      await applyBranchProtection(
+        repoUrl,
+        token,
+        entry.branch,
+        entry.expectations,
+        entry.protection,
+        fetchFn,
+        log
+      );
     }
+
+    const rulesetStatesNeedingUpdates = initialState.rulesetStates.filter((entry) => {
+      if (entry.error) {
+        return false;
+      }
+      const diffs = compareRuleset(entry.id, entry.expectations, entry.ruleset);
+      return diffs.length > 0;
+    });
+
+    for (const entry of rulesetStatesNeedingUpdates) {
+      await applyRuleset(
+        repoUrl,
+        token,
+        entry.id,
+        entry.expectations,
+        entry.ruleset,
+        fetchFn,
+        log
+      );
+    }
+
+    const postState = await collectState(manifest, repoUrl, token, fetchFn);
+    const postDiffs = evaluateDiffs(manifest, postState);
+    const remainingDiffs = [
+      ...postDiffs.repoDiffs,
+      ...postDiffs.branchDiffs,
+      ...postDiffs.rulesetDiffs
+    ];
+
+    if (remainingDiffs.length > 0) {
+      error('Merge policy mismatches detected after apply:');
+      for (const diff of remainingDiffs) {
+        error(` - ${diff}`);
+      }
+      return 1;
+    }
+
+    log('Merge policy apply completed successfully.');
+    return 0;
   }
 
-  const diffs = [...repoDiffs, ...branchDiffs];
-
-  if (diffs.length > 0) {
-    console.error('Merge policy mismatches detected:');
-    for (const diff of diffs) {
-      console.error(` - ${diff}`);
+  if (allDiffs.length > 0) {
+    error('Merge policy mismatches detected:');
+    for (const diff of allDiffs) {
+      error(` - ${diff}`);
     }
-    process.exitCode = 1;
-  } else {
-    console.log('Merge policy check passed.');
+    return 1;
   }
+
+  log('Merge policy check passed.');
+  return 0;
 }
 
-main().catch((error) => {
-  console.error(`Policy check failed: ${error.stack ?? error.message}`);
-  process.exitCode = 1;
-});
+const modulePath = path.resolve(fileURLToPath(import.meta.url));
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (invokedPath && invokedPath === modulePath) {
+  run()
+    .then((code) => {
+      if (code !== 0) {
+        process.exitCode = code;
+      }
+    })
+    .catch((err) => {
+      console.error(`Policy check failed: ${err.stack ?? err.message}`);
+      process.exitCode = 1;
+    });
+}

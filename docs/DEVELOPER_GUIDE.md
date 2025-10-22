@@ -99,6 +99,8 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - Prefer opening PRs from your fork with `npm run priority:pr`; the helper ensures `origin` targets your fork (creating
   it via `gh repo fork` if needed), pushes the current branch, and calls
   `gh pr create --fill --repo <upstream> --base develop --head <fork>:branch`.
+- Detailed enforcement notes (feature-branch guards, merge history workflow, merge queue parameters) live in
+  [`docs/knowledgebase/FEATURE_BRANCH_POLICY.md`](./knowledgebase/FEATURE_BRANCH_POLICY.md).
 
 ## Dispatcher modules
 
