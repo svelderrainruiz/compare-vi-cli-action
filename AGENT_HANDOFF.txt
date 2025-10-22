@@ -8,8 +8,8 @@
 - Latest `tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` execution (2025-10-22T07:03Z) confirmed watcher is idle, toggles applied, and wrote session capsule `tests/results/_agent/sessions/session-20251022T070334069Z-24c5ec7a03d2.json`.
 - `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary` executed at 2025-10-22T07:03Z; no rogue LVCompare/LabVIEW processes detected (JSON emitted to console only).
 - `node tools/npm/run-script.mjs priority:handoff-tests` last ran 2025-10-22T03:23Z; results remain cached in `tests/results/_agent/handoff/test-summary.json`.
-- Working tree clean on `issue/277-handoff-refresh` (tracking origin).
-
+- Working tree on `issue/277-handoff-refresh` (tracking origin). Keep local edits on this fork; use the upstream worktree or automation helpers for release pushes.
+- Working tree clean on  `issue/277-handoff-refresh` (tracking origin). 
 ## Status & Known Gaps
 1. Release metadata captured for `v0.5.2-rc1` (see `tests/results/_agent/release/release-v0.5.2-rc1-finalize.json`); PR #279 merge status is `UNKNOWN`; confirm checks and reruns before closing #277.
 2. Release branch snapshot (`tests/results/_agent/release/release-v0.5.2-rc1-branch.json`) reflects commit `d9a28e3b16f5`; ensure `release/v0.5.2-rc1` stays aligned with develop/main as new fixes land.
@@ -26,7 +26,7 @@
 5. Rerun `node tools/npm/run-script.mjs priority:handoff-tests` after any release-process script changes to keep cached results current.
 
 ## First Actions for the Next Agent
-1. Run `node tools/npm/run-script.mjs priority:sync` to refresh issue #277 metadata and router artifacts.
+1. Run `node tools/npm/run-script.mjs priority:sync` to refresh issue #277 metadata and router artifacts (do this from the upstream worktree if you need to push live changes).
 2. Review release artifacts under `tests/results/_agent/release/` and sync with PR #279 status before making edits.
 3. Re-run `Validate` on `main` if it has not already picked up the workflow fix; confirm the labels enforcement job reports success.
 4. Check `tests/results/_agent/issue/router.json` for the active validation order (hooks and PrePush) and schedule the relevant runs as changes land.
@@ -42,3 +42,4 @@
 2. Attempt graceful shutdown: `pwsh -File tools/Close-LabVIEW.ps1`.
 3. If PIDs remain, issue `Stop-Process -Id <pid> -Force` for each rogue entry (LVCompare first, then LabVIEW). Capture the console log for the issue thread.
 4. Re-run `tools/Detect-RogueLV.ps1 -FailOnRogue` to confirm cleanup; escalate in #277 if the second sweep still reports live processes.
+

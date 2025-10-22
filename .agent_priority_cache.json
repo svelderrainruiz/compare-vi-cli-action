@@ -14,5 +14,8 @@
   "bodyDigest": "ec03651863c4b6602e232e7845a533482856cd76604f56b516a8ee8103c65a99",
   "cachedAtUtc": "2025-10-22T12:55:41.437Z",
   "lastFetchSource": "live",
-  "lastFetchError": null
+  "lastFetchError": null,
+  "plan": {
+    "forkAwareRelease": "Use upstream worktree or automation helper for live pushes"
+  }
 }
