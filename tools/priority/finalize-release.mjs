@@ -3,6 +3,8 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   run,
   parseSingleValueArg,
@@ -11,12 +13,8 @@ import {
   ensureBranchExists,
   getRepoRoot
 } from './lib/branch-utils.mjs';
-import {
-  ensureGhCli,
-  resolveUpstream,
-  ensureOriginFork,
-  pushToRemote
-} from './lib/remote-utils.mjs';
+import { ensureGhCli, resolveUpstream, pushToRemote, tryResolveRemote } from './lib/remote-utils.mjs';
+import { resolveRepoContext } from './lib/git-context.mjs';
 import {
   normalizeVersionInput,
   writeReleaseMetadata,
@@ -138,11 +136,32 @@ async function main() {
 
   ensureGhCli();
   const upstream = resolveUpstream(repoRoot);
-  ensureOriginFork(repoRoot, upstream);
+  const repoContext = resolveRepoContext(repoRoot, {
+    resolveUpstreamFn: () => upstream,
+    resolveRemoteFn: tryResolveRemote
+  });
+
+  if (repoContext.isFork) {
+    console.warn(
+      `[release:finalize] Detected fork working copy (${repoContext.working?.owner}/${repoContext.working?.repo ?? upstream.repo}). Falling back to dry-run.`
+    );
+    const dryRunScript = fileURLToPath(new URL('./finalize-release.dryrun.mjs', import.meta.url));
+    const dryRunResult = spawnSync(process.execPath, [dryRunScript, tag], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      env: process.env
+    });
+    if (dryRunResult.status !== 0) {
+      throw new Error('Dry-run fallback failed. Address the issues above and rerun.');
+    }
+    console.log(
+      `[release:finalize] Dry-run complete. Run "npm run release:finalize -- ${tag}" from an upstream clone to finalize.`
+    );
+    return;
+  }
 
   const prInfo = ensureReleasePrReady(repoRoot, releaseBranch);
 
-  run('git', ['fetch', 'origin'], { cwd: repoRoot });
   run('git', ['fetch', 'upstream'], { cwd: repoRoot });
 
   const originalBranch = run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repoRoot });
