@@ -18,6 +18,11 @@ Quick reference for building, testing, and releasing the LVCompare composite act
 
 Artifacts land in `tests/results/` (JSON summaries, XML, loop logs).
 
+See `docs/plans/VALIDATION_MATRIX.md` for a standing-priority view of the major validation entry points, including 
+docker workflows and the integration gate. VS Code users can launch the same commands via the bundled tasks in
+`.vscode/tasks.json` (Command Palette -> "Run Task"); leak-handling switches are already wired in so LabVIEW closes after 
+each sweep. For container parity prerequisites and cleanup tips, refer to `docs/knowledgebase/DOCKER_TOOLS_PARITY.md`. 
+
 ## Building & linting
 
 ```powershell
