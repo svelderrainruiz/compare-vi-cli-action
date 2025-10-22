@@ -57,8 +57,8 @@ function Get-MergeableState {
     mergeable      = $response.mergeable
     mergeableState = $response.mergeable_state
     updatedAt      = $response.updated_at
-    baseRef        = $response.base.@ref
-    headRef        = $response.head.@ref
+    baseRef        = $response.base.ref
+    headRef        = $response.head.ref
   }
 }
 
