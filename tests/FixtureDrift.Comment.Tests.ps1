@@ -4,7 +4,8 @@ $ErrorActionPreference = 'Stop'
 Describe 'Get-FixtureDriftComment' -Tag 'Unit' {
   BeforeAll {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-    Import-Module (Join-Path $repoRoot 'scripts' 'Build-FixtureDriftComment.ps1') -Force
+    $modulePath = Join-Path $repoRoot 'scripts' 'Build-FixtureDriftComment.ps1'
+    . "$modulePath"
   }
 
   It 'embeds sanitized HTML report inline' {
