@@ -15,13 +15,15 @@
 2. VS Code tasks added (`.vscode/tasks.json`); Windows validation complete (PrePush + `Invoke-PesterTests.ps1 -IntegrationMode exclude` ~8 min—CLI session hit the Codex timeout after the summary landed). Tasks now include `-DetectLeaks -KillLeaks -CleanLabVIEW -CleanAfter` for the unit sweep. Confirm parity on macOS/Linux and decide if we promote them into the docs.
 3. Leak handling verified: reran the unit sweep with the new flags (LVCompare PID 33540 / LabVIEW PID 34060 in `notice-20251021-1751506366.json`), and `tools/Detect-RogueLV.ps1` reports no live processes post-run. Regression logged on #127 as resolved with the updated task.
 4. Phase 1a Docker alignment verified locally: `tools/Run-NonLVChecksInDocker.ps1 -UseToolsImage -SkipDocs -SkipWorkflow -SkipMarkdown` succeeded once Docker Desktop was available (CLI build emitted `dist/comparevi-cli/*`, artifacts removed after validation). Results documented in `docs/knowledgebase/DOCKER_TOOLS_PARITY.md`; Linux automation captured via `Tools Parity (Linux)` workflow artifacts.
-5. `priority:handoff-tests` artifacts refreshed (Oct 22). No additional action needed unless the validation flow changes.
+5. Mergeability script added (`tools/Check-PRMergeable.ps1`) so we can poll GitHub for conflicts immediately after opening a PR.
+6. `priority:handoff-tests` artifacts refreshed (Oct 22). No additional action needed unless the validation flow changes.
 
 ## Suggested Next Actions
 1. Exercise the new VS Code tasks on macOS/Linux (PrePush + Pester integration) and capture any shell/docker deltas.
 2. Expand Docker parity coverage: rerun the helper with docs/workflow checks enabled when ready and update `docs/knowledgebase/DOCKER_TOOLS_PARITY.md` with cross-platform findings.
-3. Backfill the integration-gate automation (`tools/Start-IntegrationGated.ps1`) or update the validation matrix once the script is available.
-4. If task wiring changes, rerun `node tools/npm/run-script.mjs priority:handoff-tests` to refresh the cache.
+3. After opening/refreshing a PR, run `pwsh -File tools/Check-PRMergeable.ps1 -Number <pr> -FailOnConflict` (or wire it into CI) so merge conflicts are flagged promptly in #127.
+4. Backfill the integration-gate automation (`tools/Start-IntegrationGated.ps1`) or update the validation matrix once the script is available.
+5. If task wiring changes, rerun `node tools/npm/run-script.mjs priority:handoff-tests` to refresh the cache.
 
 ## First Actions for the Next Agent
 1. Run `node tools/npm/run-script.mjs priority:sync` to ensure issue #127 metadata stays fresh.

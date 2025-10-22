@@ -23,6 +23,14 @@ docker workflows and the integration gate. VS Code users can launch the same com
 `.vscode/tasks.json` (Command Palette -> "Run Task"); leak-handling switches are already wired in so LabVIEW closes after 
 each sweep. For container parity prerequisites and cleanup tips, refer to `docs/knowledgebase/DOCKER_TOOLS_PARITY.md`. 
 
+## Pull request hygiene
+
+```powershell
+pwsh -File tools/Check-PRMergeable.ps1 -Number <pr> -FailOnConflict
+```
+
+Use this after opening a PR to poll GitHub's mergeable state (exits non-zero when conflicts are detected).
+
 ## Building & linting
 
 ```powershell
