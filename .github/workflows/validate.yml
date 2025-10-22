@@ -537,8 +537,14 @@ jobs:
       - name: Sync standing-priority snapshot
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          node tools/npm/run-script.mjs priority:sync || true
+          if [ -z "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
+            echo "::error::GH_TOKEN/GITHUB_TOKEN is required for priority:sync"
+            exit 1
+          fi
+          node tools/npm/run-script.mjs priority:sync
       - name: Validate snapshot schema (best-effort)
         continue-on-error: true
         run: |
