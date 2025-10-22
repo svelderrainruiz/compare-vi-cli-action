@@ -1,7 +1,7 @@
 <!-- markdownlint-disable-next-line MD041 -->
 # Feature Branch Enforcement & Merge Queue
 
-_Last updated: 2025-10-22 (standing priority #289)._
+_Last updated: 2025-10-22 (standing priority #293)._ 
 
 ## Purpose
 
@@ -28,6 +28,10 @@ standing GitHub protection rules (including the `main` merge queue).
   and emit metadata under `tests/results/_agent/feature/`.
 - `npm run priority:pr` pushes the current branch to your fork and opens a PR targeting `develop`, keeping the linear
   history contract intact.
+- `node tools/npm/run-script.mjs priority:validate -- --ref <branch> --push-missing` publishes the branch to the
+  upstream remote (when it is absent) before dispatching Validate. The helper refuses to push when the branch is dirty,
+  when the ref resolves to a tag, or when the upstream tip differs unless you also pass `--force-push-ok`
+  (`VALIDATE_DISPATCH_PUSH=1` / `VALIDATE_DISPATCH_FORCE_PUSH=1` provide the same behaviour for automation).
 
 ### CI guardrails
 - `.github/workflows/merge-history.yml` blocks merge commits on PRs (release branches excluded).
