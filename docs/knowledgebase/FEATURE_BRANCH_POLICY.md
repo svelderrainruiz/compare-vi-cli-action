@@ -1,7 +1,7 @@
 <!-- markdownlint-disable-next-line MD041 -->
 # Feature Branch Enforcement & Merge Queue
 
-_Last updated: 2025-10-22 (standing priority #285)._
+_Last updated: 2025-10-22 (standing priority #289)._
 
 ## Purpose
 
@@ -33,6 +33,8 @@ standing GitHub protection rules (including the `main` merge queue).
 - `.github/workflows/merge-history.yml` blocks merge commits on PRs (release branches excluded).
 - The standing-priority router keeps `priority:policy`, `hooks:multi`, and `PrePush-Checks.ps1` near the top to ensure
   linting, branch protection validation, and hook parity stay green.
+- `Validate` includes a `Policy guard (branch protection)` step that runs `node tools/npm/run-script.mjs priority:policy`
+  with the repository token and fails on drift so branch protection changes surface immediately.
 - `Validate` runs `priority:handoff-tests` automatically for heads that start with `feature/`, enforcing leak-sensitive
   suites before parallel work merges.
 
