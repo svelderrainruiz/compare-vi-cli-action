@@ -19,8 +19,8 @@ function createResponse(data, status = 200, statusText = 'OK') {
   };
 }
 
-test('priority:policy --apply updates branch protection and rulesets', async () => {
-  const expectedBranchChecks = [
+test('priority:policy --apply updates rulesets for develop/main/release', async () => {
+  const expectedDevelopChecks = [
     'guard',
     'lint',
     'fixtures',
@@ -30,7 +30,7 @@ test('priority:policy --apply updates branch protection and rulesets', async () 
   ];
 
   const repoUrl = 'https://api.github.com/repos/test-org/test-repo';
-  const branchUrl = `${repoUrl}/branches/develop/protection`;
+  const rulesetDevelopUrl = `${repoUrl}/rulesets/8811898`;
   const rulesetMainUrl = `${repoUrl}/rulesets/8614140`;
   const rulesetReleaseUrl = `${repoUrl}/rulesets/8614172`;
 
@@ -42,21 +42,44 @@ test('priority:policy --apply updates branch protection and rulesets', async () 
     delete_branch_on_merge: true
   };
 
-  const branchState = {
-    required_status_checks: {
-      strict: true,
-      checks: expectedBranchChecks.slice(0, 5).map((context) => ({ context, app_id: 15368 }))
+  const rulesetDevelop = {
+    id: 8811898,
+    name: 'develop',
+    target: 'branch',
+    enforcement: 'active',
+    conditions: {
+      ref_name: {
+        include: ['refs/heads/develop'],
+        exclude: []
+      }
     },
-    enforce_admins: { enabled: false },
-    required_pull_request_reviews: null,
-    restrictions: null,
-    required_linear_history: { enabled: false },
-    allow_force_pushes: { enabled: false },
-    allow_deletions: { enabled: false },
-    block_creations: { enabled: false },
-    required_conversation_resolution: { enabled: false },
-    lock_branch: { enabled: false },
-    allow_fork_syncing: { enabled: false }
+    bypass_actors: [],
+    rules: [
+      {
+        type: 'required_status_checks',
+        parameters: {
+          strict_required_status_checks_policy: true,
+          do_not_enforce_on_create: true,
+          required_status_checks: [
+            { context: 'guard', integration_id: 15368 },
+            { context: 'lint', integration_id: 15368 },
+            { context: 'fixtures', integration_id: 15368 },
+            { context: 'session-index', integration_id: 15368 }
+          ]
+        }
+      },
+      {
+        type: 'pull_request',
+        parameters: {
+          required_approving_review_count: 0,
+          dismiss_stale_reviews_on_push: false,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
+          required_review_thread_resolution: false,
+          allowed_merge_methods: ['merge']
+        }
+      }
+    ]
   };
 
   const rulesetMain = {
@@ -163,33 +186,17 @@ test('priority:policy --apply updates branch protection and rulesets', async () 
       return createResponse(repoState);
     }
 
-    if (url === branchUrl) {
+    if (url === rulesetDevelopUrl) {
       if (method === 'GET') {
-        return createResponse(branchState);
+        return createResponse(rulesetDevelop);
       }
-      if (method === 'PUT') {
+      if (method === 'PATCH') {
         const payload = JSON.parse(options.body);
-        branchState.required_status_checks = {
-          strict: payload.required_status_checks.strict,
-          checks: payload.required_status_checks.contexts.map((context) => ({
-            context,
-            app_id: 15368
-          }))
-        };
-        branchState.required_linear_history = structuredClone(payload.required_linear_history);
-        branchState.allow_force_pushes = structuredClone(payload.allow_force_pushes);
-        branchState.allow_deletions = structuredClone(payload.allow_deletions);
-        branchState.block_creations = structuredClone(payload.block_creations);
-        branchState.required_conversation_resolution = structuredClone(
-          payload.required_conversation_resolution
-        );
-        branchState.lock_branch = structuredClone(payload.lock_branch);
-        branchState.allow_fork_syncing = structuredClone(payload.allow_fork_syncing);
-        branchState.enforce_admins = structuredClone(payload.enforce_admins);
-        return createResponse(branchState);
+        rulesetDevelop.conditions = structuredClone(payload.conditions);
+        rulesetDevelop.rules = structuredClone(payload.rules);
+        return createResponse(rulesetDevelop);
       }
     }
-
     if (url === rulesetMainUrl) {
       if (method === 'GET') {
         return createResponse(rulesetMain);
@@ -236,10 +243,20 @@ test('priority:policy --apply updates branch protection and rulesets', async () 
 
   assert.equal(code, 0, 'run should exit cleanly');
   assert.deepEqual(
-    branchState.required_status_checks.checks.map((item) => item.context),
-    expectedBranchChecks
+    rulesetDevelop.rules
+      .find((rule) => rule.type === 'required_status_checks')
+      .parameters.required_status_checks.map((item) => item.context),
+    expectedDevelopChecks
   );
-  assert.equal(branchState.required_linear_history.enabled, true);
+  assert.ok(
+    rulesetDevelop.rules.some((rule) => rule.type === 'required_linear_history'),
+    'required_linear_history rule expected on develop'
+  );
+  const developPullRule = rulesetDevelop.rules.find((rule) => rule.type === 'pull_request');
+  assert.deepEqual(
+    developPullRule.parameters.allowed_merge_methods,
+    ['squash']
+  );
 
   const mergeQueueRule = rulesetMain.rules.find((rule) => rule.type === 'merge_queue');
   assert.equal(mergeQueueRule.parameters.min_entries_to_merge_wait_minutes, 5);
@@ -255,14 +272,13 @@ test('priority:policy --apply updates branch protection and rulesets', async () 
   assert.equal(pullRule.parameters.required_review_thread_resolution, true);
 
   assert.ok(
-    requests.some((entry) => entry.method === 'PUT' && entry.url === branchUrl),
-    'branch protection PUT call expected'
+    requests.some((entry) => entry.method === 'PATCH' && entry.url === rulesetDevelopUrl),
+    'develop ruleset patch call expected'
   );
   assert.ok(
     requests.some((entry) => entry.method === 'PATCH' && entry.url === rulesetMainUrl),
     'ruleset patch call expected'
   );
-
   assert.deepEqual(errorMessages, []);
   assert.ok(
     logMessages.includes('Merge policy apply completed successfully.'),
