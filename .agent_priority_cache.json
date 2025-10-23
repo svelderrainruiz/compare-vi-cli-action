@@ -4,9 +4,13 @@
   "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/283",
   "state": "OPEN",
   "labels": [
+    "ci",
+    "github_actions",
     "standing-priority"
   ],
-  "assignees": [],
+  "assignees": [
+    "svelderrainruiz"
+  ],
   "milestone": null,
   "commentCount": 0,
   "lastSeenUpdatedAt": "2025-10-22T14:34:41Z",
