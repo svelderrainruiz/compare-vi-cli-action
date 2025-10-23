@@ -22,7 +22,6 @@ function createResponse(data, status = 200, statusText = 'OK') {
 test('priority:policy --apply updates rulesets for develop/main/release', async () => {
   const expectedDevelopChecks = [
     'guard',
-    'lint',
     'fixtures',
     'session-index',
     'issue-snapshot',
@@ -63,9 +62,11 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
           do_not_enforce_on_create: true,
           required_status_checks: [
             { context: 'guard', integration_id: 15368 },
-            { context: 'lint', integration_id: 15368 },
             { context: 'fixtures', integration_id: 15368 },
-            { context: 'session-index', integration_id: 15368 }
+            { context: 'session-index', integration_id: 15368 },
+            { context: 'issue-snapshot', integration_id: 15368 },
+            { context: 'Workflows Lint / lint (pull_request)', integration_id: 15368 },
+            { context: 'Policy Guard (Upstream) / policy-guard' }
           ]
         }
       },
@@ -125,9 +126,10 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
           strict_required_status_checks_policy: true,
           do_not_enforce_on_create: false,
           required_status_checks: [
-            { context: 'lint', integration_id: 15368 },
             { context: 'pester', integration_id: 15368 },
-            { context: 'vi-binary-check', integration_id: 15368 }
+            { context: 'vi-binary-check', integration_id: 15368 },
+            { context: 'vi-compare', integration_id: 15368 },
+            { context: 'Policy Guard (Upstream) / policy-guard' }
           ]
         }
       }
@@ -265,7 +267,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
   const statusRule = rulesetMain.rules.find((rule) => rule.type === 'required_status_checks');
   assert.deepEqual(
     statusRule.parameters.required_status_checks.map((check) => check.context).sort(),
-    ['lint', 'pester', 'vi-binary-check', 'vi-compare', 'Policy Guard (Upstream) / policy-guard'].sort()
+    ['pester', 'vi-binary-check', 'vi-compare', 'Policy Guard (Upstream) / policy-guard'].sort()
   );
 
   const pullRule = rulesetMain.rules.find((rule) => rule.type === 'pull_request');
@@ -275,7 +277,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
   const statusRuleRelease = rulesetRelease.rules.find((rule) => rule.type === 'required_status_checks');
   assert.deepEqual(
     statusRuleRelease.parameters.required_status_checks.map((check) => check.context).sort(),
-    ['Policy Guard (Upstream) / policy-guard', 'lint', 'mock-cli', 'pester', 'publish', 'vi-binary-check', 'vi-compare'].sort()
+    ['Policy Guard (Upstream) / policy-guard', 'mock-cli', 'pester', 'publish', 'vi-binary-check', 'vi-compare'].sort()
   );
 
   assert.ok(
