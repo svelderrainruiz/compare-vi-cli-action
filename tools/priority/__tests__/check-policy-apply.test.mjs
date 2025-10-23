@@ -285,3 +285,106 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
     'apply success message expected'
   );
 });
+
+test('priority:policy skips when repository settings require admin access', async () => {
+  const repoUrl = 'https://api.github.com/repos/test-org/test-repo';
+  const rulesetDevelopUrl = `${repoUrl}/rulesets/8811898`;
+  const repoState = {
+    permissions: {
+      admin: false
+    }
+  };
+  const rulesetDevelop = {
+    id: 8811898,
+    name: 'develop',
+    target: 'branch',
+    enforcement: 'active',
+    conditions: {
+      ref_name: {
+        include: ['refs/heads/develop'],
+        exclude: []
+      }
+    },
+    bypass_actors: [],
+    rules: [
+      {
+        type: 'pull_request',
+        parameters: {
+          allowed_merge_methods: ['merge']
+        }
+      }
+    ]
+  };
+  const rulesetMain = {
+    id: 8614140,
+    name: 'main',
+    target: 'branch',
+    enforcement: 'active',
+    conditions: {
+      ref_name: {
+        include: ['refs/heads/main'],
+        exclude: []
+      }
+    },
+    bypass_actors: [],
+    rules: []
+  };
+  const rulesetRelease = {
+    id: 8614172,
+    name: 'release',
+    target: 'branch',
+    enforcement: 'active',
+    conditions: {
+      ref_name: {
+        include: ['refs/heads/release/*'],
+        exclude: []
+      }
+    },
+    bypass_actors: [],
+    rules: []
+  };
+
+  const rulesetMainUrl = `${repoUrl}/rulesets/8614140`;
+  const rulesetReleaseUrl = `${repoUrl}/rulesets/8614172`;
+
+  const fetchMock = async (url, options = {}) => {
+    const method = options.method ?? 'GET';
+    if (method === 'GET' && url === repoUrl) {
+      return createResponse(repoState);
+    }
+    if (method === 'GET' && url === rulesetDevelopUrl) {
+      return createResponse(rulesetDevelop);
+    }
+    if (method === 'GET' && url === rulesetMainUrl) {
+      return createResponse(rulesetMain);
+    }
+    if (method === 'GET' && url === rulesetReleaseUrl) {
+      return createResponse(rulesetRelease);
+    }
+
+    throw new Error(`Unexpected request ${method} ${url}`);
+  };
+
+  const logMessages = [];
+  const errorMessages = [];
+  const code = await run({
+    argv: ['node', 'check-policy.mjs'],
+    env: {
+      ...process.env,
+      GITHUB_REPOSITORY: 'test-org/test-repo'
+    },
+    fetchFn: fetchMock,
+    execSyncFn: () => {
+      throw new Error('execSync should not be called when GITHUB_REPOSITORY is set');
+    },
+    log: (msg) => logMessages.push(msg),
+    error: (msg) => errorMessages.push(msg)
+  });
+
+  assert.equal(code, 0, 'run should exit cleanly with skip');
+  assert.ok(
+    logMessages.some((msg) => msg.includes('skipping policy check')),
+    'skip message expected when admin permissions unavailable'
+  );
+  assert.deepEqual(errorMessages, []);
+});
