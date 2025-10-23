@@ -559,7 +559,7 @@ async function applyBranchProtection(repoUrl, token, branch, expected, actual, f
 async function applyRuleset(repoUrl, token, id, expectations, actual, fetchFn, logFn = console.log) {
   const rulesetUrl = `${repoUrl}/rulesets/${id}`;
   const payload = buildUpdatedRuleset(expectations, actual);
-  await requestJson(rulesetUrl, token, { method: 'PATCH', body: payload, fetchFn });
+  await requestJson(rulesetUrl, token, { method: 'PUT', body: payload, fetchFn });
   logFn(`[policy] ruleset ${id}: applied configuration.`);
 }
 
