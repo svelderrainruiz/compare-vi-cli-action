@@ -691,7 +691,7 @@ export async function run({
   const missingRepoFields = initialDiffs.repoDiffs.filter((diff) => diff.includes('actual undefined'));
   const repoFieldsAllMissing =
     initialDiffs.repoDiffs.length > 0 && missingRepoFields.length === initialDiffs.repoDiffs.length;
-  const hasAdminPermission = initialState.repoData?.permissions?.admin !== false;
+  const hasAdminPermission = initialState.repoData?.permissions?.admin === true;
 
   if (!options.apply && repoFieldsAllMissing && (!hasAdminPermission || forkRun)) {
     log(
