@@ -34,18 +34,25 @@ const USAGE_LINES = [
   '  -h, --help    Show this message and exit'
 ];
 
-async function updatePackageVersion(repoRoot, semver) {
+async function updatePackageVersion(repoRoot, semver, logFn = console.log) {
   const pkgPath = path.join(repoRoot, 'package.json');
   const pkgRaw = await readFile(pkgPath, 'utf8');
   const pkg = JSON.parse(pkgRaw);
   const previous = pkg.version;
   if (previous === semver) {
-    throw new Error(`package.json already set to ${semver}`);
+    logFn(`[release:branch] package.json already set to ${semver}; skipping version update.`);
+    return {
+      previousVersion: previous,
+      changed: false
+    };
   }
   pkg.version = semver;
   await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
   run('git', ['add', 'package.json'], { cwd: repoRoot });
-  return previous;
+  return {
+    previousVersion: previous,
+    changed: true
+  };
 }
 
 async function recordMetadata(repoRoot, metadata) {
@@ -115,6 +122,7 @@ async function main() {
 
   let releaseCommit = null;
   let previousVersion = null;
+  let versionChanged = false;
   let prInfo = null;
   const originalBranch = run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repoRoot });
   let restoreOnFailure = true;
@@ -125,15 +133,22 @@ async function main() {
     const baseCommit = run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot });
     run('git', ['checkout', '-b', branch], { cwd: repoRoot });
 
-    previousVersion = await updatePackageVersion(repoRoot, semver);
+    const versionOutcome = await updatePackageVersion(repoRoot, semver, console.log);
+    previousVersion = versionOutcome.previousVersion ?? previousVersion;
+    versionChanged = versionOutcome.changed;
 
-    const status = run('git', ['status', '--porcelain'], { cwd: repoRoot });
-    if (!status.trim()) {
-      throw new Error('No changes detected after version update.');
+    if (versionChanged) {
+      const status = run('git', ['status', '--porcelain'], { cwd: repoRoot });
+      if (!status.trim()) {
+        throw new Error('No changes detected after version update.');
+      }
+
+      const commitMessage = process.env.RELEASE_COMMIT_MESSAGE ?? `chore(release): prepare ${tag} (#270)`;
+      run('git', ['commit', '-m', commitMessage], { cwd: repoRoot });
+    } else {
+      run('git', ['reset', '--soft', baseCommit], { cwd: repoRoot });
     }
 
-    const commitMessage = process.env.RELEASE_COMMIT_MESSAGE ?? `chore(release): prepare ${tag} (#270)`;
-    run('git', ['commit', '-m', commitMessage], { cwd: repoRoot });
     releaseCommit = run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot });
 
     pushBranch(repoRoot, branch);
@@ -153,7 +168,7 @@ async function main() {
       tag,
       version: tag,
       semver,
-      previousVersion,
+      previousVersion: previousVersion ?? semver,
       branch,
       baseBranch: 'develop',
       baseCommit,
