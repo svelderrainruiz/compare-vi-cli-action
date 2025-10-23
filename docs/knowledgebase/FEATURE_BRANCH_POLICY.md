@@ -1,7 +1,7 @@
 <!-- markdownlint-disable-next-line MD041 -->
 # Feature Branch Enforcement & Merge Queue
 
-_Last updated: 2025-10-22 (standing priority #289)._
+_Last updated: 2025-10-22 (standing priority #293)._ 
 
 ## Purpose
 
@@ -28,6 +28,10 @@ standing GitHub protection rules (including the `main` merge queue).
   and emit metadata under `tests/results/_agent/feature/`.
 - `npm run priority:pr` pushes the current branch to your fork and opens a PR targeting `develop`, keeping the linear
   history contract intact.
+- `node tools/npm/run-script.mjs priority:validate -- --ref <branch> --push-missing` publishes the branch to the
+  upstream remote (when it is absent) before dispatching Validate. The helper refuses to push when the branch is dirty,
+  when the ref resolves to a tag, or when the upstream tip differs unless you also pass `--force-push-ok`
+  (`VALIDATE_DISPATCH_PUSH=1` / `VALIDATE_DISPATCH_FORCE_PUSH=1` provide the same behaviour for automation).
 
 ### CI guardrails
 - `.github/workflows/merge-history.yml` blocks merge commits on PRs (release branches excluded).
@@ -37,6 +41,14 @@ standing GitHub protection rules (including the `main` merge queue).
   with the repository token and fails on drift so branch protection changes surface immediately.
 - `Validate` runs `priority:handoff-tests` automatically for heads that start with `feature/`, enforcing leak-sensitive
   suites before parallel work merges.
+- **Important:** Required checks for queued branches must run on both the `pull_request` and `merge_group` events;
+  otherwise the merge queue will eject entries. Ensure your workflows include:
+
+  ```yaml
+  on:
+    pull_request:
+    merge_group:
+  ```
 
 ### GitHub rulesets
 | Ruleset ID | Scope                | Highlights                                                                                   |
@@ -64,52 +76,47 @@ checked into `tools/priority/policy.json` so `priority:policy` stays authoritati
 - **Required checks**: `guard`, `lint`, `fixtures`, `session-index`, `issue-snapshot`,
   `Workflows Lint / lint (pull_request)`.
 - **Admin bypass**: leave disabled; administrators should only intervene when `priority:policy` confirms parity.
-- **Quick reapply**:
-  ```powershell
-  gh api repos/$REPO/branches/develop/protection -X PUT `
-    -f required_linear_history.enabled=true `
-    -f required_status_checks.strict=true `
-    -f required_status_checks.contexts[]='guard' `
-    -f required_status_checks.contexts[]='lint' `
-    -f required_status_checks.contexts[]='fixtures' `
-    -f required_status_checks.contexts[]='session-index' `
-    -f required_status_checks.contexts[]='issue-snapshot' `
-    -f required_status_checks.contexts[]='Workflows Lint / lint (pull_request)' `
-    -H "Accept: application/vnd.github+json"
-  ```
+- **Reapply**: Use `node tools/npm/run-script.mjs priority:policy -- --apply` to push the manifest configuration when drift is detected.
 
 ### `main`
 - **Ruleset**: `8614140` (repository ruleset, scope `refs/heads/main`).
-- **Allowed merges**: queue-managed squash (`merge queue` with `merge_method=SQUASH`); disallow direct fast-forwards.
-- **Merge queue parameters**:
+- **Allowed merges**: queue-managed squash enforced by the `merge_queue` rule (`merge_method=SQUASH`); direct merges and
+  fast-forwards are disallowed while the queue is active.
+- **Merge queue parameters** (ruleset API terms; UI "Only merge non-failing pull requests" corresponds to
+  `grouping_strategy=ALLGREEN`):
   - `grouping_strategy=ALLGREEN`
   - `max_entries_to_build=5`, `min_entries_to_merge=1`, `max_entries_to_merge=5`
   - `min_entries_to_merge_wait_minutes=5`
   - `check_response_timeout_minutes=60`
 - **Required checks**: `lint`, `pester`, `vi-binary-check`, `vi-compare`.
-- **Approval policy**: ≥1 review; dismiss stale reviews on push; require thread resolution.
+- **Workflow triggers**: Ensure those required checks run on both `pull_request` and `merge_group` so queued entries can merge.
+- **Approval policy**: >= 1 review; dismiss stale reviews on push; require thread resolution.
 - **Quick verification**:
   ```powershell
-  gh api repos/$REPO/rulesets/8614140 --jq '{target,conditions,parameters: [.rules[]|{type,parameters}]}'
+  gh api repos/$REPO/rulesets/8614140 --jq '{name,enforcement,conditions,rules:[.rules[]|{type,parameters}]}'
   ```
-  Update via the UI or `gh ruleset update` if any parameter deviates from `tools/priority/policy.json`.
+  Update via the UI or with the REST API (for example, `gh api repos/$REPO/rulesets/8614140 -X PATCH --input payload.json`)
+  if any parameter deviates from `tools/priority/policy.json`.
 
 ### `release/*`
 - **Ruleset**: `8614172` (scope `refs/heads/release/*`).
 - **Required checks**: `lint`, `pester`, `publish`, `vi-binary-check`, `vi-compare`, `mock-cli`.
-- **Approvals**: ≥1 review, stale review dismissal enabled, enforce thread resolution.
+- **Approvals**: >= 1 review, stale review dismissal enabled, enforce thread resolution.
 - **Merge queue**: intentionally disabled; rely on manual review + required checks.
 - **Maintenance tip**: revisit after each release cycle to ensure the workflow matrix still emits the expected check
   names.
 
 ## Merge Queue Workflow (main)
+Prereq: All required checks for `main` must execute on both `pull_request` and `merge_group`. Use the YAML snippet above
+to confirm each workflow includes both triggers.
+
 1. Ensure the PR targets `main` (typically a release PR) and all required checks (`lint`, `pester`, `vi-binary-check`,
    `vi-compare`) are green on the latest commit.
-2. Click **Enable auto-merge**, choose **Merge queue (squash)**, and confirm at least one approval is present with all
-   review threads resolved (queue enforces this).
-3. Monitor `https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/merge-queue/main` as the synthetic queue
-   run executes. GitHub stages up to five entries, reruns required checks with the queue tip, and enforces a
-   five-minute quiet period before merging.
+2. Click **Merge when ready** (queue-managed **squash**). Ensure >= 1 approval and all review threads are resolved; the
+   queue enforces both before merging.
+3. Monitor `https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/queue/main`. GitHub stages entries, reruns
+   the required checks on the merge group tip, and waits up to your configured minimum group size wait time before
+   merging smaller groups.
 4. If the run fails or new commits land, the queue ejects the entry back to the PR. Address the failure, rerun the
    relevant check (`priority:validate`, `Validate` workflow, or manual reruns), and re-enable the queue.
 

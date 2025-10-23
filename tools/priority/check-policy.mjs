@@ -126,7 +126,8 @@ async function requestJson(url, token, { method = 'GET', body, fetchFn } = {}) {
   const headers = {
     Authorization: `Bearer ${token}`,
     'User-Agent': 'priority-policy-check',
-    Accept: 'application/vnd.github+json'
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
   };
   let payload = body;
   if (body && typeof body !== 'string') {
@@ -466,6 +467,9 @@ function updatePullRequestRule(rules, expected, actualRule) {
       parameters[key] = expected[key];
     }
   }
+  if (Array.isArray(expected.allowed_merge_methods)) {
+    parameters.allowed_merge_methods = [...expected.allowed_merge_methods];
+  }
   rule.parameters = parameters;
 }
 
@@ -492,6 +496,15 @@ function buildUpdatedRuleset(expectations, actual) {
 
   const existingQueueRule = updated.rules.find((rule) => rule?.type === 'merge_queue');
   updateMergeQueueRule(updated.rules, expectations.merge_queue, existingQueueRule);
+
+  const hasLinearRuleIndex = updated.rules.findIndex((rule) => rule?.type === 'required_linear_history');
+  if (expectations.required_linear_history) {
+    if (hasLinearRuleIndex === -1) {
+      updated.rules.push({ type: 'required_linear_history' });
+    }
+  } else if (hasLinearRuleIndex !== -1) {
+    updated.rules.splice(hasLinearRuleIndex, 1);
+  }
 
   const existingStatusRule = updated.rules.find((rule) => rule?.type === 'required_status_checks');
   updateStatusRule(

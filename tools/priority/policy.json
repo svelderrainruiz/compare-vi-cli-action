@@ -6,8 +6,13 @@
     "allow_auto_merge": true,
     "delete_branch_on_merge": true
   },
-  "branches": {
-    "develop": {
+  "branches": {},
+  "rulesets": {
+    "8811898": {
+      "name": "develop",
+      "includes": [
+        "refs/heads/develop"
+      ],
       "required_linear_history": true,
       "required_status_checks": [
         "guard",
@@ -16,10 +21,19 @@
         "session-index",
         "issue-snapshot",
         "Workflows Lint / lint (pull_request)"
-      ]
-    }
-  },
-  "rulesets": {
+      ],
+      "merge_queue": null,
+      "pull_request": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": [
+          "squash"
+        ]
+      }
+    },
     "8614140": {
       "name": "main",
       "includes": [
