@@ -8,6 +8,42 @@
   },
   "branches": {
     "develop": {
+      "required_status_checks": [
+        "guard",
+        "fixtures",
+        "session-index",
+        "issue-snapshot",
+        "Policy Guard (Upstream) / policy-guard"
+      ],
+      "required_linear_history": true
+    },
+    "main": {
+      "required_status_checks": [
+        "pester",
+        "vi-binary-check",
+        "vi-compare",
+        "Policy Guard (Upstream) / policy-guard"
+      ],
+      "required_linear_history": true
+    },
+    "release/v0.5.2": {
+      "required_status_checks": [
+        "pester",
+        "publish",
+        "vi-binary-check",
+        "vi-compare",
+        "mock-cli",
+        "Policy Guard (Upstream) / policy-guard"
+      ],
+      "required_linear_history": true
+    }
+  },
+  "rulesets": {
+    "8811898": {
+      "name": "develop",
+      "includes": [
+        "refs/heads/develop"
+      ],
       "required_linear_history": true,
       "required_status_checks": [
         "guard",
@@ -15,7 +51,72 @@
         "session-index",
         "issue-snapshot",
         "Policy Guard (Upstream) / policy-guard"
-      ]
+      ],
+      "merge_queue": null,
+      "pull_request": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": [
+          "squash",
+          "rebase"
+        ]
+      }
+    },
+    "8614140": {
+      "name": "main",
+      "includes": [
+        "refs/heads/main"
+      ],
+      "required_status_checks": [
+        "pester",
+        "vi-binary-check",
+        "vi-compare",
+        "Policy Guard (Upstream) / policy-guard"
+      ],
+      "merge_queue": {
+        "merge_method": "SQUASH",
+        "grouping_strategy": "ALLGREEN",
+        "max_entries_to_build": 5,
+        "min_entries_to_merge": 1,
+        "max_entries_to_merge": 5,
+        "min_entries_to_merge_wait_minutes": 5,
+        "check_response_timeout_minutes": 60
+      },
+      "pull_request": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true
+      }
+    },
+    "8614172": {
+      "name": "release",
+      "includes": [
+        "refs/heads/release/*"
+      ],
+      "required_status_checks": [
+        "pester",
+        "publish",
+        "vi-binary-check",
+        "vi-compare",
+        "mock-cli",
+        "Policy Guard (Upstream) / policy-guard"
+      ],
+      "merge_queue": null,
+      "pull_request": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": [
+          "rebase"
+        ]
+      }
     }
   }
 }
