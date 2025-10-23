@@ -11,7 +11,8 @@ function parseArgs(argv = process.argv) {
   const args = argv.slice(2);
   const options = {
     apply: false,
-    help: false
+    help: false,
+    debug: false
   };
 
   for (const arg of args) {
@@ -21,6 +22,10 @@ function parseArgs(argv = process.argv) {
     }
     if (arg === '--help' || arg === '-h') {
       options.help = true;
+      continue;
+    }
+    if (arg === '--debug') {
+      options.debug = true;
       continue;
     }
     throw new Error(`Unknown option: ${arg}`);
@@ -79,20 +84,20 @@ function getRepoFromEnv(env = process.env, execSyncFn = execSync) {
   throw new Error('Unable to determine repository owner/name. Set GITHUB_REPOSITORY or define an upstream remote.');
 }
 
-async function resolveToken(env = process.env, { readFileFn = readFile, accessFn = access } = {}) {
+async function resolveToken(env = process.env, { readFileFn = readFile, accessFn = access, logFn = console.log } = {}) {
   if (env.GH_TOKEN && env.GH_TOKEN.trim()) {
-    console.log('[policy] auth source: GH_TOKEN');
-    return env.GH_TOKEN.trim();
+    logFn('[policy] auth source: GH_TOKEN');
+    return { token: env.GH_TOKEN.trim(), source: 'GH_TOKEN' };
   }
 
   if (env.GITHUB_TOKEN && env.GITHUB_TOKEN.trim()) {
-    console.log('[policy] auth source: GITHUB_TOKEN');
-    return env.GITHUB_TOKEN.trim();
+    logFn('[policy] auth source: GITHUB_TOKEN');
+    return { token: env.GITHUB_TOKEN.trim(), source: 'GITHUB_TOKEN' };
   }
 
   if (env.GH_ENTERPRISE_TOKEN && env.GH_ENTERPRISE_TOKEN.trim()) {
-    console.log('[policy] auth source: GH_ENTERPRISE_TOKEN');
-    return env.GH_ENTERPRISE_TOKEN.trim();
+    logFn('[policy] auth source: GH_ENTERPRISE_TOKEN');
+    return { token: env.GH_ENTERPRISE_TOKEN.trim(), source: 'GH_ENTERPRISE_TOKEN' };
   }
 
   const candidates = [env.GH_TOKEN_FILE];
@@ -108,7 +113,8 @@ async function resolveToken(env = process.env, { readFileFn = readFile, accessFn
       await accessFn(candidate);
       const fileToken = (await readFileFn(candidate, 'utf8')).trim();
       if (fileToken) {
-        return fileToken;
+        logFn(`[policy] auth source: file:${candidate}`);
+        return { token: fileToken, source: `file:${candidate}` };
       }
     } catch {
       // ignore missing/invalid file
@@ -614,20 +620,48 @@ export async function run({
 } = {}) {
   const options = parseArgs(argv);
   if (options.help) {
-    log('Usage: node tools/priority/check-policy.mjs [--apply]');
+    log('Usage: node tools/priority/check-policy.mjs [--apply] [--debug]');
     return 0;
   }
 
+  const dbg = options.debug ? (...args) => log('[policy][debug]', ...args) : () => {};
+
   const manifest = await loadManifest();
-  const token = await resolveToken(env);
+  const tokenResult = await resolveToken(env);
+  const token = tokenResult?.token;
   if (!token) {
     throw new Error('GitHub token not found. Set GITHUB_TOKEN, GH_TOKEN, or GH_TOKEN_FILE.');
   }
 
   const { owner, repo } = getRepoFromEnv(env, execSyncFn);
+  dbg(`Resolved repository ${owner}/${repo}`);
+  if (tokenResult?.source) {
+    dbg(`Token source ${tokenResult.source}`);
+  }
   const repoUrl = `https://api.github.com/repos/${owner}/${repo}`;
 
   const initialState = await collectState(manifest, repoUrl, token, fetchFn);
+  if (options.debug) {
+    const repoKeys = initialState.repoData ? Object.keys(initialState.repoData) : [];
+    dbg(`Repo response keys: ${repoKeys.length ? repoKeys.join(', ') : '(none)'}`);
+    for (const entry of initialState.branchStates) {
+      if (entry.error) {
+        dbg(`Branch ${entry.branch} protection fetch error: ${entry.error.message}`);
+      } else {
+        const protection = entry.protection ?? {};
+        dbg(`Branch ${entry.branch} protection keys: ${Object.keys(protection).join(', ') || '(none)'}`);
+      }
+    }
+    for (const entry of initialState.rulesetStates) {
+      if (entry.error) {
+        dbg(`Ruleset ${entry.id} fetch error: ${entry.error.message}`);
+      } else {
+        const rule = entry.ruleset ?? {};
+        dbg(`Ruleset ${entry.id} keys: ${Object.keys(rule).join(', ') || '(none)'}`);
+      }
+    }
+  }
+
   const initialDiffs = evaluateDiffs(manifest, initialState);
 
   const allDiffs = [
@@ -702,6 +736,12 @@ export async function run({
   }
 
   if (allDiffs.length > 0) {
+    const missingRepoFields = initialDiffs.repoDiffs.filter((diff) => diff.includes('actual undefined'));
+    if (missingRepoFields.length > 0 && !options.debug) {
+      error(
+        '[policy] Repository settings were returned as undefined. Ensure the provided token has admin access to the repository or rerun with --debug for more details.'
+      );
+    }
     error('Merge policy mismatches detected:');
     for (const diff of allDiffs) {
       error(` - ${diff}`);
