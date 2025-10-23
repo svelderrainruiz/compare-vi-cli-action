@@ -1,115 +1,110 @@
 <!-- markdownlint-disable-next-line MD041 -->
-# Release v0.5.1 – PR Notes Helper (Do Not Ship With Final Tag)
+# Release v0.5.2 - PR Notes Helper (Do Not Ship With Final Tag)
 
-Reference sheet for refining the v0.5.1 release PR/description. Summarizes the major themes, validation
-expectations, and follow-ups captured in #134.
+Reference sheet for refining the v0.5.2 release PR/description. Summarizes the major themes, validation expectations,
+and follow-ups captured in #273.
 
 ## 1. Summary
 
-Release v0.5.1 focuses on four pillars:
+Release v0.5.2 focuses on four pillars:
 
-- Deterministic self-hosted Windows CI: per-ref concurrency + cancel-in-progress, guard preflight, and post-run
-  cleanup enforcement so orchestrated runs finish without manual intervention.
-- Session index everywhere: every dispatcher run writes `tests/results/session-index.json`, uploads it, and appends the
-  `stepSummary` snippet for easy triage.
-- Fixture policy modernization: `fixtures.manifest.json` now records exact `bytes`, drift workflows consume the new
-  shape, and the validator produces actionable size mismatch diagnostics.
-- Drift/report hardening & tooling hygiene: LVCompare exec JSON becomes the primary drift report source, docs linting
-  runs in Validate, and the repository ships a vendor tool resolver plus Docker helper to keep non-LV checks consistent.
+- **History suite & telemetry** — `tools/Compare-VIHistory.ps1` now emits aggregate/per-mode manifests, expanded Pester
+  coverage validates the suite, and the Dev Dashboard CLI renders history data alongside session/wait telemetry.
+- **Branch-policy guard & release automation** — Priority helpers under `tools/priority/*` enforce required checks,
+  manage release/feature branch lifecycles, and capture metadata for standing-priority flows.
+- **Validate auto-publish & parity** — `vi-compare-refs.yml` auto-uploads comparison refs; Validate runs mergeability
+  probes + branch policy guard; Docker parity workflow and knowledge base keep non-LV checks consistent across planes.
+- **Rogue cleanup & handoff hygiene** — Improved LabVIEW/LVCompare detection, buffer calibration, and richer handoff
+  summaries keep self-hosted environments clean between runs.
 
-## 2. Deterministic CI & Guard Highlights
+## 2. History Suite Highlights
 
-- Orchestrated workflows use concurrency groups with cancel-on-new-ref to prevent queue buildup.
-- Guard preflight blocks dispatcher launches when `LabVIEW.exe` is already running; post-run guard summarizes cleanup.
-- Validate now runs actionlint *before* markdownlint so YAML issues fail fast.
-- Published tools image (`ghcr.io/labview-community-ci-cd/comparevi-tools`) powers priority sync and non-LV checks.
+- New suite manifests (`vi-compare/history-suite@v1`) plus per-mode manifests recorded under
+  `tools/dashboard/samples/ref-compare/history/`.
+- `tests/CompareVIHistory.Tests.ps1` and `tests/CompareVI.History.Tests.ps1` exercise manifest production, diff handling,
+  and Dev Dashboard ingestion.
+- Dev Dashboard CLI (`tools/Dev-Dashboard.ps1`, `tools/Dev-Dashboard.psm1`) surfaces history suite telemetry in
+  terminal/HTML/JSON outputs.
+- Docs: `docs/DEV_DASHBOARD_PLAN.md`, `docs/test-requirements/vi-history-reporting.md`, and knowledge base notes cover
+  expectations for history data consumers.
 
-## 3. Session Index & Telemetry
+## 3. Branch-Policy Guard & Release Automation
 
-- Dispatcher emits `session-index.json` containing run status, artifact paths, timing metrics, and a ready-to-append
-  summary block.
-- `tools/Update-SessionIndexBranchProtection.ps1` maintains the contract between `session-index.json` and required
-  checks (`tools/policy/branch-required-checks.json`).
-- Watchers ingest the session index (REST watcher writes `watcher-rest.json`; helper merges into the session index).
-- New docs (`docs/CI_ORCHESTRATION_REDESIGN.md`, `docs/WATCHER_TELEMETRY_DX.md`) explain how the telemetry pieces fit.
+- `tools/priority/policy.json` encodes required statuses; Validate job enforces guard via new step wiring.
+- Release utilities (`release:branch`, `release:finalize`, `feature:*`, `priority:dispatch`) manage version bumps,
+  metadata capture, and upstream pushes.
+- Supporting tests (`tools/priority/__tests__/*`) keep release helpers deterministic.
+- Docs refreshed: `docs/knowledgebase/FEATURE_BRANCH_POLICY.md`, `docs/plans/VALIDATION_MATRIX.md`, `AGENT_HANDOFF.txt`.
 
-## 4. Fixture & Drift Updates
+## 4. Validate Auto-Publish & Parity Workflows
 
-- `fixtures.manifest.json` adopts `bytes` (exact size) and supports the additive `pair` block (`fixture-pair/v1`).
-- Drift jobs trust the LVCompare exec JSON (`compare-exec.json`) for summaries and publish deterministic artifacts.
-- Validator CLI (`tools/Validate-Fixtures.ps1`) learned `-RequirePair` / `-FailOnExpectedMismatch` to enforce policy.
-- README + integration docs call out the new fixture expectations and still reference the canonical `VI1.vi` / `VI2.vi`.
+- `vi-compare-refs.yml` publishes comparison refs on green builds; `node tools/npm/run-script.mjs priority:validate`
+  dispatches Validate with guard checks.
+- Mergeability probe (`tools/Check-PRMergeable.ps1`) runs before lint to fail conflicted PRs quickly.
+- `tools/Run-NonLVChecksInDocker.ps1` and `.github/workflows/tools-parity.yml` provide Docker parity coverage (documented
+  in `docs/knowledgebase/DOCKER_TOOLS_PARITY.md`).
+- `docs/knowledgebase/VICompare-Refs-Workflow.md` explains the ref autopublish path and expectations.
 
-## 5. Tooling & Developer Experience
+## 5. Rogue Cleanup & Handoff Enhancements
 
-- `tools/VendorTools.psm1` resolves actionlint, markdownlint, and LVCompare paths consistently.
-- `tools/Run-NonLVChecksInDocker.ps1` provides a containerized fallback for Validate linting.
-- Priority router + handoff helpers (`tools/priority/*`) power the new standing-priority automation (cache, schema,
-  semver check, release simulation).
-- VS Code extension scaffolding (comparevi) ships as an experimental companion.
+- `tools/Detect-RogueLV.ps1` captures process command lines, timestamps, and kill attempts; new calibration helpers
+  (`tools/Calibrate-LabVIEWBuffer.ps1`, `tools/Run-LocalBackbone.ps1`) tune cleanup windows.
+- Handoff script updates (`tools/Print-AgentHandoff.ps1`, `AGENT_HANDOFF.txt`) ensure telemetry capsules and watcher data
+  stay current.
+- Session capsules, watcher summaries, and rogue detection results feed the Dev Dashboard for quick triage.
 
 ## 6. Upgrade Notes & Compatibility
 
-- Consumers must update any manifest tooling to read `bytes` instead of `minBytes`.
-- Session index is additive; action inputs/outputs remain unchanged.
-- No breaking changes to CompareVI CLI invocation—LVCompare/LabVIEW guard is stricter but bypassable via env toggles
-  documented in `docs/ENVIRONMENT.md`.
+- Downstream consumers should ingest the new history manifests (aggregate + per-mode) and adjust dashboards accordingly.
+- Release automation scripts expect `GH_TOKEN`/`GITHUB_TOKEN` to be available and rely on branch-policy guard parity.
+- `vi-compare-refs` autopublish workflow assumes hosted runners have LVCompare artifacts accessible; local parity helpers
+  document prerequisites.
+- Action inputs/outputs unchanged; additional telemetry and manifests are additive.
 
 ## 7. Validation Snapshot (goal = all checked before merge/tag)
 
-- [ ] Validate workflow (actionlint, markdownlint, docs links) - rerun until clean.
-- [ ] `./Invoke-PesterTests.ps1` (non-integration) - expect PASS, session index uploaded.
-- [ ] Self-hosted integration run (`./Invoke-PesterTests.ps1 -IntegrationMode include`) - ensure guard/integration path
-      exits cleanly.
-- [ ] Fixture drift jobs (Windows + Ubuntu) - confirm size/bytes alignment.
-- [ ] LabVIEW CLI provider smoke: `tools/TestStand-CompareHarness.ps1` should complete without `CreateComparisonReport`
-      errors.
-- [ ] `node tools/npm/run-script.mjs priority:release` succeeds, writing
-      `tests/results/_agent/handoff/release-summary.json`.
+- [ ] Validate workflow (mergeability probe, branch-policy guard, markdown/docs checks).
+- [ ] `./Invoke-PesterTests.ps1` (unit surface) — expect PASS, session index uploaded.
+- [ ] Self-hosted integration run (`./Invoke-PesterTests.ps1 -IntegrationMode include`) — ensure guard cleanup stays
+      green and history suite tests pass.
+- [ ] Fixture drift jobs (Windows + Ubuntu) — confirm size/bytes alignment and provenance comments.
+- [ ] `vi-compare-refs` auto-publish workflow — artifacts uploaded and history suite manifests attached.
+- [ ] Dev Dashboard CLI smoke (`pwsh -File tools/Dev-Dashboard.ps1 -Html`) — verify history telemetry renders.
 
-## 7a. Compare History Artifact Sanity
+## 7a. History Suite Validation Notes
 
-- Confirm `tests/results/ref-compare-history/history-summary.json` exists,
-  schema=`vi-history-compare/v1`, and `pairs` matches the commit window inspected.
-- For each pair, open the matching `*-summary.json`; ensure `cli.diff`, `exitCode`, and
-  `reportHtml` align with expectations (diffs have `exitCode = 1`, identical runs stay at `0`).
-- Spot-check the rendered report (`cli-report.html`) for at least the first diff, verifying
-  highlighted sections reflect the regression under review.
-- Ensure highlights captured in the summary (`cli.highlights`) mirror the report and that the
-  artifact directory holds stdout/stderr captures for triage.
-- If `IncludeIdenticalPairs` was enabled, verify identical entries are flagged
-  (`skippedIdentical=true`) and excluded from markdown rows when not requested.
+- Confirm `tests/results/_agent/release/release-v0.5.2-*.json` capture branch/finalize metadata.
+- Inspect generated history manifests under `tests/results/ref-compare-history/` for schema compliance and diff coverage.
+- Exercise `tools/Compare-VIHistory.ps1` against sample refs and confirm exit codes/diff counts align.
+- Ensure Dev Dashboard HTML/JSON outputs include history summary rows with actionable hints.
 
 ## 8. Risks & Mitigations
 
-- **Risk:** Guard still reports rogue LabVIEW.exe
-  - **Impact:** Guard blocks post-merge
-  - **Mitigation:** Keep `tools/Detect-RogueLV.ps1` in release CI and verify guard summaries stay green.
-- **Risk:** Fixture manifest consumers ignore `bytes`
-  - **Impact:** Size checks fail downstream
-  - **Mitigation:** Highlight the change in CHANGELOG/README and retain `minBytes` compatibility shims only when needed.
-- **Risk:** Session index not appended in forks
-  - **Impact:** Telemetry coverage drops
-  - **Mitigation:** Document fallback in README and watcher docs; keep branch protection script aligned.
-- **Risk:** Dockerized non-LV checks lack GH token
-  - **Impact:** `priority:sync`/drift helpers fail
-  - **Mitigation:** Remind contributors to set `GH_TOKEN`/`GITHUB_TOKEN` (see `docs/ENVIRONMENT.md`).
+- **Risk:** Branch-policy guard misaligned with GitHub protection.
+  - **Mitigation:** Keep `tools/policy/branch-required-checks.json` synced; rerun Validate guard after configuration
+    changes.
+- **Risk:** History manifests not ingested by dashboards.
+  - **Mitigation:** Use sample fixtures + Dev Dashboard CLI to confirm format before tagging; update downstream parsers.
+- **Risk:** Rogue cleanup regression on self-hosted runners.
+  - **Mitigation:** Run calibration helpers when environment changes; monitor `Detect-RogueLV` summaries.
+- **Risk:** Docker parity workflow lacks credentials.
+  - **Mitigation:** Document GH token requirements; use tools image fallback when needed.
 
-## 9. Follow-Up Work After v0.5.1
+## 9. Follow-Up Work After v0.5.2
 
-1. Composite action consolidation and managed tokenizer adoption (tracked in standing issue #134).
-2. Extend session index watcher integration to additional workflows (rest + artifact merger).
-3. Evaluate defaulting discovery strictness once telemetry shows stability.
-4. Continue VS Code extension hardening (command palette + compare orchestration).
+1. Extend history suite ingestion to production dashboards/metrics.
+2. Broaden Docker parity coverage (macOS + additional containers).
+3. Wire release automation into CI (auto-create release/feature branches on standing issues).
+4. Continue refining Dev Dashboard rendering (interactive filtering, watcher aggregation).
 
 ## 10. Reviewer Notes
 
-- Focus reviews on CI determinism (concurrency wiring, guard steps), session index payload shape, fixture validator
-  behaviour, and docs/tooling alignment.
-- Double-check that `docs/action-outputs.md`, `action.yml`, and README tables match.
-- Ensure release artifacts (`RELEASE_NOTES_v0.5.0.md`, changelog section) remain consistent with changes landed after
-  the standing-priority sync.
+- Focus reviews on history suite manifest correctness, Dev Dashboard telemetry, branch-policy guard wiring, and release
+  automation scripts.
+- Verify `CHANGELOG.md`, `RELEASE_NOTES_v0.5.2.md`, and README/docs align with shipped features.
+- Double-check `docs/documentation-manifest.json` includes the new release docs.
+- Ensure auto-publish workflows (`vi-compare-refs`) and Docker parity job stay green alongside traditional gates.
 
 ---
 
-Updated: 2025-10-19 (aligns with the v0.5.1 release candidate).
+Updated: 2025-10-23 (aligns with the v0.5.2 release candidate).
