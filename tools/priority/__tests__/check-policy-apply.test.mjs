@@ -254,8 +254,8 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
   );
   const developPullRule = rulesetDevelop.rules.find((rule) => rule.type === 'pull_request');
   assert.deepEqual(
-    developPullRule.parameters.allowed_merge_methods,
-    ['squash']
+    developPullRule.parameters.allowed_merge_methods.sort(),
+    ['rebase', 'squash']
   );
 
   const mergeQueueRule = rulesetMain.rules.find((rule) => rule.type === 'merge_queue');
