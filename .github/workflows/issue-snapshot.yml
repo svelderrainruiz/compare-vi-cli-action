@@ -17,9 +17,15 @@ jobs:
       - name: Sync standing-priority snapshot
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
+          if [ -z "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ]; then
+            echo "::error::GH_TOKEN/GITHUB_TOKEN is required for priority:sync"
+            exit 1
+          fi
           npm ci --ignore-scripts
-          node tools/npm/run-script.mjs priority:sync || true
+          node tools/npm/run-script.mjs priority:sync
       - name: Upload snapshot
         if: always()
         uses: actions/upload-artifact@v4
