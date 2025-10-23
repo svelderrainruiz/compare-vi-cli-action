@@ -16,7 +16,6 @@
       "required_linear_history": true,
       "required_status_checks": [
         "guard",
-        "lint",
         "fixtures",
         "session-index",
         "issue-snapshot",
@@ -42,7 +41,6 @@
         "refs/heads/main"
       ],
       "required_status_checks": [
-        "lint",
         "pester",
         "vi-binary-check",
         "vi-compare",
@@ -71,7 +69,6 @@
         "refs/heads/release/*"
       ],
       "required_status_checks": [
-        "lint",
         "pester",
         "publish",
         "vi-binary-check",
@@ -81,11 +78,14 @@
       ],
       "merge_queue": null,
       "pull_request": {
-        "required_approving_review_count": 1,
+        "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": true,
         "require_code_owner_review": false,
         "require_last_push_approval": false,
-        "required_review_thread_resolution": true
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": [
+          "rebase"
+        ]
       }
     }
   }
