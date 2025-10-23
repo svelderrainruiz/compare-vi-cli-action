@@ -1,7 +1,7 @@
 {
-  "number": 283,
-  "title": "Prevent fork dispatch of Validate",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/283",
+  "number": 302,
+  "title": "Branch protection guard: fork skip + upstream enforcement",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/302",
   "state": "OPEN",
   "labels": [
     "ci",
@@ -13,10 +13,10 @@
   ],
   "milestone": null,
   "commentCount": 0,
-  "lastSeenUpdatedAt": "2025-10-22T14:34:41Z",
-  "issueDigest": "d7a2bf7bca447b0227d93feae7b01af12f288c791d7740989830d7aba24fa543",
-  "bodyDigest": "3973e022e93220f9212c18d0d0c543ae7c309e46640da93a4a0314de999f5112",
-  "cachedAtUtc": "2025-10-22T14:49:27.914Z",
+  "lastSeenUpdatedAt": "2025-10-23T19:02:30Z",
+  "issueDigest": "94562f420b1d18776bdf7d1fd4c2fab1324caa98ffae3475bbf9832b455a2038",
+  "bodyDigest": "685f9745c2026666a406ef0e7c5d03e4a4cb72ecfd2929a7b9b76e54f11e22af",
+  "cachedAtUtc": "2025-10-23T20:49:27.829Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
