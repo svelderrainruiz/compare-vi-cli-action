@@ -21,20 +21,18 @@
 - `fail_fast` (`true`/`false`): stop iterating after the first detected diff (still uploads results, does not fail the job).
 - `fail_on_diff` (`true`/`false`): exit the job with failure status if any LVCompare run reports differences.
 - `modes` (string): comma-separated compare modes. Recognised values:
-  - `default` – honour the ignore toggles (`flag_*` inputs).
-  - `attributes` – drop `-noattr` so VI attribute changes surface.
-  - `front-panel` – drop `-nofp`/`-nofppos` to observe FP layout changes.
-  - `block-diagram` – drop `-nobdcosm` to surface BD cosmetic tweaks.
-  - `all` – remove every ignore flag (`-nobd`, `-noattr`, `-nofp`, `-nofppos`, `-nobdcosm`).
-  - `custom` – honour the flag toggles exactly as provided.
+  - `default` - honour the ignore list defined by `ignore_flags` (defaults to `noattr,nofp,nofppos,nobdcosm`).
+  - `attributes` - drop `-noattr` so VI attribute changes surface.
+  - `front-panel` - drop `-nofp`/`-nofppos` to observe FP layout changes.
+  - `block-diagram` - drop `-nobdcosm` to surface BD cosmetic tweaks.
+  - `all` - remove every ignore flag (`-nobd`, `-noattr`, `-nofp`, `-nofppos`, `-nobdcosm`).
+  - `custom` - honour the ignore list supplied via `ignore_flags` exactly as provided.
 - Multiple modes can be supplied (e.g. `default,attributes`); the workflow loops over each and emits a manifest/artifact
   set per mode.
-- Flag toggles map directly to LVCompare switches:
-  - `flag_noattr` -> `-noattr`
-  - `flag_nofp` -> `-nofp`
-  - `flag_nofppos` -> `-nofppos`
-  - `flag_nobdcosm` -> `-nobdcosm`
-  - The helper always prepends `-nobd`. Add extra switches via `additional_flags` (space-delimited).
+- `ignore_flags` (string): comma-separated LVCompare ignore toggles. Accepts `default` (apply all default ignores),
+  `none` (apply none), direct flag names (`noattr`, `nofp`, `nofppos`, `nobdcosm`), and `+flag` / `-flag` modifiers
+  to add or remove flags relative to the current set.
+- The helper always prepends `-nobd`. Add extra switches via `additional_flags` (space-delimited).
 
 Example CLI dispatch (requires `gh workflow run` permissions):
 
@@ -50,7 +48,10 @@ gh workflow run vi-compare-refs.yml `
 
 - The compare step writes `tests/results/ref-compare/history/manifest.json`, an aggregate manifest with
   `schema: vi-compare/history-suite@v1`. Each `modes[]` entry captures the mode slug, resolved flag bundle,
-  stats, and the `manifestPath` for that mode’s detailed results.
+  stats, and the `manifestPath` for that mode's detailed results.
+- GitHub outputs include `manifest-path` (suite manifest), `results-dir` (root history directory), and
+  `mode-manifests-json` (JSON array enumerating each mode's manifest path, results directory, and summary stats).
+  Dashboards and metrics jobs should deserialize `mode-manifests-json` when they need per-mode artifact locations.
 - Per-mode manifests live under `tests/results/ref-compare/history/<mode>/manifest.json`
   (`schema: vi-compare/history@v1`) and enumerate the commit pairs, summaries, and LVCompare outcomes.
 - Per-iteration summaries (`*-summary.json`) and execution traces (`*-exec.json`) are stored beside the mode manifest

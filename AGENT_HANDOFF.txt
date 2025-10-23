@@ -1,6 +1,8 @@
 Progress: history suite now writes one aggregate manifest (`vi-compare/history-suite@v1`) plus per-mode manifests. `tools/Compare-VIHistory.ps1` no longer runs per-mode loops separately, and the manual workflow consumes the suite output instead of stitching manifests on its own.
+Progress: Added GitHub-output coverage + docs so dashboards/metrics can deserialize `mode-manifests-json` for per-mode artifact routing.
+Progress: Dev Dashboard loaders + CLI render the history suite using the new mode manifest JSON; sample fixtures live under `tools/dashboard/samples/ref-compare/history/`.
 
-Tests: 11/11 passing via `./Invoke-PesterTests.ps1 -TestsPath tests/CompareVI.History.Tests.ps1 -IntegrationMode include`.
+Tests: `./Invoke-PesterTests.ps1 -TestsPath tests/CompareVI.History.Tests.ps1 -IntegrationMode include` (12/12) and `./Invoke-PesterTests.ps1 -TestsPath tests -IncludePatterns 'DevDashboard.*'` (10/10).
 
 ## Status & Known Gaps
 1. `tools/priority/dispatch-validate.mjs` now supports `--push-missing` / `--force-push-ok`; `npm run priority:test` passed (40 tests, ~6.3s) after the update.
