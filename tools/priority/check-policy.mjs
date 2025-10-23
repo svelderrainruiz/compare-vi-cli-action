@@ -695,7 +695,7 @@ export async function run({
 
   if (!options.apply && repoFieldsAllMissing && (!hasAdminPermission || forkRun)) {
     log(
-      '[policy] Repository settings unavailable with current token; skipping policy check (admin permissions required).'
+      '[policy] Repository settings unavailable with current token; skipping policy check (admin permissions required). Upstream status "Policy Guard (Upstream) / policy-guard" will enforce branch protection.'
     );
     return 0;
   }

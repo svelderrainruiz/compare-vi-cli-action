@@ -26,7 +26,8 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
     'fixtures',
     'session-index',
     'issue-snapshot',
-    'Workflows Lint / lint (pull_request)'
+    'Workflows Lint / lint (pull_request)',
+    'Policy Guard (Upstream) / policy-guard'
   ];
 
   const repoUrl = 'https://api.github.com/repos/test-org/test-repo';
@@ -263,13 +264,19 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
 
   const statusRule = rulesetMain.rules.find((rule) => rule.type === 'required_status_checks');
   assert.deepEqual(
-    statusRule.parameters.required_status_checks.map((check) => check.context),
-    ['lint', 'pester', 'vi-binary-check', 'vi-compare']
+    statusRule.parameters.required_status_checks.map((check) => check.context).sort(),
+    ['lint', 'pester', 'vi-binary-check', 'vi-compare', 'Policy Guard (Upstream) / policy-guard'].sort()
   );
 
   const pullRule = rulesetMain.rules.find((rule) => rule.type === 'pull_request');
   assert.equal(pullRule.parameters.required_approving_review_count, 1);
   assert.equal(pullRule.parameters.required_review_thread_resolution, true);
+
+  const statusRuleRelease = rulesetRelease.rules.find((rule) => rule.type === 'required_status_checks');
+  assert.deepEqual(
+    statusRuleRelease.parameters.required_status_checks.map((check) => check.context).sort(),
+    ['Policy Guard (Upstream) / policy-guard', 'lint', 'mock-cli', 'pester', 'publish', 'vi-binary-check', 'vi-compare'].sort()
+  );
 
   assert.ok(
     requests.some((entry) => entry.method === 'PATCH' && entry.url === rulesetDevelopUrl),

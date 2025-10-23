@@ -20,7 +20,8 @@
         "fixtures",
         "session-index",
         "issue-snapshot",
-        "Workflows Lint / lint (pull_request)"
+        "Workflows Lint / lint (pull_request)",
+        "Policy Guard (Upstream) / policy-guard"
       ],
       "merge_queue": null,
       "pull_request": {
@@ -44,7 +45,8 @@
         "lint",
         "pester",
         "vi-binary-check",
-        "vi-compare"
+        "vi-compare",
+        "Policy Guard (Upstream) / policy-guard"
       ],
       "merge_queue": {
         "merge_method": "SQUASH",
@@ -74,7 +76,8 @@
         "publish",
         "vi-binary-check",
         "vi-compare",
-        "mock-cli"
+        "mock-cli",
+        "Policy Guard (Upstream) / policy-guard"
       ],
       "merge_queue": null,
       "pull_request": {
