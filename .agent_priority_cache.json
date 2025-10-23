@@ -4,6 +4,8 @@
   "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/283",
   "state": "OPEN",
   "labels": [
+    "ci",
+    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
