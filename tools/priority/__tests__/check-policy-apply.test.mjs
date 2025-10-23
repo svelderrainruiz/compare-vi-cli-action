@@ -25,7 +25,20 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
     'fixtures',
     'session-index',
     'issue-snapshot',
-    'Workflows Lint / lint (pull_request)',
+    'Policy Guard (Upstream) / policy-guard'
+  ];
+  const expectedMainChecks = [
+    'pester',
+    'vi-binary-check',
+    'vi-compare',
+    'Policy Guard (Upstream) / policy-guard'
+  ];
+  const expectedReleaseChecks = [
+    'pester',
+    'publish',
+    'vi-binary-check',
+    'vi-compare',
+    'mock-cli',
     'Policy Guard (Upstream) / policy-guard'
   ];
 
@@ -65,7 +78,6 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
             { context: 'fixtures', integration_id: 15368 },
             { context: 'session-index', integration_id: 15368 },
             { context: 'issue-snapshot', integration_id: 15368 },
-            { context: 'Workflows Lint / lint (pull_request)', integration_id: 15368 },
             { context: 'Policy Guard (Upstream) / policy-guard' }
           ]
         }
@@ -168,16 +180,89 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
           strict_required_status_checks_policy: true,
           do_not_enforce_on_create: false,
           required_status_checks: [
-            { context: 'lint', integration_id: 15368 },
             { context: 'pester', integration_id: 15368 },
             { context: 'publish', integration_id: 15368 },
             { context: 'vi-binary-check', integration_id: 15368 },
             { context: 'vi-compare', integration_id: 15368 },
-            { context: 'mock-cli', integration_id: 15368 }
+            { context: 'mock-cli', integration_id: 15368 },
+            { context: 'Policy Guard (Upstream) / policy-guard' }
           ]
         }
       }
     ]
+  };
+
+  const branchDevelopUrl = `${repoUrl}/branches/develop/protection`;
+  const branchMainUrl = `${repoUrl}/branches/main/protection`;
+  const branchReleaseUrl = `${repoUrl}/branches/release%2Fv0.5.2/protection`;
+
+  let branchDevelopProtection = {
+    required_status_checks: {
+      strict: true,
+      contexts: ['guard', 'fixtures', 'session-index', 'issue-snapshot'],
+      checks: [
+        { context: 'guard', app_id: 15368 },
+        { context: 'fixtures', app_id: 15368 },
+        { context: 'session-index', app_id: 15368 },
+        { context: 'issue-snapshot', app_id: 15368 }
+      ]
+    },
+    enforce_admins: { enabled: false },
+    required_pull_request_reviews: null,
+    restrictions: null,
+    required_linear_history: { enabled: false },
+    allow_force_pushes: { enabled: false },
+    allow_deletions: { enabled: false },
+    block_creations: { enabled: false },
+    required_conversation_resolution: { enabled: false },
+    lock_branch: { enabled: false },
+    allow_fork_syncing: { enabled: false }
+  };
+
+  let branchMainProtection = {
+    required_status_checks: {
+      strict: true,
+      contexts: ['pester', 'vi-binary-check', 'vi-compare'],
+      checks: [
+        { context: 'pester', app_id: 15368 },
+        { context: 'vi-binary-check', app_id: 15368 },
+        { context: 'vi-compare', app_id: 15368 }
+      ]
+    },
+    enforce_admins: { enabled: false },
+    required_pull_request_reviews: null,
+    restrictions: null,
+    required_linear_history: { enabled: false },
+    allow_force_pushes: { enabled: false },
+    allow_deletions: { enabled: false },
+    block_creations: { enabled: false },
+    required_conversation_resolution: { enabled: false },
+    lock_branch: { enabled: false },
+    allow_fork_syncing: { enabled: false }
+  };
+
+  let branchReleaseProtection = {
+    required_status_checks: {
+      strict: true,
+      contexts: ['pester', 'publish', 'vi-binary-check', 'vi-compare', 'mock-cli'],
+      checks: [
+        { context: 'pester', app_id: 15368 },
+        { context: 'publish', app_id: 15368 },
+        { context: 'vi-binary-check', app_id: 15368 },
+        { context: 'vi-compare', app_id: 15368 },
+        { context: 'mock-cli', app_id: 15368 }
+      ]
+    },
+    enforce_admins: { enabled: false },
+    required_pull_request_reviews: null,
+    restrictions: null,
+    required_linear_history: { enabled: false },
+    allow_force_pushes: { enabled: false },
+    allow_deletions: { enabled: false },
+    block_creations: { enabled: false },
+    required_conversation_resolution: { enabled: false },
+    lock_branch: { enabled: false },
+    allow_fork_syncing: { enabled: false }
   };
 
   const requests = [];
@@ -189,11 +274,95 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
       return createResponse(repoState);
     }
 
+    if (url === branchDevelopUrl) {
+      if (method === 'GET') {
+        return createResponse(branchDevelopProtection);
+      }
+      if (method === 'PUT') {
+        const payload = JSON.parse(options.body);
+        const contexts = payload.required_status_checks?.contexts ?? [];
+        branchDevelopProtection = {
+          enforce_admins: payload.enforce_admins,
+          required_pull_request_reviews: payload.required_pull_request_reviews,
+          restrictions: payload.restrictions,
+          required_status_checks: {
+            strict: payload.required_status_checks?.strict ?? true,
+            contexts,
+            checks: contexts.map((context) => ({ context }))
+          },
+          required_linear_history: payload.required_linear_history,
+          allow_force_pushes: payload.allow_force_pushes,
+          allow_deletions: payload.allow_deletions,
+          block_creations: payload.block_creations,
+          required_conversation_resolution: payload.required_conversation_resolution,
+          lock_branch: payload.lock_branch,
+          allow_fork_syncing: payload.allow_fork_syncing
+        };
+        return createResponse(branchDevelopProtection);
+      }
+    }
+
+    if (url === branchMainUrl) {
+      if (method === 'GET') {
+        return createResponse(branchMainProtection);
+      }
+      if (method === 'PUT') {
+        const payload = JSON.parse(options.body);
+        const contexts = payload.required_status_checks?.contexts ?? [];
+        branchMainProtection = {
+          enforce_admins: payload.enforce_admins,
+          required_pull_request_reviews: payload.required_pull_request_reviews,
+          restrictions: payload.restrictions,
+          required_status_checks: {
+            strict: payload.required_status_checks?.strict ?? true,
+            contexts,
+            checks: contexts.map((context) => ({ context }))
+          },
+          required_linear_history: payload.required_linear_history,
+          allow_force_pushes: payload.allow_force_pushes,
+          allow_deletions: payload.allow_deletions,
+          block_creations: payload.block_creations,
+          required_conversation_resolution: payload.required_conversation_resolution,
+          lock_branch: payload.lock_branch,
+          allow_fork_syncing: payload.allow_fork_syncing
+        };
+        return createResponse(branchMainProtection);
+      }
+    }
+
+    if (url === branchReleaseUrl) {
+      if (method === 'GET') {
+        return createResponse(branchReleaseProtection);
+      }
+      if (method === 'PUT') {
+        const payload = JSON.parse(options.body);
+        const contexts = payload.required_status_checks?.contexts ?? [];
+        branchReleaseProtection = {
+          enforce_admins: payload.enforce_admins,
+          required_pull_request_reviews: payload.required_pull_request_reviews,
+          restrictions: payload.restrictions,
+          required_status_checks: {
+            strict: payload.required_status_checks?.strict ?? true,
+            contexts,
+            checks: contexts.map((context) => ({ context }))
+          },
+          required_linear_history: payload.required_linear_history,
+          allow_force_pushes: payload.allow_force_pushes,
+          allow_deletions: payload.allow_deletions,
+          block_creations: payload.block_creations,
+          required_conversation_resolution: payload.required_conversation_resolution,
+          lock_branch: payload.lock_branch,
+          allow_fork_syncing: payload.allow_fork_syncing
+        };
+        return createResponse(branchReleaseProtection);
+      }
+    }
+
     if (url === rulesetDevelopUrl) {
       if (method === 'GET') {
         return createResponse(rulesetDevelop);
       }
-      if (method === 'PATCH') {
+      if (method === 'PUT') {
         const payload = JSON.parse(options.body);
         rulesetDevelop.conditions = structuredClone(payload.conditions);
         rulesetDevelop.rules = structuredClone(payload.rules);
@@ -204,7 +373,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
       if (method === 'GET') {
         return createResponse(rulesetMain);
       }
-      if (method === 'PATCH') {
+      if (method === 'PUT') {
         const payload = JSON.parse(options.body);
         rulesetMain.conditions = structuredClone(payload.conditions);
         rulesetMain.rules = structuredClone(payload.rules);
@@ -216,7 +385,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
       if (method === 'GET') {
         return createResponse(rulesetRelease);
       }
-      if (method === 'PATCH') {
+      if (method === 'PUT') {
         const payload = JSON.parse(options.body);
         rulesetRelease.conditions = structuredClone(payload.conditions);
         rulesetRelease.rules = structuredClone(payload.rules);
@@ -281,12 +450,45 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
   );
 
   assert.ok(
-    requests.some((entry) => entry.method === 'PATCH' && entry.url === rulesetDevelopUrl),
-    'develop ruleset patch call expected'
+    requests.some((entry) => entry.method === 'PUT' && entry.url === rulesetDevelopUrl),
+    'develop ruleset put call expected'
   );
   assert.ok(
-    requests.some((entry) => entry.method === 'PATCH' && entry.url === rulesetMainUrl),
-    'ruleset patch call expected'
+    requests.some((entry) => entry.method === 'PUT' && entry.url === rulesetMainUrl),
+    'ruleset put call expected'
+  );
+  assert.ok(
+    requests.some((entry) => entry.method === 'PUT' && entry.url === branchDevelopUrl),
+    'develop branch protection put call expected'
+  );
+  assert.ok(
+    requests.some((entry) => entry.method === 'PUT' && entry.url === branchMainUrl),
+    'main branch protection put call expected'
+  );
+  assert.ok(
+    requests.some((entry) => entry.method === 'PUT' && entry.url === branchReleaseUrl),
+    'release branch protection put call expected'
+  );
+
+  const developApplied = branchDevelopProtection.required_status_checks.checks.map((check) => check.context).sort();
+  assert.deepEqual(
+    developApplied,
+    expectedDevelopChecks.slice().sort(),
+    'develop branch contexts should match expectations'
+  );
+
+  const mainApplied = branchMainProtection.required_status_checks.checks.map((check) => check.context).sort();
+  assert.deepEqual(
+    mainApplied,
+    expectedMainChecks.slice().sort(),
+    'main branch contexts should match expectations'
+  );
+
+  const releaseApplied = branchReleaseProtection.required_status_checks.checks.map((check) => check.context).sort();
+  assert.deepEqual(
+    releaseApplied,
+    expectedReleaseChecks.slice().sort(),
+    'release branch contexts should match expectations'
   );
   assert.deepEqual(errorMessages, []);
   assert.ok(
