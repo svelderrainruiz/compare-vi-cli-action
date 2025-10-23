@@ -1,20 +1,18 @@
 {
-  "number": 295,
-  "title": "Fine-tune VI compare refs workflow",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/295",
+  "number": 273,
+  "title": "Release prep",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/273",
   "state": "OPEN",
   "labels": [
-    "ci",
-    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
-  "commentCount": 2,
-  "lastSeenUpdatedAt": "2025-10-23T02:15:58Z",
-  "issueDigest": "40baf5cac357271d3c75bc4db67c13546c11724f9f114680a4833857a720070f",
+  "commentCount": 0,
+  "lastSeenUpdatedAt": "2025-10-23T17:20:15Z",
+  "issueDigest": "ed67f7efef871b6c2a4092bf18ea4ec4d63afeebc5fda1054282d0280463a873",
   "bodyDigest": "7570f8e74d5f2b3405911b265e938532b185654a7454de32099fdb6450e02064",
-  "cachedAtUtc": "2025-10-23T03:02:02.853Z",
+  "cachedAtUtc": "2025-10-23T17:22:02.227Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }

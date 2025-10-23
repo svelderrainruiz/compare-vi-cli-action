@@ -1,7 +1,7 @@
 {
   "name": "compare-vi-cli-action",
   "private": true,
-  "version": "0.5.2-rc1",
+  "version": "0.5.2",
   "license": "MIT",
   "type": "module",
   "scripts": {

@@ -7,16 +7,39 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+_No unreleased changes yet._
+
+## [v0.5.2] - 2025-10-23
+
 ### Added
 
-- Validate workflow now runs the mergeability probe (`tools/Check-PRMergeable.ps1`) before linting so conflicted PRs
-  fail fast.
+- VI history comparison suite with aggregate/per-mode manifests, expanded tests (`tests/CompareVIHistory.Tests.ps1`,
+  `tests/CompareVI.History.Tests.ps1`), and Dev Dashboard integration (`tools/Dev-Dashboard.ps1`,
+  `tools/dashboard/samples/ref-compare/history/*`) so history telemetry is available in local and HTML reports.
+- Release automation helpers under `tools/priority/` (branch creation/finalize scripts, dispatch helpers, policy checks)
+  plus standing-priority workflow shims to keep release/feature flows reproducible.
+- Validate `vi-compare-refs` auto-publish path and Docker parity workflow with supporting docs
+  (`.github/workflows/vi-compare-refs.yml`, `.github/workflows/tools-parity.yml`,
+  `docs/knowledgebase/DOCKER_TOOLS_PARITY.md`, `docs/knowledgebase/VICompare-Refs-Workflow.md`) to streamline ref
+  regeneration on hosted and local runners.
+- Branch policy guard coverage and feature-branch enforcement documentation
+  (`tools/priority/policy.json`, `.github/workflows/validate.yml`, `docs/knowledgebase/FEATURE_BRANCH_POLICY.md`) so
+  required checks remain aligned.
 
 ### Changed
 
-- Integration runbook workflow skips forked repositories to avoid waiting on unavailable self-hosted runners.
-- Developer docs and validation matrix now call out cross-plane PowerShell requirements for bundled VS Code tasks and
-  align with markdown linting.
+- Validate workflow now runs the mergeability probe (`tools/Check-PRMergeable.ps1`) before linting, enforces the branch
+  protection guard, and skips forked runbook dispatches to avoid stalled self-hosted jobs.
+- Rogue LabVIEW/LVCompare cleanup guard tightened: buffer calibration, command-line capture, and richer rogue metadata
+  surface through `tools/Detect-RogueLV.ps1` and associated helpers.
+- Developer guides, validation matrix, and standing handoff docs call out cross-plane PowerShell requirements and
+  updated release tooling to match the new automation flows.
+
+### Fixed
+
+- Compare CLI tarball layout corrected so CI artifacts include the expected files.
+- Fixture drift provenance comments/tests hardened and history suite `-FailOnDiff` handling corrected for consistent
+  exit semantics.
 
 ## [v0.5.1] - 2025-10-19
 
@@ -74,34 +97,6 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 - If you ingest `fixtures.manifest.json`, migrate to `bytes` (exact size). Repo scripts/validators are updated. No
   changes to action inputs/outputs.
-
-## [Unreleased] (Post v0.5.1)
-
-### Added
-
-- Auto-close loop resiliency: `LOOP_CLOSE_LABVIEW` (graceful close + kill fallback) and `LOOP_CLOSE_LABVIEW_FORCE`
-  (post-close `taskkill /F /IM LabVIEW.exe /T`).
-- Bitness guard: `Resolve-Cli` now inspects PE Machine field and rejects 32-bit `LVCompare.exe` at canonical path,
-  providing actionable remediation guidance.
-- Stray LVCompare mitigation: loop detects and terminates 32-bit `LVCompare` processes; emits `lvcompareStrayKill` JSON
-  event (`detected`, `killed`).
-- Enhanced labview close event: `labviewCloseAttempt` now includes `forceKill`, `forceKillSuccess`, and `graceMs`
-  fields.
-- JSON events reference documentation plus troubleshooting rows for modal dialogs and bitness mismatch in
-  `INTEGRATION_RUNBOOK.md`.
-- Tests: `Loop.AutoClose.Tests.ps1`, force-kill path test, stray LVCompare kill test, and bitness guard test
-  (`CompareVI.BitnessGuard.Tests.ps1`).
-
-### Changed
-
-- Loop summary now surfaces auto-close mode (grace + forceKill state) and adds contextual troubleshooting hints.
-- Executor baseline normalizes non-canonical LVCompare path to the canonical 64-bit path when available.
-
-### Fixed
-
-- Eliminated stale process handle retention by disposing LVCompare and LabVIEW processes after each iteration.
-- Corrected synthetic PE header generation in new tests (proper `e_lfanew` byte writes) ensuring reliable bitness
-  simulation.
 
 ## [v0.4.1] - 2025-10-03
 
