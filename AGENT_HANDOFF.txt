@@ -4,27 +4,28 @@
 - Running on the Windows runner; PowerShell 7.5.3 is available at `C:\Program Files\PowerShell\7\pwsh.exe`.
 - Pester 5.7.1 remains on the PSModulePath.
 - GitHub CLI 2.81.0 is available with `repo`, `workflow`, `gist`, and `read:org` scopes.
-- `node tools/npm/run-script.mjs priority:sync` ran at 2025-10-22T19:30Z; `.agent_priority_cache.json` now tracks standing issue #289 (`lastFetchSource = "live"`, digest aligned with `tests/results/_agent/issue/289.json`).
+- `node tools/npm/run-script.mjs priority:sync` ran at 2025-10-22T22:01Z; `.agent_priority_cache.json` now tracks standing issue #293 (`lastFetchSource = "live"`, digest aligned with `tests/results/_agent/issue/293.json`).
 - Latest `tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim` execution (2025-10-22T19:43Z) confirmed the watcher is idle, re-applied LabVIEW safety toggles, and wrote session capsule `tests/results/_agent/sessions/session-20251022T194354048Z-058a25d675fd.json`.
 - `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900 -AppendToStepSummary` executed at 2025-10-22T19:32Z; no rogue LVCompare/LabVIEW processes detected.
 - `node tools/npm/run-script.mjs priority:handoff-tests` last ran 2025-10-22T03:23Z; cached results remain under `tests/results/_agent/handoff/test-summary.json`.
-- Working tree on `issue/289-policy-guard` (tracking upstream); workflow + docs edits staged but not yet committed to main.
+- Working tree on `issue/293-validate-push` (tracking upstream); latest commit `2897467` ("feat: auto-publish validate refs (#293)") synced locally.
 
 ## Status & Known Gaps
-1. Validate workflow now includes a `Policy guard (branch protection)` step that runs `node tools/npm/run-script.mjs priority:policy` with `GITHUB_TOKEN`; monitor the next CI run to confirm it passes on PRs targeting `develop`.
-2. `docs/knowledgebase/FEATURE_BRANCH_POLICY.md` references the new guard, but SME review is still pending.
-3. `tools/priority/check-policy.mjs` already supports `--apply`; CI remains verify-only. Keep admin workflows aligned with the manifest.
-4. Cached release artifacts (`tests/results/_agent/release/release-v0.5.2-rc1-*.json`) still reference PR #279; no action required unless the release thread reopens.
+1. `tools/priority/dispatch-validate.mjs` now supports `--push-missing` / `--force-push-ok`; `npm run priority:test` passed (40 tests, ~6.3s) after the update.
+2. Validate run 18730978798 (`priority:validate -- --ref issue/293-validate-push --push-missing --allow-fork --force-push-ok`, head `2897467`) completed **success** at 2025-10-22T22:00Z; earlier runs 18730963960 / 18730940250 auto-cancelled after the superseding dispatch.
+3. PR #294 (“feat: auto-publish validate refs (#293)”) is open against `develop`; the latest Validate jobs (`lint`, `fixtures`, `session-index`, `semver`, hook parity matrix) all report success.
+4. `docs/knowledgebase/FEATURE_BRANCH_POLICY.md` documents the auto-publish flag; loop SMEs for tone/accuracy once tests are green.
+5. Cached release artifacts (`tests/results/_agent/release/release-v0.5.2-rc1-*.json`) still reference PR #279; no action required unless the release thread reopens.
 
 ## Suggested Next Actions
-1. Open PR for #289 once tests finish; ensure Validate shows the new policy guard step green.
-2. If the guard fails, realign GitHub protections or update `tools/priority/policy.json` before re-running CI.
-3. Kick off `tools/PrePush-Checks.ps1` and `node tools/npm/run-script.mjs hooks:multi` before pushing additional workflow changes to keep hook telemetry current.
+1. Monitor PR #294 until Validate and required sub-jobs (`lint`, `fixtures`, `session-index`) stay green; re-dispatch `priority:validate` with `--push-missing`/`--force-push-ok` only if a follow-up commit lands.
+2. Coordinate SME feedback on the doc updates once reviewers are available; capture their sign-off in the PR.
+3. Kick off `tools/PrePush-Checks.ps1` and `node tools/npm/run-script.mjs hooks:multi` before any further workflow-touching commits to keep hook telemetry current.
 
 ## First Actions for the Next Agent
-1. Run `node tools/npm/run-script.mjs priority:sync` to refresh the standing-priority snapshot (issue #289).
-2. Execute `node tools/npm/run-script.mjs lint:md` and `npm run priority:test` after any follow-up edits to keep the policy guard doc and helper covered.
-3. Dispatch Validate via `node tools/npm/run-script.mjs priority:validate -- --ref issue/289-policy-guard` if a manual CI run is needed to observe the guard.
+1. Run `node tools/npm/run-script.mjs priority:sync` to refresh the standing-priority snapshot (issue #293).
+2. Execute `npm run priority:test` after follow-up edits so the new auto-push flows stay covered.
+3. Watch `gh pr checks 294` (and `gh run view 18730978798 --log`) to ensure the PR summary stays accurate; only re-dispatch with `--push-missing`/`--force-push-ok` if new commits land.
 4. Check `tests/results/_agent/issue/router.json` for updated priority actions once the router refreshes.
 
 ## Notes for Next Agent
@@ -32,9 +33,10 @@
 - Pester artifacts live under `tests/results/` (`pester-summary.json`, `pester-results.xml`, `pester-artifacts.json`, `pester-summary.txt`).
 - Rogue LV notices: most recent is `tests/results/_lvcompare_notice/notice-20251021-0521137873.json`; earlier notices (2025-10-20) retained for history.
 - Latest session capsule: `tests/results/_agent/sessions/session-20251022T194354048Z-058a25d675fd.json`.
+- `priority:validate` now accepts `--push-missing` / `--force-push-ok`; combine with `--allow-fork` (or set the env toggles) when running from a fork so the helper can publish the branch before dispatching CI.
 
 ## Manual LabVIEW Recovery (when LV refuses to exit)
 1. Run `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900` to list live LVCompare/LabVIEW PIDs.
 2. Attempt graceful shutdown: `pwsh -File tools/Close-LabVIEW.ps1`.
 3. If PIDs remain, issue `Stop-Process -Id <pid> -Force` for each rogue entry (LVCompare first, then LabVIEW). Capture the console output for the issue thread.
-4. Re-run `tools/Detect-RogueLV.ps1 -FailOnRogue` to confirm cleanup; escalate in #289 if rogues persist.
+4. Re-run `tools/Detect-RogueLV.ps1 -FailOnRogue` to confirm cleanup; escalate in #293 if rogues persist.
