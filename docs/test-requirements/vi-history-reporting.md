@@ -27,29 +27,29 @@ This document tracks the atomic test requirements for `tools/Compare-VIHistory.p
 14. If no touching commit exists, helper shall exit non-zero with "Unable to locate a commit".
 15. Capture JSON, stdout, stderr, and manifest files shall be emitted for every run.
 
-*Report format enrichment note: tests validating XML and text report contents shall be augmented once
-real LVCompare artifacts are captured in CI. Current tests verify flag wiring via the stub driver.*
+_Report format enrichment note: tests validating XML and text report contents shall be augmented once
+real LVCompare artifacts are captured in CI. Current tests verify flag wiring via the stub driver._
 
 ## Workflow (`.github/workflows/vi-compare-refs.yml`)
-<!-- markdownlint-disable MD029 -->
-16. `modes` input shall accept comma/semicolon separated tokens (case-insensitive) and default to `default`.
-17. Workflow shall invoke the helper once per mode, writing outputs to `tests/results/ref-compare/history/<mode>`.
-18. `steps.history.outputs['manifest-path']` shall resolve to the aggregate history suite manifest.
-19. `steps.history.outputs['mode-manifests-json']` shall emit a JSON array describing each requested mode (slug,
+
+<!-- Ensure ordered list numbering resets cleanly across sections -->
+
+1. `modes` input shall accept comma/semicolon separated tokens (case-insensitive) and default to `default`.
+2. Workflow shall invoke the helper once per mode, writing outputs to `tests/results/ref-compare/history/<mode>`.
+3. `steps.history.outputs['manifest-path']` shall resolve to the aggregate history suite manifest.
+4. `steps.history.outputs['mode-manifests-json']` shall emit a JSON array describing each requested mode (slug,
    manifest path, results directory, processed count, diff count, status).
-20. `steps.history.outputs['results-dir']` shall equal the root history directory.
-21. Step summary shall report target, requested/resolved start refs, processed pairs, stop reason, last diff, and active
+5. `steps.history.outputs['results-dir']` shall equal the root history directory.
+6. Step summary shall report target, requested/resolved start refs, processed pairs, stop reason, last diff, and active
    mode for each iteration.
-22. `vi-compare-results` artifact shall include every manifest plus all `*-summary.json` and `*-exec.json` files.
-23. Single-mode (`default`) runs shall produce the same layout as the legacy workflow.
-24. Workflow shall surface helper failures per mode and mark the job failed while preserving prior results.
+7. `vi-compare-results` artifact shall include every manifest plus all `*-summary.json` and `*-exec.json` files.
+8. Single-mode (`default`) runs shall produce the same layout as the legacy workflow.
+9. Workflow shall surface helper failures per mode and mark the job failed while preserving prior results.
 
 ## Documentation
 
-25. `docs/knowledgebase/VICompare-Refs-Workflow.md` shall describe the `modes` input and multi-mode dispatch examples.
-26. Documentation shall explain helper usage with `-Mode` and how manifest fields map to modes and flag bundles.
-27. Documentation shall note that artifacts are partitioned per mode and that report-format tests will be enriched with
+1. `docs/knowledgebase/VICompare-Refs-Workflow.md` shall describe the `modes` input and multi-mode dispatch examples.
+2. Documentation shall explain helper usage with `-Mode` and how manifest fields map to modes and flag bundles.
+3. Documentation shall note that artifacts are partitioned per mode and that report-format tests will be enriched with
    real LVCompare outputs.
-
-<!-- markdownlint-enable MD029 -->
 

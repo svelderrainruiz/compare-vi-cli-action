@@ -2,10 +2,41 @@ Progress: history suite now writes one aggregate manifest (`vi-compare/history-s
 Progress: Added GitHub-output coverage + docs so dashboards/metrics can deserialize `mode-manifests-json` for per-mode artifact routing.
 Progress: Dev Dashboard loaders + CLI render the history suite using the new mode manifest JSON; sample fixtures live under `tools/dashboard/samples/ref-compare/history/`.
 Progress: Prepped v0.5.2 release collateral (CHANGELOG, release notes, PR checklist/description, tag prep) and bumped `package.json` to `0.5.2`.
+Progress: Scoped and began implementing branch protection guard plan (#302): added `policy-guard-upstream.yml` so upstream PRs run `check-policy.mjs`; policy manifest/tests now require the new status.
+Progress: Removed the legacy `Workflows Lint / lint (pull_request)` requirement, updated docs/samples, and added develop/main/release branch expectations so `Policy Guard (Upstream) / policy-guard` is part of the contract.
+Progress: Updated `priority:policy` to use PUT for ruleset applies and refreshed GitHub branch protections (develop/main/release/v0.5.2 now require the upstream policy guard); `priority:test` and `priority:policy` both green post-update.
 
-Tests: `./Invoke-PesterTests.ps1 -TestsPath tests/CompareVI.History.Tests.ps1 -IntegrationMode include` (12/12) and `./Invoke-PesterTests.ps1 -TestsPath tests -IncludePatterns 'DevDashboard.*'` (10/10). `node tools/npm/run-script.mjs priority:handoff-tests` (4/4) and `node tools/priority/validate-semver.mjs` (0.5.2 valid).
+Tests: `./Invoke-PesterTests.ps1 -TestsPath tests/CompareVI.History.Tests.ps1 -IntegrationMode include` (12/12) and `./Invoke-PesterTests.ps1 -TestsPath tests -IncludePatterns 'DevDashboard.*'` (10/10). `node tools/npm/run-script.mjs priority:handoff-tests` (4/4), `node tools/priority/validate-semver.mjs` (0.5.2 valid), and `node tools/npm/run-script.mjs priority:test`.
 
-Next session:
-  1) Spot-check downstream dashboards/metrics after the next workflow run to confirm live telemetry is ingesting the refreshed `mode-manifests-json` payload.
-  2) Once the branch lands on `develop`, rerun `vi-compare-refs.yml` to ensure artifact uploads and diff scanning behave with the new suite manifests.
-  3) Cut `release/v0.5.2` from the updated sources and run the release finalize dry-run (`node tools/priority/finalize-release.dryrun.mjs v0.5.2`) once the branch exists.
+## Status & Known Gaps
+1. `tools/priority/dispatch-validate.mjs` now supports `--push-missing` / `--force-push-ok`; `npm run priority:test` passed (40 tests, ~6.3s) after the update.
+2. Validate run 18730978798 (`priority:validate -- --ref issue/293-validate-push --push-missing --allow-fork --force-push-ok`, head `2897467`) completed **success** at 2025-10-22T22:00Z; earlier runs 18730963960 / 18730940250 auto-cancelled after the superseding dispatch.
+3. PR #294 (“feat: auto-publish validate refs (#293)”) is open against `develop`; the latest Validate jobs (`lint`, `fixtures`, `session-index`, `semver`, hook parity matrix) all report success.
+4. `docs/knowledgebase/FEATURE_BRANCH_POLICY.md` documents the auto-publish flag; loop SMEs for tone/accuracy once tests are green.
+5. Cached release artifacts (`tests/results/_agent/release/release-v0.5.2-rc1-*.json`) still reference PR #279; no action required unless the release thread reopens.
+
+## Suggested Next Actions
+1. Trigger `Validate` on `main` via `node tools/npm/run-script.mjs priority:validate -- --ref main` (or wait for the next push) to confirm the labels enforcement step passes with PR #280 applied.
+2. Check the status of PR #279 (release candidate finalize) and trigger CI reruns if any required checks are missing or stale.
+3. Exercise the updated VS Code tasks on another plane (macOS/Linux) to flush out shell-specific issues before documenting them.
+4. Run `pwsh -File tools/PrePush-Checks.ps1` and `node tools/npm/run-script.mjs hooks:multi` once new changes are staged for #277 to keep router priorities green.
+5. Rerun `node tools/npm/run-script.mjs priority:handoff-tests` after any release-process script changes to keep cached results current.
+
+## First Actions for the Next Agent
+1. Run `node tools/npm/run-script.mjs priority:sync` to refresh issue #277 metadata and router artifacts.
+2. Review release artifacts under `tests/results/_agent/release/` and sync with PR #279 status before making edits.
+3. Re-run `Validate` on `main` with `node tools/npm/run-script.mjs priority:validate -- --ref main` if it has not already picked up the workflow fix; confirm the labels enforcement job reports success.
+4. Check `tests/results/_agent/issue/router.json` for the active validation order (hooks and PrePush) and schedule the relevant runs as changes land.
+
+## Notes for Next Agent
+- `SUPPRESS_PATTERN_SELFTEST` remains enforced via `tests/_helpers/DispatcherTestHelper.psm1`; leave it enabled to avoid recursion loops.
+- Pester artifacts live under `tests/results/` (`pester-summary.json`, `pester-results.xml`, `pester-artifacts.json`, `pester-summary.txt`).
+- Rogue LV notices: most recent is `tests/results/_lvcompare_notice/notice-20251021-0521137873.json`; earlier notices (2025-10-20) retained for history.
+- Latest session capsule: `tests/results/_agent/sessions/session-20251022T194354048Z-058a25d675fd.json`.
+- `priority:validate` now accepts `--push-missing` / `--force-push-ok`; combine with `--allow-fork` (or set the env toggles) when running from a fork so the helper can publish the branch before dispatching CI.
+
+## Manual LabVIEW Recovery (when LV refuses to exit)
+1. Run `pwsh -File tools/Detect-RogueLV.ps1 -ResultsDir tests/results -LookBackSeconds 900` to list live LVCompare/LabVIEW PIDs.
+2. Attempt graceful shutdown: `pwsh -File tools/Close-LabVIEW.ps1`.
+3. If PIDs remain, issue `Stop-Process -Id <pid> -Force` for each rogue entry (LVCompare first, then LabVIEW). Capture the console output for the issue thread.
+4. Re-run `tools/Detect-RogueLV.ps1 -FailOnRogue` to confirm cleanup; escalate in #293 if rogues persist.

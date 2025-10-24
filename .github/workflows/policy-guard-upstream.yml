@@ -1,0 +1,62 @@
+name: Policy Guard (Upstream)
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - develop
+      - release/**
+
+concurrency:
+  group: policy-guard-upstream-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  policy-guard:
+    name: policy-guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Prepare policy guard token
+        shell: pwsh
+        env:
+          INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if (-not $env:INPUT_TOKEN -or (-not $env:INPUT_TOKEN.Trim())) {
+            throw 'Policy Guard requires secrets.GITHUB_TOKEN to be populated.'
+          }
+
+          $token = $env:INPUT_TOKEN.Trim()
+          $tokenFile = Join-Path $env:RUNNER_TEMP 'policy-guard-gh-token.txt'
+          Set-Content -Path $tokenFile -Value $token -Encoding utf8 -NoNewline
+
+          Add-Content -Path $env:GITHUB_ENV -Value "GH_TOKEN=$token"
+          Add-Content -Path $env:GITHUB_ENV -Value "GITHUB_TOKEN=$token"
+          Add-Content -Path $env:GITHUB_ENV -Value "GH_TOKEN_FILE=$tokenFile"
+
+          Write-Host "Policy guard token exported. GH_TOKEN_FILE=$tokenFile"
+
+      - name: Verify remote refs are unambiguous
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -File tools/Assert-NoAmbiguousRemoteRefs.ps1
+
+      - name: Run policy guard
+        run: node tools/priority/check-policy.mjs

@@ -1,18 +1,23 @@
 {
-  "number": 273,
-  "title": "Release prep",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/273",
+  "number": 302,
+  "title": "Branch protection guard: fork skip + upstream enforcement",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/302",
   "state": "OPEN",
   "labels": [
+    "ci",
+    "enhancement",
+    "github_actions",
     "standing-priority"
   ],
-  "assignees": [],
+  "assignees": [
+    "svelderrainruiz"
+  ],
   "milestone": null,
   "commentCount": 0,
-  "lastSeenUpdatedAt": "2025-10-23T17:20:15Z",
-  "issueDigest": "ed67f7efef871b6c2a4092bf18ea4ec4d63afeebc5fda1054282d0280463a873",
-  "bodyDigest": "7570f8e74d5f2b3405911b265e938532b185654a7454de32099fdb6450e02064",
-  "cachedAtUtc": "2025-10-23T17:22:02.227Z",
+  "lastSeenUpdatedAt": "2025-10-24T01:23:19Z",
+  "issueDigest": "4f87fb7de3e95d10922aecd5f5a88e36522e00719b77d57570d46d3e4354ed61",
+  "bodyDigest": "86a4ce6e2ff72d17c40fea9537964f64fe8ce82edd0a4c0a7d6c25c4c76dfa7f",
+  "cachedAtUtc": "2025-10-24T06:37:16.215Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }

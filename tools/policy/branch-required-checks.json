@@ -3,14 +3,17 @@
   "schemaVersion": "1.0.0",
   "branches": {
     "develop": [
-      "Validate / lint",
-      "Validate / fixtures",
-      "Validate / session-index"
+      "guard",
+      "fixtures",
+      "session-index",
+      "issue-snapshot",
+      "Policy Guard (Upstream) / policy-guard"
     ],
     "main": [
-      "Validate / lint",
-      "Validate / fixtures",
-      "Validate / session-index"
+      "pester",
+      "vi-binary-check",
+      "vi-compare",
+      "Policy Guard (Upstream) / policy-guard"
     ]
   }
 }
