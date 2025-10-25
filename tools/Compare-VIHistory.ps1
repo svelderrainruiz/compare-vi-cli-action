@@ -657,6 +657,7 @@ foreach ($modeSpec in $modeSpecs) {
       '-ReportFormat', $reportFormatEffective,
       '-Quiet'
     )
+      $compareArgs += '-ReplaceFlags'
       if ($Detailed.IsPresent) { $compareArgs += '-Detailed' }
       if ($RenderReport.IsPresent -or $reportFormatEffective -eq 'html') { $compareArgs += '-RenderReport' }
       if ($FailOnDiff.IsPresent) { $compareArgs += '-FailOnDiff' }
