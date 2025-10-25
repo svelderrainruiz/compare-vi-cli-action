@@ -20,26 +20,25 @@
 - `compare_fail_fast` (`true`/`false`): stop iterating after the first detected diff (still uploads results, does not fail the job).
 - `compare_fail_on_diff` (`true`/`false`): exit the job with failure status if any LVCompare run reports differences.
 - `compare_modes` (string): comma-separated compare modes. Recognised values:
-  - `default` - honour the ignore list defined by `compare_ignore_flags` (defaults to `noattr,nofp,nofppos,nobdcosm`).
-  - `attributes` - drop `-noattr` so VI attribute changes surface.
-  - `front-panel` - drop `-nofp`/`-nofppos` to observe FP layout changes.
-  - `block-diagram` - drop `-nobdcosm` to surface BD cosmetic tweaks.
-  - `all` - remove every ignore flag (`-nobd`, `-noattr`, `-nofp`, `-nofppos`, `-nobdcosm`).
+  - `default` - compare with no ignore flags (full detail).
+  - `attributes` - apply `-noattr` to suppress attribute-only differences when you want a quieter run.
+  - `front-panel` - apply `-nofp`/`-nofppos` to suppress front panel layout changes.
+  - `block-diagram` - apply `-nobdcosm` to suppress block diagram cosmetic tweaks.
+  - `all` - synonym for `default` (retained for backwards compatibility).
   - `custom` - honour the ignore list supplied via `compare_ignore_flags` exactly as provided.
 - Multiple modes can be supplied (e.g. `default,attributes`); the workflow loops over each and emits a manifest/artifact
   set per mode.
-- `compare_ignore_flags` (string): comma-separated LVCompare ignore toggles. Accepts `default` (apply all default ignores),
-  `none` (apply none), direct flag names (`noattr`, `nofp`, `nofppos`, `nobdcosm`), and `+flag` / `-flag` modifiers
+- `compare_ignore_flags` (string): comma-separated LVCompare ignore toggles. Accepts `default` (reapply the legacy suppression bundle `noattr,nofp,nofppos,nobdcosm`),
+  `none` (apply none; this is the default), direct flag names (`noattr`, `nofp`, `nofppos`, `nobdcosm`), and `+flag` / `-flag` modifiers
   to add or remove flags relative to the current set.
-- The helper always prepends `-nobd`. Add extra switches via `compare_additional_flags` (space-delimited).
+- Need additional switches (e.g. `-nobd`)? Add them via `compare_additional_flags` (space-delimited).
 - `notify_issue` (string, optional): GitHub issue number that should receive the run summary table as a comment. Ignored on forks.
 
 ### Quick-start scenarios
 
 - **Default history sweep** - leave inputs at their defaults and supply only `vi_path`. The workflow walks the first
-  ten commit pairs starting at `HEAD`, honours the standard ignore flags, and uploads a lightweight manifest.
-- **Attribute audit** - set `compare_modes` to `default,attributes` so the second pass removes `-noattr` and calls out attribute
-  changes explicitly in the manifest/summary.
+  ten commit pairs starting at `HEAD`, surfaces every difference (no suppression), and uploads a lightweight manifest.
+- **Attribute audit** - set `compare_modes` to `default,attributes` so the second pass runs with `-noattr`, letting you contrast the full-detail manifest against a suppressed one.
 - **Deep dive** - bump `compare_depth` to `0` (unbounded) and enable `compare_fail_fast='true'` when you just need to know whether any
   difference exists in the history span.
 

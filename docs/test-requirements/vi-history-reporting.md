@@ -8,10 +8,10 @@ This document tracks the atomic test requirements for `tools/Compare-VIHistory.p
 1. Manifest shall record `mode` equal to the requested value.
 1. Each comparison entry shall record `mode` equal to the requested value.
 1. `manifest.flags` shall contain the expected flag bundle per mode:
-   - `default`: includes `-nobd`, `-noattr`, `-nofp`, `-nofppos`, `-nobdcosm`.
-   - `attributes`: includes `-nobd`, `-nofp`, `-nofppos`, `-nobdcosm`, omits `-noattr`.
-   - `front-panel`: includes `-nobd`, `-noattr`, `-nobdcosm`, omits `-nofp`, `-nofppos`.
-   - `block-diagram`: includes `-nobd`, `-noattr`, `-nofp`, `-nofppos`, omits `-nobdcosm`.
+   - `default`: no ignore flags present.
+   - `attributes`: includes `-noattr` only.
+   - `front-panel`: includes `-nofp`, `-nofppos` only.
+   - `block-diagram`: includes `-nobdcosm` only.
    - `all`: no ignore flags present.
    - `custom`: flag list matches explicit inputs.
 1. `requestedStartRef` and `startRef` shall be written; `startRef` resolves to the nearest commit that touches the VI.
@@ -54,3 +54,4 @@ real LVCompare artifacts are captured in CI. Current tests verify flag wiring vi
 1. Documentation shall explain helper usage with `-Mode` and how manifest fields map to modes and flag bundles.
 1. Documentation shall note that artifacts are partitioned per mode and that report-format tests will be enriched with
    real LVCompare outputs.
+

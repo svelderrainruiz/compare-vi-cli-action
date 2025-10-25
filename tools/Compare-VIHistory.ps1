@@ -8,11 +8,11 @@ param(
   [string]$EndRef,
   [int]$MaxPairs,
 
-  [bool]$FlagNoAttr = $true,
-  [bool]$FlagNoFp = $true,
-  [bool]$FlagNoFpPos = $true,
-  [bool]$FlagNoBdCosm = $true,
-  [bool]$ForceNoBd = $true,
+  [bool]$FlagNoAttr = $false,
+  [bool]$FlagNoFp = $false,
+  [bool]$FlagNoFpPos = $false,
+  [bool]$FlagNoBdCosm = $false,
+  [bool]$ForceNoBd = $false,
   [string]$AdditionalFlags,
   [string]$LvCompareArgs,
   [switch]$ReplaceFlags,
@@ -59,10 +59,10 @@ function Split-ArgString {
 }
 
 $modeDefinitions = @{
-  'default'       = @{ slug = 'default'; flags = @('-nobd','-noattr','-nofp','-nofppos','-nobdcosm') }
-  'attributes'    = @{ slug = 'attributes'; flags = @('-nobd','-nofp','-nofppos','-nobdcosm') }
-  'front-panel'   = @{ slug = 'front-panel'; flags = @('-nobd','-noattr','-nobdcosm') }
-  'block-diagram' = @{ slug = 'block-diagram'; flags = @('-nobd','-noattr','-nofp','-nofppos') }
+  'default'       = @{ slug = 'default'; flags = @() }
+  'attributes'    = @{ slug = 'attributes'; flags = @('-noattr') }
+  'front-panel'   = @{ slug = 'front-panel'; flags = @('-nofp','-nofppos') }
+  'block-diagram' = @{ slug = 'block-diagram'; flags = @('-nobdcosm') }
   'all'           = @{ slug = 'all'; flags = @() }
   'custom'        = @{ slug = 'custom'; flags = $null }
 }
