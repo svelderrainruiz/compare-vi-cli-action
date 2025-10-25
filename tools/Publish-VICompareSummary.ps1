@@ -46,9 +46,20 @@ $targetPath = $aggregate.targetPath
 $requestedStart = $aggregate.requestedStartRef
 $resolvedStart = $aggregate.startRef
 $endRef = $aggregate.endRef
-$totalProcessed = $aggregate.stats.processed
-$totalDiffs = $aggregate.stats.diffs
-$totalMissing = $aggregate.stats.missing
+$aggregateStats = $null
+if ($aggregate -and $aggregate.PSObject.Properties['stats']) {
+  $aggregateStats = $aggregate.stats
+}
+if (-not $aggregateStats) {
+  $aggregateStats = [ordered]@{
+    processed = 0
+    diffs     = 0
+    missing   = 0
+  }
+}
+$totalProcessed = $aggregateStats.processed
+$totalDiffs = $aggregateStats.diffs
+$totalMissing = $aggregateStats.missing
 $modeNames = ($modeSummaries | ForEach-Object { $_.mode ?? $_.name })
 
 $lines = New-Object System.Collections.Generic.List[string]
@@ -75,12 +86,16 @@ $lines.Add("| --- | ---: | ---: | ---: | --- | --- |")
 foreach ($mode in $modeSummaries) {
   $modeName = $mode.mode
   if (-not $modeName) { $modeName = $mode.name }
+  $modeStats = $null
+  if ($mode -and $mode.PSObject.Properties['stats']) {
+    $modeStats = $mode.stats
+  }
   $processed = $mode.processed
-  if ($null -eq $processed -and $mode.stats) { $processed = $mode.stats.processed }
-  $diffs = if ($mode.diffs -ne $null) { $mode.diffs } elseif ($mode.stats) { $mode.stats.diffs } else { 0 }
-  $missing = if ($mode.missing -ne $null) { $mode.missing } elseif ($mode.stats) { $mode.stats.missing } else { 0 }
-  $lastDiffIndex = if ($mode.lastDiffIndex -ne $null) { $mode.lastDiffIndex } elseif ($mode.stats) { $mode.stats.lastDiffIndex } else { $null }
-  $lastDiffCommit = if ($mode.lastDiffCommit) { $mode.lastDiffCommit } elseif ($mode.stats) { $mode.stats.lastDiffCommit } else { $null }
+  if ($null -eq $processed -and $modeStats) { $processed = $modeStats.processed }
+  $diffs = if ($mode.diffs -ne $null) { $mode.diffs } elseif ($modeStats) { $modeStats.diffs } else { 0 }
+  $missing = if ($mode.missing -ne $null) { $mode.missing } elseif ($modeStats) { $modeStats.missing } else { 0 }
+  $lastDiffIndex = if ($mode.lastDiffIndex -ne $null) { $mode.lastDiffIndex } elseif ($modeStats) { $modeStats.lastDiffIndex } else { $null }
+  $lastDiffCommit = if ($mode.lastDiffCommit) { $mode.lastDiffCommit } elseif ($modeStats) { $modeStats.lastDiffCommit } else { $null }
   $status = if ($mode.status) { $mode.status } else { 'unknown' }
 
   $lastDiffCell = '—'
