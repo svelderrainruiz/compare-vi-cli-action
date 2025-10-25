@@ -526,6 +526,14 @@ foreach ($modeSpec in $modeSpecs) {
   $modeResultsRoot = Join-Path $resultsRoot $modeSlug
   New-Item -ItemType Directory -Path $modeResultsRoot -Force | Out-Null
   $modeResultsResolved = (Resolve-Path -LiteralPath $modeResultsRoot).Path
+  $modeResultsRelative = $null
+  if ($modeResultsResolved) {
+    try {
+      $modeResultsRelative = [System.IO.Path]::GetRelativePath($repoRoot, $modeResultsResolved)
+    } catch {
+      $modeResultsRelative = $modeResultsResolved
+    }
+  }
   $modeManifestPath = Join-Path $modeResultsRoot 'manifest.json'
 
   $modeManifest = [ordered]@{
@@ -795,12 +803,15 @@ foreach ($modeSpec in $modeSpecs) {
   $modeSummaryRows.Add([pscustomobject]@{
     Mode           = $modeName
     Slug           = $modeSlug
+    Flags          = @($modeFlags)
     Processed      = $processed
     Diffs          = $diffCount
     Missing        = $missingCount
     LastDiffIndex  = $lastDiffIndex
     LastDiffCommit = $lastDiffCommit
     ManifestPath   = $modeManifestResolved
+    ResultsDir     = $modeResultsResolved
+    ResultsRelative= $modeResultsRelative
   })
 
   if ($diffCount -gt 0) {
@@ -860,11 +871,52 @@ if ($hasStepSummary -and $modeSummaryRows.Count -gt 0) {
     $manifestCell = if ($manifestLeaf) { "``$manifestLeaf``" } else { 'n/a' }
     $summaryLines += ('| {0} | {1} | {2} | {3} | {4} | {5} |' -f $row.Mode, $row.Processed, $row.Diffs, $row.Missing, $lastDiffCell, $manifestCell)
   }
-  if ($totalDiffs -gt 0) {
+    if ($totalDiffs -gt 0) {
+      $summaryLines += ''
+      $summaryLines += '> Diff artifacts are available under the `vi-compare-diff-artifacts` upload.'
+    }
+
     $summaryLines += ''
-    $summaryLines += '> Diff artifacts are available under the `vi-compare-diff-artifacts` upload.'
+    $summaryLines += '#### Mode Outputs'
+    $summaryLines += ''
+    $summaryLines += '| Mode | Flags | Results Dir | Manifest |'
+    $summaryLines += '| --- | --- | --- | --- |'
+    foreach ($row in $modeSummaryRows) {
+      $flagCell = '_none_'
+      if ($row.Flags) {
+        $flagEntries = @()
+        foreach ($flag in @($row.Flags)) {
+          if ([string]::IsNullOrWhiteSpace($flag)) { continue }
+          $flagEntries += ("``{0}``" -f $flag)
+        }
+        if ($flagEntries.Count -gt 0) {
+          $flagCell = $flagEntries -join '<br>'
+        }
+      }
+
+      $resultsRelative = $row.ResultsRelative
+      if ([string]::IsNullOrWhiteSpace($resultsRelative)) {
+        $resultsRelative = $row.ResultsDir
+      }
+      $resultsCell = if ($resultsRelative) {
+        $resultsNormalized = $resultsRelative.Replace('\','/')
+        ("``{0}``" -f $resultsNormalized)
+      } else {
+        'n/a'
+      }
+
+      $manifestLeaf = if ($row.ManifestPath) { [System.IO.Path]::GetFileName($row.ManifestPath) } else { $null }
+      $manifestCell = if ($manifestLeaf) {
+        "``$manifestLeaf``"
+      } elseif ($row.ManifestPath) {
+        "``$($row.ManifestPath)``"
+      } else {
+        'n/a'
+      }
+
+      $summaryLines += ('| {0} | {1} | {2} | {3} |' -f $row.Mode, $flagCell, $resultsCell, $manifestCell)
+    }
   }
-}
 
 if ($aggregate.modes.Count -eq 0) {
   throw 'No comparison modes executed.'
@@ -887,6 +939,7 @@ Write-GitHubOutput -Key 'total-processed' -Value $totalProcessed -DestPath $GitH
 Write-GitHubOutput -Key 'total-diffs' -Value $totalDiffs -DestPath $GitHubOutputPath
 $aggregateStopReason = if ($aggregate.status -eq 'ok') { 'complete' } else { 'failed' }
 Write-GitHubOutput -Key 'stop-reason' -Value $aggregateStopReason -DestPath $GitHubOutputPath
+Write-GitHubOutput -Key 'target-path' -Value $targetRel -DestPath $GitHubOutputPath
 
 $modeManifestSummary = $aggregate.modes | ForEach-Object {
   [ordered]@{
@@ -894,6 +947,7 @@ $modeManifestSummary = $aggregate.modes | ForEach-Object {
     slug      = $_.slug
     manifest  = $_.manifestPath
     resultsDir= $_.resultsDir
+    flags     = $_.flags
     processed = $_.stats.processed
     diffs     = $_.stats.diffs
     missing   = $_.stats.missing
@@ -904,6 +958,27 @@ $modeManifestSummary = $aggregate.modes | ForEach-Object {
   }
 }
 Write-GitHubOutput -Key 'mode-manifests-json' -Value ((ConvertTo-Json $modeManifestSummary -Depth 4 -Compress)) -DestPath $GitHubOutputPath
+
+$modeNameBuffer = New-Object System.Collections.Generic.List[string]
+$flagSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($modeEntry in $aggregate.modes) {
+  if ($modeEntry.name) { $modeNameBuffer.Add([string]$modeEntry.name) }
+  foreach ($flagValue in @($modeEntry.flags)) {
+    if ([string]::IsNullOrWhiteSpace($flagValue)) { continue }
+    [void]$flagSet.Add($flagValue.Trim())
+  }
+}
+if ($modeNameBuffer.Count -gt 0) {
+  $modeListValue = ($modeNameBuffer | Sort-Object -Unique) -join ', '
+  Write-GitHubOutput -Key 'mode-list' -Value $modeListValue -DestPath $GitHubOutputPath
+}
+$flagArray = [System.Linq.Enumerable]::ToArray($flagSet)
+if ($flagArray -and $flagArray.Count -gt 0) {
+  $flagListValue = ($flagArray | Sort-Object) -join ', '
+  Write-GitHubOutput -Key 'flag-list' -Value $flagListValue -DestPath $GitHubOutputPath
+} else {
+  Write-GitHubOutput -Key 'flag-list' -Value 'none' -DestPath $GitHubOutputPath
+}
 
 Write-Host ("VI compare history suite complete. Aggregate manifest: {0}" -f $aggregateManifestResolved)
 

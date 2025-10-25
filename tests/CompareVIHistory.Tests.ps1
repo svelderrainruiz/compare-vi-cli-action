@@ -3,7 +3,6 @@ Describe 'Compare-VIHistory.ps1' {
   $scriptPath = Join-Path $repoRoot 'tools' 'Compare-VIHistory.ps1'
   Test-Path -LiteralPath $scriptPath -PathType Leaf | Should -BeTrue
 
-
   Context 'artifact handling' {
     It 'falls back to cli-report.html when compare report is renamed' {
       $scriptPath = Join-Path (Get-Location).Path 'tools' 'Compare-VIHistory.ps1'
@@ -85,7 +84,9 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
       $resultsDir = Join-Path $TestDrive 'history-fallback'
       $env:STUB_COMPARE_RENAME_REPORT = '1'
       $startRef = git rev-list HEAD --max-count=1 --first-parent -- 'VI1.vi' 2>$null | Where-Object { $_ } | Select-Object -First 1
-      if ($LASTEXITCODE -ne 0 -or -not $startRef) {
+      $gitVar = Get-Variable -Name 'LASTEXITCODE' -ErrorAction SilentlyContinue
+      $gitExit = if ($gitVar) { $gitVar.Value } else { 0 }
+      if ($gitExit -ne 0 -or -not $startRef) {
         Set-ItResult -Skipped -Because "No commit for VI1.vi found in repo history."
         return
       }
@@ -219,7 +220,9 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
       $env:STUB_COMPARE_EXITCODE = '1'
       $env:STUB_COMPARE_DIFF = '1'
       $startRef = git rev-list HEAD --max-count=1 --first-parent -- 'VI1.vi' 2>$null | Where-Object { $_ } | Select-Object -First 1
-      if ($LASTEXITCODE -ne 0 -or -not $startRef) {
+      $gitVar = Get-Variable -Name 'LASTEXITCODE' -ErrorAction SilentlyContinue
+      $gitExit = if ($gitVar) { $gitVar.Value } else { 0 }
+      if ($gitExit -ne 0 -or -not $startRef) {
         Set-ItResult -Skipped -Because "No commit for VI1.vi found in repo history."
         return
       }
@@ -280,7 +283,9 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
           '-FailOnDiff'
         )
         $null = pwsh $failArgs
-        $LASTEXITCODE | Should -Be 1
+        $exitVar = Get-Variable -Name 'LASTEXITCODE' -ErrorAction SilentlyContinue
+        $exitCode = if ($exitVar) { $exitVar.Value } else { $null }
+        $exitCode | Should -Be 1
       }
       finally {
         Remove-Item Env:STUB_COMPARE_RENAME_REPORT -ErrorAction SilentlyContinue
@@ -400,8 +405,10 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
 
       Test-Path -LiteralPath $summaryPath -PathType Leaf | Should -BeTrue
       $content = Get-Content -LiteralPath $summaryPath -Raw
+      $content | Should -Match '#### Mode Summary'
       $content | Should -Match '\| Mode \| Processed \| Diffs \| Missing \| Last Diff \| Manifest \|'
-      $content | Should -Not -Match '#### Mode:'
+      $content | Should -Match '#### Mode Outputs'
+      $content | Should -Match '\| Mode \| Flags \| Results Dir \| Manifest \|'
     }
 
     It 'notes diff artifacts in the summary when diffs are present' {
