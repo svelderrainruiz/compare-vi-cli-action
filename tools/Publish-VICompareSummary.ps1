@@ -54,20 +54,20 @@ $modeNames = ($modeSummaries | ForEach-Object { $_.mode ?? $_.name })
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("### Manual VI Compare summary")
 $lines.Add("")
-$lines.Add(("* Target: `{0}`" -f $targetPath))
+$lines.Add(('* Target: `{0}`' -f $targetPath))
 if ($requestedStart -and $requestedStart -ne $resolvedStart) {
-  $lines.Add(("* Requested start ref: `{0}`" -f $requestedStart))
-  $lines.Add(("* Resolved start ref: `{0}`" -f $resolvedStart))
+  $lines.Add(('* Requested start ref: `{0}`' -f $requestedStart))
+  $lines.Add(('* Resolved start ref: `{0}`' -f $resolvedStart))
 } else {
-  $lines.Add(("* Start ref: `{0}`" -f $resolvedStart))
+  $lines.Add(('* Start ref: `{0}`' -f $resolvedStart))
 }
 if ($endRef) {
-  $lines.Add(("* End ref: `{0}`" -f $endRef))
+  $lines.Add(('* End ref: `{0}`' -f $endRef))
 }
-$lines.Add(("* Modes: {0}" -f ([string]::Join(', ', $modeNames))))
-$lines.Add(("* Total processed pairs: {0}" -f $totalProcessed))
-$lines.Add(("* Total diffs: {0}" -f $totalDiffs))
-$lines.Add(("* Total missing pairs: {0}" -f $totalMissing))
+$lines.Add(('* Modes: {0}' -f ([string]::Join(', ', $modeNames))))
+$lines.Add(('* Total processed pairs: {0}' -f $totalProcessed))
+$lines.Add(('* Total diffs: {0}' -f $totalDiffs))
+$lines.Add(('* Total missing pairs: {0}' -f $totalMissing))
 $lines.Add("")
 $lines.Add("| Mode | Processed | Diffs | Missing | Last Diff | Status |")
 $lines.Add("| --- | ---: | ---: | ---: | --- | --- |")
