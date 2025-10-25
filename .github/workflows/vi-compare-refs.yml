@@ -414,9 +414,9 @@ jobs:
         run: |
           if (-not $env:GITHUB_STEP_SUMMARY) { return }
           $lines = @('', '#### Workflow Artifacts', '')
-          $lines += ("- Manifests: `{0}`" -f $env:MANIFEST_ARTIFACT)
+          $lines += ('- Manifests: `{0}`' -f $env:MANIFEST_ARTIFACT)
           if ($env:HAS_DIFF -eq 'true') {
-            $lines += ("- Diff artifacts: `{0}`" -f $env:DIFF_ARTIFACT)
+            $lines += ('- Diff artifacts: `{0}`' -f $env:DIFF_ARTIFACT)
           } else {
             $lines += '- Diff artifacts: *(not produced)*'
           }
