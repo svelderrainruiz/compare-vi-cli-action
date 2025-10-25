@@ -83,6 +83,7 @@ jobs:
     needs: preflight
     permissions:
       contents: read
+      issues: write
     outputs:
       manifest_path: ${{ steps.job_outputs.outputs.manifest_path }}
       results_dir: ${{ steps.job_outputs.outputs.results_dir }}
