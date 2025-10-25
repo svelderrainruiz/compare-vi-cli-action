@@ -107,7 +107,7 @@ if ($totalDiffs -gt 0) {
 $body = $lines -join "`n"
 
 if ($DryRun.IsPresent) {
-  Write-Host "[dry-run] Would post comment to issue #$Issue:"
+  Write-Host "[dry-run] Would post comment to issue #${Issue}:"
   Write-Host $body
   return
 }
@@ -138,3 +138,4 @@ $headers = @{
 $payload = @{ body = $body } | ConvertTo-Json -Depth 4
 
 Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $payload | Out-Null
+
