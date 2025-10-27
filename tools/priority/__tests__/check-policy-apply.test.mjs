@@ -21,10 +21,10 @@ function createResponse(data, status = 200, statusText = 'OK') {
 
 test('priority:policy --apply updates rulesets for develop/main/release', async () => {
   const expectedDevelopChecks = [
-    'guard',
-    'fixtures',
-    'session-index',
-    'issue-snapshot',
+    'Validate / lint',
+    'Validate / fixtures',
+    'Validate / session-index',
+    'Validate / issue-snapshot',
     'Policy Guard (Upstream) / policy-guard'
   ];
   const expectedMainChecks = [
@@ -74,10 +74,10 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
           strict_required_status_checks_policy: true,
           do_not_enforce_on_create: true,
           required_status_checks: [
-            { context: 'guard', integration_id: 15368 },
-            { context: 'fixtures', integration_id: 15368 },
-            { context: 'session-index', integration_id: 15368 },
-            { context: 'issue-snapshot', integration_id: 15368 },
+            { context: 'Validate / lint', integration_id: 15368 },
+            { context: 'Validate / fixtures', integration_id: 15368 },
+            { context: 'Validate / session-index', integration_id: 15368 },
+            { context: 'Validate / issue-snapshot', integration_id: 15368 },
             { context: 'Policy Guard (Upstream) / policy-guard' }
           ]
         }
@@ -199,12 +199,17 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
   let branchDevelopProtection = {
     required_status_checks: {
       strict: true,
-      contexts: ['guard', 'fixtures', 'session-index', 'issue-snapshot'],
+      contexts: [
+        'Validate / lint',
+        'Validate / fixtures',
+        'Validate / session-index',
+        'Validate / issue-snapshot'
+      ],
       checks: [
-        { context: 'guard', app_id: 15368 },
-        { context: 'fixtures', app_id: 15368 },
-        { context: 'session-index', app_id: 15368 },
-        { context: 'issue-snapshot', app_id: 15368 }
+        { context: 'Validate / lint', app_id: 15368 },
+        { context: 'Validate / fixtures', app_id: 15368 },
+        { context: 'Validate / session-index', app_id: 15368 },
+        { context: 'Validate / issue-snapshot', app_id: 15368 }
       ]
     },
     enforce_admins: { enabled: false },
@@ -265,6 +270,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
     allow_fork_syncing: { enabled: false }
   };
 
+  const wrapEnabled = (value) => ({ enabled: Boolean(value) });
   const requests = [];
   const fetchMock = async (url, options = {}) => {
     const method = options.method ?? 'GET';
@@ -282,7 +288,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
         const payload = JSON.parse(options.body);
         const contexts = payload.required_status_checks?.contexts ?? [];
         branchDevelopProtection = {
-          enforce_admins: payload.enforce_admins,
+          enforce_admins: wrapEnabled(payload.enforce_admins),
           required_pull_request_reviews: payload.required_pull_request_reviews,
           restrictions: payload.restrictions,
           required_status_checks: {
@@ -290,13 +296,13 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
             contexts,
             checks: contexts.map((context) => ({ context }))
           },
-          required_linear_history: payload.required_linear_history,
-          allow_force_pushes: payload.allow_force_pushes,
-          allow_deletions: payload.allow_deletions,
-          block_creations: payload.block_creations,
-          required_conversation_resolution: payload.required_conversation_resolution,
-          lock_branch: payload.lock_branch,
-          allow_fork_syncing: payload.allow_fork_syncing
+          required_linear_history: wrapEnabled(payload.required_linear_history),
+          allow_force_pushes: wrapEnabled(payload.allow_force_pushes),
+          allow_deletions: wrapEnabled(payload.allow_deletions),
+          block_creations: wrapEnabled(payload.block_creations),
+          required_conversation_resolution: wrapEnabled(payload.required_conversation_resolution),
+          lock_branch: wrapEnabled(payload.lock_branch),
+          allow_fork_syncing: wrapEnabled(payload.allow_fork_syncing)
         };
         return createResponse(branchDevelopProtection);
       }
@@ -310,7 +316,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
         const payload = JSON.parse(options.body);
         const contexts = payload.required_status_checks?.contexts ?? [];
         branchMainProtection = {
-          enforce_admins: payload.enforce_admins,
+          enforce_admins: wrapEnabled(payload.enforce_admins),
           required_pull_request_reviews: payload.required_pull_request_reviews,
           restrictions: payload.restrictions,
           required_status_checks: {
@@ -318,13 +324,13 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
             contexts,
             checks: contexts.map((context) => ({ context }))
           },
-          required_linear_history: payload.required_linear_history,
-          allow_force_pushes: payload.allow_force_pushes,
-          allow_deletions: payload.allow_deletions,
-          block_creations: payload.block_creations,
-          required_conversation_resolution: payload.required_conversation_resolution,
-          lock_branch: payload.lock_branch,
-          allow_fork_syncing: payload.allow_fork_syncing
+          required_linear_history: wrapEnabled(payload.required_linear_history),
+          allow_force_pushes: wrapEnabled(payload.allow_force_pushes),
+          allow_deletions: wrapEnabled(payload.allow_deletions),
+          block_creations: wrapEnabled(payload.block_creations),
+          required_conversation_resolution: wrapEnabled(payload.required_conversation_resolution),
+          lock_branch: wrapEnabled(payload.lock_branch),
+          allow_fork_syncing: wrapEnabled(payload.allow_fork_syncing)
         };
         return createResponse(branchMainProtection);
       }
@@ -338,7 +344,7 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
         const payload = JSON.parse(options.body);
         const contexts = payload.required_status_checks?.contexts ?? [];
         branchReleaseProtection = {
-          enforce_admins: payload.enforce_admins,
+          enforce_admins: wrapEnabled(payload.enforce_admins),
           required_pull_request_reviews: payload.required_pull_request_reviews,
           restrictions: payload.restrictions,
           required_status_checks: {
@@ -346,13 +352,13 @@ test('priority:policy --apply updates rulesets for develop/main/release', async 
             contexts,
             checks: contexts.map((context) => ({ context }))
           },
-          required_linear_history: payload.required_linear_history,
-          allow_force_pushes: payload.allow_force_pushes,
-          allow_deletions: payload.allow_deletions,
-          block_creations: payload.block_creations,
-          required_conversation_resolution: payload.required_conversation_resolution,
-          lock_branch: payload.lock_branch,
-          allow_fork_syncing: payload.allow_fork_syncing
+          required_linear_history: wrapEnabled(payload.required_linear_history),
+          allow_force_pushes: wrapEnabled(payload.allow_force_pushes),
+          allow_deletions: wrapEnabled(payload.allow_deletions),
+          block_creations: wrapEnabled(payload.block_creations),
+          required_conversation_resolution: wrapEnabled(payload.required_conversation_resolution),
+          lock_branch: wrapEnabled(payload.lock_branch),
+          allow_fork_syncing: wrapEnabled(payload.allow_fork_syncing)
         };
         return createResponse(branchReleaseProtection);
       }
