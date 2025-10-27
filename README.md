@@ -5,7 +5,7 @@
 This repository hosts the reusable workflows and helper scripts that drive manual
 LVCompare runs against commits in a LabVIEW project. The primary entrypoint is the
 `Manual VI Compare (refs)` workflow, which walks a branch/ref history, extracts the
-target VI at each commit→parent pair, and invokes LVCompare in headless mode.
+target VI at each commit-parent pair, and invokes LVCompare in headless mode.
 
 The latest rev streamlines the workflow inputs so SMEs only need to provide:
 
@@ -19,7 +19,7 @@ tuning.
 
 ### GitHub UI
 
-1. Navigate to **Actions → Manual VI Compare (refs)**.
+1. Navigate to **Actions -> Manual VI Compare (refs)**.
 2. Click **Run workflow**.
 3. Supply `vi_path` (for example `Fixtures/Loop.vi`) and, optionally,
    `compare_ref` if you want something other than the workflow branch tip.
@@ -41,21 +41,30 @@ workflow uploads two artifacts:
 - `vi-compare-manifests` - aggregate suite manifest and per-mode summaries
 - `vi-compare-diff-artifacts` - only present when LVCompare detects differences
 
+Each job also emits GitHub outputs pointing at the aggregate manifest, the
+history results directory, the per-mode manifest summary (`mode-manifests-json`),
+and the generated history report paths (`history-report-md` and, when HTML
+renders, `history-report-html`). Downstream workflows and reusable snippets can
+consume those keys to surface the Markdown/HTML report or to dispatch follow-up
+automation without spelunking the artifacts. When the renderer is unavailable,
+`Compare-VIHistory.ps1` writes a lightweight fallback report so the Markdown
+output key always resolves to a readable summary.
+
 Provide the optional `notify_issue` input when dispatching the workflow to post
 the same summary table to a GitHub issue for stakeholders.
 
 ## Optional inputs
 
-| Input name               | Default   | Description                                                                 |
-| ------------------------ | --------- | --------------------------------------------------------------------------- |
-| `compare_depth`          | `10`      | Maximum commit pairs to evaluate (`0` = no limit)                           |
-| `compare_modes`          | `default` | Comma/semicolon list of compare modes (`default,attributes,front-panel` …) |
-| `compare_ignore_flags`   | `none`    | LVCompare ignore toggles (`none`, `default`, or comma-separated flags)      |
-| `compare_additional_flags` | ` `   | Extra LVCompare switches (space-delimited)                                  |
-| `compare_fail_fast`      | `false`   | Stop after the first diff                                                   |
-| `compare_fail_on_diff`   | `false`   | Fail the workflow when any diff is detected                                 |
-| `sample_id`              | _(empty)_ | Optional concurrency key (advanced use)                                     |
-| `notify_issue`           | _(empty)_ | Issue number to receive the summary table as a comment                      |
+| Input name                 | Default   | Description                                                                 |
+| -------------------------- | --------- | --------------------------------------------------------------------------- |
+| `compare_depth`            | `10`      | Maximum commit pairs to evaluate (`0` = no limit)                           |
+| `compare_modes`            | `default` | Comma/semicolon list of compare modes (`default,attributes,front-panel`) |
+| `compare_ignore_flags`     | `none`    | LVCompare ignore toggles (`none`, `default`, or comma-separated flags)      |
+| `compare_additional_flags` | ` `       | Extra LVCompare switches (space-delimited)                                  |
+| `compare_fail_fast`        | `false`   | Stop after the first diff                                                   |
+| `compare_fail_on_diff`     | `false`   | Fail the workflow when any diff is detected                                 |
+| `sample_id`                | _(empty)_ | Optional concurrency key (advanced use)                                     |
+| `notify_issue`             | _(empty)_ | Issue number to receive the summary table as a comment                      |
 
 These inputs map directly onto the parameters in `tools/Compare-VIHistory.ps1`,
 so advanced behaviour remains available without cluttering the default UX.
@@ -78,8 +87,24 @@ schema as the workflow outputs.
 
 For a quicker end-to-end loop:
 
-- `scripts/Run-VIHistory.ps1` regenerates the history results, prints the enriched Markdown summary (including attribute coverage), surfaces the first commit pairs it processed, and writes `tests/results/ref-compare/history/history-context.json` with commit metadata for deeper debugging.
-- `scripts/Dispatch-VIHistoryWorkflow.ps1` wraps `gh workflow run` and echoes the URL to the most recent run so you can follow progress immediately.
+- `scripts/Run-VIHistory.ps1` regenerates the history results, prints the
+  enriched Markdown summary (including attribute coverage), surfaces the first
+  commit pairs it processed, writes `tests/results/ref-compare/history/history-context.json`
+  with commit metadata, and renders `tests/results/ref-compare/history/history-report.md`
+  (plus `history-report.html` when `-HtmlReport`) so reviewers get a single document
+  with author/date context, diff outcome, and relative links to the preserved LVCompare
+  report and artifact directory whenever a difference is detected. If the
+  renderer throws or is missing, the script falls back to a lightweight Markdown
+  stub so downstream tooling still has a report to reference.
+- `scripts/Dispatch-VIHistoryWorkflow.ps1` wraps `gh workflow run` and echoes
+  the URL to the most recent run so you can follow progress immediately.
+
+Need to point the tools at non-default LabVIEW/LVCompare installs? Copy
+`configs/labview-paths.sample.json` to `configs/labview-paths.json` and list any
+custom paths under the `lvcompare` and `labview` arrays; the resolvers consult
+those entries before falling back to environment variables and canonical Program
+Files locations. Run commands with `-Verbose` if you need to inspect the
+candidate list while debugging.
 
 ## Release and compatibility
 

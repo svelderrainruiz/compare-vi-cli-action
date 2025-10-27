@@ -9,6 +9,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+try {
+  $scriptRoot = Split-Path -Parent $PSCommandPath
+  $vendorModule = Join-Path (Split-Path -Parent $scriptRoot) 'tools\VendorTools.psm1'
+  if (Test-Path -LiteralPath $vendorModule -PathType Leaf) {
+    Import-Module $vendorModule -Force
+  }
+} catch {}
+
 function Get-NormalizedRepoRelativePath {
   param(
     [string]$InputPath,
@@ -227,19 +235,59 @@ try {
         }
       }
 
+      $resultNode = $null
+      if ($comparison.PSObject.Properties['result']) {
+        $resultNode = $comparison.result
+      }
+
+      $resultPayload = [ordered]@{}
+
+      if ($resultNode) {
+        if ($resultNode.PSObject.Properties['diff']) {
+          $resultPayload.diff = [bool]$resultNode.diff
+        }
+        if ($resultNode.PSObject.Properties['exitCode']) {
+          $resultPayload.exitCode = $resultNode.exitCode
+        }
+        if ($resultNode.PSObject.Properties['duration_s']) {
+          $resultPayload.duration_s = $resultNode.duration_s
+        }
+        if ($resultNode.PSObject.Properties['summaryPath'] -and $resultNode.summaryPath) {
+          $resultPayload.summaryPath = $resultNode.summaryPath
+        }
+        if ($resultNode.PSObject.Properties['reportPath'] -and $resultNode.reportPath) {
+          $resultPayload.reportPath = $resultNode.reportPath
+        }
+        if ($resultNode.PSObject.Properties['reportHtml'] -and $resultNode.reportHtml) {
+          $resultPayload.reportHtml = $resultNode.reportHtml
+        }
+        if ($resultNode.PSObject.Properties['artifactDir'] -and $resultNode.artifactDir) {
+          $resultPayload.artifactDir = $resultNode.artifactDir
+        }
+        if ($resultNode.PSObject.Properties['execPath'] -and $resultNode.execPath) {
+          $resultPayload.execPath = $resultNode.execPath
+        }
+        if ($resultNode.PSObject.Properties['command'] -and $resultNode.command) {
+          $resultPayload.command = $resultNode.command
+        }
+        if ($resultNode.PSObject.Properties['includedAttributes'] -and $resultNode.includedAttributes) {
+          $resultPayload.includedAttributes = @($resultNode.includedAttributes)
+        }
+        if ($resultNode.PSObject.Properties['status']) {
+          $resultPayload.status = $resultNode.status
+        }
+        if ($resultNode.PSObject.Properties['message']) {
+          $resultPayload.message = $resultNode.message
+        }
+      }
+
       $comparisonDetails += [pscustomobject]@{
         mode   = $mode.name
         index  = $comparison.index
         report = $comparison.outName
         base   = $baseMeta
         head   = $headMeta
-        result = [pscustomobject]@{
-          diff        = $comparison.result.diff
-          exitCode    = $comparison.result.exitCode
-          duration_s  = $comparison.result.duration_s
-          summaryPath = $comparison.result.summaryPath
-          reportPath  = $comparison.result.reportPath
-        }
+        result = [pscustomobject]$resultPayload
       }
     }
   }
@@ -251,7 +299,13 @@ try {
       $entry = $comparisonDetails[$i]
       $baseLabel = if ($entry.base.subject) { "{0} ({1})" -f $entry.base.short, $entry.base.subject } else { $entry.base.short }
       $headLabel = if ($entry.head.subject) { "{0} ({1})" -f $entry.head.short, $entry.head.subject } else { $entry.head.short }
-      $diffLabel = if ($entry.result.diff) { 'diff=yes' } else { 'diff=no' }
+      $diffLabel = if ($entry.result.PSObject.Properties['diff']) {
+        if ($entry.result.diff) { 'diff=yes' } else { 'diff=no' }
+      } elseif ($entry.result.PSObject.Properties['status']) {
+        "status=$($entry.result.status)"
+      } else {
+        'diff=n/a'
+      }
       Write-Host ("  [{0} #{1}] {2} -> {3} ({4})" -f $entry.mode, $entry.index, $baseLabel, $headLabel, $diffLabel)
     }
     if ($comparisonDetails.Count -gt $preview) {
@@ -274,9 +328,37 @@ try {
 
   $modeSummaryJson = ($manifest.modes | ConvertTo-Json -Depth 4)
 
+  $historyReportPath = Join-Path $historyResultsDir 'history-report.md'
+  $historyReportHtmlPath = $null
+  if ($HtmlReport.IsPresent) {
+    $historyReportHtmlPath = Join-Path $historyResultsDir 'history-report.html'
+  }
+  $historyRenderer = Join-Path $repoRoot 'tools' 'Render-VIHistoryReport.ps1'
+  if (Test-Path -LiteralPath $historyRenderer -PathType Leaf) {
+    $rendererArgs = @{
+      ManifestPath       = $manifestPath
+      HistoryContextPath = $contextPath
+      OutputDir          = $historyResultsDir
+      MarkdownPath       = $historyReportPath
+    }
+    if ($HtmlReport.IsPresent) {
+      $rendererArgs['EmitHtml'] = $true
+      $rendererArgs['HtmlPath'] = $historyReportHtmlPath
+    }
+    try {
+      & $historyRenderer @rendererArgs | Out-Null
+    } catch {
+      Write-Warning ("Failed to render history report: {0}" -f $_.Exception.Message)
+    }
+  } else {
+    Write-Warning ("VI history report renderer missing at {0}" -f $historyRenderer)
+  }
+
   pwsh -NoLogo -NoProfile -File (Join-Path $repoRoot 'tools' 'Publish-VICompareSummary.ps1') `
     -ManifestPath $manifestPath `
     -ModeSummaryJson $modeSummaryJson `
+    -HistoryReportPath $historyReportPath `
+    -HistoryReportHtmlPath $historyReportHtmlPath `
     -Issue 0 `
     -DryRun
 } finally {

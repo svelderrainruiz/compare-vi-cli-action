@@ -583,6 +583,57 @@ exit $exitCode
     $bySlug.ContainsKey('attributes') | Should -BeTrue
     $bySlug['default'].mode | Should -Be 'default'
     $bySlug['attributes'].mode | Should -Be 'attributes'
+
+    $historyMdLine = $outputLines | Where-Object { $_ -like 'history-report-md=*' } | Select-Object -First 1
+    $historyMdLine | Should -Not -BeNullOrEmpty
+    $historyMdPath = (($historyMdLine -split '=', 2)[1]).Trim()
+    Test-Path -LiteralPath $historyMdPath | Should -BeTrue
+
+    $historyHtmlLine = $outputLines | Where-Object { $_ -like 'history-report-html=*' } | Select-Object -First 1
+    $historyHtmlLine | Should -Not -BeNullOrEmpty
+    $historyHtmlPath = (($historyHtmlLine -split '=', 2)[1]).Trim()
+    Test-Path -LiteralPath $historyHtmlPath | Should -BeTrue
+
+    Test-Path -LiteralPath $summaryPath | Should -BeTrue
+    $summaryContent = Get-Content -LiteralPath $summaryPath -Raw
+    $summaryContent | Should -Match 'VI history report'
+    $summaryContent | Should -Match 'history-report.md'
+  }
+
+  It 'renders enriched history report with commit metadata and artifact links' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+    $previousDiff = $env:STUB_COMPARE_DIFF
+    try {
+      $env:STUB_COMPARE_DIFF = '1'
+      $pair = $_pairs[0]
+      $rd = Join-Path $TestDrive 'history-report-rich'
+
+      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
+        -TargetPath $_target `
+        -StartRef $pair.Head `
+        -MaxPairs 1 `
+        -InvokeScriptPath $_stubPath `
+        -ResultsDir $rd `
+        -Mode 'default' `
+        -FailOnDiff:$false | Out-Null
+
+      $historyMd = Get-Content -LiteralPath (Join-Path $rd 'history-report.md') -Raw
+      $historyMd | Should -Match '\#\# Commit pairs'
+      $historyMd | Should -Match '\*\*diff\*\*'
+      $historyMd | Should -Match '\[report\]\(\./'
+      $historyMd | Should -Match '<sub>.* - .*<\/sub>'
+      $historyMd | Should -Match '\#\# Attribute coverage'
+
+      $historyHtml = Get-Content -LiteralPath (Join-Path $rd 'history-report.html') -Raw
+      $historyHtml | Should -Match '<h2>Attribute coverage</h2>'
+      $historyHtml | Should -Match '<td class="diff-yes">Diff</td>'
+    } finally {
+      if ($null -eq $previousDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $previousDiff
+      }
+    }
   }
 
   It 'expands comma-separated mode tokens into multiple entries' {
@@ -609,6 +660,90 @@ exit $exitCode
   }
 }
 
+Describe 'Compare-VIHistory source control handling' -Tag 'Integration' {
+  BeforeAll {
+    $script:RepoRoot = (Get-Location).Path
+    $compareScript = Join-Path $script:RepoRoot 'tools' 'Compare-VIHistory.ps1'
+    $localConfigPath = Join-Path $script:RepoRoot 'configs' 'labview-paths.local.json'
+    $script:CompareScript = $compareScript
+    $script:LocalConfigPath = $localConfigPath
+    $script:OriginalLocalConfig = $null
+    $script:HadLocalConfig = Test-Path -LiteralPath $localConfigPath -PathType Leaf
+    if ($script:HadLocalConfig) {
+      $script:OriginalLocalConfig = Get-Content -LiteralPath $localConfigPath -Raw
+    }
+  }
+
+  AfterEach {
+    if (Test-Path -LiteralPath $script:LocalConfigPath -PathType Leaf) {
+      Remove-Item -LiteralPath $script:LocalConfigPath -Force
+    }
+  }
+
+  AfterAll {
+    if ($script:HadLocalConfig) {
+      Set-Content -LiteralPath $script:LocalConfigPath -Value $script:OriginalLocalConfig
+    } else {
+      if (Test-Path -LiteralPath $script:LocalConfigPath -PathType Leaf) {
+        Remove-Item -LiteralPath $script:LocalConfigPath -Force
+      }
+    }
+  }
+
+  It 'emits a warning when SCC is enabled in LabVIEW.ini' {
+    $tempRoot = Join-Path $TestDrive 'lv-scc-enabled'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+    $fakeExe = Join-Path $tempRoot 'LabVIEW.exe'
+    Set-Content -LiteralPath $fakeExe -Value '' -Encoding Byte
+    $fakeIni = Join-Path $tempRoot 'LabVIEW.ini'
+    Set-Content -LiteralPath $fakeIni -Value "SCCUseInLabVIEW=True`nSCCProviderIsActive=True`n"
+
+    @"
+{
+  "labview": [ "$fakeExe" ]
+}
+"@ | Set-Content -LiteralPath $script:LocalConfigPath
+
+    $resultsDir = Join-Path $TestDrive 'history-enabled'
+    Push-Location $script:RepoRoot
+    try {
+      $WarningPreference = 'Continue'
+      $output = & $script:CompareScript -TargetPath 'VI1.vi' -StartRef 'HEAD' -MaxPairs 1 -ResultsDir $resultsDir -RenderReport 3>&1
+      $warnings = $output | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | ForEach-Object { $_.Message }
+      $warnings | Should -ContainMatch 'LabVIEW source control is enabled'
+    } finally {
+      Pop-Location
+      if (Test-Path -LiteralPath $resultsDir) { Remove-Item -LiteralPath $resultsDir -Recurse -Force }
+    }
+  }
+
+  It 'does not emit a warning when SCC is disabled' {
+    $tempRoot = Join-Path $TestDrive 'lv-scc-disabled'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+    $fakeExe = Join-Path $tempRoot 'LabVIEW.exe'
+    Set-Content -LiteralPath $fakeExe -Value '' -Encoding Byte
+    $fakeIni = Join-Path $tempRoot 'LabVIEW.ini'
+    Set-Content -LiteralPath $fakeIni -Value "SCCUseInLabVIEW=False`nSCCProviderIsActive=False`n"
+
+    @"
+{
+  "labview": [ "$fakeExe" ]
+}
+"@ | Set-Content -LiteralPath $script:LocalConfigPath
+
+    $resultsDir = Join-Path $TestDrive 'history-disabled'
+    Push-Location $script:RepoRoot
+    try {
+      $WarningPreference = 'Continue'
+      $output = & $script:CompareScript -TargetPath 'VI1.vi' -StartRef 'HEAD' -MaxPairs 1 -ResultsDir $resultsDir -RenderReport 3>&1
+      $warnings = $output | Where-Object { $_ -is [System.Management.Automation.WarningRecord] } | ForEach-Object { $_.Message }
+      $warnings | Should -BeNullOrEmpty
+    } finally {
+      Pop-Location
+      if (Test-Path -LiteralPath $resultsDir) { Remove-Item -LiteralPath $resultsDir -Recurse -Force }
+    }
+  }
+}
 
 
 
