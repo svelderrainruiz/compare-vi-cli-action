@@ -3,6 +3,14 @@ name: Smoke VI Staging
 on:
   workflow_dispatch:
     inputs:
+      runner:
+        description: 'Runner selection'
+        required: false
+        default: 'hosted'
+        type: choice
+        options:
+          - hosted
+          - self-hosted
       keep_branch:
         description: 'Keep scratch branch and PR after the smoke test'
         required: false
@@ -19,7 +27,7 @@ permissions:
 
 jobs:
   smoke:
-    runs-on: windows-latest
+    runs-on: ${{ fromJson(inputs.runner == 'self-hosted' && '["self-hosted","windows","vi-staging"]' || '["windows-latest"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
