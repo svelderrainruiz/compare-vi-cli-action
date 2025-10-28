@@ -45,6 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_PR: ${{ inputs.pr }}
           COMMENT_PR: ${{ github.event.issue.number }}
+          REPO_SLUG: ${{ github.repository }}
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -56,7 +57,15 @@ jobs:
           }
 
           Write-Host "Resolving metadata for PR #$prNumber"
-          $json = gh pr view $prNumber --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepositoryOwner,headRepository
+          $repoSlug = $env:REPO_SLUG
+          if (-not $repoSlug) {
+            $repoSlug = $env:GITHUB_REPOSITORY
+          }
+          if (-not $repoSlug) {
+            throw 'Unable to determine repository slug for gh commands.'
+          }
+
+          $json = gh pr view $prNumber --repo $repoSlug --json number,url,baseRefName,baseRefOid,headRefName,headRefOid,headRepositoryOwner,headRepository
           $info = $json | ConvertFrom-Json
 
           if (-not $info) {
@@ -242,9 +251,10 @@ jobs:
 
           $linksJson = ($links | ConvertTo-Json -Depth 4)
           $linksPath = Join-Path (Get-Location) 'vi-compare-artifacts/vi-staging-links.json'
-          if ($linksJson) {
+          if ($links.Count -gt 0 -and $linksJson) {
             $linksJson | Set-Content -LiteralPath $linksPath -Encoding utf8
-            "artifact_links=$linksJson" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+            $block = "artifact_links<<EOF`n$linksJson`nEOF"
+            $block | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
             "artifact_links_path=$linksPath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
           } else {
             "artifact_links=[]" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -286,12 +296,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           STAGING_LABEL: ${{ env.STAGING_LABEL }}
+          REPO_SLUG: ${{ github.repository }}
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           if (-not $env:STAGING_LABEL) { return }
-          gh pr edit $env:PR_NUMBER --add-label "$env:STAGING_LABEL"
+          if (-not $env:PR_NUMBER) { return }
+          $repoSlug = $env:REPO_SLUG
+          if (-not $repoSlug) { $repoSlug = $env:GITHUB_REPOSITORY }
+          if (-not $repoSlug) { throw 'Unable to determine repository slug for gh commands.' }
+          & gh pr edit $env:PR_NUMBER --repo $repoSlug --add-label "$env:STAGING_LABEL"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to add label '$env:STAGING_LABEL' to PR #$env:PR_NUMBER (exit code $LASTEXITCODE)."
+            $global:LASTEXITCODE = 0
+          }
 
       - name: Comment with results
         if: github.event_name == 'issue_comment'
@@ -303,10 +322,13 @@ jobs:
           ARTIFACT_LINKS: ${{ steps.collect_links.outputs.artifact_links }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          REPO_SLUG: ${{ github.repository }}
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+
+          if (-not $env:PR_NUMBER) { return }
 
           $runUrl = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           $summary = Get-Content $env:SUMMARY_PATH -Raw
@@ -338,7 +360,10 @@ jobs:
           }
 
           $body = $bodyLines -join "`n"
-          gh pr comment $env:PR_NUMBER --body $body
+          $repoSlug = $env:REPO_SLUG
+          if (-not $repoSlug) { $repoSlug = $env:GITHUB_REPOSITORY }
+          if (-not $repoSlug) { throw 'Unable to determine repository slug for gh commands.' }
+          gh pr comment $env:PR_NUMBER --repo $repoSlug --body $body
 
       - name: Remove staging label when not applicable
         if: always()
@@ -348,14 +373,23 @@ jobs:
           STAGING_LABEL: ${{ env.STAGING_LABEL }}
           STAGE_COUNT: ${{ steps.stage.outputs.stage_count }}
           JOB_STATUS: ${{ job.status }}
+          REPO_SLUG: ${{ github.repository }}
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           if (-not $env:STAGING_LABEL) { return }
+          if (-not $env:PR_NUMBER) { return }
           $shouldRemove = $false
           if ($env:JOB_STATUS -ne 'success') { $shouldRemove = $true }
           elseif (-not $env:STAGE_COUNT -or $env:STAGE_COUNT -eq '0') { $shouldRemove = $true }
           if ($shouldRemove) {
-            gh pr edit $env:PR_NUMBER --remove-label "$env:STAGING_LABEL" 2>$null
+            $repoSlug = $env:REPO_SLUG
+            if (-not $repoSlug) { $repoSlug = $env:GITHUB_REPOSITORY }
+            if (-not $repoSlug) { throw 'Unable to determine repository slug for gh commands.' }
+            & gh pr edit $env:PR_NUMBER --repo $repoSlug --remove-label "$env:STAGING_LABEL" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Failed to remove label '$env:STAGING_LABEL' from PR #$env:PR_NUMBER (exit code $LASTEXITCODE)."
+              $global:LASTEXITCODE = 0
+            }
           }
