@@ -186,6 +186,36 @@ jobs:
           "artifact_dir=$exportDir" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
           "stage_count=$($results.Count)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Run LVCompare on staged pairs
+        id: compare
+        shell: pwsh
+        env:
+          RESULTS_PATH: ${{ steps.stage.outputs.results_path }}
+          ARTIFACTS_DIR: ${{ steps.manifest.outputs.artifacts_dir }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          if (-not $env:RESULTS_PATH -or -not (Test-Path -LiteralPath $env:RESULTS_PATH -PathType Leaf)) {
+            Write-Host 'No staged pairs to compare.'
+            if ($Env:GITHUB_OUTPUT) {
+              "compare_json=" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "compare_dir=" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "diff_count=0" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "match_count=0" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "skip_count=0" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "error_count=0" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+            }
+            exit 0
+          }
+
+          $scriptPath = Join-Path (Get-Location) 'tools' 'Run-StagedLVCompare.ps1'
+          if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+            throw "Run-StagedLVCompare.ps1 not found at $scriptPath"
+          }
+
+          & $scriptPath -ResultsPath $env:RESULTS_PATH -ArtifactsDir $env:ARTIFACTS_DIR -RenderReport
+
       - name: Generate staging summary
         id: summary
         shell: pwsh
@@ -209,23 +239,61 @@ jobs:
             }
           }
 
+          $compareCounts = @{
+            diff   = 0
+            match  = 0
+            error  = 0
+            skipped= 0
+          }
+
           if (-not $results) {
+            $compareCounts.skipped = 0
             'No VI pairs with both base/head paths were staged.' | Set-Content -LiteralPath $summaryPath -Encoding utf8
           } else {
-            $lines = @(
-              '| # | Change | Base | Head | Artifact |',
-              '| - | ------ | ---- | ---- | -------- |'
+            $lines = @()
+            $lines += ("Total staged pairs: {0}" -f $results.Count)
+
+            $table = @(
+              '| # | Change | Base | Head | Artifact | Compare |',
+              '| - | ------ | ---- | ---- | -------- | ------- |'
             )
+
             $idx = 1
             foreach ($entry in $results) {
+              $compareStatus = 'n/a'
+              if ($entry.PSObject.Properties['compare'] -and $entry.compare) {
+                $compareStatus = $entry.compare.status
+                switch ($compareStatus) {
+                  'diff'    { $compareCounts.diff++ }
+                  'match'   { $compareCounts.match++ }
+                  'error'   { $compareCounts.error++ }
+                  'skipped' { $compareCounts.skipped++ }
+                  default   { if ($compareStatus) { $compareCounts.skipped++ } }
+                }
+                if ($entry.compare.status -eq 'diff' -and $entry.compare.reportPath) {
+                  $compareStatus = "$($entry.compare.status) (report)"
+                }
+              } else {
+                $compareCounts.skipped++
+              }
               $artifactCell = if ($entry.artifact) { $entry.artifact } else { 'n/a' }
-              $lines += "| $idx | $($entry.changeType) | $($entry.basePath) | $($entry.headPath) | $artifactCell |"
+              $table += "| $idx | $($entry.changeType) | $($entry.basePath) | $($entry.headPath) | $artifactCell | $compareStatus |"
               $idx++
             }
+
+            $lines += ("Compare results → match: {0}, diff: {1}, error: {2}, skipped: {3}" -f $compareCounts.match, $compareCounts.diff, $compareCounts.error, $compareCounts.skipped)
+            $lines += ''
+            $lines += $table
             $lines -join "`n" | Set-Content -LiteralPath $summaryPath -Encoding utf8
           }
 
           "summary_path=$summaryPath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if ($Env:GITHUB_OUTPUT) {
+            "diff_count=$($compareCounts.diff)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "match_count=$($compareCounts.match)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "error_count=$($compareCounts.error)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "skip_count=$($compareCounts.skipped)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Ensure staging label exists
         if: steps.stage.outputs.stage_count != '0'
@@ -244,10 +312,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vi-compare-manifest
-          path: |
-            vi-compare-artifacts/vi-manifest.json
-            vi-compare-artifacts/vi-staging-results.json
-            vi-compare-artifacts/vi-staging-summary.md
+          path: vi-compare-artifacts/
 
       - name: Upload staged bundles
         if: steps.stage.outputs.stage_count != '0'

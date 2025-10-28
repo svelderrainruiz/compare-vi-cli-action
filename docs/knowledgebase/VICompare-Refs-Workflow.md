@@ -16,7 +16,9 @@
   `tools/Get-PRVIDiffManifest.ps1`, stage the resolvable base/head pairs via `tools/Invoke-PRVIStaging.ps1`, and upload a
   zipped bundle per staged pair.
 - The workflow runs on the repository’s self-hosted Windows runner (`self-hosted, Windows, X64`) so the same LabVIEW/LVCompare
-  environment used in production compares is exercised during staging.
+  environment used in production compares is exercised during staging, and immediately launches `Invoke-LVCompare.ps1`
+  against each staged pair. The capture artifacts (HTML report, `lvcompare-capture.json`, stdout/stderr) are stored under
+  `vi-compare-artifacts/compare/pair-XX/` and summarised in the PR comment.
 - The workflow only honours comments authored by repository members/collaborators. Maintainers can also run the job
   manually with `gh workflow run pr-vi-staging.yml -f pr=<number> [-f note="context"]`.
 - Outputs:
