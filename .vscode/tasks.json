@@ -20,10 +20,12 @@
     {
       "label": "Smoke: VI staging label",
       "type": "process",
-      "command": "npm",
+      "command": "pwsh",
       "args": [
-        "run",
-        "smoke:vi-stage"
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "$env:GH_TOKEN = Get-Content -Raw 'C:\\github_token.txt'; npm run smoke:vi-stage"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

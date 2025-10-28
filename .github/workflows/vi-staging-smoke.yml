@@ -14,11 +14,12 @@ on:
 
 permissions:
   contents: write
+  actions: write
   pull-requests: write
 
 jobs:
   smoke:
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -74,10 +74,106 @@ function Touch-ViFile {
     [System.IO.File]::WriteAllBytes($Path, $bytes)
 }
 
+function Copy-ViContent {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Source,
+        [Parameter(Mandatory)]
+        [string]$Destination
+    )
+
+    if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+        throw "Source VI file not found: $Source"
+    }
+
+    $destDir = Split-Path -Parent $Destination
+    if ($destDir -and -not (Test-Path -LiteralPath $destDir -PathType Container)) {
+        throw "Destination directory not found: $destDir"
+    }
+
+    [System.IO.File]::Copy($Source, $Destination, $true)
+}
+
+function Get-RepoInfo {
+    if ($env:GITHUB_REPOSITORY -and ($env:GITHUB_REPOSITORY -match '^(?<owner>[^/]+)/(?<name>.+)$')) {
+        return [ordered]@{
+            Slug  = $env:GITHUB_REPOSITORY
+            Owner = $Matches['owner']
+            Name  = $Matches['name']
+        }
+    }
+    $remote = Invoke-Git -Arguments @('remote', 'get-url', 'origin') | Select-Object -First 1
+    if ($remote -match 'github.com[:/](?<owner>[^/]+)/(?<name>.+?)(?:\.git)?$') {
+        return [ordered]@{
+            Slug  = "$($Matches['owner'])/$($Matches['name'])"
+            Owner = $Matches['owner']
+            Name  = $Matches['name']
+        }
+    }
+    throw 'Unable to determine repository slug.'
+}
+
+function Get-GitHubAuth {
+    $token = $env:GH_TOKEN
+    if (-not $token) {
+        $token = $env:GITHUB_TOKEN
+    }
+    if (-not $token) {
+        throw 'GH_TOKEN or GITHUB_TOKEN must be set.'
+    }
+
+    $headers = @{
+        Authorization = "Bearer $token"
+        Accept        = 'application/vnd.github+json'
+        'User-Agent'  = 'compare-vi-staging-smoke'
+    }
+
+    return [ordered]@{
+        Token   = $token
+        Headers = $headers
+    }
+}
+
+function Get-PullRequestInfo {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Repo,
+        [Parameter(Mandatory)]
+        [string]$Branch,
+        [int]$Attempts = 10,
+        [int]$DelaySeconds = 2
+    )
+
+    $auth = Get-GitHubAuth
+    $headers = $auth.Headers
+
+    $lastError = $null
+    for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+        try {
+            $uri = "https://api.github.com/repos/$($Repo.Slug)/pulls?head=$($Repo.Owner):$Branch&state=open"
+            $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -ErrorAction Stop
+            if ($response -and $response.Count -gt 0) {
+                return $response[0]
+            }
+        } catch {
+            $lastError = $_
+        }
+        if ($attempt -lt $Attempts - 1) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    if ($lastError) {
+        throw "Failed to locate scratch PR: $($lastError.Exception.Message)"
+    }
+    throw 'Failed to locate scratch PR.'
+}
+
 Write-Verbose "Base branch: $BaseBranch"
 Write-Verbose "KeepBranch: $KeepBranch"
 Write-Verbose "DryRun: $DryRun"
 
+$repoInfo = Get-RepoInfo
 $initialBranch = Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD') | Select-Object -First 1
 Write-Host "Current branch: $initialBranch"
 
@@ -94,7 +190,7 @@ $scratchBranch = "smoke/vi-stage-$timestamp"
 $prTitle = "Smoke: VI staging label test ($timestamp)"
 $note = "staging smoke $timestamp"
 
-Write-Host "Scratch branch would be: $scratchBranch"
+Write-Host "Scratch branch: $scratchBranch"
 
 if ($DryRun) {
     Write-Host "Dry-run mode: no changes will be made."
@@ -110,18 +206,23 @@ if ($DryRun) {
 $context = [ordered]@{
     InitialBranch = $initialBranch
     ScratchBranch = $scratchBranch
+    Repo          = $repoInfo
     PrNumber      = $null
+    PrUrl         = $null
     WorkflowRunId = $null
+    Success       = $false
+    ErrorMessage  = $null
+    SummaryPath   = $null
+    Note          = $note
 }
 
 try {
     Invoke-Git -Arguments @('fetch', 'origin', $BaseBranch)
     Invoke-Git -Arguments @('checkout', '-b', $scratchBranch, "origin/$BaseBranch")
 
-    Touch-ViFile -Path 'VI1.vi'
-    Touch-ViFile -Path 'VI2.vi'
+    Copy-ViContent -Source 'VI2.vi' -Destination 'VI1.vi'
 
-    Invoke-Git -Arguments @('add', 'VI1.vi', 'VI2.vi')
+    Invoke-Git -Arguments @('add', 'VI1.vi')
     Invoke-Git -Arguments @('commit', '-m', 'chore: synthetic VI changes for staging smoke')
 
     Invoke-Git -Arguments @('push', '-u', 'origin', $scratchBranch)
@@ -133,23 +234,29 @@ try {
     ) -join "`n"
 
     Invoke-Gh -Arguments @('pr', 'create',
+        '--repo', $repoInfo.Slug,
         '--base', $BaseBranch,
         '--head', $scratchBranch,
         '--title', $prTitle,
         '--body', $prBody,
         '--draft') | Out-Null
-
-    $prInfo = Invoke-Gh -Arguments @('pr', 'view', $scratchBranch, '--json', 'number', 'url') -ExpectJson
-    if (-not $prInfo) {
-        throw 'Failed to obtain PR information.'
-    }
+    $prInfo = Get-PullRequestInfo -Repo $repoInfo -Branch $scratchBranch
     $context.PrNumber = [int]$prInfo.number
-    Write-Host "Draft PR ##$($context.PrNumber) created at $($prInfo.url)."
+    $context.PrUrl = $prInfo.url
+    Write-Host "Draft PR ##$($context.PrNumber) created at $($context.PrUrl)."
 
-    Invoke-Gh -Arguments @('workflow', 'run', 'pr-vi-staging.yml',
-        '--ref', $scratchBranch,
-        '-f', "pr=$($context.PrNumber)",
-        '-f', "note=$note") | Out-Null
+    $auth = Get-GitHubAuth
+    $dispatchUri = "https://api.github.com/repos/$($repoInfo.Slug)/actions/workflows/pr-vi-staging.yml/dispatches"
+    $dispatchBody = @{
+        ref    = $scratchBranch
+        inputs = @{
+            pr   = $context.PrNumber.ToString()
+            note = $note
+        }
+    } | ConvertTo-Json -Depth 4
+    Write-Host "Triggering pr-vi-staging workflow via dispatch API..."
+    Invoke-RestMethod -Uri $dispatchUri -Headers $auth.Headers -Method Post -Body $dispatchBody -ContentType 'application/json'
+    Write-Host 'Workflow dispatch accepted.'
 
     Write-Host 'Waiting for pr-vi-staging workflow to complete...'
     $runId = $null
@@ -170,6 +277,7 @@ try {
         throw 'Unable to locate dispatched workflow run.'
     }
     $context.WorkflowRunId = $runId
+    Write-Host "Workflow run id: $runId"
 
     Write-Host "Monitoring workflow run $runId..."
     $watchArgs = @('tools/npm/run-script.mjs', 'ci:watch:rest', '--', '--workflow', '.github/workflows/pr-vi-staging.yml', '--run-id', $runId)
@@ -184,7 +292,7 @@ try {
         throw "Workflow run $runId concluded with '$($runSummary.conclusion)'."
     }
 
-    $labelInfo = Invoke-Gh -Arguments @('pr', 'view', $context.PrNumber.ToString(), '--json', 'labels') -ExpectJson
+    $labelInfo = Invoke-Gh -Arguments @('pr', 'view', $context.PrNumber.ToString(), '--repo', $repoInfo.Slug, '--json', 'labels') -ExpectJson
     $labels = $labelInfo.labels | ForEach-Object { $_.name }
     if (-not ($labels -contains 'vi-staging-ready')) {
         throw "Expected label 'vi-staging-ready' not found on PR ##$($context.PrNumber)."
@@ -193,23 +301,51 @@ try {
     $resultsDir = Join-Path 'tests' 'results' '_agent' 'smoke' 'vi-stage'
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
     $summaryPath = Join-Path $resultsDir "smoke-$timestamp.json"
+    $context.SummaryPath = $summaryPath
     $summary = [ordered]@{
         branch   = $scratchBranch
         prNumber = $context.PrNumber
         runId    = $runId
         note     = $note
         created  = (Get-Date).ToString('o')
+        success  = $true
+        url      = $context.PrUrl
     }
     $summary | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $summaryPath -Encoding utf8
 
     Write-Host "Smoke test succeeded. Label detected on PR ##$($context.PrNumber)."
     Write-Host "Summary written to $summaryPath"
+    $context.Success = $true
 }
 catch {
+    $context.ErrorMessage = $_.Exception.Message
     Write-Error $_
     throw
 }
 finally {
+    try {
+        $resultsDir = Join-Path 'tests' 'results' '_agent' 'smoke' 'vi-stage'
+        New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+        if (-not $context.SummaryPath) {
+            $context.SummaryPath = Join-Path $resultsDir "smoke-$timestamp.json"
+            $summary = [ordered]@{
+                branch   = $scratchBranch
+                prNumber = $context.PrNumber
+                runId    = $context.WorkflowRunId
+                note     = $context.Note
+                created  = (Get-Date).ToString('o')
+                success  = $context.Success
+                url      = $context.PrUrl
+            }
+            if ($context.ErrorMessage) {
+                $summary.error = $context.ErrorMessage
+            }
+            $summary | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $context.SummaryPath -Encoding utf8
+        }
+    } catch {
+        Write-Warning "Failed to write smoke summary: $($_.Exception.Message)"
+    }
+
     if ($DryRun -or $KeepBranch) {
         Write-Host 'Skipping cleanup per request.'
     } else {
@@ -217,8 +353,8 @@ finally {
 
         try {
             if ($context.PrNumber) {
-                Invoke-Gh -Arguments @('pr', 'edit', $context.PrNumber.ToString(), '--remove-label', 'vi-staging-ready') -ErrorAction SilentlyContinue | Out-Null
-                Invoke-Gh -Arguments @('pr', 'close', $context.PrNumber.ToString(), '--delete-branch') -ErrorAction SilentlyContinue | Out-Null
+                Invoke-Gh -Arguments @('pr', 'edit', $context.PrNumber.ToString(), '--repo', $repoInfo.Slug, '--remove-label', 'vi-staging-ready') -ErrorAction SilentlyContinue | Out-Null
+                Invoke-Gh -Arguments @('pr', 'close', $context.PrNumber.ToString(), '--repo', $repoInfo.Slug, '--delete-branch') -ErrorAction SilentlyContinue | Out-Null
             }
         } catch {
             Write-Warning "PR cleanup encountered an issue: $($_.Exception.Message)"
