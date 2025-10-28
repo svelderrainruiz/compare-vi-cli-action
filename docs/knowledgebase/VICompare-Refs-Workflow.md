@@ -15,6 +15,8 @@
 - Comment `/vi-stage` on a pull request (or dispatch `pr-vi-staging.yml`) to have the automation generate a manifest with
   `tools/Get-PRVIDiffManifest.ps1`, stage the resolvable base/head pairs via `tools/Invoke-PRVIStaging.ps1`, and upload a
   zipped bundle per staged pair.
+- The workflow runs on the repository’s self-hosted Windows runner (`self-hosted, Windows, X64`) so the same LabVIEW/LVCompare
+  environment used in production compares is exercised during staging.
 - The workflow only honours comments authored by repository members/collaborators. Maintainers can also run the job
   manually with `gh workflow run pr-vi-staging.yml -f pr=<number> [-f note="context"]`.
 - Outputs:

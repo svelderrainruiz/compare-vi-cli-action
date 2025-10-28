@@ -34,7 +34,7 @@ jobs:
         contains(github.event.comment.body || '', '/vi-stage') &&
         contains('OWNER,MEMBER,COLLABORATOR', github.event.comment.author_association)
       )
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64]
     env:
       NOTE: ${{ inputs.note }}
       STAGING_LABEL: ${{ inputs.label_name || 'vi-staging-ready' }}
