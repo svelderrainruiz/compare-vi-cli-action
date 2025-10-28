@@ -116,8 +116,8 @@ jobs:
           repository: ${{ steps.pr.outputs.head_repo }}
           ref: ${{ steps.pr.outputs.head_ref }}
 
-      - name: Generate manifest and stage VI pairs
-        id: stage
+      - name: Generate VI manifest
+        id: manifest
         shell: pwsh
         env:
           BASE_SHA: ${{ steps.pr.outputs.base_sha }}
@@ -133,10 +133,31 @@ jobs:
           $manifestPath = Join-Path $artifactsDir 'vi-manifest.json'
           & "$repoRoot\tools\Get-PRVIDiffManifest.ps1" -BaseRef $env:BASE_SHA -HeadRef $env:HEAD_SHA -OutputPath $manifestPath | Out-Null
 
+          "artifacts_dir=$artifactsDir" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "manifest_path=$manifestPath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Stage VI bundles
+        id: stage
+        shell: pwsh
+        env:
+          MANIFEST_PATH: ${{ steps.manifest.outputs.manifest_path }}
+          ARTIFACTS_DIR: ${{ steps.manifest.outputs.artifacts_dir }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          $repoRoot = Get-Location
+          $artifactsDir = if ($env:ARTIFACTS_DIR) { $env:ARTIFACTS_DIR } else { Join-Path $repoRoot 'vi-compare-artifacts' }
+          New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+          if (-not $env:MANIFEST_PATH) {
+            throw 'Manifest path was not provided.'
+          }
+
           $stagingWorkRoot = Join-Path $repoRoot 'vi-staging-work'
           New-Item -ItemType Directory -Path $stagingWorkRoot -Force | Out-Null
 
-          $results = & "$repoRoot\tools\Invoke-PRVIStaging.ps1" -ManifestPath $manifestPath -WorkingRoot $stagingWorkRoot
+          $results = & "$repoRoot\tools\Invoke-PRVIStaging.ps1" -ManifestPath $env:MANIFEST_PATH -WorkingRoot $stagingWorkRoot
           if (-not $results) {
             $results = @()
           }
@@ -161,8 +182,36 @@ jobs:
           $resultsPath = Join-Path $artifactsDir 'vi-staging-results.json'
           $results | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
 
-          $summaryPath = Join-Path $artifactsDir 'vi-staging-summary.md'
-          if ($results.Count -gt 0) {
+          "results_path=$resultsPath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_dir=$exportDir" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "stage_count=$($results.Count)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Generate staging summary
+        id: summary
+        shell: pwsh
+        env:
+          RESULTS_PATH: ${{ steps.stage.outputs.results_path }}
+          ARTIFACTS_DIR: ${{ steps.manifest.outputs.artifacts_dir }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          if (-not $env:ARTIFACTS_DIR) {
+            throw 'Artifacts directory path missing.'
+          }
+
+          $summaryPath = Join-Path $env:ARTIFACTS_DIR 'vi-staging-summary.md'
+          $results = @()
+          if ($env:RESULTS_PATH -and (Test-Path -LiteralPath $env:RESULTS_PATH -PathType Leaf)) {
+            $json = Get-Content -LiteralPath $env:RESULTS_PATH -Raw
+            if ($json) {
+              $results = $json | ConvertFrom-Json
+            }
+          }
+
+          if (-not $results) {
+            'No VI pairs with both base/head paths were staged.' | Set-Content -LiteralPath $summaryPath -Encoding utf8
+          } else {
             $lines = @(
               '| # | Change | Base | Head | Artifact |',
               '| - | ------ | ---- | ---- | -------- |'
@@ -174,14 +223,9 @@ jobs:
               $idx++
             }
             $lines -join "`n" | Set-Content -LiteralPath $summaryPath -Encoding utf8
-          } else {
-            'No VI pairs with both base/head paths were staged.' | Set-Content -LiteralPath $summaryPath -Encoding utf8
           }
 
-          "results_path=$resultsPath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
           "summary_path=$summaryPath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "artifact_dir=$exportDir" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "stage_count=$($results.Count)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Ensure staging label exists
         if: steps.stage.outputs.stage_count != '0'
@@ -263,7 +307,7 @@ jobs:
       - name: Append job summary
         shell: pwsh
         env:
-          SUMMARY_PATH: ${{ steps.stage.outputs.summary_path }}
+          SUMMARY_PATH: ${{ steps.summary.outputs.summary_path }}
           NOTE: ${{ env.NOTE }}
           ARTIFACT_LINKS: ${{ steps.collect_links.outputs.artifact_links }}
         run: |
@@ -317,7 +361,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          SUMMARY_PATH: ${{ steps.stage.outputs.summary_path }}
+          SUMMARY_PATH: ${{ steps.summary.outputs.summary_path }}
           STAGE_COUNT: ${{ steps.stage.outputs.stage_count }}
           ARTIFACT_LINKS: ${{ steps.collect_links.outputs.artifact_links }}
           GITHUB_RUN_ID: ${{ github.run_id }}

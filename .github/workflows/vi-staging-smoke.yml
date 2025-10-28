@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   smoke:
-    runs-on: ${{ fromJson(inputs.runner == 'self-hosted' && '["self-hosted","Windows","vi-staging"]' || '["windows-latest"]') }}
+    runs-on: ${{ fromJson(inputs.runner == 'self-hosted' && '["self-hosted","Windows","X64"]' || '["windows-latest"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
