@@ -29,7 +29,9 @@ param(
     [Parameter(Mandatory)]
     [string]$ArtifactsDir,
 
-    [switch]$RenderReport
+    [switch]$RenderReport,
+
+    [scriptblock]$InvokeLVCompare
 )
 
 Set-StrictMode -Version Latest
@@ -70,6 +72,34 @@ if (-not (Test-Path -LiteralPath $invokeScript -PathType Leaf)) {
     throw "Invoke-LVCompare.ps1 not found at $invokeScript"
 }
 
+if (-not $InvokeLVCompare) {
+    $InvokeLVCompare = {
+        param(
+            [string]$BaseVi,
+            [string]$HeadVi,
+            [string]$OutputDir,
+            [switch]$AllowSameLeaf,
+            [switch]$RenderReport
+        )
+
+        $args = @(
+            '-NoLogo', '-NoProfile',
+            '-File', $using:invokeScript,
+            '-BaseVi', $BaseVi,
+            '-HeadVi', $HeadVi,
+            '-OutputDir', $OutputDir,
+            '-Summary'
+        )
+        if ($AllowSameLeaf.IsPresent) { $args += '-AllowSameLeaf' }
+        if ($RenderReport.IsPresent) { $args += '-RenderReport' }
+
+        & pwsh @args | Out-String | Out-Null
+        return [pscustomobject]@{
+            ExitCode = $LASTEXITCODE
+        }
+    }.GetNewClosure()
+}
+
 New-Item -ItemType Directory -Path $ArtifactsDir -Force | Out-Null
 $compareRoot = Join-Path $ArtifactsDir 'compare'
 New-Item -ItemType Directory -Path $compareRoot -Force | Out-Null
@@ -104,30 +134,33 @@ foreach ($entry in $results) {
         $pairDir = Join-Path $compareRoot ("pair-{0:D2}" -f $index)
         New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
 
-        $cmd = @(
-            '-NoLogo', '-NoProfile',
-            '-File', $invokeScript,
-            '-BaseVi', $entry.staged.Base,
-            '-HeadVi', $entry.staged.Head,
-            '-OutputDir', $pairDir,
-            '-Summary'
-        )
-
-        if ($RenderReport.IsPresent) {
-            $cmd += '-RenderReport'
+        $invokeParams = @{
+            BaseVi      = $entry.staged.Base
+            HeadVi      = $entry.staged.Head
+            OutputDir   = $pairDir
         }
 
+        if ($RenderReport.IsPresent) { $invokeParams.RenderReport = $true }
+
+        $allowSameLeafRequested = $false
         if ($entry.staged.PSObject.Properties['AllowSameLeaf']) {
             try {
                 if ([bool]$entry.staged.AllowSameLeaf) {
-                    $cmd += '-AllowSameLeaf'
+                    $invokeParams.AllowSameLeaf = $true
+                    $allowSameLeafRequested = $true
                 }
             } catch {}
         }
 
         Write-Host ("[compare] Running LVCompare for pair {0}: Base={1} Head={2}" -f $index, $entry.basePath, $entry.headPath)
-        & pwsh @cmd | Out-String | Out-Null
+        $invokeResult = & $InvokeLVCompare @invokeParams
+
         $exitCode = $LASTEXITCODE
+        if ($invokeResult -is [int]) {
+            $exitCode = [int]$invokeResult
+        } elseif ($invokeResult -and $invokeResult.PSObject.Properties['ExitCode']) {
+            try { $exitCode = [int]$invokeResult.ExitCode } catch { $exitCode = $LASTEXITCODE }
+        }
 
         $compareInfo.exitCode = $exitCode
         $compareInfo.outputDir = $pairDir
@@ -144,6 +177,13 @@ foreach ($entry in $results) {
                 $compareInfo.reportPath = $candidatePath
                 break
             }
+        }
+
+        if ($invokeResult -and $invokeResult.PSObject.Properties['CapturePath'] -and $invokeResult.CapturePath) {
+            $compareInfo.capturePath = $invokeResult.CapturePath
+        }
+        if ($invokeResult -and $invokeResult.PSObject.Properties['ReportPath'] -and $invokeResult.ReportPath) {
+            $compareInfo.reportPath = $invokeResult.ReportPath
         }
 
         switch ($exitCode) {
