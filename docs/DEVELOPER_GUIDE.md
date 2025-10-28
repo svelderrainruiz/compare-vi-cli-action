@@ -16,6 +16,13 @@ Quick reference for building, testing, and releasing the LVCompare composite act
 - **Smoke tests**
   - `npm run smoke:vi-stage -- --DryRun`
   - `npm run smoke:vi-stage`
+  - GitHub workflow “Smoke VI Staging” (`.github/workflows/vi-staging-smoke.yml`)
+    - Trigger from the Actions UI or `gh workflow run vi-staging-smoke.yml`.
+    - Inputs:
+      - `runner`: `hosted` (default) sticks with `windows-latest`; `self-hosted` targets the repository runner labelled `self-hosted, Windows, X64`.
+      - `keep_branch`: set to `true` when you want to inspect the synthetic scratch PR afterward; keep `false` for normal sweeps so the helper cleans up.
+    - Requires `GH_TOKEN`/`GITHUB_TOKEN` with push + workflow scopes. Locally, populate `$env:GH_TOKEN` (for example from `C:\github_token.txt`) before running `tools/Test-PRVIStagingSmoke.ps1`.
+    - Successful runs upload `tests/results/_agent/smoke/vi-stage/smoke-*.json` summaries and assert the scratch PR carries the `vi-staging-ready` label.
 
  â†’ telemetry snapshot
   - `tools/Watch-Pester.ps1` â†’ file watcher / retry loop
