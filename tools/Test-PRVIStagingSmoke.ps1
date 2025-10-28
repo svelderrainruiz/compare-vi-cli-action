@@ -74,6 +74,26 @@ function Touch-ViFile {
     [System.IO.File]::WriteAllBytes($Path, $bytes)
 }
 
+function Copy-ViContent {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Source,
+        [Parameter(Mandatory)]
+        [string]$Destination
+    )
+
+    if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) {
+        throw "Source VI file not found: $Source"
+    }
+
+    $destDir = Split-Path -Parent $Destination
+    if ($destDir -and -not (Test-Path -LiteralPath $destDir -PathType Container)) {
+        throw "Destination directory not found: $destDir"
+    }
+
+    [System.IO.File]::Copy($Source, $Destination, $true)
+}
+
 function Get-RepoInfo {
     if ($env:GITHUB_REPOSITORY -and ($env:GITHUB_REPOSITORY -match '^(?<owner>[^/]+)/(?<name>.+)$')) {
         return [ordered]@{
@@ -200,8 +220,7 @@ try {
     Invoke-Git -Arguments @('fetch', 'origin', $BaseBranch)
     Invoke-Git -Arguments @('checkout', '-b', $scratchBranch, "origin/$BaseBranch")
 
-    Touch-ViFile -Path 'VI1.vi'
-    Touch-ViFile -Path 'VI2.vi'
+    Copy-ViContent -Source 'VI2.vi' -Destination 'VI1.vi'
 
     Invoke-Git -Arguments @('add', 'VI1.vi', 'VI2.vi')
     Invoke-Git -Arguments @('commit', '-m', 'chore: synthetic VI changes for staging smoke')
