@@ -131,15 +131,26 @@ function Copy-Tree {
   New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
   Copy-Item -LiteralPath $parentDir -Destination $targetDir -Recurse -Force
   $parentLeaf = Split-Path -Leaf $parentDir
-  $candidate = Join-Path (Join-Path $targetDir $parentLeaf) (Split-Path -Leaf $SourceFile)
-  try { return (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).Path } catch { return $candidate }
+  $copiedSource = Join-Path (Join-Path $targetDir $parentLeaf) (Split-Path -Leaf $SourceFile)
+
+  $extension = [System.IO.Path]::GetExtension($SourceFile)
+  $extension = if ($extension) { $extension } else { '' }
+  $targetLeafName = if ($Label -eq 'base') { 'Base' } else { 'Head' }
+  $targetLeafName = $targetLeafName + $extension
+  $finalPath = Join-Path (Split-Path -Parent $copiedSource) $targetLeafName
+  if (-not [string]::Equals($copiedSource, $finalPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Move-Item -LiteralPath $copiedSource -Destination $finalPath -Force
+  }
+  try { return (Resolve-Path -LiteralPath $finalPath -ErrorAction Stop).Path } catch { return $finalPath }
 }
 
 if ($mirrorStage) {
   $stagedBase = if ($mirrorBase) {
     Copy-Tree -SourceFile $baseSource -StageRoot $stagingRoot -Label 'base'
   } else {
-    $leafBase = Join-Path (Join-Path $stagingRoot 'base-single') 'Base.vi'
+    $baseExtension = [System.IO.Path]::GetExtension($baseSource)
+    $baseExtension = if ($baseExtension) { $baseExtension } else { '' }
+    $leafBase = Join-Path (Join-Path $stagingRoot 'base-single') ('Base' + $baseExtension)
     New-Item -ItemType Directory -Path (Split-Path -Parent $leafBase) -Force | Out-Null
     Copy-Item -LiteralPath $baseSource -Destination $leafBase -Force
     try { (Resolve-Path -LiteralPath $leafBase -ErrorAction Stop).Path } catch { $leafBase }
@@ -148,14 +159,20 @@ if ($mirrorStage) {
   $stagedHead = if ($mirrorHead) {
     Copy-Tree -SourceFile $headSource -StageRoot $stagingRoot -Label 'head'
   } else {
-    $leafHead = Join-Path (Join-Path $stagingRoot 'head-single') 'Head.vi'
+    $headExtension = [System.IO.Path]::GetExtension($headSource)
+    $headExtension = if ($headExtension) { $headExtension } else { '' }
+    $leafHead = Join-Path (Join-Path $stagingRoot 'head-single') ('Head' + $headExtension)
     New-Item -ItemType Directory -Path (Split-Path -Parent $leafHead) -Force | Out-Null
     Copy-Item -LiteralPath $headSource -Destination $leafHead -Force
     try { (Resolve-Path -LiteralPath $leafHead -ErrorAction Stop).Path } catch { $leafHead }
   }
 } else {
-  $stagedBase = Join-Path $stagingRoot 'Base.vi'
-  $stagedHead = Join-Path $stagingRoot 'Head.vi'
+  $baseExtension = [System.IO.Path]::GetExtension($baseSource)
+  $baseExtension = if ($baseExtension) { $baseExtension } else { '' }
+  $headExtension = [System.IO.Path]::GetExtension($headSource)
+  $headExtension = if ($headExtension) { $headExtension } else { '' }
+  $stagedBase = Join-Path $stagingRoot ('Base' + $baseExtension)
+  $stagedHead = Join-Path $stagingRoot ('Head' + $headExtension)
 
   Copy-Item -LiteralPath $baseSource -Destination $stagedBase -Force
   Copy-Item -LiteralPath $headSource -Destination $stagedHead -Force
@@ -163,16 +180,15 @@ if ($mirrorStage) {
 
 $finalBaseLeaf = Split-Path -Leaf $stagedBase
 $finalHeadLeaf = Split-Path -Leaf $stagedHead
-$allowSameLeaf =
-  ($finalBaseLeaf -and $finalHeadLeaf -and
-   [string]::Equals($finalBaseLeaf, $finalHeadLeaf, [System.StringComparison]::OrdinalIgnoreCase) -and
-   -not ([string]::Equals($finalBaseLeaf, 'Base.vi', [System.StringComparison]::OrdinalIgnoreCase)) -and
-   -not ([string]::Equals($finalHeadLeaf, 'Head.vi', [System.StringComparison]::OrdinalIgnoreCase)))
+if ($finalBaseLeaf -and $finalHeadLeaf -and
+    [string]::Equals($finalBaseLeaf, $finalHeadLeaf, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "Staging produced identical Base/Head filenames (`$finalBaseLeaf`). This indicates the staging rename failed."
+}
 
 return [pscustomobject]@{
   Base = (Resolve-Path -LiteralPath $stagedBase).Path
   Head = (Resolve-Path -LiteralPath $stagedHead).Path
   Root = (Resolve-Path -LiteralPath $stagingRoot).Path
   Mode = if ($mirrorStage) { 'mirror' } else { 'single-file' }
-  AllowSameLeaf = $allowSameLeaf
+  AllowSameLeaf = $false
 }

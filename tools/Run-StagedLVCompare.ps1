@@ -196,9 +196,27 @@ foreach ($entry in $results) {
         $pairDir = Join-Path $compareRoot ("pair-{0:D2}" -f $index)
         New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
 
+        $stagedBasePath = $entry.staged.Base
+        $stagedHeadPath = $entry.staged.Head
+
+        if ([string]::IsNullOrWhiteSpace($stagedBasePath) -or [string]::IsNullOrWhiteSpace($stagedHeadPath)) {
+            throw "Staged paths missing for pair $index. Base='$stagedBasePath' Head='$stagedHeadPath'."
+        }
+
+        if ([string]::Equals($stagedBasePath, $stagedHeadPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Staged pair $index produced identical Base/Head paths (`$stagedBasePath`)."
+        }
+
+        $stagedBaseLeaf = try { Split-Path -Leaf $stagedBasePath } catch { $null }
+        $stagedHeadLeaf = try { Split-Path -Leaf $stagedHeadPath } catch { $null }
+        if ($stagedBaseLeaf -and $stagedHeadLeaf -and
+            [string]::Equals($stagedBaseLeaf, $stagedHeadLeaf, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Staged pair $index produced identical Base/Head filenames (`$stagedBaseLeaf`)."
+        }
+
         $invokeParams = @{
-            BaseVi      = $entry.staged.Base
-            HeadVi      = $entry.staged.Head
+            BaseVi      = $stagedBasePath
+            HeadVi      = $stagedHeadPath
             OutputDir   = $pairDir
         }
 
@@ -215,21 +233,12 @@ foreach ($entry in $results) {
                 }
             } catch {}
         }
-
-        if (-not $allowSameLeafRequested) {
-            $stagedBaseLeaf = try { Split-Path -Leaf $entry.staged.Base } catch { $null }
-            $stagedHeadLeaf = try { Split-Path -Leaf $entry.staged.Head } catch { $null }
-            if ($stagedBaseLeaf -and $stagedHeadLeaf -and
-                [string]::Equals($stagedBaseLeaf, $stagedHeadLeaf, [System.StringComparison]::OrdinalIgnoreCase)) {
-                $invokeParams.AllowSameLeaf = $true
-                $allowSameLeafRequested = $true
-            }
-        }
         if ($allowSameLeafRequested) {
             $compareInfo.allowSameLeaf = $true
         }
 
-        Write-Host ("[compare] Running LVCompare for pair {0}: Base={1} Head={2}" -f $index, $entry.basePath, $entry.headPath)
+        Write-Host ("[compare] Running LVCompare for pair {0}: Base={1} -> {2} Head={3} -> {4}" -f `
+            $index, $entry.basePath, $stagedBasePath, $entry.headPath, $stagedHeadPath)
         $invokeResult = & $InvokeLVCompare @invokeParams
 
         $exitCode = $LASTEXITCODE
@@ -285,16 +294,18 @@ foreach ($entry in $results) {
     $entry | Add-Member -NotePropertyName compare -NotePropertyValue ([pscustomobject]$compareInfo) -Force
 
     $comparisons.Add([pscustomobject]@{
-        index      = $index
-        changeType = $entry.changeType
-        basePath   = $entry.basePath
-        headPath   = $entry.headPath
-        status     = $compareInfo.status
-        exitCode   = $compareInfo.exitCode
-        outputDir  = $compareInfo.outputDir
-        capturePath= $compareInfo.capturePath
-        reportPath = $compareInfo.reportPath
-        allowSameLeaf = $allowSameLeafRequested
+        index        = $index
+        changeType   = $entry.changeType
+        basePath     = $entry.basePath
+        headPath     = $entry.headPath
+        stagedBase   = $stagedBasePath
+        stagedHead   = $stagedHeadPath
+        status       = $compareInfo.status
+        exitCode     = $compareInfo.exitCode
+        outputDir    = $compareInfo.outputDir
+        capturePath  = $compareInfo.capturePath
+        reportPath   = $compareInfo.reportPath
+        allowSameLeaf= $allowSameLeafRequested
     })
 
     $index++
@@ -318,3 +329,5 @@ if ($failureMessages.Count -gt 0) {
     $message = "LVCompare reported failures for {0} staged pair(s): {1}" -f $failureMessages.Count, ($failureMessages -join '; ')
     throw $message
 }
+
+$global:LASTEXITCODE = 0

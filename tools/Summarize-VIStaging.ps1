@@ -156,7 +156,7 @@ function Build-MarkdownTable {
             '—'
         }
 
-        $pairLabel = ('#{0} ({1})' -f $pair.index, $pair.changeType)
+        $pairLabel = ('Pair {0} ({1})' -f $pair.index, $pair.changeType)
         $rows += ('| {0} | {1} | {2} | {3} | {4} |' -f $pairLabel, $statusIcon, $categories, $included, $reportLink)
     }
 
@@ -279,11 +279,22 @@ foreach ($entry in $entries) {
         $reportRelative = Get-RelativePath -BasePath $compareRoot -TargetPath $reportPath
     }
 
+    $stagedBase = $null
+    $stagedHead = $null
+    if ($entry.PSObject.Properties['stagedBase']) {
+        $stagedBase = $entry.stagedBase
+    }
+    if ($entry.PSObject.Properties['stagedHead']) {
+        $stagedHead = $entry.stagedHead
+    }
+
     $pairInfo = [pscustomobject]@{
         index             = $entry.index
         changeType        = $entry.changeType
         basePath          = $entry.basePath
         headPath          = $entry.headPath
+        stagedBase        = $stagedBase
+        stagedHead        = $stagedHead
         status            = $status
         exitCode          = $entry.exitCode
         capturePath       = $capturePath
