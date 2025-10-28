@@ -1,18 +1,22 @@
 Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
-    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-    $scriptPath = Join-Path $repoRoot 'tools' 'Run-StagedLVCompare.ps1'
-
     BeforeAll {
+        $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+        $script:scriptPath = Join-Path $script:repoRoot 'tools' 'Run-StagedLVCompare.ps1'
         $script:originalLocation = Get-Location
-        Set-Location $repoRoot
+        Set-Location $script:repoRoot
     }
 
     AfterAll {
-        Set-Location $script:originalLocation
+        if ($script:originalLocation) {
+            Set-Location $script:originalLocation
+        }
     }
 
     AfterEach {
         Remove-Item Env:GITHUB_OUTPUT -ErrorAction SilentlyContinue
+        Remove-Item Env:RUN_STAGED_LVCOMPARE_FLAGS -ErrorAction SilentlyContinue
+        Remove-Item Env:RUN_STAGED_LVCOMPARE_FLAGS_MODE -ErrorAction SilentlyContinue
+        Remove-Item Env:RUN_STAGED_LVCOMPARE_REPLACE_FLAGS -ErrorAction SilentlyContinue
     }
 
     It 'records match when LVCompare exits 0' {
@@ -48,7 +52,9 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [string]$HeadVi,
                 [string]$OutputDir,
                 [switch]$AllowSameLeaf,
-                [switch]$RenderReport
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
             )
             $call = [pscustomobject]@{
                 Base         = $BaseVi
@@ -57,7 +63,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 AllowSameLeaf= $AllowSameLeaf.IsPresent
                 RenderReport = $RenderReport.IsPresent
             }
-            $using:invokeCalls.Add($call) | Out-Null
+            $null = $invokeCalls.Add($call)
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             $capturePath = Join-Path $OutputDir 'lvcompare-capture.json'
             $reportPath  = Join-Path $OutputDir 'compare-report.html'
@@ -73,7 +79,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $outputFile = Join-Path $TestDrive 'outputs.txt'
         $env:GITHUB_OUTPUT = $outputFile
 
-        & $scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -RenderReport -InvokeLVCompare $invoke
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -RenderReport -InvokeLVCompare $invoke
 
         $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
         $entry = $updated[0]
@@ -103,6 +109,62 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $outputMap['skip_count'] | Should -Be '0'
     }
 
+    It 'forces AllowSameLeaf when staged leaf names are identical' {
+        $resultsPath = Join-Path $TestDrive 'vi-sameleaf-results.json'
+        $artifactsDir = Join-Path $TestDrive 'artifacts'
+        New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+        $stagedBase = Join-Path $TestDrive 'mirror\base\vi-attr\Base.vi'
+        $stagedHead = Join-Path $TestDrive 'mirror\head\vi-attr\Base.vi'
+        New-Item -ItemType Directory -Path (Split-Path $stagedBase -Parent) -Force | Out-Null
+        New-Item -ItemType Directory -Path (Split-Path $stagedHead -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $stagedBase -Value 'base'
+        Set-Content -LiteralPath $stagedHead -Value 'head'
+
+        @(
+            [ordered]@{
+                changeType = 'modify'
+                basePath   = 'fixtures/vi-attr/Base.vi'
+                headPath   = 'fixtures/vi-attr/Base.vi'
+                staged     = [ordered]@{
+                    Base         = $stagedBase
+                    Head         = $stagedHead
+                    AllowSameLeaf= $false
+                }
+            }
+        ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+        $invokeCalls = New-Object System.Collections.Generic.List[object]
+        $invoke = {
+            param(
+                [string]$BaseVi,
+                [string]$HeadVi,
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
+            )
+            $invokeCalls.Add([pscustomobject]@{
+                Base         = $BaseVi
+                Head         = $HeadVi
+                AllowSameLeaf= $AllowSameLeaf.IsPresent
+            }) | Out-Null
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            return [pscustomobject]@{
+                ExitCode = 0
+            }
+        }.GetNewClosure()
+
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
+
+        $invokeCalls.Count | Should -Be 1
+        $invokeCalls[0].AllowSameLeaf | Should -BeTrue
+
+        $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
+        $updated[0].compare.allowSameLeaf | Should -BeTrue
+    }
+
     It 'marks diff when LVCompare exits 1' {
         $resultsPath = Join-Path $TestDrive 'results.json'
         $artifactsDir = Join-Path $TestDrive 'artifacts'
@@ -130,7 +192,11 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
             param(
                 [string]$BaseVi,
                 [string]$HeadVi,
-                [string]$OutputDir
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
             )
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             return [pscustomobject]@{
@@ -141,7 +207,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $outputFile = Join-Path $TestDrive 'outputs2.txt'
         $env:GITHUB_OUTPUT = $outputFile
 
-        & $scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
 
         $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
         $updated[0].compare.status | Should -Be 'diff'
@@ -185,14 +251,186 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
             param(
                 [string]$BaseVi,
                 [string]$HeadVi,
-                [string]$OutputDir
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
             )
             return [pscustomobject]@{
                 ExitCode = 2
             }
         }.GetNewClosure()
 
-        { & $scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke } |
-            Should -Throw -ErrorMessage '*LVCompare reported failures*'
+        $caughtError = $null
+        try {
+            & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
+        } catch {
+            $caughtError = $_
+        }
+        $caughtError | Should -Not -BeNullOrEmpty
+        $caughtError.Exception.Message | Should -Match 'LVCompare reported failures'
+    }
+
+    It 'passes replace flags and custom flags to Invoke-LVCompare' {
+        $resultsPath = Join-Path $TestDrive 'flags-results.json'
+        $artifactsDir = Join-Path $TestDrive 'artifacts'
+        New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+        $stagedBase = Join-Path $TestDrive 'flags\Base.vi'
+        $stagedHead = Join-Path $TestDrive 'flags\Head.vi'
+        New-Item -ItemType Directory -Path (Split-Path $stagedBase -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $stagedBase -Value 'base'
+        Set-Content -LiteralPath $stagedHead -Value 'head'
+
+        @(
+            [ordered]@{
+                changeType = 'modify'
+                basePath   = 'VI3.vi'
+                headPath   = 'VI3.vi'
+                staged     = [ordered]@{
+                    Base = $stagedBase
+                    Head = $stagedHead
+                }
+            }
+        ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+        $invokeCalls = New-Object System.Collections.Generic.List[object]
+        $invoke = {
+            param(
+                [string]$BaseVi,
+                [string]$HeadVi,
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
+            )
+            $null = $invokeCalls.Add([pscustomobject]@{
+                Flags        = $Flags
+                ReplaceFlags = $ReplaceFlags.IsPresent
+            })
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            return [pscustomobject]@{
+                ExitCode = 0
+            }
+        }.GetNewClosure()
+
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -ReplaceFlags -Flags @('-nobd','-nobdcosm') -InvokeLVCompare $invoke
+
+        $invokeCalls.Count | Should -Be 1
+        $invokeCalls[0].ReplaceFlags | Should -BeTrue
+        $invokeCalls[0].Flags | Should -Be @('-nobd','-nobdcosm')
+    }
+
+    It 'honors environment flag configuration when parameters omitted' {
+        $resultsPath = Join-Path $TestDrive 'env-results.json'
+        $artifactsDir = Join-Path $TestDrive 'artifacts'
+        New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+        $stagedBase = Join-Path $TestDrive 'env\Base.vi'
+        $stagedHead = Join-Path $TestDrive 'env\Head.vi'
+        New-Item -ItemType Directory -Path (Split-Path $stagedBase -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $stagedBase -Value 'base'
+        Set-Content -LiteralPath $stagedHead -Value 'head'
+
+        @(
+            [ordered]@{
+                changeType = 'modify'
+                basePath   = 'VI4.vi'
+                headPath   = 'VI4.vi'
+                staged     = [ordered]@{
+                    Base = $stagedBase
+                    Head = $stagedHead
+                }
+            }
+        ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+        $env:RUN_STAGED_LVCOMPARE_FLAGS_MODE = 'replace'
+        $env:RUN_STAGED_LVCOMPARE_FLAGS = @('-nobd','-nobdcosm') -join "`n"
+
+        $invokeCalls = New-Object System.Collections.Generic.List[object]
+        $invoke = {
+            param(
+                [string]$BaseVi,
+                [string]$HeadVi,
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
+            )
+            $null = $invokeCalls.Add([pscustomobject]@{
+                Flags        = $Flags
+                ReplaceFlags = $ReplaceFlags.IsPresent
+            })
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            return [pscustomobject]@{
+                ExitCode = 0
+            }
+        }.GetNewClosure()
+
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
+
+        $invokeCalls.Count | Should -Be 1
+        $invokeCalls[0].ReplaceFlags | Should -BeTrue
+        $invokeCalls[0].Flags | Should -Be @('-nobd','-nobdcosm')
+    }
+
+    It 'honors replace mode without explicit flags' {
+        $resultsPath = Join-Path $TestDrive 'env-replace.json'
+        $artifactsDir = Join-Path $TestDrive 'artifacts'
+        New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+        $stagedBase = Join-Path $TestDrive 'env2\Base.vi'
+        $stagedHead = Join-Path $TestDrive 'env2\Head.vi'
+        New-Item -ItemType Directory -Path (Split-Path $stagedBase -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $stagedBase -Value 'base'
+        Set-Content -LiteralPath $stagedHead -Value 'head'
+
+        @(
+            [ordered]@{
+                changeType = 'modify'
+                basePath   = 'VI5.vi'
+                headPath   = 'VI5.vi'
+                staged     = [ordered]@{
+                    Base = $stagedBase
+                    Head = $stagedHead
+                }
+            }
+        ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+        $env:RUN_STAGED_LVCOMPARE_FLAGS_MODE = 'replace'
+        Remove-Item Env:RUN_STAGED_LVCOMPARE_FLAGS -ErrorAction SilentlyContinue
+
+        $invokeCalls = New-Object System.Collections.Generic.List[object]
+        $invoke = {
+            param(
+                [string]$BaseVi,
+                [string]$HeadVi,
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags
+            )
+            $null = $invokeCalls.Add([pscustomobject]@{
+                Flags        = $Flags
+                ReplaceFlags = $ReplaceFlags.IsPresent
+            })
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            return [pscustomobject]@{
+                ExitCode = 0
+            }
+        }.GetNewClosure()
+
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
+
+        $invokeCalls.Count | Should -Be 1
+        $invokeCalls[0].ReplaceFlags | Should -BeTrue
+        $invokeCalls[0].Flags | Should -BeNullOrEmpty
     }
 }
+
+
+

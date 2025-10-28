@@ -31,11 +31,68 @@ param(
 
     [switch]$RenderReport,
 
+    [string[]]$Flags,
+    [switch]$ReplaceFlags,
+
     [scriptblock]$InvokeLVCompare
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$flagsProvided = $PSBoundParameters.ContainsKey('Flags')
+$effectiveFlags = $Flags
+$effectiveReplace = $ReplaceFlags.IsPresent
+
+function Get-RunStagedFlagList {
+    param([string]$Raw)
+    if ([string]::IsNullOrWhiteSpace($Raw)) { return @() }
+    $lines = $Raw -split "(\r\n|\n|\r)"
+    $result = New-Object System.Collections.Generic.List[string]
+    foreach ($line in $lines) {
+        $candidate = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        $result.Add($candidate)
+    }
+    return $result.ToArray()
+}
+
+if (-not $flagsProvided) {
+    $envFlagsRaw = [System.Environment]::GetEnvironmentVariable('RUN_STAGED_LVCOMPARE_FLAGS', 'Process')
+    if (-not [string]::IsNullOrWhiteSpace($envFlagsRaw)) {
+        $parsedFlags = Get-RunStagedFlagList -Raw $envFlagsRaw
+        if ($parsedFlags.Count -gt 0) {
+            $effectiveFlags = $parsedFlags
+        } else {
+            $effectiveFlags = $null
+        }
+    }
+}
+
+if (-not $effectiveReplace) {
+    $envModeRaw = [System.Environment]::GetEnvironmentVariable('RUN_STAGED_LVCOMPARE_FLAGS_MODE', 'Process')
+    if (-not [string]::IsNullOrWhiteSpace($envModeRaw)) {
+        if ($envModeRaw.Trim().ToLowerInvariant() -eq 'replace') {
+            $effectiveReplace = $true
+        } elseif ($envModeRaw.Trim().ToLowerInvariant() -eq 'append') {
+            $effectiveReplace = $false
+        }
+    }
+}
+
+if (-not $effectiveReplace) {
+    $envReplaceRaw = [System.Environment]::GetEnvironmentVariable('RUN_STAGED_LVCOMPARE_REPLACE_FLAGS', 'Process')
+    if (-not [string]::IsNullOrWhiteSpace($envReplaceRaw)) {
+        $value = $envReplaceRaw.Trim().ToLowerInvariant()
+        $truthy = @('1','true','yes','on','replace')
+        $falsy  = @('0','false','no','off','append')
+        if ($truthy -contains $value) {
+            $effectiveReplace = $true
+        } elseif ($falsy -contains $value) {
+            $effectiveReplace = $false
+        }
+    }
+}
 
 if (-not (Test-Path -LiteralPath $ResultsPath -PathType Leaf)) {
     throw "Staging results file not found: $ResultsPath"
@@ -50,7 +107,7 @@ if ([string]::IsNullOrWhiteSpace($raw)) {
 try {
     $results = $raw | ConvertFrom-Json -ErrorAction Stop
 } catch {
-    throw "Unable to parse staging results JSON at $ResultsPath: $($_.Exception.Message)"
+    throw ("Unable to parse staging results JSON at {0}: {1}" -f $ResultsPath, $_.Exception.Message)
 }
 
 if (-not $results) {
@@ -79,12 +136,14 @@ if (-not $InvokeLVCompare) {
             [string]$HeadVi,
             [string]$OutputDir,
             [switch]$AllowSameLeaf,
-            [switch]$RenderReport
+            [switch]$RenderReport,
+            [string[]]$Flags,
+            [switch]$ReplaceFlags
         )
 
         $args = @(
             '-NoLogo', '-NoProfile',
-            '-File', $using:invokeScript,
+            '-File', $invokeScript,
             '-BaseVi', $BaseVi,
             '-HeadVi', $HeadVi,
             '-OutputDir', $OutputDir,
@@ -92,6 +151,8 @@ if (-not $InvokeLVCompare) {
         )
         if ($AllowSameLeaf.IsPresent) { $args += '-AllowSameLeaf' }
         if ($RenderReport.IsPresent) { $args += '-RenderReport' }
+        if ($ReplaceFlags.IsPresent) { $args += '-ReplaceFlags' }
+        if ($Flags) { $args += @('-Flags') + $Flags }
 
         & pwsh @args | Out-String | Out-Null
         return [pscustomobject]@{
@@ -119,6 +180,7 @@ foreach ($entry in $results) {
         outputDir  = $null
         capturePath= $null
         reportPath = $null
+        allowSameLeaf = $false
     }
 
     $hasStaging =
@@ -141,6 +203,8 @@ foreach ($entry in $results) {
         }
 
         if ($RenderReport.IsPresent) { $invokeParams.RenderReport = $true }
+        if ($effectiveFlags) { $invokeParams.Flags = $effectiveFlags }
+        if ($effectiveReplace) { $invokeParams.ReplaceFlags = $true }
 
         $allowSameLeafRequested = $false
         if ($entry.staged.PSObject.Properties['AllowSameLeaf']) {
@@ -150,6 +214,19 @@ foreach ($entry in $results) {
                     $allowSameLeafRequested = $true
                 }
             } catch {}
+        }
+
+        if (-not $allowSameLeafRequested) {
+            $stagedBaseLeaf = try { Split-Path -Leaf $entry.staged.Base } catch { $null }
+            $stagedHeadLeaf = try { Split-Path -Leaf $entry.staged.Head } catch { $null }
+            if ($stagedBaseLeaf -and $stagedHeadLeaf -and
+                [string]::Equals($stagedBaseLeaf, $stagedHeadLeaf, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $invokeParams.AllowSameLeaf = $true
+                $allowSameLeafRequested = $true
+            }
+        }
+        if ($allowSameLeafRequested) {
+            $compareInfo.allowSameLeaf = $true
         }
 
         Write-Host ("[compare] Running LVCompare for pair {0}: Base={1} Head={2}" -f $index, $entry.basePath, $entry.headPath)
@@ -217,6 +294,7 @@ foreach ($entry in $results) {
         outputDir  = $compareInfo.outputDir
         capturePath= $compareInfo.capturePath
         reportPath = $compareInfo.reportPath
+        allowSameLeaf = $allowSameLeafRequested
     })
 
     $index++
