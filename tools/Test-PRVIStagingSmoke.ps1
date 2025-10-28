@@ -222,7 +222,7 @@ try {
 
     Copy-ViContent -Source 'VI2.vi' -Destination 'VI1.vi'
 
-    Invoke-Git -Arguments @('add', 'VI1.vi', 'VI2.vi')
+    Invoke-Git -Arguments @('add', 'VI1.vi')
     Invoke-Git -Arguments @('commit', '-m', 'chore: synthetic VI changes for staging smoke')
 
     Invoke-Git -Arguments @('push', '-u', 'origin', $scratchBranch)
