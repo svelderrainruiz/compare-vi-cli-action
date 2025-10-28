@@ -93,16 +93,7 @@ function Get-RepoInfo {
     throw 'Unable to determine repository slug.'
 }
 
-function Get-PullRequestInfo {
-    param(
-        [Parameter(Mandatory)]
-        [hashtable]$Repo,
-        [Parameter(Mandatory)]
-        [string]$Branch,
-        [int]$Attempts = 10,
-        [int]$DelaySeconds = 2
-    )
-
+function Get-GitHubAuth {
     $token = $env:GH_TOKEN
     if (-not $token) {
         $token = $env:GITHUB_TOKEN
@@ -116,6 +107,25 @@ function Get-PullRequestInfo {
         Accept        = 'application/vnd.github+json'
         'User-Agent'  = 'compare-vi-staging-smoke'
     }
+
+    return [ordered]@{
+        Token   = $token
+        Headers = $headers
+    }
+}
+
+function Get-PullRequestInfo {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Repo,
+        [Parameter(Mandatory)]
+        [string]$Branch,
+        [int]$Attempts = 10,
+        [int]$DelaySeconds = 2
+    )
+
+    $auth = Get-GitHubAuth
+    $headers = $auth.Headers
 
     $lastError = $null
     for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
@@ -216,11 +226,18 @@ try {
     $context.PrUrl = $prInfo.url
     Write-Host "Draft PR ##$($context.PrNumber) created at $($context.PrUrl)."
 
-    Invoke-Gh -Arguments @('workflow', 'run', 'pr-vi-staging.yml',
-        '--repo', $repoInfo.Slug,
-        '--ref', $scratchBranch,
-        '-f', "pr=$($context.PrNumber)",
-        '-f', "note=$note") | Out-Null
+    $auth = Get-GitHubAuth
+    $dispatchUri = "https://api.github.com/repos/$($repoInfo.Slug)/actions/workflows/pr-vi-staging.yml/dispatches"
+    $dispatchBody = @{
+        ref    = $scratchBranch
+        inputs = @{
+            pr   = $context.PrNumber.ToString()
+            note = $note
+        }
+    } | ConvertTo-Json -Depth 4
+    Write-Host "Triggering pr-vi-staging workflow via dispatch API..."
+    Invoke-RestMethod -Uri $dispatchUri -Headers $auth.Headers -Method Post -Body $dispatchBody -ContentType 'application/json'
+    Write-Host 'Workflow dispatch accepted.'
 
     Write-Host 'Waiting for pr-vi-staging workflow to complete...'
     $runId = $null
