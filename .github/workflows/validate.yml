@@ -600,6 +600,19 @@ jobs:
     - name: Install Pester v5
       shell: pwsh
       run: |
+        $ErrorActionPreference = 'Stop'
+        $galleryUri = 'https://www.powershellgallery.com/api/v2/'
+        $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        if (-not $repo) {
+          Register-PSRepository -Name PSGallery -SourceLocation $galleryUri -ScriptSourceLocation $galleryUri -InstallationPolicy Trusted
+        } else {
+          $expected = $galleryUri.TrimEnd('/')
+          $current = if ($repo.SourceLocation) { $repo.SourceLocation.TrimEnd('/') } else { '' }
+          $needsUpdate = $current -ne $expected -or $repo.InstallationPolicy -ne 'Trusted'
+          if ($needsUpdate) {
+            Set-PSRepository -Name PSGallery -SourceLocation $galleryUri -ScriptSourceLocation $galleryUri -InstallationPolicy Trusted
+          }
+        }
         Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
 
     - name: Run dispatcher smoke to produce session index
