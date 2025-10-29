@@ -1,0 +1,58 @@
+{
+  "updatedAt": "2025-10-28T18:58:31.8241804-07:00",
+  "issue": 461,
+  "actions": [
+    {
+      "key": "hooks:pre-commit",
+      "priority": 10,
+      "scripts": [
+        "node tools/npm/run-script.mjs hooks:pre-commit"
+      ],
+      "rationale": "baseline hook gate"
+    },
+    {
+      "key": "hooks:multi",
+      "priority": 11,
+      "scripts": [
+        "node tools/npm/run-script.mjs hooks:multi",
+        "node tools/npm/run-script.mjs hooks:schema"
+      ],
+      "rationale": "ensure parity across planes"
+    },
+    {
+      "key": "staging:refs-entry",
+      "priority": 20,
+      "scripts": [
+        "pwsh -File tools/Test-PRVIStagingSmoke.ps1 -DryRun"
+      ],
+      "rationale": "plan vi-history entry point smoke"
+    },
+    {
+      "key": "history:announce",
+      "priority": 25,
+      "scripts": [
+        "pwsh -NoLogo -NoProfile -Command \"Write-Host 'Reminder: `/vi-history` PR command is live; add it to review checklists when VI deltas show up.'\""
+      ],
+      "rationale": "surface new /vi-history entry point to reviewers"
+    },
+    {
+      "key": "docs:update",
+      "priority": 30,
+      "scripts": [
+        "pwsh -NoLogo -NoProfile -Command \"Write-Host updating docs\""
+      ],
+      "rationale": "documentation alignment"
+    },
+    {
+      "key": "validate:lint",
+      "priority": 90,
+      "scripts": [
+        "pwsh -File tools/PrePush-Checks.ps1"
+      ],
+      "rationale": "baseline validation"
+    }
+  ],
+  "schema": "agent/priority-router@v1"
+}
+
+

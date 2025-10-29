@@ -67,6 +67,16 @@
     -MarkdownPath ./vi-staging-compare.md `
     -SummaryJsonPath ./vi-staging-compare-summary.json
   ```
+- Comment `/vi-history` when you want the automation to walk commit history for every VI in the PR. The companion
+  workflow (`pr-vi-history.yml`) generates the diff manifest, runs `tools/Invoke-PRVIHistory.ps1` (default `-MaxPairs 6`),
+  renders the Markdown table via `tools/Summarize-PRVIHistory.ps1`, uploads `tests/results/pr-vi-history/`, and replies
+  to the PR with the same table. Supply `max_pairs=<n>` in the comment (or the workflow_dispatch input) when you need a
+  deeper history window.
+  ```powershell
+  pwsh -File tools/Get-PRVIDiffManifest.ps1 -BaseRef origin/develop -HeadRef HEAD -OutputPath vi-history-manifest.json
+  pwsh -File tools/Invoke-PRVIHistory.ps1 -ManifestPath vi-history-manifest.json -ResultsRoot tests/results/pr-vi-history -MaxPairs 6
+  pwsh -File tools/Summarize-PRVIHistory.ps1 -SummaryPath tests/results/pr-vi-history/vi-history-summary.json -MarkdownPath vi-history-summary.md
+  ```
 
 ## Dispatch inputs (GitHub UI or `gh workflow run`)
 

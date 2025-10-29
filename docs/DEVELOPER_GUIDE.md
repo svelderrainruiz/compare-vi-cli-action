@@ -27,19 +27,23 @@ Quick reference for building, testing, and releasing the LVCompare composite act
     - Successful runs upload `tests/results/_agent/smoke/vi-stage/smoke-*.json` summaries and assert the scratch PR carries the `vi-staging-ready` label.
     - Scenario catalog (defined in `Get-VIStagingSmokeScenarios`):
 
-      | Scenario  | Fixture prep                                                                 | Expected LVCompare |
-      |-----------|------------------------------------------------------------------------------|--------------------|
-      | `no-diff` | Copy `fixtures/vi-attr/Head.vi` onto `Base.vi`                               | match              |
-      | `vi2-diff`| Write tracked fixtures `tmp-commit-236ffab/{VI1,VI2}.vi` into `fixtures/vi-attr/{Base,Head}.vi` (block diagram cosmetic diff) | diff |
-      | `attr-diff` | Stage the baked attribute fixtures `fixtures/vi-attr/attr/{BaseAttr,HeadAttr}.vi` | diff               |
+      | Scenario        | Fixture prep                                                                 | Expected LVCompare |
+      |-----------------|------------------------------------------------------------------------------|--------------------|
+      | `no-diff`       | Copy `fixtures/vi-attr/Head.vi` onto `Base.vi`                               | match              |
+      | `vi2-diff`      | Write tracked fixtures `tmp-commit-236ffab/{VI1,VI2}.vi` into `fixtures/vi-attr/{Base,Head}.vi` (block diagram cosmetic diff) | diff |
+      | `attr-diff`     | Stage the attribute fixtures `fixtures/vi-attr/attr/{BaseAttr,HeadAttr}.vi`  | diff |
+      | `fp-cosmetic`   | Stage `fixtures/vi-stage/fp-cosmetic/{Base,Head}.vi` (front-panel cosmetic tweak) | diff |
+      | `connector-pane`| Stage `fixtures/vi-stage/connector-pane/{Base,Head}.vi` (connector assignment change) | diff |
+      | `bd-cosmetic`   | Stage `fixtures/vi-stage/bd-cosmetic/{Base,Head}.vi` (block-diagram cosmetic label) | diff |
+      | `control-rename`| Stage `fixtures/vi-stage/control-rename/{Base,Head}.vi` (control rename)     | diff |
+      | `fp-window`     | Stage `fixtures/vi-stage/fp-window/{Base,Head}.vi` (window sizing change)    | diff |
 
-      Update those fixtures only when you intentionally want to change the smoke baseline; the helper writes their bytes into the scenario prep blocks for deterministic runs.
-      Compare summaries now append per-category detail lines (for example `VI Attribute — Documentation » Description`) so reviewers can see attribute changes without downloading the artifacts.
-    - Compare flags: the staging helper honours `VI_STAGE_COMPARE_FLAGS_MODE` (default `replace`) and
-      `VI_STAGE_COMPARE_FLAGS` repository variables. The default `replace` mode clears the quiet bundle so LVCompare
-      reports include VI Attribute differences. Set the mode to `append` to keep the quiet bundle, and provide
-      newline-separated entries in `VI_STAGE_COMPARE_FLAGS` (for example `-nobd`) when you want to add explicit flags.
-      `VI_STAGE_COMPARE_REPLACE_FLAGS` accepts `true`/`false` to override the mode for a single run when needed.
+      Treat these fixtures as read-only baselines—update them only when you intentionally want to change the smoke matrix. The `/vi-stage` PR comment includes this table (via `tools/Summarize-VIStaging.ps1`) so reviewers can immediately see which categories (front panel, block diagram functional/cosmetic, VI attributes) triggered without downloading artifacts. Locally, run the helper against `vi-staging-compare.json` to preview the Markdown before you push.
+
+      Reading the PR comment: the staging workflow drops the same table into the `/vi-stage` response. Green checkmarks indicate staged pairs; review the category columns (front panel, block diagram functional/cosmetic, VI attributes) to catch unexpected diffs without downloading artifacts. Follow the artifact links when you need to inspect compare reports in detail.
+
+      Compare flags: the staging helper honours `VI_STAGE_COMPARE_FLAGS_MODE` (default `replace`) and `VI_STAGE_COMPARE_FLAGS` repository variables. The default `replace` mode clears the quiet bundle so LVCompare reports include VI Attribute differences. Set the mode to `append` to keep the quiet bundle, and provide newline-separated entries in `VI_STAGE_COMPARE_FLAGS` (for example `-nobd`) when you want to add explicit flags. `VI_STAGE_COMPARE_REPLACE_FLAGS` accepts `true`/`false` to override the mode for a single run when needed.
+
     - `pr-vi-staging.yml` now calls `tools/Summarize-VIStaging.ps1` after LVCompare finishes. The helper inspects
       `vi-staging-compare.json`, captures the categories surfaced in each compare report (front panel, block diagram
       functional/cosmetic, VI attributes), and emits both a Markdown table and JSON snapshot. The workflow drops that
@@ -51,6 +55,15 @@ Quick reference for building, testing, and releasing the LVCompare composite act
         -MarkdownPath ./vi-staging-compare.md `
         -SummaryJsonPath ./vi-staging-compare-summary.json
       ```
+    - `/vi-history` PR comments (or the `pr-vi-history.yml` workflow) reuse the same pattern for history diffs:
+      1. `tools/Get-PRVIDiffManifest.ps1` enumerates VI changes between the PR base/head commits.
+      2. `tools/Invoke-PRVIHistory.ps1` runs the compare suite per VI (default `-MaxPairs 6`) and drops artifacts under
+         `tests/results/pr-vi-history/` (aggregate manifest + `history-report.{md,html}` per target).
+      3. `tools/Summarize-PRVIHistory.ps1` renders the PR table with change types, comparison/diff counts, and relative
+         report paths so reviewers can triage without downloading the artifact bundle.
+      Override the history depth via the workflow_dispatch input `max_pairs` when you need a longer runway; otherwise
+      accept the default for quick attribution. The workflow uploads the results directory as
+      `pr-vi-history-<pr-number>.zip` for local inspection.
 
  â†’ telemetry snapshot
   - `tools/Watch-Pester.ps1` â†’ file watcher / retry loop
