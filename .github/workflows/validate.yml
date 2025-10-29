@@ -628,17 +628,19 @@ jobs:
               Write-Host ("::warning::Register-PSResourceRepository fallback failed: {0}" -f $_.Exception.Message)
             }
             $attempts = 0
-            while (-not $installed -and $attempts -lt 3) {
+            $maxAttempts = 5
+            while (-not $installed -and $attempts -lt $maxAttempts) {
               try {
                 Install-PSResource -Name Pester -Version '5.*' -Scope CurrentUser -TrustRepository -Repository PSGallery
                 $installed = $true
               } catch {
                 $attempts++
-                if ($attempts -ge 3) {
+                if ($attempts -ge $maxAttempts) {
                   throw
                 }
                 Write-Host ("::notice::Install-PSResource attempt {0} failed: {1}" -f $attempts, $_.Exception.Message)
-                Start-Sleep -Seconds ([math]::Min(4, $attempts * 2))
+                $delay = [math]::Min(30, [math]::Pow(2, $attempts))
+                Start-Sleep -Seconds $delay
               }
             }
           }
