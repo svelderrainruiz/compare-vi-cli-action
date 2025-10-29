@@ -229,31 +229,48 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = if ($env:PESTER_VERSION -and $env:PESTER_VERSION.Trim()) { $env:PESTER_VERSION } else { (./tools/Get-PesterVersion.ps1) }
           Write-Host "Installing Pester $version"
-          $galleryUri = 'https://www.powershellgallery.com/api/v2/'
+          $installed = $false
+          $installLegacy = {
+            Install-Module -Name Pester -RequiredVersion $version -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+          try {
+            &$installLegacy
+            $installed = $true
+          } catch {
+            if ($_.Exception.Message -like "*Register-PSRepository -Default*") {
+              try {
+                Register-PSRepository -Default -ErrorAction Stop
+              } catch {
+                Write-Host ("::warning::Register-PSRepository -Default failed: {0}" -f $_.Exception.Message)
+              }
+              try {
+                &$installLegacy
+                $installed = $true
+              } catch {
+                Write-Host "::notice::Falling back to PSResourceGet for Pester installation."
+                try {
+                  Register-PSResourceRepository -Default -ErrorAction SilentlyContinue
+                } catch {
+                  Write-Host ("::warning::Register-PSResourceRepository -Default failed: {0}" -f $_.Exception.Message)
+                }
+                Install-PSResource -Name Pester -Version $version -Scope CurrentUser -TrustRepository
+                $installed = $true
+              }
+            } else {
+              throw
+            }
+          }
+          if (-not $installed) {
+            throw 'Failed to install Pester from PSGallery.'
+          }
           $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
-          if (-not $repo) {
+          if ($repo -and $repo.InstallationPolicy -ne 'Trusted') {
             try {
-              Register-PSRepository -Default -ErrorAction Stop
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
             } catch {
-              Write-Host ("::warning::Register-PSRepository -Default failed: {0}" -f $_.Exception.Message)
+              Write-Host ("::notice::Unable to set PSGallery installation policy to Trusted: {0}" -f $_.Exception.Message)
             }
-            $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
           }
-          if (-not $repo) {
-            Register-PSRepository -Name PSGallery -SourceLocation $galleryUri -ScriptSourceLocation $galleryUri -InstallationPolicy Trusted
-            $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
-          }
-          if ($repo) {
-            $expected = $galleryUri.TrimEnd('/')
-            $current = if ($repo.SourceLocation) { $repo.SourceLocation.TrimEnd('/') } else { '' }
-            $needsUpdate = $current -ne $expected -or $repo.InstallationPolicy -ne 'Trusted'
-            if ($needsUpdate) {
-              Set-PSRepository -Name PSGallery -SourceLocation $galleryUri -ScriptSourceLocation $galleryUri -InstallationPolicy Trusted
-            }
-          } else {
-            Write-Warning 'Unable to register PSGallery repository; proceeding with Install-Module attempt.'
-          }
-          Install-Module -Name Pester -RequiredVersion $version -Force -SkipPublisherCheck -Scope CurrentUser
 
       - name: Enable diagnostics (synthetic failure)
         if: ${{ inputs.diagnostic_fail == 'true' }}
