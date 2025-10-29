@@ -316,14 +316,21 @@ $effectiveSummaryPath = if ($SummaryPath) {
     Join-Path $resultsRootResolved 'vi-history-summary.json'
 }
 
-$compareScriptPath = Join-Path (Split-Path -Parent $PSCommandPath) 'Compare-VIHistory.ps1'
+$compareScriptPathCandidate = Join-Path (Split-Path -Parent $PSCommandPath) 'Compare-VIHistory.ps1'
+try {
+    $compareScriptPathResolved = (Resolve-Path -LiteralPath $compareScriptPathCandidate -ErrorAction Stop).ProviderPath
+} catch {
+    throw ("Unable to locate Compare-VIHistory.ps1 at expected path: {0}" -f $compareScriptPathCandidate)
+}
+Write-Verbose ("Compare-VIHistory resolved to: {0}" -f $compareScriptPathResolved)
+
 if (-not $CompareInvoker) {
-    $CompareInvoker = {
-        param(
-            [hashtable]$Arguments
-        )
-        & $using:compareScriptPath @Arguments
-    }.GetNewClosure()
+    $compareScriptLiteral = $compareScriptPathResolved.Replace("'", "''")
+    $compareInvokerSource = @"
+param([hashtable]`$Arguments)
+& '$compareScriptLiteral' @Arguments
+"@
+    $CompareInvoker = [scriptblock]::Create($compareInvokerSource)
 }
 
 $summaryTargets = [System.Collections.Generic.List[object]]::new()
@@ -342,11 +349,17 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
     $targetResultsDir = Join-Path $resultsRootResolved $targetDirName
     New-Item -ItemType Directory -Force -Path $targetResultsDir | Out-Null
 
+    $effectiveTargetPath = $targetFullPath
+    if (-not [string]::IsNullOrWhiteSpace($repoPath) -and -not [System.IO.Path]::IsPathRooted($repoPath)) {
+        $effectiveTargetPath = $repoPath
+    }
+
     $compareArgs = @{
-        TargetPath = $targetFullPath
+        TargetPath = $effectiveTargetPath
         ResultsDir = $targetResultsDir
         OutPrefix  = $sanitized
     }
+    Write-Verbose ("[{0}/{1}] Target '{2}' (origin: {3}) -> compare path '{4}'" -f ($i + 1), $targets.Count, $repoPath, $target.origin, $effectiveTargetPath)
     if ($MaxPairs -gt 0) { $compareArgs.MaxPairs = $MaxPairs }
     if ($Mode) { $compareArgs.Mode = $Mode }
     if (-not [string]::IsNullOrWhiteSpace($StartRef)) { $compareArgs.StartRef = $StartRef }
@@ -356,15 +369,15 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
     try {
         & $CompareInvoker $compareArgs | Out-Null
     } catch {
-        $error = $_
+        $caughtError = $_
         [void]$errorTargets.Add([pscustomobject]@{
             repoPath = $repoPath
-            message  = $error.Exception.Message
+            message  = $caughtError.Exception.Message
         }) | Out-Null
         [void]$summaryTargets.Add([pscustomobject]@{
             repoPath    = $repoPath
             status      = 'error'
-            message     = $error.Exception.Message
+            message     = $caughtError.Exception.Message
             changeTypes = $target.changeTypes.ToArray()
             basePaths   = $target.basePaths.ToArray()
             headPaths   = $target.headPaths.ToArray()
