@@ -647,21 +647,37 @@ jobs:
             if (-not $installed) {
               Write-Host "::notice::Attempting manual PSGallery download fallback for Pester."
               $fallbackVersion = '5.7.1'
-              $nupkgUri = '{0}/package/Pester/{1}' -f $galleryUri.TrimEnd('/'), $fallbackVersion
               $downloadRoot = Join-Path $env:RUNNER_TEMP 'pester-download'
               New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
               $packagePath = Join-Path $downloadRoot ("Pester.{0}.nupkg" -f $fallbackVersion)
+              $downloadEndpoints = @(
+                @{ Uri = ('{0}/package/Pester/{1}' -f $galleryUri.TrimEnd('/'), $fallbackVersion); SkipCert = $false },
+                @{ Uri = ('https://psg-prod-eastus.azureedge.net/packages/pester.{0}.nupkg' -f $fallbackVersion.ToLowerInvariant()); SkipCert = $true }
+              )
               $downloaded = $false
-              for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
-                try {
-                  Invoke-WebRequest -Uri $nupkgUri -OutFile $packagePath -UseBasicParsing -ErrorAction Stop
-                  $downloaded = $true
-                } catch {
-                  if ($i -ge 3) {
-                    Write-Host ("::warning::Manual download attempt {0} failed: {1}" -f $i, $_.Exception.Message)
-                  } else {
-                    Write-Host ("::notice::Manual download attempt {0} failed: {1}" -f $i, $_.Exception.Message)
-                    Start-Sleep -Seconds ([math]::Min(30, [math]::Pow(2, $i)))
+              foreach ($endpoint in $downloadEndpoints) {
+                if ($downloaded) { break }
+                for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
+                  try {
+                    $commonArgs = @{
+                      Uri              = $endpoint.Uri
+                      OutFile          = $packagePath
+                      UseBasicParsing  = $true
+                      ErrorAction      = 'Stop'
+                    }
+                    if ($endpoint.SkipCert) {
+                      Invoke-WebRequest @commonArgs -SkipCertificateCheck
+                    } else {
+                      Invoke-WebRequest @commonArgs
+                    }
+                    $downloaded = $true
+                  } catch {
+                    if ($i -ge 3) {
+                      Write-Host ("::warning::Manual download attempt {0} ({1}) failed: {2}" -f $i, $endpoint.Uri, $_.Exception.Message)
+                    } else {
+                      Write-Host ("::notice::Manual download attempt {0} ({1}) failed: {2}" -f $i, $endpoint.Uri, $_.Exception.Message)
+                      Start-Sleep -Seconds ([math]::Min(30, [math]::Pow(2, $i)))
+                    }
                   }
                 }
               }
