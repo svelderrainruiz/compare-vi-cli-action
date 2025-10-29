@@ -103,6 +103,149 @@ function Reset-FixtureFiles {
     Invoke-Git -Arguments @('checkout', $Ref, '--', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi') | Out-Null
 }
 
+function Get-VIStagingSmokeScenarios {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FixtureRef
+    )
+
+    $noDiffPrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        Copy-ViContent -Source 'fixtures/vi-attr/Head.vi' -Destination 'fixtures/vi-attr/Base.vi'
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi')
+    }.GetNewClosure()
+
+    $vi2BaseFixture = 'tmp-commit-236ffab/VI1.vi'
+    $vi2HeadFixture = 'tmp-commit-236ffab/VI2.vi'
+    if (-not (Test-Path -LiteralPath $vi2BaseFixture -PathType Leaf)) {
+        throw "Block-diagram base fixture missing: $vi2BaseFixture"
+    }
+    if (-not (Test-Path -LiteralPath $vi2HeadFixture -PathType Leaf)) {
+        throw "Block-diagram head fixture missing: $vi2HeadFixture"
+    }
+    $vi2BaseBytes = [System.IO.File]::ReadAllBytes($vi2BaseFixture)
+    $vi2HeadBytes = [System.IO.File]::ReadAllBytes($vi2HeadFixture)
+
+    $vi2DiffPrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        [System.IO.File]::WriteAllBytes('fixtures/vi-attr/Base.vi', $vi2BaseBytes)
+        [System.IO.File]::WriteAllBytes('fixtures/vi-attr/Head.vi', $vi2HeadBytes)
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    $attrBasePath = 'fixtures/vi-attr/attr/BaseAttr.vi'
+    $attrHeadPath = 'fixtures/vi-attr/attr/HeadAttr.vi'
+    if (-not (Test-Path -LiteralPath $attrBasePath -PathType Leaf)) {
+        throw "Attr-diff base fixture missing: $attrBasePath"
+    }
+    if (-not (Test-Path -LiteralPath $attrHeadPath -PathType Leaf)) {
+        throw "Attr-diff head fixture missing: $attrHeadPath"
+    }
+    $attrBaseBytes = [System.IO.File]::ReadAllBytes($attrBasePath)
+    $attrHeadBytes = [System.IO.File]::ReadAllBytes($attrHeadPath)
+
+    $attrDiffPrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        [System.IO.File]::WriteAllBytes('fixtures/vi-attr/Base.vi', $attrBaseBytes)
+        [System.IO.File]::WriteAllBytes('fixtures/vi-attr/Head.vi', $attrHeadBytes)
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    $fpCosmeticPrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        Copy-ViContent -Source 'fixtures/vi-stage/fp-cosmetic/Base.vi' -Destination 'fixtures/vi-attr/Base.vi'
+        Copy-ViContent -Source 'fixtures/vi-stage/fp-cosmetic/Head.vi' -Destination 'fixtures/vi-attr/Head.vi'
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    $connectorPanePrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        Copy-ViContent -Source 'fixtures/vi-stage/connector-pane/Base.vi' -Destination 'fixtures/vi-attr/Base.vi'
+        Copy-ViContent -Source 'fixtures/vi-stage/connector-pane/Head.vi' -Destination 'fixtures/vi-attr/Head.vi'
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    $bdCosmeticPrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        Copy-ViContent -Source 'fixtures/vi-stage/bd-cosmetic/Base.vi' -Destination 'fixtures/vi-attr/Base.vi'
+        Copy-ViContent -Source 'fixtures/vi-stage/bd-cosmetic/Head.vi' -Destination 'fixtures/vi-attr/Head.vi'
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    $controlRenamePrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        Copy-ViContent -Source 'fixtures/vi-stage/control-rename/Base.vi' -Destination 'fixtures/vi-attr/Base.vi'
+        Copy-ViContent -Source 'fixtures/vi-stage/control-rename/Head.vi' -Destination 'fixtures/vi-attr/Head.vi'
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    $fpWindowPrep = {
+        Reset-FixtureFiles -Ref $FixtureRef
+        Copy-ViContent -Source 'fixtures/vi-stage/fp-window/Base.vi' -Destination 'fixtures/vi-attr/Base.vi'
+        Copy-ViContent -Source 'fixtures/vi-stage/fp-window/Head.vi' -Destination 'fixtures/vi-attr/Head.vi'
+        Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
+    }.GetNewClosure()
+
+    return @(
+        [ordered]@{
+            Name          = 'no-diff'
+            Description   = 'Copy Head.vi onto Base.vi so LVCompare reports no differences.'
+            Expectation   = 'match'
+            CommitMessage = 'chore: synthetic VI changes for staging smoke'
+            Prepare       = $noDiffPrep
+        },
+        [ordered]@{
+            Name          = 'vi2-diff'
+            Description   = 'Copy tracked fixtures tmp-commit-236ffab/{VI1,VI2}.vi onto Base.vi/Head.vi for a block diagram cosmetic diff.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI diff for staging smoke'
+            Prepare       = $vi2DiffPrep
+        },
+        [ordered]@{
+            Name          = 'attr-diff'
+            Description   = 'Stage VI1/VI2 fixture pair to exercise metadata-focused differences.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI attribute diff for staging smoke'
+            Prepare       = $attrDiffPrep
+        },
+        [ordered]@{
+            Name          = 'fp-cosmetic'
+            Description   = 'Stage fp-cosmetic fixture pair to exercise front panel cosmetic differences.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI front panel cosmetic diff for staging smoke'
+            Prepare       = $fpCosmeticPrep
+        },
+        [ordered]@{
+            Name          = 'connector-pane'
+            Description   = 'Stage connector-pane fixture pair to exercise connector pane wiring differences.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI connector pane diff for staging smoke'
+            Prepare       = $connectorPanePrep
+        },
+        [ordered]@{
+            Name          = 'bd-cosmetic'
+            Description   = 'Stage bd-cosmetic fixture pair to exercise block diagram cosmetic differences.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI block diagram cosmetic diff for staging smoke'
+            Prepare       = $bdCosmeticPrep
+        },
+        [ordered]@{
+            Name          = 'control-rename'
+            Description   = 'Stage control-rename fixture pair to exercise front panel control rename differences.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI control rename diff for staging smoke'
+            Prepare       = $controlRenamePrep
+        },
+        [ordered]@{
+            Name          = 'fp-window'
+            Description   = 'Stage fp-window fixture pair to exercise front panel window sizing differences.'
+            Expectation   = 'diff'
+            CommitMessage = 'chore: synthetic VI window size diff for staging smoke'
+            Prepare       = $fpWindowPrep
+        }
+    )
+}
+
 function Get-RepoInfo {
     if ($env:GITHUB_REPOSITORY -and ($env:GITHUB_REPOSITORY -match '^(?<owner>[^/]+)/(?<name>.+)$')) {
         return [ordered]@{
@@ -198,6 +341,42 @@ $timestamp = (Get-Date).ToString('yyyyMMddHHmmss')
 $branchPrefix = "smoke/vi-stage-$timestamp"
 $prTitle = "Smoke: VI staging label test ($timestamp)"
 $note = "staging smoke $timestamp"
+$fixtureRef = "origin/$BaseBranch"
+$scenarios = Get-VIStagingSmokeScenarios -FixtureRef $fixtureRef
+$originalFlagsMode = [System.Environment]::GetEnvironmentVariable('RUN_STAGED_LVCOMPARE_FLAGS_MODE', 'Process')
+$restoreFlagsMode = $false
+if ([string]::IsNullOrWhiteSpace($originalFlagsMode)) {
+    [System.Environment]::SetEnvironmentVariable('RUN_STAGED_LVCOMPARE_FLAGS_MODE', 'replace', 'Process')
+    $restoreFlagsMode = $true
+}
+
+$metadataHelperPath = Join-Path (Get-Location) 'tools' 'Get-VICompareMetadata.ps1'
+$metadataHelperContent = $null
+if (Test-Path -LiteralPath $metadataHelperPath -PathType Leaf) {
+    $metadataHelperContent = Get-Content -LiteralPath $metadataHelperPath -Raw
+} else {
+    Write-Warning "Optional metadata helper not found at $metadataHelperPath; pre-compare metadata will be skipped."
+}
+$metadataInvoker = {
+    param(
+        [string]$BaseVi,
+        [string]$HeadVi,
+        [string]$MetadataPath,
+        [string]$HelperContent
+    )
+    if (-not $HelperContent) { return $null }
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("Get-VICompareMetadata-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
+    try {
+        Set-Content -LiteralPath $tempPath -Value $HelperContent -Encoding utf8
+        return & pwsh -NoLogo -NoProfile -File $tempPath `
+            -BaseVi $BaseVi `
+            -HeadVi $HeadVi `
+            -OutputPath $MetadataPath `
+            -ReplaceFlags
+    } finally {
+        Remove-Item -LiteralPath $tempPath -ErrorAction SilentlyContinue
+    }
+}.GetNewClosure()
 
 Write-Host "Branch prefix: $branchPrefix"
 
@@ -206,8 +385,13 @@ if ($DryRun) {
     Write-Host "Plan:"
     Write-Host "  - Fetch origin/$BaseBranch"
     Write-Host "  - Create $branchPrefix-<scenario> branches from origin/$BaseBranch"
-    Write-Host "  - Scenario #1 (no-diff): copy fixtures/vi-attr/Head.vi over Base.vi, commit, push, dispatch pr-vi-staging.yml"
-    Write-Host "  - Scenario #2 (diff): restore fixtures, copy fixtures/vi-attr/VI2.vi over Head.vi, commit, push, dispatch pr-vi-staging.yml"
+    for ($idx = 0; $idx -lt $scenarios.Count; $idx++) {
+        $scenario = $scenarios[$idx]
+        $label = "Scenario #{0} ({1})" -f ($idx + 1), $scenario.Name
+        $expectation = if ($scenario.Expectation) { " (expectation: $($scenario.Expectation))" } else { '' }
+        $description = if ($scenario.Description) { $scenario.Description } else { 'No description provided.' }
+        Write-Host ("  - {0}: {1}{2}" -f $label, $description, $expectation)
+    }
     Write-Host "  - Verify both workflow runs succeed and label updates"
     Write-Host "  - Cleanup branch/PR (unless -KeepBranch)"
     return
@@ -225,31 +409,8 @@ $overallContext = [ordered]@{
 try {
     Invoke-Git -Arguments @('fetch', 'origin', $BaseBranch)
 
-    $fixtureRef = "origin/$BaseBranch"
     $resultsDir = Join-Path 'tests' 'results' '_agent' 'smoke' 'vi-stage'
     New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
-
-    $scenarios = @(
-        @{
-            Name          = 'no-diff'
-            CommitMessage = 'chore: synthetic VI changes for staging smoke'
-            Prepare       = {
-                Reset-FixtureFiles -Ref $fixtureRef
-                Copy-ViContent -Source 'fixtures/vi-attr/Head.vi' -Destination 'fixtures/vi-attr/Base.vi'
-                Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi')
-            }.GetNewClosure()
-        },
-        @{
-            Name          = 'vi2-diff'
-            CommitMessage = 'chore: synthetic VI diff for staging smoke'
-            Prepare       = {
-                Reset-FixtureFiles -Ref $fixtureRef
-                Copy-ViContent -Source 'fixtures/vi-attr/Head.vi' -Destination 'fixtures/vi-attr/Base.vi'
-                Touch-ViFile -Path 'fixtures/vi-attr/Head.vi'
-                Invoke-Git -Arguments @('add', 'fixtures/vi-attr/Base.vi', 'fixtures/vi-attr/Head.vi')
-            }.GetNewClosure()
-        }
-    )
 
     foreach ($scenario in $scenarios) {
         $scenarioName = $scenario.Name
@@ -260,12 +421,14 @@ try {
 
         $scenarioNote = "$note [$scenarioName]"
         $scenarioSummaryPath = Join-Path $resultsDir ("smoke-{0}-{1}.json" -f $timestamp, $scenarioName)
+        $scenarioMetadataPath = Join-Path $resultsDir ("smoke-{0}-{1}-metadata.json" -f $timestamp, $scenarioName)
 
         $scenarioCtx = [pscustomobject]@{
             Branch      = $scenarioBranch
             Scenario    = $scenarioName
             Note        = $scenarioNote
             SummaryPath = $scenarioSummaryPath
+            MetadataPath= $scenarioMetadataPath
             PrNumber    = $null
             PrUrl       = $null
             RunId       = $null
@@ -274,6 +437,20 @@ try {
         $scenarioContexts.Add($scenarioCtx) | Out-Null
 
         & $scenario.Prepare
+
+        $metadata = $null
+        try {
+            $metadata = & $metadataInvoker `
+                -BaseVi (Join-Path 'fixtures' 'vi-attr' 'Base.vi') `
+                -HeadVi (Join-Path 'fixtures' 'vi-attr' 'Head.vi') `
+                -MetadataPath $scenarioMetadataPath `
+                -HelperContent $metadataHelperContent
+        } catch {
+            Write-Warning ("Failed to capture pre-compare metadata for scenario '{0}': {1}" -f $scenarioName, $_.Exception.Message)
+        }
+        if ($metadata) {
+            $scenarioCtx | Add-Member -NotePropertyName Metadata -NotePropertyValue $metadata -Force
+        }
 
         Invoke-Git -Arguments @('commit', '-m', $scenario.CommitMessage)
         Invoke-Git -Arguments @('push', '-u', 'origin', $scenarioBranch)
@@ -360,6 +537,7 @@ try {
             created  = (Get-Date).ToString('o')
             success  = $true
             url      = $scenarioCtx.PrUrl
+            metadata = if ($scenarioCtx.PSObject.Properties['Metadata'] -and $scenarioCtx.Metadata) { $scenarioCtx.Metadata } else { $null }
         }
         $summary | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $scenarioSummaryPath -Encoding utf8
 
@@ -403,4 +581,11 @@ finally {
             }
         }
     }
+
+    if ($restoreFlagsMode) {
+        [System.Environment]::SetEnvironmentVariable('RUN_STAGED_LVCOMPARE_FLAGS_MODE', $originalFlagsMode, 'Process')
+    }
 }
+    if (-not (Test-Path -LiteralPath 'VI2.vi' -PathType Leaf)) {
+        throw "Diff fixture missing: VI2.vi"
+    }

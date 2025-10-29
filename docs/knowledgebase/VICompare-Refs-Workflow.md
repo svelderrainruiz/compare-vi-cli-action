@@ -19,8 +19,21 @@
   environment used in production compares is exercised during staging, and immediately launches `Invoke-LVCompare.ps1`
   against each staged pair. The capture artifacts (HTML report, `lvcompare-capture.json`, stdout/stderr) are stored under
   `vi-compare-artifacts/compare/pair-XX/` and summarised in the PR comment.
-- The staging smoke helper now commits the baked-in attribute diff under `fixtures/vi-attr/{Base,Head}.vi`, so every run
-  produces deterministic LVCompare output. Only update those fixtures when you intentionally want to change the smoke baseline.
+- The staging smoke helper ships a baked catalog so every run produces deterministic LVCompare output. The current scenarios are:
+
+  | Scenario        | Fixture prep                                                                 | Expected LVCompare |
+  |-----------------|------------------------------------------------------------------------------|--------------------|
+  | `no-diff`       | Copy `fixtures/vi-attr/Head.vi` onto `Base.vi`                               | match              |
+  | `vi2-diff`      | Write tracked fixtures `tmp-commit-236ffab/{VI1,VI2}.vi` into `fixtures/vi-attr/{Base,Head}.vi` (block diagram cosmetic diff) | diff |
+  | `attr-diff`     | Stage the attribute fixtures `fixtures/vi-attr/attr/{BaseAttr,HeadAttr}.vi`  | diff               |
+  | `fp-cosmetic`   | Stage `fixtures/vi-stage/fp-cosmetic/{Base,Head}.vi` (front panel cosmetic tweak) | diff |
+  | `connector-pane`| Stage `fixtures/vi-stage/connector-pane/{Base,Head}.vi` (connector assignment change) | diff |
+  | `bd-cosmetic`   | Stage `fixtures/vi-stage/bd-cosmetic/{Base,Head}.vi` (block-diagram cosmetic label) | diff |
+  | `control-rename`| Stage `fixtures/vi-stage/control-rename/{Base,Head}.vi` (control rename) | diff |
+  | `fp-window`     | Stage `fixtures/vi-stage/fp-window/{Base,Head}.vi` (window sizing change) | diff |
+
+  The attribute fixtures live alongside the baseline set so we can keep the scenario data in-source without editing binaries in place. Update them only when you intend to change the smoke baseline.
+  The PR comment table now appends per-category detail lines (for example `VI Attribute - Documentation � Description`) so attribute-only changes are visible at a glance. Additional atomic fixtures live under `fixtures/vi-stage/`; update those copies in LabVIEW (or via LabVIEW CLI) before wiring more scenarios into `tools/Test-PRVIStagingSmoke.ps1`.
 - The workflow only honours comments authored by repository members/collaborators. Maintainers can also run the job
   manually with `gh workflow run pr-vi-staging.yml -f pr=<number> [-f note="context"]`.
 - Outputs:
@@ -185,3 +198,5 @@ gh workflow run vi-compare-refs.yml `
   itself is missing, the helper emits a final `missing-head` entry and stops.
 - Artifacts for no-diff runs stay lightweight (<5 KB) so you can keep the workflow optional without overwhelming CI
   storage.
+
+
