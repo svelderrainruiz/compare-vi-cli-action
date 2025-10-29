@@ -636,11 +636,47 @@ jobs:
               } catch {
                 $attempts++
                 if ($attempts -ge $maxAttempts) {
-                  throw
+                  Write-Host ("::warning::Install-PSResource exhausted attempts ({0}): {1}" -f $attempts, $_.Exception.Message)
+                  break
                 }
                 Write-Host ("::notice::Install-PSResource attempt {0} failed: {1}" -f $attempts, $_.Exception.Message)
                 $delay = [math]::Min(30, [math]::Pow(2, $attempts))
                 Start-Sleep -Seconds $delay
+              }
+            }
+            if (-not $installed) {
+              Write-Host "::notice::Attempting manual PSGallery download fallback for Pester."
+              $fallbackVersion = '5.7.1'
+              $nupkgUri = '{0}/package/Pester/{1}' -f $galleryUri.TrimEnd('/'), $fallbackVersion
+              $downloadRoot = Join-Path $env:RUNNER_TEMP 'pester-download'
+              New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
+              $packagePath = Join-Path $downloadRoot ("Pester.{0}.nupkg" -f $fallbackVersion)
+              $downloaded = $false
+              for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
+                try {
+                  Invoke-WebRequest -Uri $nupkgUri -OutFile $packagePath -UseBasicParsing -ErrorAction Stop
+                  $downloaded = $true
+                } catch {
+                  if ($i -ge 3) {
+                    Write-Host ("::warning::Manual download attempt {0} failed: {1}" -f $i, $_.Exception.Message)
+                  } else {
+                    Write-Host ("::notice::Manual download attempt {0} failed: {1}" -f $i, $_.Exception.Message)
+                    Start-Sleep -Seconds ([math]::Min(30, [math]::Pow(2, $i)))
+                  }
+                }
+              }
+              if ($downloaded -and (Test-Path -LiteralPath $packagePath)) {
+                $modulePaths = $env:PSModulePath -split [System.IO.Path]::PathSeparator
+                $destRoot = $modulePaths | Where-Object { $_ -and $_.Trim() } | Where-Object { $_ -like '*Modules*' } | Select-Object -First 1
+                if (-not $destRoot) {
+                  $destRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.local/share/powershell/Modules'
+                }
+                $destPath = Join-Path $destRoot ('Pester/{0}' -f $fallbackVersion)
+                New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+                Expand-Archive -Path $packagePath -DestinationPath $destPath -Force
+                $installed = $true
+              } else {
+                Write-Host "::warning::Manual PSGallery download fallback failed."
               }
             }
           }
