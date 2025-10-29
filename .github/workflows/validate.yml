@@ -604,14 +604,26 @@ jobs:
         $galleryUri = 'https://www.powershellgallery.com/api/v2/'
         $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
         if (-not $repo) {
+          try {
+            Register-PSRepository -Default -ErrorAction Stop
+          } catch {
+            Write-Host ("::warning::Register-PSRepository -Default failed: {0}" -f $_.Exception.Message)
+          }
+          $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        }
+        if (-not $repo) {
           Register-PSRepository -Name PSGallery -SourceLocation $galleryUri -ScriptSourceLocation $galleryUri -InstallationPolicy Trusted
-        } else {
+          $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        }
+        if ($repo) {
           $expected = $galleryUri.TrimEnd('/')
           $current = if ($repo.SourceLocation) { $repo.SourceLocation.TrimEnd('/') } else { '' }
           $needsUpdate = $current -ne $expected -or $repo.InstallationPolicy -ne 'Trusted'
           if ($needsUpdate) {
             Set-PSRepository -Name PSGallery -SourceLocation $galleryUri -ScriptSourceLocation $galleryUri -InstallationPolicy Trusted
           }
+        } else {
+          Write-Warning 'Unable to register PSGallery repository; proceeding with Install-Module attempt.'
         }
         Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
 
