@@ -7,19 +7,35 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+_No unreleased changes yet._
+
+## [v0.5.3] - 2025-10-29
+
 ### Added
 
-- Staged LVCompare automation now records per-pair leak metadata (`compare-leak.json`) and exposes leak counts via
+- Staged LVCompare automation now records per-pair leak metadata (`compare-leak.json`) and surfaces leak counts through
   `tools/Run-StagedLVCompare.ps1`, `tools/Summarize-VIStaging.ps1`, and the `/vi-stage` PR summary table so reviewers can
-  see lingering LVCompare/LabVIEW processes without downloading artifacts.
-- Timeout overrides can be supplied end-to-end (`Run-StagedLVCompare.ps1`, `Invoke-LVCompare.ps1`,
-  `scripts/Capture-LVCompare.ps1`, `tools/LabVIEWCli.psm1`) allowing LVCompare runs to fail-fast during long captures.
+  triage lingering LabVIEW/LVCompare processes without downloading artifacts.
+- Timeout overrides can be supplied end-to-end (`tools/Run-StagedLVCompare.ps1`, `tools/Run-HeadlessCompare.ps1`,
+  `Invoke-LVCompare.ps1`, `scripts/Capture-LVCompare.ps1`, `tools/LabVIEWCli.psm1`) allowing LVCompare runs to fail-fast
+  during long captures.
+- Validate’s session-index job now hardens Pester installation by retrying against PSGallery, falling back to
+  `Install-PSResource`, and mirroring the 5.7.1 module from the CDN when the gallery is unavailable; the reusable Pester
+  dispatcher shares the same bootstrap.
 
 ### Changed
 
-- Developer guide now documents the new leak/timeout environment toggles for staged comparisons and clarifies the
-  `/vi-history` table structure.
-- `pr-vi-staging.yml` surfaces leak totals in the workflow summary/PR comment for easier triage.
+- Developer guide and PR release docs now describe the new leak/timeout environment toggles for staged comparisons and
+  clarify the `/vi-history` report table.
+- `pr-vi-staging.yml` surfaces leak totals in workflow summaries and PR comments for easier triage.
+- `tools/Stage-CompareInputs.ps1` propagates `AllowSameLeaf` when mirroring dependency trees so downstream helpers
+  respect same-leaf comparisons, and the guard suite reflectively allows the PR history smoke helper.
+
+### Fixed
+
+- Guard tests tolerate legitimate `Head.vi` references used by the PR VI history smoke helper.
+- Staging helpers now propagate `AllowSameLeaf` correctly through `Run-HeadlessCompare`/`Run-StagedLVCompare`, ensuring
+  same-leaf dependency comparisons remain opt-in.
 
 ## [v0.5.2] - 2025-10-23
 
