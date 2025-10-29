@@ -602,6 +602,7 @@ jobs:
       run: |
         $ErrorActionPreference = 'Stop'
         $installed = $false
+        $galleryUri = 'https://www.powershellgallery.com/api/v2/'
         $installLegacy = {
           Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
         }
@@ -622,12 +623,24 @@ jobs:
             Write-Host ("::notice::Install-Module retry failed: {0}" -f $_.Exception.Message)
             Write-Host "::notice::Falling back to PSResourceGet for Pester installation."
             try {
-              Register-PSResourceRepository -Default -ErrorAction SilentlyContinue
+              Register-PSResourceRepository -Name PSGallery -Uri $galleryUri -Trusted -ErrorAction SilentlyContinue
             } catch {
-              Write-Host ("::warning::Register-PSResourceRepository -Default failed: {0}" -f $_.Exception.Message)
+              Write-Host ("::warning::Register-PSResourceRepository fallback failed: {0}" -f $_.Exception.Message)
             }
-            Install-PSResource -Name Pester -Version '5.*' -Scope CurrentUser -TrustRepository
-            $installed = $true
+            $attempts = 0
+            while (-not $installed -and $attempts -lt 3) {
+              try {
+                Install-PSResource -Name Pester -Version '5.*' -Scope CurrentUser -TrustRepository -Repository PSGallery
+                $installed = $true
+              } catch {
+                $attempts++
+                if ($attempts -ge 3) {
+                  throw
+                }
+                Write-Host ("::notice::Install-PSResource attempt {0} failed: {1}" -f $attempts, $_.Exception.Message)
+                Start-Sleep -Seconds ([math]::Min(4, $attempts * 2))
+              }
+            }
           }
         }
         if (-not $installed) {
