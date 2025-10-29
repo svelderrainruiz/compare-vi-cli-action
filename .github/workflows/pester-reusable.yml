@@ -237,27 +237,25 @@ jobs:
             &$installLegacy
             $installed = $true
           } catch {
-            if ($_.Exception.Message -like "*Register-PSRepository -Default*") {
+            Write-Host ("::notice::Install-Module first attempt failed: {0}" -f $_.Exception.Message)
+            try {
+              Register-PSRepository -Default -ErrorAction Stop
+            } catch {
+              Write-Host ("::warning::Register-PSRepository -Default failed: {0}" -f $_.Exception.Message)
+            }
+            try {
+              &$installLegacy
+              $installed = $true
+            } catch {
+              Write-Host ("::notice::Install-Module retry failed: {0}" -f $_.Exception.Message)
+              Write-Host "::notice::Falling back to PSResourceGet for Pester installation."
               try {
-                Register-PSRepository -Default -ErrorAction Stop
+                Register-PSResourceRepository -Default -ErrorAction SilentlyContinue
               } catch {
-                Write-Host ("::warning::Register-PSRepository -Default failed: {0}" -f $_.Exception.Message)
+                Write-Host ("::warning::Register-PSResourceRepository -Default failed: {0}" -f $_.Exception.Message)
               }
-              try {
-                &$installLegacy
-                $installed = $true
-              } catch {
-                Write-Host "::notice::Falling back to PSResourceGet for Pester installation."
-                try {
-                  Register-PSResourceRepository -Default -ErrorAction SilentlyContinue
-                } catch {
-                  Write-Host ("::warning::Register-PSResourceRepository -Default failed: {0}" -f $_.Exception.Message)
-                }
-                Install-PSResource -Name Pester -Version $version -Scope CurrentUser -TrustRepository
-                $installed = $true
-              }
-            } else {
-              throw
+              Install-PSResource -Name Pester -Version $version -Scope CurrentUser -TrustRepository
+              $installed = $true
             }
           }
           if (-not $installed) {
