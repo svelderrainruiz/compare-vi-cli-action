@@ -636,6 +636,78 @@ exit $exitCode
     }
   }
 
+  It 'summarizes diff metrics in report tables' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+    $originalDiff = $env:STUB_COMPARE_DIFF
+    try {
+      $pair = $_pairs[0]
+
+      $env:STUB_COMPARE_DIFF = '1'
+      $diffDir = Join-Path $TestDrive 'history-diff-metric'
+      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
+        -TargetPath $_target `
+        -StartRef $pair.Head `
+        -MaxPairs 1 `
+        -InvokeScriptPath $_stubPath `
+        -ResultsDir $diffDir `
+        -Mode 'default' `
+        -FailOnDiff:$false | Out-Null
+
+      $diffReport = Get-Content -LiteralPath (Join-Path $diffDir 'history-report.md') -Raw
+      $diffReport | Should -Match '\| Diffs \|\s*1\s*\|'
+      $diffReport | Should -Match '\| default \|\s*1\s*\|\s*1\s*\|\s*_none_\s*\|'
+
+      $env:STUB_COMPARE_DIFF = '0'
+      $cleanDir = Join-Path $TestDrive 'history-clean-metric'
+      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
+        -TargetPath $_target `
+        -StartRef $pair.Head `
+        -MaxPairs 1 `
+        -InvokeScriptPath $_stubPath `
+        -ResultsDir $cleanDir `
+        -Mode 'default' `
+        -FailOnDiff:$false | Out-Null
+
+      $cleanReport = Get-Content -LiteralPath (Join-Path $cleanDir 'history-report.md') -Raw
+      $cleanReport | Should -Match '\| Diffs \|\s*0\s*\|'
+    } finally {
+      if ($null -eq $originalDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $originalDiff
+      }
+    }
+  }
+
+  It 'records commit pair modes in history tables' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+    $originalDiff = $env:STUB_COMPARE_DIFF
+    try {
+      $env:STUB_COMPARE_DIFF = '1'
+      $pair = $_pairs[0]
+      $rd = Join-Path $TestDrive 'history-multi-mode-table'
+      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
+        -TargetPath $_target `
+        -StartRef $pair.Head `
+        -MaxPairs 1 `
+        -InvokeScriptPath $_stubPath `
+        -ResultsDir $rd `
+        -Mode 'default,attributes' `
+        -FailOnDiff:$false | Out-Null
+
+      $historyMd = Get-Content -LiteralPath (Join-Path $rd 'history-report.md') -Raw
+      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Report \|'
+      $historyMd | Should -Match '\| default \|\s*1\s*\|'
+      $historyMd | Should -Match '\| attributes \|\s*1\s*\|'
+    } finally {
+      if ($null -eq $originalDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $originalDiff
+      }
+    }
+  }
+
   It 'expands comma-separated mode tokens into multiple entries' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
     $env:STUB_COMPARE_DIFF = '0'
