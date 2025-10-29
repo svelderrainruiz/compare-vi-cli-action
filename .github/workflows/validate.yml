@@ -597,14 +597,22 @@ jobs:
       with:
         phase: J2
         results-dir: tests/results
-    - name: Install Pester v5
+    - name: Resolve Pester version
+      id: resolve_pester
+      shell: pwsh
+      run: |
+        $version = if ($env:PESTER_VERSION -and $env:PESTER_VERSION.Trim()) { $env:PESTER_VERSION } else { (./tools/Get-PesterVersion.ps1) }
+        "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+    - name: Install Pester ${{ steps.resolve_pester.outputs.version }}
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
+        $pesterVersion = '${{ steps.resolve_pester.outputs.version }}'
         $installed = $false
         $galleryUri = 'https://www.powershellgallery.com/api/v2/'
         $installLegacy = {
-          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser
+          Install-Module -Name Pester -RequiredVersion $pesterVersion -Force -Scope CurrentUser
         }
         try {
           &$installLegacy
@@ -631,7 +639,7 @@ jobs:
             $maxAttempts = 5
             while (-not $installed -and $attempts -lt $maxAttempts) {
               try {
-                Install-PSResource -Name Pester -Version '5.*' -Scope CurrentUser -TrustRepository -Repository PSGallery
+                Install-PSResource -Name Pester -Version $pesterVersion -Scope CurrentUser -TrustRepository -Repository PSGallery
                 $installed = $true
               } catch {
                 $attempts++
@@ -646,13 +654,12 @@ jobs:
             }
             if (-not $installed) {
               Write-Host "::notice::Attempting manual PSGallery download fallback for Pester."
-              $fallbackVersion = '5.7.1'
               $downloadRoot = Join-Path $env:RUNNER_TEMP 'pester-download'
               New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
-              $packagePath = Join-Path $downloadRoot ("Pester.{0}.nupkg" -f $fallbackVersion)
+              $packagePath = Join-Path $downloadRoot ("Pester.{0}.nupkg" -f $pesterVersion)
               $downloadEndpoints = @(
-                @{ Uri = ('{0}/package/Pester/{1}' -f $galleryUri.TrimEnd('/'), $fallbackVersion); SkipCert = $false },
-                @{ Uri = ('https://psg-prod-eastus.azureedge.net/packages/pester.{0}.nupkg' -f $fallbackVersion.ToLowerInvariant()); SkipCert = $true }
+                @{ Uri = ('{0}/package/Pester/{1}' -f $galleryUri.TrimEnd('/'), $pesterVersion); SkipCert = $false },
+                @{ Uri = ('https://psg-prod-eastus.azureedge.net/packages/pester.{0}.nupkg' -f $pesterVersion.ToLowerInvariant()); SkipCert = $true }
               )
               $downloaded = $false
               foreach ($endpoint in $downloadEndpoints) {
@@ -687,7 +694,7 @@ jobs:
                 if (-not $destRoot) {
                   $destRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.local/share/powershell/Modules'
                 }
-                $destPath = Join-Path $destRoot ('Pester/{0}' -f $fallbackVersion)
+                $destPath = Join-Path $destRoot ('Pester/{0}' -f $pesterVersion)
                 New-Item -ItemType Directory -Force -Path $destPath | Out-Null
                 Expand-Archive -Path $packagePath -DestinationPath $destPath -Force
                 $installed = $true
