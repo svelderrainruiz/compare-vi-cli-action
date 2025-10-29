@@ -185,10 +185,16 @@ if ($finalBaseLeaf -and $finalHeadLeaf -and
   throw "Staging produced identical Base/Head filenames (`$finalBaseLeaf`). This indicates the staging rename failed."
 }
 
+$originalLeafMatch = [string]::Equals(
+  (Split-Path -Leaf $baseSource),
+  (Split-Path -Leaf $headSource),
+  [System.StringComparison]::OrdinalIgnoreCase
+)
+
 return [pscustomobject]@{
   Base = (Resolve-Path -LiteralPath $stagedBase).Path
   Head = (Resolve-Path -LiteralPath $stagedHead).Path
   Root = (Resolve-Path -LiteralPath $stagingRoot).Path
   Mode = if ($mirrorStage) { 'mirror' } else { 'single-file' }
-  AllowSameLeaf = $false
+  AllowSameLeaf = ($mirrorStage -and $originalLeafMatch)
 }

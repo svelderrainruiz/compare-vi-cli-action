@@ -66,7 +66,7 @@ Describe 'Stage-CompareInputs.ps1' -Tag 'Unit' {
 
     $result = & $stageScript -BaseVi $baseVi -HeadVi $headVi
     $result | Should -Not -BeNullOrEmpty
-    $result.AllowSameLeaf | Should -BeFalse
+    $result.AllowSameLeaf | Should -BeTrue
     $result.Mode | Should -Be 'mirror'
     (Split-Path -Leaf $result.Base) | Should -Be 'Base.vi'
     (Split-Path -Leaf $result.Head) | Should -Be 'Head.vi'
@@ -101,7 +101,7 @@ Describe 'Stage-CompareInputs.ps1' -Tag 'Unit' {
 
     $result = & $stageScript -BaseVi $baseVi -HeadVi $headVi
     $result | Should -Not -BeNullOrEmpty
-    $result.AllowSameLeaf | Should -BeFalse
+    $result.AllowSameLeaf | Should -BeTrue
     (Split-Path -Leaf $result.Base) | Should -Be 'Base.vi'
     (Split-Path -Leaf $result.Head) | Should -Be 'Head.vi'
   }

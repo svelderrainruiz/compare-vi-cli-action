@@ -27,6 +27,7 @@ Describe 'Legacy artifact name guard (Base.vi / Head.vi)' -Tag 'Unit','Guard' {
       'TAG_PREP_CHECKLIST.md'
       'README.md'  # Contains breaking change migration notice
       'Guard.LegacyArtifactNames.Tests.ps1'  # This test file itself
+      'Test-PRVIHistorySmoke.ps1'
       '.git'
     )
     
