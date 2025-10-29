@@ -19,6 +19,11 @@ Skip cleanup so the scratch branch and draft PR remain available for inspection.
 .PARAMETER DryRun
 Emit the planned steps without executing them.
 
+.PARAMETER Scenario
+Selects which synthetic change set to exercise. Use `attribute` for the legacy
+single-commit attr diff, or `sequential` to replay multiple fixture commits and
+validate richer history output.
+
 .PARAMETER MaxPairs
 Optional override for the `max_pairs` workflow input. Defaults to `6`.
 #>
@@ -27,6 +32,8 @@ param(
     [string]$BaseBranch = 'develop',
     [switch]$KeepBranch,
     [switch]$DryRun,
+    [ValidateSet('attribute', 'sequential')]
+    [string]$Scenario = 'attribute',
     [int]$MaxPairs = 6
 )
 
@@ -215,9 +222,174 @@ function Restore-HistoryTracking {
     }
 }
 
+
+$script:SequentialFixtureCache = $null
+
+function Get-SequentialHistorySequence {
+    if ($script:SequentialFixtureCache) {
+        return $script:SequentialFixtureCache
+    }
+
+    $repoRoot = Invoke-Git -Arguments @('rev-parse', '--show-toplevel') | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+        throw 'Unable to resolve repository root for sequential history fixture.'
+    }
+
+    $fixturePath = Join-Path $repoRoot 'fixtures' 'vi-history' 'sequential.json'
+    if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) {
+        throw "Sequential history fixture not found: $fixturePath"
+    }
+
+    try {
+        $fixtureRaw = Get-Content -LiteralPath $fixturePath -Raw -ErrorAction Stop
+        $fixtureObj = $fixtureRaw | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        throw ("Unable to parse sequential history fixture {0}: {1}" -f $fixturePath, $_.Exception.Message)
+    }
+
+    if ($fixtureObj.schema -ne 'vi-history-sequence@v1') {
+        throw "Unsupported sequential fixture schema '$($fixtureObj.schema)' (expected vi-history-sequence@v1)."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($fixtureObj.targetPath)) {
+        throw 'Sequential history fixture must declare targetPath.'
+    }
+
+    if (-not $fixtureObj.steps -or $fixtureObj.steps.Count -eq 0) {
+        throw 'Sequential history fixture must define at least one step.'
+    }
+
+    $targetResolved = if ([System.IO.Path]::IsPathRooted($fixtureObj.targetPath)) {
+        $fixtureObj.targetPath
+    } else {
+        Join-Path $repoRoot $fixtureObj.targetPath
+    }
+
+    if (-not (Test-Path -LiteralPath $targetResolved -PathType Leaf)) {
+        throw "Sequential history target not found on disk: $($fixtureObj.targetPath)"
+    }
+
+    $stepObjects = New-Object System.Collections.Generic.List[pscustomobject]
+    foreach ($step in $fixtureObj.steps) {
+        if (-not $step.source) {
+            throw 'Sequential history fixture step missing source path.'
+        }
+
+        $resolvedSource = if ([System.IO.Path]::IsPathRooted($step.source)) {
+            $step.source
+        } else {
+            Join-Path $repoRoot $step.source
+        }
+
+        if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) {
+            throw "Sequential history source not found: $($step.source)"
+        }
+
+        $stepObjects.Add([pscustomobject]@{
+            id             = $step.id
+            title          = $step.title
+            message        = $step.message
+            source         = $step.source
+            resolvedSource = $resolvedSource
+        }) | Out-Null
+    }
+
+    $script:SequentialFixtureCache = [pscustomobject]@{
+        path               = $fixturePath
+        repoRoot           = $repoRoot
+        targetPathRelative = $fixtureObj.targetPath
+        targetPathResolved = $targetResolved
+        steps              = $stepObjects
+        maxPairs           = if ($fixtureObj.PSObject.Properties['maxPairs']) { [int]$fixtureObj.maxPairs } else { $null }
+    }
+
+    return $script:SequentialFixtureCache
+}
+
+function Invoke-AttributeHistoryCommit {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetVi
+    )
+
+    $sourceVi = 'fixtures/vi-attr/Base.vi'
+    Write-Host "Applying synthetic history change: $TargetVi <= $sourceVi"
+    Copy-VIContent -Source $sourceVi -Destination $TargetVi
+    $statusAfterPrep = Invoke-Git -Arguments @('status', '--short', $TargetVi)
+    Write-Host ("Post-change status for {0}: {1}" -f $TargetVi, ($statusAfterPrep -join ' '))
+    Invoke-Git -Arguments @('add', '-f', $TargetVi) | Out-Null
+    Invoke-Git -Arguments @('commit', '-m', 'chore: synthetic VI attr diff for history smoke') | Out-Null
+
+    return @(
+        [pscustomobject]@{
+            Title   = 'VI Attribute'
+            Source  = $sourceVi
+            Message = 'chore: synthetic VI attr diff for history smoke'
+        }
+    )
+}
+
+function Invoke-SequentialHistoryCommits {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TargetVi
+    )
+
+    $fixture = Get-SequentialHistorySequence
+    Write-Verbose ("Sequential fixture loaded from {0}" -f $fixture.path)
+
+    $targetSource = if ([string]::IsNullOrWhiteSpace($TargetVi)) {
+        $fixture.targetPathRelative
+    } else {
+        $TargetVi
+    }
+
+    $targetResolved = if ([System.IO.Path]::IsPathRooted($targetSource)) {
+        $targetSource
+    } else {
+        Join-Path $fixture.repoRoot $targetSource
+    }
+
+    $targetRelative = if ([System.IO.Path]::IsPathRooted($targetSource)) {
+        [System.IO.Path]::GetRelativePath($fixture.repoRoot, $targetResolved)
+    } else {
+        $targetSource
+    }
+
+    if ($fixture.targetPathRelative -and ($fixture.targetPathRelative -ne $targetRelative)) {
+        Write-Verbose ("Sequential fixture target differs from supplied target: fixture={0}, requested={1}" -f $fixture.targetPathRelative, $targetRelative)
+    }
+
+    $commits = New-Object System.Collections.Generic.List[pscustomobject]
+    for ($index = 0; $index -lt $fixture.steps.Count; $index++) {
+        $step = $fixture.steps[$index]
+        $stepNumber = $index + 1
+        $displaySource = if ($step.source) { $step.source } else { $step.resolvedSource }
+        Write-Host ("Applying sequential step {0}: {1} <= {2}" -f $stepNumber, $targetRelative, $displaySource)
+        Copy-VIContent -Source $step.resolvedSource -Destination $targetResolved
+        $statusAfterStep = Invoke-Git -Arguments @('status', '--short', $targetRelative)
+        Write-Host ("Post-step status for {0}: {1}" -f $targetRelative, ($statusAfterStep -join ' '))
+        Invoke-Git -Arguments @('add', '-f', $targetRelative) | Out-Null
+        $commitMessage = if ([string]::IsNullOrWhiteSpace($step.message)) {
+            "chore: sequential history step $stepNumber"
+        } else {
+            $step.message
+        }
+        Invoke-Git -Arguments @('commit', '-m', $commitMessage) | Out-Null
+        $commits.Add([pscustomobject]@{
+            Title   = if ($step.title) { $step.title } else { "Step $stepNumber" }
+            Source  = $displaySource
+            Message = $commitMessage
+        }) | Out-Null
+    }
+
+    return $commits.ToArray()
+}
+
 Write-Verbose "Base branch: $BaseBranch"
 Write-Verbose "KeepBranch: $KeepBranch"
 Write-Verbose "DryRun: $DryRun"
+Write-Verbose "Scenario: $Scenario"
 Write-Verbose "MaxPairs: $MaxPairs"
 
 $repoInfo = Get-RepoInfo
@@ -225,29 +397,58 @@ $initialBranch = Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD') | 
 
 Ensure-CleanWorkingTree
 
+$scenarioKey = $Scenario.ToLowerInvariant()
+switch ($scenarioKey) {
+    'attribute' {
+        $scenarioBranchSuffix = 'attr'
+        $scenarioDescription  = 'synthetic attribute difference'
+        $scenarioExpectation  = '`/vi-history` workflow completes successfully'
+        $scenarioPlanHint     = '- Replace fixtures/vi-attr/Head.vi with attribute variant and commit'
+        $scenarioNeedsArtifactValidation = $false
+    }
+    'sequential' {
+        $scenarioBranchSuffix = 'sequential'
+        $scenarioDescription  = 'sequential multi-category history'
+        $scenarioExpectation  = '`/vi-history` workflow reports multi-row diff summary'
+        $scenarioPlanHint     = '- Apply sequential fixture commits from fixtures/vi-history/sequential.json (attribute, front panel, connector pane, control rename, block diagram cosmetic)'
+        $scenarioNeedsArtifactValidation = $true
+    }
+    default {
+        throw "Unsupported scenario: $Scenario"
+    }
+}
+
 $timestamp = (Get-Date).ToString('yyyyMMddHHmmss')
-$branchName = "smoke/vi-history-$timestamp"
-$prTitle = "Smoke: VI history compare ($timestamp)"
-$prNote = "vi-history smoke $timestamp"
+$branchName = "smoke/vi-history-$scenarioBranchSuffix-$timestamp"
+$prTitle = "Smoke: VI history compare ($scenarioDescription; $timestamp)"
+$prNote = "vi-history smoke $scenarioKey $timestamp"
 $summaryDir = Join-Path 'tests' 'results' '_agent' 'smoke' 'vi-history'
 New-Item -ItemType Directory -Path $summaryDir -Force | Out-Null
 $summaryPath = Join-Path $summaryDir ("vi-history-smoke-{0}.json" -f $timestamp)
 $workflowPath = '.github/workflows/pr-vi-history.yml'
 
+$planSteps = [System.Collections.Generic.List[string]]::new()
+$planSteps.Add("- Fetch origin/$BaseBranch") | Out-Null
+$planSteps.Add("- Create branch $branchName from origin/$BaseBranch") | Out-Null
+$planSteps.Add($scenarioPlanHint) | Out-Null
+$planSteps.Add("- Push scratch branch and create draft PR") | Out-Null
+$planSteps.Add("- Dispatch pr-vi-history.yml with PR input (max_pairs=$MaxPairs)") | Out-Null
+$planSteps.Add("- Wait for workflow completion and verify PR comment") | Out-Null
+if ($scenarioNeedsArtifactValidation) {
+    $planSteps.Add("- Download workflow artifact and validate diff/comparison counts") | Out-Null
+}
+$planSteps.Add("- Record summary under tests/results/_agent/smoke/vi-history/") | Out-Null
+if (-not $KeepBranch) {
+    $planSteps.Add("- Close draft PR and delete branch") | Out-Null
+} else {
+    $planSteps.Add("- Leave branch/PR for inspection (KeepBranch present)") | Out-Null
+}
+
 if ($DryRun) {
     Write-Host 'Dry-run mode: no changes will be made.'
     Write-Host 'Plan:'
-    Write-Host "  - Fetch origin/$BaseBranch"
-    Write-Host "  - Create branch $branchName from origin/$BaseBranch"
-    Write-Host "  - Replace fixtures/vi-attr/Head.vi with attribute variant and commit"
-    Write-Host "  - Push scratch branch and create draft PR"
-    Write-Host "  - Dispatch pr-vi-history.yml with PR input (max_pairs=$MaxPairs)"
-    Write-Host '  - Wait for workflow completion and verify PR comment'
-    Write-Host '  - Record summary under tests/results/_agent/smoke/vi-history/'
-    if (-not $KeepBranch) {
-        Write-Host '  - Close draft PR and delete branch'
-    } else {
-        Write-Host '  - Leave branch/PR for inspection (KeepBranch present)'
+    foreach ($step in $planSteps) {
+        Write-Host "  $step"
     }
     return
 }
@@ -261,34 +462,51 @@ $scratchContext = [ordered]@{
     WorkflowUrl   = $null
     Success       = $false
     Note          = $prNote
+    Scenario      = $scenarioKey
+    CommitCount   = 0
+    Comparisons   = $null
+    Diffs         = $null
+    ArtifactValidated = $false
 }
+
+$commitSummaries = @()
 
 try {
     Invoke-Git -Arguments @('fetch', 'origin', $BaseBranch) | Out-Null
 
     Invoke-Git -Arguments @('checkout', "-B$branchName", "origin/$BaseBranch") | Out-Null
 
-    $sourceVi = 'fixtures/vi-attr/Base.vi'
     $targetVi = 'fixtures/vi-attr/Head.vi'
     Enable-HistoryTracking -Path $targetVi
-    Write-Host "Applying synthetic history change: $targetVi <= $sourceVi"
-    Copy-VIContent -Source $sourceVi -Destination $targetVi
-    $statusAfterPrep = Invoke-Git -Arguments @('status', '--short', $targetVi)
-    Write-Host ("Post-change status for {0}: {1}" -f $targetVi, ($statusAfterPrep -join ' '))
-    Invoke-Git -Arguments @('add', '-f', $targetVi) | Out-Null
-    Invoke-Git -Arguments @('commit', '-m', 'chore: synthetic VI attr diff for history smoke') | Out-Null
+
+    switch ($scenarioKey) {
+        'attribute' {
+            $commitSummaries = Invoke-AttributeHistoryCommit -TargetVi $targetVi
+        }
+        'sequential' {
+            $commitSummaries = Invoke-SequentialHistoryCommits -TargetVi $targetVi
+        }
+    }
+    $scratchContext.CommitCount = $commitSummaries.Count
 
     Invoke-Git -Arguments @('push', '-u', 'origin', $branchName) | Out-Null
 
     Write-Host "Creating draft PR for branch $branchName..."
-    $prBody = @(
-        '# VI history smoke test',
-        '',
-        '*This PR was generated by tools/Test-PRVIHistorySmoke.ps1.*',
-        '',
-        '- Scenario: synthetic attribute difference',
-        '- Expectation: `/vi-history` workflow completes successfully'
-    ) -join "`n"
+    $prBodyLines = New-Object System.Collections.Generic.List[string]
+    $prBodyLines.Add('# VI history smoke test') | Out-Null
+    $prBodyLines.Add('') | Out-Null
+    $prBodyLines.Add('*This PR was generated by tools/Test-PRVIHistorySmoke.ps1.*') | Out-Null
+    $prBodyLines.Add('') | Out-Null
+    $prBodyLines.Add("- Scenario: $scenarioDescription") | Out-Null
+    $prBodyLines.Add("- Expectation: $scenarioExpectation") | Out-Null
+    if ($commitSummaries.Count -gt 0) {
+        $prBodyLines.Add('') | Out-Null
+        $prBodyLines.Add('- Steps:') | Out-Null
+        foreach ($commitSummary in $commitSummaries) {
+            $prBodyLines.Add(("  - {0} (`{1}`)" -f $commitSummary.Title, $commitSummary.Source)) | Out-Null
+        }
+    }
+    $prBody = $prBodyLines -join "`n"
     Invoke-Gh -Arguments @('pr', 'create',
         '--repo', $repoInfo.Slug,
         '--base', $BaseBranch,
@@ -352,9 +570,70 @@ try {
     if ($prDetails -and $prDetails.comments) {
         $commentBodies = @($prDetails.comments | ForEach-Object { $_.body })
     }
-    $scratchContext.CommentFound = $commentBodies | Where-Object { $_ -like '*VI history compare*' } | ForEach-Object { $true } | Select-Object -First 1
-    if (-not $scratchContext.CommentFound) {
+    $historyComment = $commentBodies | Where-Object { $_ -like '*VI history compare*' } | Select-Object -First 1
+    $scratchContext.CommentFound = [bool]$historyComment
+    if (-not $historyComment) {
         throw 'Expected `/vi-history` comment not found on the draft PR.'
+    }
+
+    $rowPattern = '\|\s*<code>fixtures/vi-attr/Head\.vi</code>\s*\|\s*(?<change>[^|]+)\|\s*(?<comparisons>\d+)\s*\|\s*(?<diffs>\d+)\s*\|\s*(?<status>[^|]+)\|'
+    $rowMatch = [regex]::Match($historyComment, $rowPattern)
+    if ($rowMatch.Success) {
+        $scratchContext.Comparisons = [int]$rowMatch.Groups['comparisons'].Value
+        $scratchContext.Diffs = [int]$rowMatch.Groups['diffs'].Value
+    } else {
+        Write-Warning 'Unable to parse comparison/diff counts from the history comment.'
+    }
+
+    if ($scenarioKey -eq 'sequential') {
+        if (-not $rowMatch.Success) {
+            throw 'Failed to parse sequential summary row from history comment.'
+        }
+        $comparisonsValue = [int]$rowMatch.Groups['comparisons'].Value
+        $diffsValue = [int]$rowMatch.Groups['diffs'].Value
+        $statusValue = $rowMatch.Groups['status'].Value.Trim()
+        if ($comparisonsValue -lt [Math]::Max(1, $commitSummaries.Count)) {
+            throw ("Expected at least {0} comparisons, but comment reported {1}." -f [Math]::Max(1, $commitSummaries.Count), $comparisonsValue)
+        }
+        if ($diffsValue -lt 1) {
+            throw 'Sequential history comment should report at least one diff.'
+        }
+        if ($statusValue -notlike '*diff*') {
+            throw ("Expected status column to mark diff but saw '{0}'." -f $statusValue)
+        }
+
+        $artifactDir = Join-Path $summaryDir ("artifact-$timestamp")
+        New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+        Invoke-Gh -Arguments @(
+            'run', 'download',
+            $runId.ToString(),
+            '--name', ("pr-vi-history-{0}" -f $scratchContext.PrNumber),
+            '--dir', $artifactDir
+        ) | Out-Null
+
+        $summaryFile = Get-ChildItem -LiteralPath $artifactDir -Recurse -Filter 'vi-history-summary.json' | Select-Object -First 1
+        if (-not $summaryFile) {
+            throw 'Summary JSON not found in downloaded artifact.'
+        }
+        $summaryData = Get-Content -LiteralPath $summaryFile.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $targetSummary = $summaryData.targets | Select-Object -First 1
+        if (-not $targetSummary) {
+            throw 'Summary JSON does not contain target entries.'
+        }
+        $artifactComparisons = if ($targetSummary.stats) { [int]$targetSummary.stats.processed } else { 0 }
+        $artifactDiffs = if ($targetSummary.stats) { [int]$targetSummary.stats.diffs } else { 0 }
+        if ($artifactComparisons -lt [Math]::Max(1, $commitSummaries.Count)) {
+            throw ("Summary JSON reported {0} comparisons; expected at least {1}." -f $artifactComparisons, [Math]::Max(1, $commitSummaries.Count))
+        }
+        if ($artifactDiffs -lt 1) {
+            throw 'Summary JSON should report at least one diff for sequential history smoke.'
+        }
+        $scratchContext.ArtifactValidated = $true
+        try {
+            Remove-Item -LiteralPath $artifactDir -Recurse -Force
+        } catch {
+            Write-Warning ("Failed to delete temporary artifact directory {0}: {1}" -f $artifactDir, $_.Exception.Message)
+        }
     }
 
     $scratchContext.Success = $true
