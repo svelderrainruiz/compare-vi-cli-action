@@ -46,11 +46,15 @@ function Install-Actionlint([string]$repoRoot,[string]$version){
     } finally { if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue } }
   } else {
     # Try vendored downloader if available
-    $dl = Join-Path $bin 'dl-actionlint.sh'
-    if (Test-Path -LiteralPath $dl -PathType Leaf) {
-      Write-Info "Installing actionlint ${version} via dl-actionlint.sh..."
-      & bash $dl $version $bin
-    } else {
+  $dlCandidates = @(
+    (Join-Path -Path $bin -ChildPath 'dl-actionlint.sh'),
+    (Join-Path -Path $repoRoot -ChildPath 'tools/dl-actionlint.sh')
+  )
+  $dl = $dlCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+  if ($dl) {
+    Write-Info "Installing actionlint ${version} via dl-actionlint.sh (${dl})..."
+    & bash $dl $version $bin
+  } else {
       # Generic fallback using upstream script
       Write-Info "Installing actionlint ${version} via upstream script..."
       $script = "https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash"
@@ -86,6 +90,17 @@ function Invoke-Actionlint([string]$repoRoot){
 }
 
 $root = (Get-RepoRoot).Path
+$guardScript = Join-Path (Split-Path -Parent $PSCommandPath) 'Assert-NoAmbiguousRemoteRefs.ps1'
+
+Push-Location $root
+try {
+  Write-Host '[pre-push] Verifying remote refs are unambiguous' -ForegroundColor Cyan
+  & $guardScript
+  Write-Host '[pre-push] remote references OK' -ForegroundColor Green
+} finally {
+  Pop-Location | Out-Null
+}
+
 $code = Invoke-Actionlint -repoRoot $root
 if ($code -ne 0) {
   Write-Error "actionlint reported issues (exit=$code)."

@@ -8,15 +8,28 @@ Describe 'Get-BranchProtectionRequiredChecks' -Tag 'Unit' {
     Mock Invoke-RestMethod {
       [pscustomobject]@{
         required_status_checks = [pscustomobject]@{
-          contexts = @('Validate / lint','Validate / fixtures')
-          checks   = @()
+          contexts = @()
+          checks   = @(
+            @{ context = 'Validate / lint' },
+            @{ context = 'Validate / fixtures' },
+            @{ context = 'Validate / session-index' },
+            @{ context = 'Validate / issue-snapshot' },
+            @{ context = 'Policy Guard (Upstream) / policy-guard' }
+          )
         }
       }
     }
 
     $result = & $script:scriptPath -Owner 'octo' -Repository 'repo' -Branch 'develop' -Token 'token'
     $result.status | Should -Be 'available'
-    ($result.contexts | Sort-Object) | Should -Be @('Validate / fixtures','Validate / lint')
+    $expected = @(
+      'Policy Guard (Upstream) / policy-guard',
+      'Validate / fixtures',
+      'Validate / issue-snapshot',
+      'Validate / lint',
+      'Validate / session-index'
+    )
+    ($result.contexts | Sort-Object) | Should -Be ($expected | Sort-Object)
     @($result.notes).Length | Should -Be 0
   }
 

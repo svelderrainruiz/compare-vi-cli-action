@@ -5,12 +5,15 @@
     "develop": [
       "Validate / lint",
       "Validate / fixtures",
-      "Validate / session-index"
+      "Validate / session-index",
+      "Validate / issue-snapshot",
+      "Policy Guard (Upstream) / policy-guard"
     ],
     "main": [
-      "Validate / lint",
-      "Validate / fixtures",
-      "Validate / session-index"
+      "pester",
+      "vi-binary-check",
+      "vi-compare",
+      "Policy Guard (Upstream) / policy-guard"
     ]
   }
 }

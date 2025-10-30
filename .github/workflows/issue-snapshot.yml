@@ -17,12 +17,14 @@ jobs:
       - name: Sync standing-priority snapshot
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           npm ci --ignore-scripts
           node tools/npm/run-script.mjs priority:sync || true
       - name: Upload snapshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: standing-priority-snapshot-${{ github.run_id }}
           path: |

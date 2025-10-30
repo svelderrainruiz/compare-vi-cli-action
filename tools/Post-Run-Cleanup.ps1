@@ -76,6 +76,51 @@ function Remove-RequestFiles {
   }
 }
 
+function Invoke-ForceCloseProcesses {
+  param(
+    [string[]]$ProcessNames,
+    [string]$Label
+  )
+
+  $scriptPath = Join-Path $repoRoot 'tools' 'Force-CloseLabVIEW.ps1'
+  if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+    Write-Log ("Force-CloseLabVIEW.ps1 not found; skipping {0} fallback." -f $Label)
+    return $false
+  }
+
+  $processArgs = @()
+  if ($ProcessNames -and $ProcessNames.Count -gt 0) {
+    $processArgs = @('-ProcessName', $ProcessNames)
+  }
+
+  $output = & $scriptPath @processArgs
+  $exitCode = $LASTEXITCODE
+  if ($output) {
+    Write-Log ("Force-CloseLabVIEW output ({0}): {1}" -f $Label, $output)
+  }
+
+  Start-Sleep -Milliseconds 300
+  $remaining = @()
+  foreach ($name in $ProcessNames) {
+    try { $remaining += @(Get-Process -Name $name -ErrorAction SilentlyContinue) } catch {}
+  }
+  if ($exitCode -eq 0 -and $remaining.Count -eq 0) {
+    Write-Log ("Force close succeeded for {0}." -f ($ProcessNames -join ','))
+    return $true
+  }
+
+  if ($remaining.Count -gt 0) {
+    $details = $remaining | ForEach-Object { "{0}(PID {1})" -f $_.ProcessName, $_.Id }
+    Write-Warning ("Force-CloseLabVIEW unable to terminate {0}: {1}" -f $Label, ($details -join ', '))
+  }
+
+  if ($exitCode -ne 0) {
+    Write-Warning ("Force-CloseLabVIEW exited with code {0} for {1}." -f $exitCode, $Label)
+  }
+
+  return $false
+}
+
 Write-Log ("Post-Run-Cleanup invoked. Parameters: CloseLabVIEW={0}, CloseLVCompare={1}" -f $CloseLabVIEW.IsPresent, $CloseLVCompare.IsPresent)
 $debugTool = Join-Path $repoRoot 'tools' 'Debug-ChildProcesses.ps1'
 $preSnapshot = $null
@@ -97,20 +142,48 @@ function Invoke-CloseLabVIEW {
     if ($Metadata.ContainsKey('version') -and $Metadata.version) { $params.MinimumSupportedLVVersion = $Metadata.version }
     if ($Metadata.ContainsKey('bitness') -and $Metadata.bitness) { $params.SupportedBitness = $Metadata.bitness }
   }
+  $markerPath = Join-Path $logDir 'once-close-labview.marker'
+  if (Test-Path -LiteralPath $markerPath) {
+    Write-Log 'Close-LabVIEW already executed; skipping duplicate.'
+    return
+  }
   $action = {
     param($scriptPath,$params)
     & $scriptPath @params
     $exit = $LASTEXITCODE
-    if ($exit -ne 0) {
-      throw "Close-LabVIEW.ps1 exited with code $exit."
-    }
+    $exit
   }.GetNewClosure()
-  $executed = Invoke-Once -Key 'close-labview' -Action { & $action $scriptPath $params } -ScopeDirectory $logDir
-  if ($executed) {
-    Write-Log "Close-LabVIEW executed successfully."
-  } else {
-    Write-Log 'Close-LabVIEW already executed; skipping duplicate.'
+  $attempt = 0
+  $maxAttempts = 3
+  while ($attempt -lt $maxAttempts) {
+    $attempt++
+    $exitCode = & $action $scriptPath $params
+    if ($exitCode -ne 0) {
+      Write-Warning ("Close-LabVIEW.ps1 exited with code {0} (attempt {1}/{2})." -f $exitCode,$attempt,$maxAttempts)
+    }
+    Start-Sleep -Milliseconds 300
+    $stillRunning = @()
+    try { $stillRunning = @(Get-Process -Name 'LabVIEW' -ErrorAction SilentlyContinue) } catch {}
+    if ($exitCode -eq 0 -and $stillRunning.Count -eq 0) {
+      $executed = Invoke-Once -Key 'close-labview' -Action { } -ScopeDirectory $logDir
+      if ($executed) { Write-Log "Close-LabVIEW executed successfully." }
+      return
+    }
+    if ($stillRunning.Count -gt 0) {
+      Write-Warning ("Close-LabVIEW.ps1 completed but LabVIEW.exe still running (PID(s): {0})" -f ($stillRunning.Id -join ','))
+    }
+  if ($attempt -lt $maxAttempts) {
+    Write-Log ("Close-LabVIEW retry scheduled ({0}/{1})." -f ($attempt + 1), $maxAttempts)
+    Start-Sleep -Seconds 1
   }
+}
+  Write-Log "Close-LabVIEW helper retries exhausted; invoking force-close fallback."
+  if (Invoke-ForceCloseProcesses -ProcessNames @('LabVIEW') -Label 'LabVIEW') {
+    $executed = Invoke-Once -Key 'close-labview' -Action { } -ScopeDirectory $logDir
+    if ($executed) { Write-Log "Close-LabVIEW force-close executed successfully." }
+    return
+  }
+  throw "Close-LabVIEW.ps1 failed to terminate LabVIEW.exe after $maxAttempts attempt(s)."
 }
 
 function Invoke-CloseLVCompare {
@@ -141,12 +214,41 @@ function Invoke-CloseLVCompare {
       throw "Close-LVCompare.ps1 exited with code $exit."
     }
   }.GetNewClosure()
-  $executed = Invoke-Once -Key 'close-lvcompare' -Action { & $action $scriptPath $params } -ScopeDirectory $logDir
-  if ($executed) {
-    Write-Log "Close-LVCompare executed successfully."
-  } else {
+  $markerPath = Join-Path $logDir 'once-close-lvcompare.marker'
+  if (Test-Path -LiteralPath $markerPath) {
     Write-Log 'Close-LVCompare already executed; skipping duplicate.'
+    return
   }
+  $attempt = 0
+  $maxAttempts = 3
+  while ($attempt -lt $maxAttempts) {
+    $attempt++
+    try {
+      & $action $scriptPath $params
+    } catch {
+      Write-Warning ("Close-LVCompare.ps1 exited with error (attempt {0}/{1}): {2}" -f $attempt,$maxAttempts,$_.Exception.Message)
+    }
+    Start-Sleep -Milliseconds 300
+    $remaining = @()
+    try { $remaining = @(Get-Process -Name 'LVCompare' -ErrorAction SilentlyContinue) } catch {}
+    if ($remaining.Count -eq 0) {
+      $executed = Invoke-Once -Key 'close-lvcompare' -Action { } -ScopeDirectory $logDir
+      if ($executed) { Write-Log "Close-LVCompare executed successfully." }
+      return
+    }
+    Write-Warning ("Close-LVCompare.ps1 completed but LVCompare.exe still running (PID(s): {0})" -f ($remaining.Id -join ','))
+  if ($attempt -lt $maxAttempts) {
+    Write-Log ("Close-LVCompare retry scheduled ({0}/{1})." -f ($attempt + 1), $maxAttempts)
+    Start-Sleep -Seconds 1
+  }
+}
+  Write-Log "Close-LVCompare helper retries exhausted; invoking force-close fallback."
+  if (Invoke-ForceCloseProcesses -ProcessNames @('LVCompare') -Label 'LVCompare') {
+    $executed = Invoke-Once -Key 'close-lvcompare' -Action { } -ScopeDirectory $logDir
+    if ($executed) { Write-Log "Close-LVCompare force-close executed successfully." }
+    return
+  }
+  throw "Close-LVCompare.ps1 failed to terminate LVCompare.exe after $maxAttempts attempt(s)."
 }
 
 try {

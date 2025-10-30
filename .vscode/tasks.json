@@ -18,6 +18,22 @@
       "problemMatcher": []
     },
     {
+      "label": "Smoke: VI staging label",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "$env:GH_TOKEN = Get-Content -Raw 'C:\\github_token.txt'; npm run smoke:vi-stage"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
       "label": "Validation: Pester (unit)",
       "type": "process",
       "command": "pwsh",
@@ -100,6 +116,78 @@
       },
       "group": "test",
       "problemMatcher": []
+    },
+    {
+      "label": "VI History: Run local suite",
+      "type": "process",
+      "command": "npm",
+      "args": [
+        "run",
+        "history:run",
+        "--",
+        "-ViPath",
+        "${input:viHistoryPath}",
+        "-StartRef",
+        "${input:viHistoryStartRef}",
+        "-MaxPairs",
+        "${input:viHistoryMaxPairs}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "VI History: Dispatch workflow",
+      "type": "process",
+      "command": "npm",
+      "args": [
+        "run",
+        "history:dispatch",
+        "--",
+        "-ViPath",
+        "${input:viHistoryPath}",
+        "-CompareRef",
+        "${input:viHistoryCompareRef}",
+        "-NotifyIssue",
+        "${input:viHistoryNotifyIssue}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "viHistoryPath",
+      "type": "promptString",
+      "description": "Repository-relative VI path",
+      "default": "VI1.vi"
+    },
+    {
+      "id": "viHistoryStartRef",
+      "type": "promptString",
+      "description": "Start ref (use HEAD for branch tip)",
+      "default": "HEAD"
+    },
+    {
+      "id": "viHistoryMaxPairs",
+      "type": "promptString",
+      "description": "Maximum commit pairs to inspect (0 = unlimited)",
+      "default": "3"
+    },
+    {
+      "id": "viHistoryCompareRef",
+      "type": "promptString",
+      "description": "Workflow compare ref (branch/commit)",
+      "default": "develop"
+    },
+    {
+      "id": "viHistoryNotifyIssue",
+      "type": "promptString",
+      "description": "Issue number to notify (leave blank to skip)",
+      "default": "317"
     }
   ]
 }

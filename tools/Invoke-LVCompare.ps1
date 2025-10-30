@@ -61,6 +61,11 @@
 
 .PARAMETER LeakGraceSeconds
   Optional grace delay before leak check to reduce false positives (default 0.5 seconds).
+
+.PARAMETER TimeoutSeconds
+  Optional override for the LVCompare execution timeout (seconds). When omitted,
+  defaults apply (300s for LabVIEW CLI captures, unlimited for direct LVCompare
+  capture).
 #>
 [CmdletBinding()]
 param(
@@ -73,6 +78,7 @@ param(
   [string]$LVComparePath,
   [string[]]$Flags,
   [switch]$ReplaceFlags,
+  [switch]$AllowSameLeaf,
     [string]$OutputDir = 'tests/results/single-compare',
     [switch]$RenderReport,
     [ValidateSet('html','xml','text')]
@@ -83,7 +89,8 @@ param(
   [string]$LeakJsonPath,
   [string]$CaptureScriptPath,
   [switch]$Summary,
-  [double]$LeakGraceSeconds = 0.5
+  [double]$LeakGraceSeconds = 0.5,
+  [Nullable[int]]$TimeoutSeconds
 )
 
 Set-StrictMode -Version Latest
@@ -395,8 +402,46 @@ function Invoke-LabVIEWCLICompare {
     [switch]$RenderReport,
     [string[]]$Flags,
     [ValidateSet('html','xml','text')]
-    [string]$ReportFormat = 'html'
+    [string]$ReportFormat = 'html',
+    [switch]$AllowSameLeaf,
+    [Nullable[int]]$TimeoutSeconds
   )
+
+  $stageCleanupRoot = $null
+  $baseResolved = (Resolve-Path -LiteralPath $Base -ErrorAction Stop).Path
+  $headResolved = (Resolve-Path -LiteralPath $Head -ErrorAction Stop).Path
+  $stageAllowSameLeaf = $AllowSameLeaf.IsPresent
+  if ($baseResolved -ne $headResolved) {
+    $baseLeaf = Split-Path -Leaf $baseResolved
+    $headLeaf = Split-Path -Leaf $headResolved
+    if ($baseLeaf -and $headLeaf -and [string]::Equals($baseLeaf, $headLeaf, [System.StringComparison]::OrdinalIgnoreCase) -and -not $stageAllowSameLeaf) {
+      $stageScript = Join-Path $PSScriptRoot 'Stage-CompareInputs.ps1'
+      if (-not (Test-Path -LiteralPath $stageScript -PathType Leaf)) {
+        throw "LVCompare limitation: Cannot compare two VIs sharing the same filename '$baseLeaf' located in different directories. Rename one copy or provide distinct filenames. Base=$baseResolved Head=$headResolved"
+      }
+      try {
+        $stagingInfo = & $stageScript -BaseVi $baseResolved -HeadVi $headResolved
+      } catch {
+        throw ("Invoke-LabVIEWCLICompare: staging failed -> {0}" -f $_.Exception.Message)
+      }
+      if (-not $stagingInfo) { throw 'Invoke-LabVIEWCLICompare: Stage-CompareInputs.ps1 returned no staging information.' }
+      if ($stagingInfo.Root) { $stageCleanupRoot = $stagingInfo.Root }
+      try { $baseResolved = (Resolve-Path -LiteralPath $stagingInfo.Base -ErrorAction Stop).Path } catch { $baseResolved = $stagingInfo.Base }
+      try { $headResolved = (Resolve-Path -LiteralPath $stagingInfo.Head -ErrorAction Stop).Path } catch { $headResolved = $stagingInfo.Head }
+      if ($stagingInfo.PSObject.Properties['AllowSameLeaf']) {
+        $allowSameLeafValue = $false
+        try { $allowSameLeafValue = [bool]$stagingInfo.AllowSameLeaf } catch { $allowSameLeafValue = $false }
+        if ($allowSameLeafValue) { $stageAllowSameLeaf = $true }
+      }
+      $baseLeaf = Split-Path -Leaf $baseResolved
+      $headLeaf = Split-Path -Leaf $headResolved
+    }
+    if ($baseLeaf -and $headLeaf -and $baseResolved -ne $headResolved -and [string]::Equals($baseLeaf, $headLeaf, [System.StringComparison]::OrdinalIgnoreCase) -and -not $stageAllowSameLeaf) {
+      throw "LVCompare limitation: Cannot compare two VIs sharing the same filename '$baseLeaf' located in different directories. Rename one copy or provide distinct filenames. Base=$baseResolved Head=$headResolved"
+    }
+  }
+  $Base = $baseResolved
+  $Head = $headResolved
 
   New-DirIfMissing -Path $OutDir
   $reportPath = $null
@@ -442,6 +487,10 @@ function Invoke-LabVIEWCLICompare {
     if ($filteredFlags.Count -gt 0) {
       $invokeParams.Flags = @($filteredFlags)
     }
+  }
+
+  if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -gt 0) {
+    $invokeParams.TimeoutSeconds = $TimeoutSeconds
   }
 
   $cliResult = Invoke-LVCreateComparisonReport @invokeParams
@@ -513,19 +562,35 @@ function Invoke-LabVIEWCLICompare {
   $capture | Add-Member -NotePropertyName environment -NotePropertyValue $envBlock -Force
   $capture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $capPath -Encoding utf8
 
-  return [pscustomobject]@{
+  $resultObject = [pscustomobject]@{
     ExitCode   = [int]$cliResult.exitCode
     Seconds    = [double]$cliResult.elapsedSeconds
     CapturePath= $capPath
     ReportPath = if ($reportPath) { $reportPath } else { $cliInfoOrdered['reportPath'] }
     Command    = $cliResult.command
   }
+
+  if ($stageCleanupRoot) {
+    try {
+      if (Test-Path -LiteralPath $stageCleanupRoot -PathType Container) {
+        Remove-Item -LiteralPath $stageCleanupRoot -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+
+  return $resultObject
 }
 
 $repoRoot = (Resolve-Path '.').Path
 New-DirIfMissing -Path $OutputDir
 Initialize-LabVIEWPidTracker
 Set-DefaultLabVIEWCliPath
+
+$originalBaseVi = $BaseVi
+$originalHeadVi = $HeadVi
+$stageCleanupRoot = $null
+
+try {
 
 # Resolve LabVIEW path (prefer explicit/env LABVIEW_PATH; fallback to 2025 canonical by bitness)
 if (-not $LabVIEWExePath) {
@@ -544,6 +609,28 @@ if (-not $LabVIEWExePath -or -not (Test-Path -LiteralPath $LabVIEWExePath -PathT
   exit 2
 }
 
+$labviewSccEnabled = $false
+$labviewIniPath = $null
+try { $labviewIniPath = Get-LabVIEWIniPath -LabVIEWExePath $LabVIEWExePath } catch {}
+if ($labviewIniPath) {
+  try {
+    $sccUseValue = Get-LabVIEWIniValue -LabVIEWIniPath $labviewIniPath -Key 'SCCUseInLabVIEW'
+    $sccProviderValue = Get-LabVIEWIniValue -LabVIEWIniPath $labviewIniPath -Key 'SCCProviderIsActive'
+    $sccUseEnabled = ($sccUseValue -and ($sccUseValue.Trim() -ieq 'True'))
+    $sccProviderEnabled = ($sccProviderValue -and ($sccProviderValue.Trim() -ieq 'True'))
+    if ($sccUseEnabled -or $sccProviderEnabled) { $labviewSccEnabled = $true }
+  } catch {}
+}
+if ($labviewSccEnabled) {
+  $hint = Get-SourceControlBootstrapHint
+  $message = "Invoke-LVCompare: LabVIEW source control is enabled in '$labviewIniPath'. Disable Source Control in LabVIEW (Tools -> Options -> Source Control) or set SCCUseInLabVIEW=False before running headless comparisons."
+  if ($hint -and $message -notmatch 'SCC_ConnSrv') { $message = "$message; $hint" }
+  Write-Warning $message
+  Write-JsonEvent 'error' @{ stage='preflight'; message=$message }
+  Finalize-LabVIEWPidTracker -Status 'error' -ExitCode 2 -ProcessExitCode 2 -Message $message
+  exit 2
+}
+
   # Compose flags list: -lvpath then normalization flags
 $defaultFlags = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')
 $effectiveFlags = @()
@@ -553,6 +640,40 @@ if ($ReplaceFlags.IsPresent) {
 } else {
   $effectiveFlags += $defaultFlags
   if ($Flags) { $effectiveFlags += $Flags }
+}
+
+$baseNameOriginal = Split-Path -Path $BaseVi -Leaf
+$headNameOriginal = Split-Path -Path $HeadVi -Leaf
+$sameNameOriginal = [string]::Equals($baseNameOriginal, $headNameOriginal, [System.StringComparison]::OrdinalIgnoreCase)
+
+$baseResolvedForStage = $null
+$headResolvedForStage = $null
+try { $baseResolvedForStage = (Resolve-Path -LiteralPath $BaseVi -ErrorAction Stop).Path } catch {}
+try { $headResolvedForStage = (Resolve-Path -LiteralPath $HeadVi -ErrorAction Stop).Path } catch {}
+$stageAllowSameLeafOuter = $AllowSameLeaf.IsPresent
+if ($baseResolvedForStage -and $headResolvedForStage -and $baseResolvedForStage -ne $headResolvedForStage) {
+  $baseLeafStage = Split-Path -Leaf $baseResolvedForStage
+  $headLeafStage = Split-Path -Leaf $headResolvedForStage
+  if ($baseLeafStage -and $headLeafStage -and [string]::Equals($baseLeafStage, $headLeafStage, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $stageScript = Join-Path $PSScriptRoot 'Stage-CompareInputs.ps1'
+    if (-not (Test-Path -LiteralPath $stageScript -PathType Leaf)) {
+      throw "LVCompare limitation: Cannot compare two VIs sharing the same filename '$baseLeafStage' located in different directories. Rename one copy or provide distinct filenames. Base=$baseResolvedForStage Head=$headResolvedForStage"
+    }
+    try {
+      $stagingInfo = & $stageScript -BaseVi $baseResolvedForStage -HeadVi $headResolvedForStage
+    } catch {
+      throw ("Invoke-LVCompare: staging failed -> {0}" -f $_.Exception.Message)
+    }
+    if (-not $stagingInfo) { throw 'Invoke-LVCompare: Stage-CompareInputs.ps1 returned no staging information.' }
+    if ($stagingInfo.Root) { $stageCleanupRoot = $stagingInfo.Root }
+    try { $BaseVi = (Resolve-Path -LiteralPath $stagingInfo.Base -ErrorAction Stop).Path } catch { $BaseVi = $stagingInfo.Base }
+    try { $HeadVi = (Resolve-Path -LiteralPath $stagingInfo.Head -ErrorAction Stop).Path } catch { $HeadVi = $stagingInfo.Head }
+    if ($stagingInfo.PSObject.Properties['AllowSameLeaf']) {
+      $allowSameLeafValueOuter = $false
+      try { $allowSameLeafValueOuter = [bool]$stagingInfo.AllowSameLeaf } catch { $allowSameLeafValueOuter = $false }
+      if ($allowSameLeafValueOuter) { $stageAllowSameLeafOuter = $true }
+    }
+  }
 }
 
 $baseName = Split-Path -Path $BaseVi -Leaf
@@ -571,7 +692,7 @@ $reportFileName = switch ($reportFormatEffective) {
  $mode   = $env:LVCI_COMPARE_MODE
  if ([string]::IsNullOrWhiteSpace($mode)) { $mode = 'labview-cli' }
  $autoCli = $false
- if ($sameName -and $policy -ne 'lv-only') {
+ if ($sameNameOriginal -and $policy -ne 'lv-only') {
    $autoCli = $true
    if ($mode -ne 'labview-cli') { $mode = 'labview-cli' }
  }
@@ -579,6 +700,10 @@ $reportFileName = switch ($reportFormatEffective) {
 Write-JsonEvent 'plan' @{
   base      = $BaseVi
   head      = $HeadVi
+  baseOriginal = $originalBaseVi
+  headOriginal = $originalHeadVi
+  staged    = [bool]($stageCleanupRoot)
+  sameNameOriginal = $sameNameOriginal
   lvpath    = $LabVIEWExePath
   lvcompare = $LVComparePath
   flags     = ($effectiveFlags -join ' ')
@@ -595,7 +720,19 @@ Write-JsonEvent 'plan' @{
  $didCli = $false
 if (-not $CaptureScriptPath -and (($policy -eq 'cli-only') -or $autoCli -or ($mode -eq 'labview-cli' -and $policy -ne 'lv-only'))) {
   try {
-   $cliRes = Invoke-LabVIEWCLICompare -Base $BaseVi -Head $HeadVi -OutDir $OutputDir -RenderReport:$RenderReport.IsPresent -Flags $effectiveFlags -ReportFormat $ReportFormat
+   $cliParams = @{
+     Base         = $BaseVi
+     Head         = $HeadVi
+     OutDir       = $OutputDir
+     RenderReport = $RenderReport.IsPresent
+     Flags        = $effectiveFlags
+     ReportFormat = $ReportFormat
+   }
+   if ($stageAllowSameLeafOuter) { $cliParams.AllowSameLeaf = $true }
+   if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -gt 0) {
+     $cliParams.TimeoutSeconds = [int]$TimeoutSeconds
+   }
+   $cliRes = Invoke-LabVIEWCLICompare @cliParams
     if (-not $cliRes) { throw 'LabVIEW CLI compare returned no result payload.' }
     $reportAvailable = $false
     if ($cliRes -and $cliRes.PSObject.Properties['ReportPath'] -and $cliRes.ReportPath) {
@@ -617,7 +754,7 @@ if (-not $CaptureScriptPath -and (($policy -eq 'cli-only') -or $autoCli -or ($mo
    if ($CaptureScriptPath) { $captureScript = $CaptureScriptPath } else { $captureScript = Join-Path $repoRoot 'scripts' 'Capture-LVCompare.ps1' }
   if (-not (Test-Path -LiteralPath $captureScript -PathType Leaf)) { throw "Capture-LVCompare.ps1 not found at $captureScript" }
   try {
-    $captureParams = @{
+  $captureParams = @{
       Base         = $BaseVi
       Head         = $HeadVi
       LvArgs       = $effectiveFlags
@@ -627,6 +764,10 @@ if (-not $CaptureScriptPath -and (($policy -eq 'cli-only') -or $autoCli -or ($mo
     }
   if (-not $LVComparePath) { try { $LVComparePath = Resolve-LVComparePath } catch {} }
   if ($LVComparePath) { $captureParams.LvComparePath = $LVComparePath }
+  if ($stageAllowSameLeafOuter) { $captureParams.AllowSameLeaf = $true }
+  if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -gt 0) {
+    $captureParams.TimeoutSeconds = [int]$TimeoutSeconds
+  }
   & $captureScript @captureParams
   } catch {
    $message = $_.Exception.Message
@@ -844,4 +985,12 @@ if ($Summary) {
 }
 
 exit $exitCode
-
+} finally {
+  if ($stageCleanupRoot) {
+    try {
+      if (Test-Path -LiteralPath $stageCleanupRoot -PathType Container) {
+        Remove-Item -LiteralPath $stageCleanupRoot -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+}

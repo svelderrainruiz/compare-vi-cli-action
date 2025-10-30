@@ -216,11 +216,127 @@ jobs:
           phase: T1
           results-dir: tests/results
 
-      - name: Install Pester v5 (optional)
-        if: ${{ inputs.install_pester == 'true' }}
+      - name: Resolve Pester version
+        id: resolve_pester
+        if: ${{ inputs.skip_run != 'true' }}
         shell: pwsh
         run: |
-          Install-Module -Name Pester -RequiredVersion 5.4.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          $version = if ($env:PESTER_VERSION -and $env:PESTER_VERSION.Trim()) { $env:PESTER_VERSION } else { (./tools/Get-PesterVersion.ps1) }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install Pester ${{ steps.resolve_pester.outputs.version }} (optional)
+        if: ${{ inputs.install_pester == 'true' && inputs.skip_run != 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pesterVersion = '${{ steps.resolve_pester.outputs.version }}'
+          Write-Host "Installing Pester $pesterVersion"
+          $installed = $false
+          $galleryUri = 'https://www.powershellgallery.com/api/v2/'
+          $installLegacy = {
+            Install-Module -Name Pester -RequiredVersion $pesterVersion -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+          try {
+            &$installLegacy
+            $installed = $true
+          } catch {
+            Write-Host ("::notice::Install-Module first attempt failed: {0}" -f $_.Exception.Message)
+            try {
+              Register-PSRepository -Default -ErrorAction Stop
+            } catch {
+              Write-Host ("::warning::Register-PSRepository -Default failed: {0}" -f $_.Exception.Message)
+            }
+            try {
+              &$installLegacy
+              $installed = $true
+            } catch {
+              Write-Host ("::notice::Install-Module retry failed: {0}" -f $_.Exception.Message)
+              Write-Host "::notice::Falling back to PSResourceGet for Pester installation."
+              try {
+                Register-PSResourceRepository -Name PSGallery -Uri $galleryUri -Trusted -ErrorAction SilentlyContinue
+              } catch {
+                Write-Host ("::warning::Register-PSResourceRepository fallback failed: {0}" -f $_.Exception.Message)
+              }
+              $attempts = 0
+              $maxAttempts = 5
+              while (-not $installed -and $attempts -lt $maxAttempts) {
+                try {
+                  Install-PSResource -Name Pester -Version $pesterVersion -Scope CurrentUser -TrustRepository -Repository PSGallery
+                  $installed = $true
+                } catch {
+                  $attempts++
+                  if ($attempts -ge $maxAttempts) {
+                    Write-Host ("::warning::Install-PSResource exhausted attempts ({0}): {1}" -f $attempts, $_.Exception.Message)
+                    break
+                  }
+                  Write-Host ("::notice::Install-PSResource attempt {0} failed: {1}" -f $attempts, $_.Exception.Message)
+                  $delay = [math]::Min(30, [math]::Pow(2, $attempts))
+                  Start-Sleep -Seconds $delay
+                }
+              }
+              if (-not $installed) {
+                Write-Host "::notice::Attempting manual PSGallery download fallback for Pester."
+                $downloadRoot = Join-Path $env:RUNNER_TEMP 'pester-download'
+                New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
+                $packagePath = Join-Path $downloadRoot ("Pester.{0}.nupkg" -f $pesterVersion)
+                $downloadEndpoints = @(
+                  @{ Uri = ('{0}/package/Pester/{1}' -f $galleryUri.TrimEnd('/'), $pesterVersion); SkipCert = $false },
+                  @{ Uri = ('https://psg-prod-eastus.azureedge.net/packages/pester.{0}.nupkg' -f $pesterVersion.ToLowerInvariant()); SkipCert = $true }
+                )
+                $downloaded = $false
+                foreach ($endpoint in $downloadEndpoints) {
+                  if ($downloaded) { break }
+                  for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
+                    try {
+                      $commonArgs = @{
+                        Uri             = $endpoint.Uri
+                        OutFile         = $packagePath
+                        UseBasicParsing = $true
+                        ErrorAction     = 'Stop'
+                      }
+                      if ($endpoint.SkipCert) {
+                        Invoke-WebRequest @commonArgs -SkipCertificateCheck
+                      } else {
+                        Invoke-WebRequest @commonArgs
+                      }
+                      $downloaded = $true
+                    } catch {
+                      if ($i -ge 3) {
+                        Write-Host ("::warning::Manual download attempt {0} ({1}) failed: {2}" -f $i, $endpoint.Uri, $_.Exception.Message)
+                      } else {
+                        Write-Host ("::notice::Manual download attempt {0} ({1}) failed: {2}" -f $i, $endpoint.Uri, $_.Exception.Message)
+                        Start-Sleep -Seconds ([math]::Min(30, [math]::Pow(2, $i)))
+                      }
+                    }
+                  }
+                }
+                if ($downloaded -and (Test-Path -LiteralPath $packagePath)) {
+                  $modulePaths = $env:PSModulePath -split [System.IO.Path]::PathSeparator
+                  $destRoot = $modulePaths | Where-Object { $_ -and $_.Trim() } | Where-Object { $_ -like '*Modules*' } | Select-Object -First 1
+                  if (-not $destRoot) {
+                    $destRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.local/share/powershell/Modules'
+                  }
+                  $destPath = Join-Path $destRoot ('Pester/{0}' -f $pesterVersion)
+                  New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+                  Expand-Archive -Path $packagePath -DestinationPath $destPath -Force
+                  $installed = $true
+                } else {
+                  Write-Host "::warning::Manual PSGallery download fallback failed."
+                }
+              }
+            }
+          }
+          if (-not $installed) {
+            throw 'Failed to install Pester from PSGallery.'
+          }
+          $repo = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+          if ($repo -and $repo.InstallationPolicy -ne 'Trusted') {
+            try {
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            } catch {
+              Write-Host ("::notice::Unable to set PSGallery installation policy to Trusted: {0}" -f $_.Exception.Message)
+            }
+          }
 
       - name: Enable diagnostics (synthetic failure)
         if: ${{ inputs.diagnostic_fail == 'true' }}
@@ -236,13 +352,37 @@ jobs:
           $logDir = Split-Path -Parent $logPath
           if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
           if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
-          Import-Module ./Invoke-PesterTests.ps1 -Force
-          $cmd = Get-Command Invoke-PesterTests.ps1 -ErrorAction Stop
+          $dispatcherPath = Join-Path (Get-Location) 'Invoke-PesterTests.ps1'
+          if (-not (Test-Path -LiteralPath $dispatcherPath -PathType Leaf)) {
+            throw "Dispatcher script not found at $dispatcherPath"
+          }
+          $cmd = $dispatcherPath
           $lockScript = Join-Path (Get-Location) 'tools/Session-Lock.ps1'
           $bound = [ordered]@{}
           $bound.TestsPath = 'tests'
-          $bound.IncludeIntegration = '${{ needs.normalize.outputs.include_integration }}'
+          $includeIntegration = '${{ needs.normalize.outputs.include_integration }}'
+          if ($includeIntegration) {
+            try {
+              $normalized = $includeIntegration.ToString().ToLowerInvariant()
+            } catch {
+              $normalized = $null
+            }
+            switch ($normalized) {
+              { $_ -in @('true','1','yes','y','on','include') } {
+                $bound.IntegrationMode = 'include'
+              }
+              { $_ -in @('false','0','no','n','off','exclude') } {
+                $bound.IntegrationMode = 'exclude'
+              }
+              'auto' {
+                $bound.IntegrationMode = 'auto'
+              }
+            }
+          }
           $bound.ResultsPath = 'tests/results'
+          if ($env:DISPATCHER_LIVE_OUTPUT -ne '0') {
+            $bound.LiveOutput = $true
+          }
           if ('${{ steps.dprofile.outputs.emit_failures_json_always }}' -eq 'true') { $bound.EmitFailuresJsonAlways = $true }
           if ('${{ inputs.include_patterns }}' -ne '') {
             $patternInput = '${{ inputs.include_patterns }}'
@@ -279,10 +419,18 @@ jobs:
             $exitCode = $LASTEXITCODE
           } finally {
             if ($heartbeatJob) {
-              Stop-Job -Id $heartbeatJob.Id -Force | Out-Null
+              Stop-Job -Id $heartbeatJob.Id | Out-Null
               Remove-Job -Id $heartbeatJob.Id -Force | Out-Null
             }
             pwsh -NoLogo -NoProfile -File $lockScript -Action Heartbeat | Out-Null
+          }
+          if (-not $env:GITHUB_OUTPUT) {
+            $fallbackOutput = Join-Path (Get-Location) 'tests/results/dispatcher-github-output.txt'
+            $fallbackDir = Split-Path -Parent $fallbackOutput
+            if (-not (Test-Path -LiteralPath $fallbackDir)) {
+              New-Item -ItemType Directory -Path $fallbackDir -Force | Out-Null
+            }
+            $env:GITHUB_OUTPUT = [System.IO.Path]::GetFullPath($fallbackOutput)
           }
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           if ($exitCode -ne 0) {
@@ -411,7 +559,7 @@ jobs:
 
       - name: Upload Pester artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pester-results
           path: |
@@ -534,7 +682,7 @@ jobs:
 
       - name: Upload dev dashboard artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dev-dashboard
           path: |
@@ -560,7 +708,7 @@ jobs:
 
       - name: Upload compact totals artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pester-totals
           path: tests/results/pester-totals.json

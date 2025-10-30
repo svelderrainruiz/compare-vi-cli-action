@@ -9,6 +9,34 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 _No unreleased changes yet._
 
+## [v0.5.3] - 2025-10-30
+
+### Added
+
+- History and staging compares now surface structured diff categories and highlight snippets. `tools/Compare-VIHistory.ps1`,
+  `tools/Render-VIHistoryReport.ps1`, and `tools/Summarize-VIStaging.ps1` annotate each comparison with signal/cosmetic
+  badges and aggregate counts so reviewers can filter noise without downloading artifacts.
+- New report fixtures (`fixtures/vi-report/*`) plus focused test coverage
+  (`tests/Run-StagedLVCompare.Report.Tests.ps1`, expanded history/staging suites) validate block-diagram, front-panel, and
+  attribute coverage in captured LVCompare reports.
+- `vi-compare-refs.yml` exposes an optional `notify_issue` input that posts run summaries directly to a GitHub issue, and
+  the workflow publishes the rendered Markdown/HTML report paths through job outputs for downstream automation.
+
+### Changed
+
+- Manual compare workflow now defaults to `compare_modes="default,full"` so releases capture a full (no-ignore) pass
+  alongside the filtered baseline; helper documentation and VS Code tasks explain the new preset.
+- History report rendering adds category badges, per-mode category counts, and highlight columns to the Markdown and HTML
+  outputs. The staging PR summary tables mirror the same presentation so category noise is visible at a glance.
+- Priority policy fixtures/tests align with the updated branch-protection contract (develop/main/release),
+  ensuring `priority:policy` continues to guard the current required checks.
+
+### Fixed
+
+- `Invoke-LVCompare.ps1` and downstream helpers propagate leak metadata and timeout arguments reliably when staging
+  workflows re-run comparisons, avoiding stale PID tracker entries in history and staging summaries.
+- Fixture drift comment tests harden path resolution to prevent strict-mode faults during CI setup failures.
+
 ## [v0.5.2] - 2025-10-23
 
 ### Added

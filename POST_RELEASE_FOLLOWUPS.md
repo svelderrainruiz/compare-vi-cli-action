@@ -9,6 +9,8 @@ future releases.
 ### ✅ Issue 1 – Remove artifact fallback and expand guard
 
 - Drop legacy `Base.vi`/`Head.vi` name resolution from compare scripts and tests.
+- Confirm no automation depends on `tools/Warmup-LabVIEW.ps1` shim and remove the wrapper once all callers use
+  `Warmup-LabVIEWRuntime.ps1`.
 - Extend guard coverage across scripts and key docs with migration messaging in the release notes.
 - Guard test: `tests/Guard.LegacyArtifactNames.Tests.ps1`.
 

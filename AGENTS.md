@@ -7,11 +7,15 @@ line buffers).
 
 ## Primary directive
 
-- The standing priority is whichever issue carries the `standing-priority` label. Use the sanitized wrappers (`node
-  tools/npm/cli.mjs <command>` / `node tools/npm/run-script.mjs <script>`) instead of raw `npm` invocations (the
-  container exports `npm_config_http_proxy`, which triggers warnings in recent npm builds). Run `node tools/npm/run-
-  script.mjs priority:sync` at session start so `.agent_priority_cache.json` and `tests/results/_agent/issue/` reflect
-  the latest snapshot; treat that issue as the top objective for edits, CI runs, and PRs.
+- The standing priority is whichever issue carries the `standing-priority`
+  label. Use the sanitized wrappers (`node tools/npm/cli.mjs <command>` /
+  `node tools/npm/run-script.mjs <script>`) instead of raw `npm` invocations
+  (the container exports `npm_config_http_proxy`, which triggers warnings in
+  recent npm builds). Run `pwsh -NoLogo -NoProfile -File
+  tools/priority/bootstrap.ps1` at session start so
+  `.agent_priority_cache.json` and `tests/results/_agent/issue/` reflect the
+  latest snapshot, hook preflight succeeds, and the working tree is anchored to
+  `develop`; treat that issue as the top objective for edits, CI runs, and PRs.
 - The human operator is signed in with an admin GitHub token; assume privileged operations (labels, reruns, merges) are
   allowed when safe.
 - Default behaviour:
@@ -19,15 +23,17 @@ line buffers).
   - Keep workflows deterministic and green.
   - Reference the current standing-priority issue (e.g., `#<standing-number>`) in commit and PR descriptions.
 - First actions in a session:
-  1. `node tools/npm/run-script.mjs priority:sync` to refresh the standing-priority snapshot and router
-     artifacts. When Node isn't available on the host plane, use the Docker fallback:
+  1. `pwsh -NoLogo -NoProfile -File tools/priority/bootstrap.ps1` to run hook preflight, refresh the standing-priority
+     snapshot/router artifacts, and auto-anchor the workspace to `develop`. When PowerShell + Node aren't available on
+     the host plane, use the Docker fallback:
      - `pwsh -NoLogo -NoProfile -File tools/Run-NonLVChecksInDocker.ps1 -ToolsImageTag comparevi-tools:local
        -UseToolsImage -PrioritySync -SkipActionlint -SkipMarkdown -SkipDocs -SkipWorkflow -SkipDotnetCliBuild`
      - `node tools/npm/run-script.mjs priority:sync:docker`
      Ensure a GitHub token is supplied via `GH_TOKEN`/`GITHUB_TOKEN` or `GH_TOKEN_FILE`
      (default `C:\github_token.txt`). The helper injects the token into the container
      without writing it to logs. Set `COMPAREVI_TOOLS_IMAGE=ghcr.io/labview-community-ci-cd/comparevi-tools:latest`
-     to use the published tools image instead of building locally.
+     to use the published tools image instead of building locally. After the Docker fallback completes, manually verify
+     the working tree is on `develop` before creating a feature branch.
   2. Review `.agent_priority_cache.json` / `tests/results/_agent/issue/` for tasks, acceptance, and
      linked PRs on the standing issue.
   3. Create or sync a working branch (`issue/<standing-number>-<slug>`), push minimal changes,
@@ -58,7 +64,11 @@ line buffers).
 - Integration: `./Invoke-PesterTests.ps1 -IntegrationMode include`
 - Custom paths: `./Invoke-PesterTests.ps1 -TestsPath tests -ResultsPath tests/results`
 - Pattern filter: `./Invoke-PesterTests.ps1 -IncludePatterns 'CompareVI.*'`
-- Quick smoke: `./tools/Quick-DispatcherSmoke.ps1 -Keep`
+- Staging smoke:
+  - `pwsh -File tools/Test-PRVIStagingSmoke.ps1 -DryRun` (plan only)
+  - `npm run smoke:vi-stage` (full run; uses fixtures/vi-attr for a baked-in VI
+    attribute diff)
+  Both flows post artifact links and the updated PR summary comment.
 - Containerized non-LV checks: `pwsh -File tools/Run-NonLVChecksInDocker.ps1`
 - Compare harnesses default to headless CLI runs (`LVCI_COMPARE_POLICY=cli-only`). Override with `lv-only` only when you
   explicitly need the LVCompare UI; otherwise leave it unset to avoid prompts and stuck LabVIEW instances.
@@ -142,7 +152,7 @@ line buffers).
 - Canonical required-status mapping lives in `tools/policy/branch-required-checks.json` (hash = contract digest).
 - `tools/Update-SessionIndexBranchProtection.ps1` injects the verification block into `session-index.json` and emits a
   step-summary entry.
-- When running smoke tests locally:
+- When validating Branch Protection locally:
 
   ```powershell
   pwsh -File tools/Quick-DispatcherSmoke.ps1 -PreferWorkspace -ResultsPath .tmp/sessionindex
@@ -150,6 +160,9 @@ line buffers).
     -PolicyPath tools/policy/branch-required-checks.json `
     -Branch (git branch --show-current)
   ```
+
+Staging smoke runs use the dedicated helper (`Test-PRVIStagingSmoke.ps1`) so staged VI bundles and LVCompare outputs
+are exercised end-to-end.
 
 - Confirm `session-index.json` contains `branchProtection.result.status = "ok"`; mismatches should be logged in
   `branchProtection.notes`.

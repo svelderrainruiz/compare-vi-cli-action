@@ -1,7 +1,7 @@
 {
   "name": "compare-vi-cli-action",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.3",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -65,7 +65,11 @@
     "ext:package": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1",
     "ext:install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -Install",
     "ext:bump-package": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch",
-    "ext:bump-install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch -Install"
+    "ext:bump-install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch -Install",
+    "history:run": "pwsh -NoLogo -NoProfile -File scripts/Run-VIHistory.ps1",
+    "history:dispatch": "pwsh -NoLogo -NoProfile -File scripts/Dispatch-VIHistoryWorkflow.ps1",
+    "smoke:vi-stage": "pwsh -NoLogo -NoProfile -File tools/Test-PRVIStagingSmoke.ps1",
+    "smoke:vi-history": "pwsh -NoLogo -NoProfile -File tools/Test-PRVIHistorySmoke.ps1"
   },
   "devDependencies": {
     "@types/argparse": "^2.0.16",
