@@ -19,9 +19,9 @@ on:
         default: '10'
         type: string
       compare_modes:
-        description: 'Comma/semicolon separated modes to evaluate (default,attributes,front-panel,block-diagram,all)'
+        description: 'Comma/semicolon separated modes to evaluate (default,attributes,front-panel,block-diagram,all,full)'
         required: false
-        default: 'default'
+        default: 'default,full'
         type: string
       compare_ignore_flags:
         description: 'LVCompare ignore toggles (default, none, or comma-separated flags such as noattr,nofp)'
