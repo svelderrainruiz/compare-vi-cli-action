@@ -51,7 +51,7 @@ Quick reference for building, testing, and releasing the LVCompare composite act
       | `control-rename`| Stage `fixtures/vi-stage/control-rename/{Base,Head}.vi` (control rename)     | diff |
       | `fp-window`     | Stage `fixtures/vi-stage/fp-window/{Base,Head}.vi` (window sizing change)    | diff |
 
-      Treat these fixtures as read-only baselinesΓÇöupdate them only when you intend
+      Treat these fixtures as read-only baselines—update them only when you intend
       to change the smoke matrix. The `/vi-stage` PR comment includes this table
       (via `tools/Summarize-VIStaging.ps1`) so reviewers can immediately see which
       categories (front panel, block diagram functional/cosmetic, VI attributes)
@@ -130,10 +130,6 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - `develop` is the integration branch. All standing-priority work lands here via squash merges (linear history).
 - `main` reflects the latest release. Use release branches to promote changes from `develop` to `main`.
 - For standing-priority work, create `issue/<number>-<slug>` and merge back with squash once checks are green.
-- When the standing-priority issue changes mid-flight, realign the branch name and PR head with  
-  `npm run priority:branch:rename -- --issue <number>`. The helper derives the slug from the issue title, renames the
-  local branch, pushes the new name to any remotes that carried the old branch, retargets the matching PR, and (unless
-  you pass `--keep-remote`) deletes the stale remote ref.
 - Use short-lived `feature/<slug>` branches when parallel threads are needed. Rebase on `develop` frequently and
   open PRs with `npm run priority:pr`.
 - When preparing a release:
@@ -214,8 +210,8 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - On shared runners the canonical installs sit under `C:\Program Files`, but
   local setups may vary. Copy `configs/labview-paths.sample.json` to
   `configs/labview-paths.json` and list overrides under:
-  - `lvcompare` array ├óΓé¼ΓÇ£ explicit `LVCompare.exe` locations; first match wins.
-  - `labview` array ├óΓé¼ΓÇ£ candidate `LabVIEW.exe` paths (per version/bitness).
+  - `lvcompare` array â€“ explicit `LVCompare.exe` locations; first match wins.
+  - `labview` array â€“ candidate `LabVIEW.exe` paths (per version/bitness).
 - Environment variables (`LVCOMPARE_PATH`, `LABVIEW_PATH`, etc.) still win, and
   the provider now writes verbose logs enumerating every candidate so you can
   troubleshoot missing installs quickly (`pwsh -v 5` to surface messages).
@@ -272,6 +268,5 @@ pwsh -File scripts/CompareVI.ps1 -Base VI1.vi -Head VI2.vi -LvCompareArgs "-nobd
 - Fork PRs targeting develop automatically run the **VI Compare (Fork PR)** workflow. The job checks out the head commit using the shared etch-pr-head helper, stages the affected VIs, runs LVCompare on the self-hosted runner, and uploads artifacts identical to /vi-stage.
 - /vi-stage and /vi-history commands remain available for both upstream and fork contributions. Those workflows now also use the fetch helper so they can operate on fork heads safely.
 - The new **PR Auto-approve Label** workflow runs after Validate. When a PR targets develop, is not a fork/draft, its checks are green, and (optionally) the author is allowed, the workflow adds the auto-approve label automatically. If any condition fails, the label is removed.
-- When the workflow skips a PR, it now emits structured outputs (`autoapprove_reason`, `autoapprove_checks`, `autoapprove_detail`) and `::notice::` messages (for example, merge conflicts or failing checks). Downstream automation can inspect those outputs to surface richer status or trigger follow-up actions.
-- Auto-approve still requires AUTO_APPROVE_TOKEN, optional AUTO_APPROVE_LABEL (default uto-approve), and optional AUTO_APPROVE_ALLOWED. The label lifecycle is now fully automated so contributors donΓÇÖt need to toggle it manually.
+- Auto-approve still requires AUTO_APPROVE_TOKEN, optional AUTO_APPROVE_LABEL (default uto-approve), and optional AUTO_APPROVE_ALLOWED. The label lifecycle is now fully automated so contributors don’t need to toggle it manually.
 - When testing fork scenarios locally, use the composite ./.github/actions/fetch-pr-head to simulate pull/<id>/head checkouts before invoking staging/history helpers.
