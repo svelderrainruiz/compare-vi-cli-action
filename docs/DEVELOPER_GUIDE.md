@@ -130,6 +130,10 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - `develop` is the integration branch. All standing-priority work lands here via squash merges (linear history).
 - `main` reflects the latest release. Use release branches to promote changes from `develop` to `main`.
 - For standing-priority work, create `issue/<number>-<slug>` and merge back with squash once checks are green.
+- When the standing-priority issue changes mid-flight, realign the branch name and PR head with  
+  `npm run priority:branch:rename -- --issue <number>`. The helper derives the slug from the issue title, renames the
+  local branch, pushes the new name to any remotes that carried the old branch, retargets the matching PR, and (unless
+  you pass `--keep-remote`) deletes the stale remote ref.
 - Use short-lived `feature/<slug>` branches when parallel threads are needed. Rebase on `develop` frequently and
   open PRs with `npm run priority:pr`.
 - When preparing a release:
