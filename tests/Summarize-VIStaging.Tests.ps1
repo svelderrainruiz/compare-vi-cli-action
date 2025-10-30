@@ -71,6 +71,9 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $result.pairs.Count | Should -Be 1
         $result.pairs[0].diffCategories | Should -Contain 'VI Attribute'
         $result.pairs[0].diffCategories | Should -Contain 'Block Diagram Functional'
+        $result.pairs[0].diffCategoryDetails | Should -Not -BeNullOrEmpty
+        ($result.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq 'attributes' }).Count | Should -Be 1
+        ($result.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq 'block-diagram' }).Count | Should -Be 1
         $result.pairs[0].includedAttributes.Count | Should -BeGreaterThan 0
         ($result.pairs[0].includedAttributes | Where-Object { $_.name -eq 'VI Attribute' }).value | Should -BeTrue
         (@($result.pairs[0].diffDetailPreview | Where-Object { $_ -match 'Difference Type: VI icon' })).Count | Should -BeGreaterThan 0
@@ -86,6 +89,9 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $jsonPayload = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -Depth 6
         $jsonPayload.totals.diff | Should -Be 1
         (@($jsonPayload.pairs[0].diffDetailPreview | Where-Object { $_ -match 'Difference Type: VI icon' })).Count | Should -BeGreaterThan 0
+        $jsonPayload.pairs[0].diffCategoryDetails | Should -Not -BeNullOrEmpty
+        $jsonPayload.totals.categoryCounts.attributes | Should -Be 1
+        $jsonPayload.totals.categoryCounts.'block-diagram' | Should -Be 1
     }
 
     It 'handles missing report gracefully' {
@@ -109,6 +115,7 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $result.pairs.Count | Should -Be 1
         $result.pairs[0].status | Should -Be 'skipped'
         $result.pairs[0].diffCategories.Count | Should -Be 0
+        $result.pairs[0].diffCategoryDetails.Count | Should -Be 0
         $result.markdown | Should -Match 'Totals'
     }
 

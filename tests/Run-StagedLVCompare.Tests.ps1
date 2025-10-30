@@ -1,3 +1,6 @@
+. (Join-Path $PSScriptRoot 'ReportFixtureHelpers.ps1')
+$reportFixtureCases = Get-ReportFixtureCases
+
 Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
     BeforeAll {
         $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -685,6 +688,103 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
             }
         }
         $outputMap['leak_warning_count'] | Should -Be '0'
+    }
+
+    Context 'report fixtures' {
+    It 'preserves report artifact content for <Name>' -TestCases $reportFixtureCases {
+        param($Name, $FixtureRoot, $Headings, $Expected)
+
+            $FixtureRoot | Should -Not -BeNullOrEmpty
+            $Headings | Should -Not -BeNullOrEmpty
+
+            $resultsPath = Join-Path $TestDrive ("report-{0}.json" -f $Name)
+            $artifactsDir = Join-Path $TestDrive ("report-artifacts-{0}" -f $Name)
+            New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+            $stagedRoot = Join-Path $TestDrive ("staged-{0}" -f $Name)
+            $stagedBase = Join-Path $stagedRoot 'Base.vi'
+            $stagedHead = Join-Path $stagedRoot 'Head.vi'
+            New-Item -ItemType Directory -Path $stagedRoot -Force | Out-Null
+            Set-Content -LiteralPath $stagedBase -Value 'base VI contents'
+            Set-Content -LiteralPath $stagedHead -Value 'head VI contents'
+
+            @(
+                [ordered]@{
+                    changeType = 'modify'
+                    basePath   = "fixtures/vi-report/$Name/Base.vi"
+                    headPath   = "fixtures/vi-report/$Name/Head.vi"
+                    staged     = [ordered]@{
+                        Base = $stagedBase
+                        Head = $stagedHead
+                    }
+                }
+            ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+            $fixtureReport = Join-Path $FixtureRoot 'compare-report.html'
+            $fixtureCapture = Join-Path $FixtureRoot 'lvcompare-capture.json'
+
+            $invoke = {
+                param(
+                    [string]$BaseVi,
+                    [string]$HeadVi,
+                    [string]$OutputDir,
+                    [switch]$AllowSameLeaf,
+                    [switch]$RenderReport,
+                    [string[]]$Flags,
+                    [switch]$ReplaceFlags,
+                    [switch]$LeakCheck,
+                    [Nullable[int]]$TimeoutSeconds,
+                [Nullable[double]]$LeakGraceSeconds
+            )
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            Copy-Item -LiteralPath $fixtureReport -Destination (Join-Path $OutputDir 'compare-report.html') -Force
+            Copy-Item -LiteralPath $fixtureCapture -Destination (Join-Path $OutputDir 'lvcompare-capture.json') -Force
+            return [pscustomobject]@{
+                ExitCode    = 1
+                CapturePath = Join-Path $OutputDir 'lvcompare-capture.json'
+                ReportPath  = Join-Path $OutputDir 'compare-report.html'
+            }
+            }.GetNewClosure()
+
+            $env:GITHUB_OUTPUT = Join-Path $TestDrive ("report-output-{0}.txt" -f $Name)
+
+            & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -RenderReport -InvokeLVCompare $invoke
+
+            $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
+            $compareInfo = $updated[0].compare
+            $compareInfo.status | Should -Be 'diff'
+            $compareInfo.reportPath | Should -Not -BeNullOrEmpty
+            $compareInfo.capturePath | Should -Not -BeNullOrEmpty
+
+            Test-Path -LiteralPath $compareInfo.reportPath | Should -BeTrue
+            Test-Path -LiteralPath $compareInfo.capturePath | Should -BeTrue
+
+            $reportHtml = Get-Content -LiteralPath $compareInfo.reportPath -Raw
+            foreach ($heading in $Headings) {
+                $reportHtml | Should -Match ([regex]::Escape($heading))
+            }
+
+            $summaryPath = Join-Path $artifactsDir 'vi-staging-compare.json'
+            Test-Path -LiteralPath $summaryPath | Should -BeTrue
+            $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+            $summaryEntries = @($summary)
+            $summaryEntries.Count | Should -Be 1
+            $summaryEntries[0].reportPath | Should -Be $compareInfo.reportPath
+            $summaryEntries[0].status | Should -Be 'diff'
+
+            $summarizeScript = Join-Path $script:repoRoot 'tools' 'Summarize-VIStaging.ps1'
+            $summaryResult = & $summarizeScript -CompareJson $summaryPath
+            $summaryResult | Should -Not -BeNullOrEmpty
+            $summaryResult.pairs.Count | Should -Be 1
+            $summaryResult.pairs[0].diffCategoryDetails | Should -Not -BeNullOrEmpty
+            foreach ($expectedEntry in $Expected) {
+                $match = @($summaryResult.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq $expectedEntry.slug })
+                $match.Count | Should -BeGreaterThan 0
+                if ($expectedEntry.PSObject.Properties['classification']) {
+                    $match[0].classification | Should -Be $expectedEntry.classification
+                }
+            }
+        }
     }
 }
 

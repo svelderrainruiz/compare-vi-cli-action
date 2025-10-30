@@ -1,0 +1,17 @@
+{
+  "schema": "lvcompare-capture-v1",
+  "timestamp": "2025-10-29T00:00:02Z",
+  "base": "fixtures/vi-stage/fp-cosmetic/Base.vi",
+  "head": "fixtures/vi-stage/fp-cosmetic/Head.vi",
+  "cli": {
+    "diff": true,
+    "exitCode": 1,
+    "reportFormat": "html",
+    "reportPath": "./compare-report.html",
+    "duration_s": 0.07
+  },
+  "out": {
+    "reportHtml": "./compare-report.html",
+    "reportPath": "./compare-report.html"
+  }
+}

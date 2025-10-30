@@ -1,0 +1,17 @@
+{
+  "schema": "lvcompare-capture-v1",
+  "timestamp": "2025-10-29T00:00:00Z",
+  "base": "fixtures/vi-stage/control-rename/Base.vi",
+  "head": "fixtures/vi-stage/control-rename/Head.vi",
+  "cli": {
+    "diff": true,
+    "exitCode": 1,
+    "reportFormat": "html",
+    "reportPath": "./compare-report.html",
+    "duration_s": 0.05
+  },
+  "out": {
+    "reportHtml": "./compare-report.html",
+    "reportPath": "./compare-report.html"
+  }
+}

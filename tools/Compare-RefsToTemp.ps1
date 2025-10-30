@@ -15,6 +15,9 @@ param(
   [string]$LvComparePath,
   [string]$LabVIEWExePath,
   [string]$InvokeScriptPath,
+  [switch]$LeakCheck,
+  [double]$LeakGraceSeconds = 1.5,
+  [string]$LeakJsonPath,
   [switch]$FailOnDiff
 )
 
@@ -288,8 +291,13 @@ if ($detailRequested) {
     foreach ($token in $invokeFlagTokens) { $invokeArgs += $token }
   }
   if ($ReplaceFlags) { $invokeArgs += '-ReplaceFlags' }
-  $invokeArgs += '-LeakCheck:$true'
-  $invokeArgs += '-LeakGraceSeconds'; $invokeArgs += '1.5'
+  if ($LeakCheck.IsPresent) {
+    $invokeArgs += '-LeakCheck'
+    $invokeArgs += '-LeakGraceSeconds'; $invokeArgs += $LeakGraceSeconds
+    if (-not [string]::IsNullOrWhiteSpace($LeakJsonPath)) {
+      $invokeArgs += '-LeakJsonPath'; $invokeArgs += $LeakJsonPath
+    }
+  }
 
   $previousReportFormat = [System.Environment]::GetEnvironmentVariable('COMPAREVI_REPORT_FORMAT','Process')
   $previousFlags = [System.Environment]::GetEnvironmentVariable('COMPAREVI_LVCOMPARE_FLAGS','Process')
@@ -378,6 +386,54 @@ if ($detailRequested) {
     }
   }
 
+  $leakResolvedPath = $null
+  if ($LeakCheck.IsPresent) {
+    $candidateLeakPaths = @()
+    if (-not [string]::IsNullOrWhiteSpace($LeakJsonPath)) {
+      $candidateLeakPaths += $LeakJsonPath
+    }
+    $candidateLeakPaths += (Join-Path $artifactDir 'lvcompare-leak.json')
+    foreach ($candidatePath in $candidateLeakPaths) {
+      if (-not $candidatePath) { continue }
+      if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+        try {
+          $leakResolvedPath = (Resolve-Path -LiteralPath $candidatePath).Path
+        } catch {
+          $leakResolvedPath = $candidatePath
+        }
+        break
+      }
+    }
+    if ($leakResolvedPath) {
+      $detailPaths.leakJson = $leakResolvedPath
+      try {
+        $leakInfo = Get-Content -LiteralPath $leakResolvedPath -Raw | ConvertFrom-Json -Depth 6
+      } catch {
+        $leakInfo = $null
+      }
+      if ($leakInfo) {
+        if ($cliArtifacts) {
+          $cliArtifacts | Add-Member -NotePropertyName 'leakDetected' -NotePropertyValue ([bool]$leakInfo.leakDetected) -Force
+        } else {
+          $cliArtifacts = [pscustomobject]@{
+            leakDetected = [bool]$leakInfo.leakDetected
+          }
+        }
+        if ($cliArtifacts) {
+          if ($leakInfo.PSObject.Properties['graceSeconds']) {
+            $cliArtifacts | Add-Member -NotePropertyName 'graceSeconds' -NotePropertyValue ([double]$leakInfo.graceSeconds) -Force
+          }
+          if ($leakInfo.PSObject.Properties['processes']) {
+            $cliArtifacts | Add-Member -NotePropertyName 'processes' -NotePropertyValue $leakInfo.processes -Force
+          }
+          if ($leakInfo.PSObject.Properties['schema']) {
+            $cliArtifacts | Add-Member -NotePropertyName 'leakSchema' -NotePropertyValue $leakInfo.schema -Force
+          }
+        }
+      }
+    }
+  }
+
   if (Test-Path -LiteralPath $capturePath) { $detailPaths.captureJson = (Resolve-Path -LiteralPath $capturePath).Path }
   if (Test-Path -LiteralPath $stdoutPath)  { $detailPaths.stdout       = (Resolve-Path -LiteralPath $stdoutPath).Path }
   if (Test-Path -LiteralPath $stderrPath)  { $detailPaths.stderr       = (Resolve-Path -LiteralPath $stderrPath).Path }
@@ -427,6 +483,9 @@ $exec = Get-Content -LiteralPath $execPath -Raw | ConvertFrom-Json -Depth 6
 $outPaths = [ordered]@{ execJson = (Resolve-Path -LiteralPath $execPath).Path }
 foreach ($k in @('captureJson','stdout','stderr','reportHtml','reportPath','imagesDir')) {
   if ($detailPaths.Contains($k) -and $detailPaths[$k]) { $outPaths[$k] = $detailPaths[$k] }
+}
+if ($detailPaths.Contains('leakJson') -and $detailPaths['leakJson']) {
+  $outPaths.leakJson = $detailPaths['leakJson']
 }
 if ($artifactDir) { $outPaths.artifactDir = (Resolve-Path -LiteralPath $artifactDir).Path }
 

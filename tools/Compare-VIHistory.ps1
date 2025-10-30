@@ -71,6 +71,7 @@ $modeDefinitions = @{
   'front-panel'   = @{ slug = 'front-panel'; flags = $null }
   'block-diagram' = @{ slug = 'block-diagram'; flags = $null }
   'all'           = @{ slug = 'all'; flags = $null }
+  'full'          = @{ slug = 'full'; flags = $null }
   'custom'        = @{ slug = 'custom'; flags = $null }
 }
 
@@ -123,6 +124,40 @@ function Build-CustomFlags {
   return @($unique)
 }
 
+function Get-ComparisonCategories {
+  param(
+    [string[]]$Highlights,
+    [bool]$HasDiff
+  )
+
+  $categories = New-Object System.Collections.Generic.List[string]
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+
+  function Add-Category {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return }
+    if ($seen.Add($Name)) {
+      [void]$categories.Add($Name)
+    }
+  }
+
+  foreach ($highlight in @($Highlights | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+    $text = $highlight.ToLowerInvariant()
+    if ($text -match 'block diagram') { Add-Category 'block-diagram' }
+    if ($text -match 'front panel' -or $text -match 'control changes') { Add-Category 'front-panel' }
+    if ($text -match 'vi attribute' -or $text -match 'attributes:') { Add-Category 'attributes' }
+    if ($text -match 'connector' -or $text -match 'terminal') { Add-Category 'connector-pane' }
+    if ($text -match 'cosmetic') { Add-Category 'cosmetic' }
+    if ($text -match 'window') { Add-Category 'front-panel' }
+  }
+
+  if ($HasDiff -and $categories.Count -eq 0) {
+    Add-Category 'unspecified'
+  }
+
+  return @($categories.ToArray())
+}
+
 function Expand-ModeTokens {
   param([string[]]$Values)
   $tokens = New-Object System.Collections.Generic.List[string]
@@ -167,7 +202,7 @@ function Build-FlagBundle {
       }
     }
   }
-  if ($ModeSpec.Name -eq 'all') {
+  if ($ModeSpec.Name -in @('all','full')) {
     $flags.Clear()
   }
 
@@ -563,6 +598,7 @@ $aggregate = [ordered]@{
     diffs     = 0
     errors    = 0
     missing   = 0
+    categoryCounts = [ordered]@{}
   }
   status      = 'pending'
 }
@@ -573,6 +609,7 @@ $totalErrors = 0
 $totalMissing = 0
 $modeSummaryRows = New-Object System.Collections.Generic.List[object]
 $diffHighlights = New-Object System.Collections.Generic.List[string]
+$aggregateCategoryCounts = $aggregate.stats.categoryCounts
 
 foreach ($modeSpec in $modeSpecs) {
   $modeName = $modeSpec.Name
@@ -595,6 +632,13 @@ foreach ($modeSpec in $modeSpecs) {
       $modeFlagNoBdCosm = $false
     }
     'all' {
+      $modeForceNoBd = $false
+      $modeFlagNoAttr = $false
+      $modeFlagNoFp = $false
+      $modeFlagNoFpPos = $false
+      $modeFlagNoBdCosm = $false
+    }
+    'full' {
       $modeForceNoBd = $false
       $modeFlagNoAttr = $false
       $modeFlagNoFp = $false
@@ -645,9 +689,12 @@ foreach ($modeSpec in $modeSpecs) {
       stopReason     = $null
       errors         = 0
       missing        = 0
+      categoryCounts = [ordered]@{}
     }
     status      = 'pending'
   }
+
+  $modeCategoryCounts = $modeManifest.stats.categoryCounts
 
   $processed = 0
   $diffCount = 0
@@ -703,6 +750,20 @@ foreach ($modeSpec in $modeSpecs) {
       reportFormat = $reportFormatEffective
     }
 
+    $summaryPath = Join-Path $modeResultsResolved ("{0}-summary.json" -f $comparisonRecord.outName)
+    $execPath    = Join-Path $modeResultsResolved ("{0}-exec.json" -f $comparisonRecord.outName)
+    $summaryJson = $null
+    $summaryPreExisting = $false
+    if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+      try {
+        $summaryJson = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -Depth 8
+        $summaryPreExisting = $true
+      } catch {
+        $summaryJson = $null
+        $summaryPreExisting = $false
+      }
+    }
+
     try {
       $headExists = Test-FileExistsAtRef -Ref $headCommit -Path $targetRel
       if (-not $headExists) {
@@ -732,49 +793,51 @@ foreach ($modeSpec in $modeSpecs) {
         continue
       }
 
-    $compareArgs = @(
-      '-NoLogo','-NoProfile','-File', $compareScript,
-      '-Path', $targetRel,
-      '-RefA', $parentCommit,
-      '-RefB', $headCommit,
-      '-ResultsDir', $modeResultsResolved,
-      '-OutName', $comparisonRecord.outName,
-      '-ReportFormat', $reportFormatEffective,
-      '-Quiet'
-    )
-      $compareArgs += '-ReplaceFlags'
-      if ($Detailed.IsPresent) { $compareArgs += '-Detailed' }
-      if ($RenderReport.IsPresent -or $reportFormatEffective -eq 'html') { $compareArgs += '-RenderReport' }
-      if ($FailOnDiff.IsPresent) { $compareArgs += '-FailOnDiff' }
-      if ($modeFlags -and $modeFlags.Count -gt 0) {
-        $compareArgs += '-LvCompareArgs'
-        $compareArgs += ($modeFlags -join ' ')
+      if (-not $summaryPreExisting) {
+        $compareArgs = @(
+          '-NoLogo','-NoProfile','-File', $compareScript,
+          '-Path', $targetRel,
+          '-RefA', $parentCommit,
+          '-RefB', $headCommit,
+          '-ResultsDir', $modeResultsResolved,
+          '-OutName', $comparisonRecord.outName,
+          '-ReportFormat', $reportFormatEffective,
+          '-Quiet'
+        )
+        $compareArgs += '-ReplaceFlags'
+        if ($Detailed.IsPresent) { $compareArgs += '-Detailed' }
+        if ($RenderReport.IsPresent -or $reportFormatEffective -eq 'html') { $compareArgs += '-RenderReport' }
+        if ($FailOnDiff.IsPresent) { $compareArgs += '-FailOnDiff' }
+        if ($modeFlags -and $modeFlags.Count -gt 0) {
+          $compareArgs += '-LvCompareArgs'
+          $compareArgs += ($modeFlags -join ' ')
+        }
+        if (-not [string]::IsNullOrWhiteSpace($InvokeScriptPath)) {
+          $compareArgs += '-InvokeScriptPath'
+          $compareArgs += $InvokeScriptPath
+        }
+        if ($KeepArtifactsOnNoDiff.IsPresent) {
+          $compareArgs += '-KeepArtifactsOnNoDiff'
+        }
+        $pwshResult = Invoke-Pwsh -Arguments $compareArgs
+        if ($pwshResult.ExitCode -ne 0) {
+          if ($pwshResult.ExitCode -eq 1) {
+            Write-Verbose 'Compare-RefsToTemp reported exit code 1 (diff detected); continuing.'
+          } else {
+            $msg = "Compare-RefsToTemp.ps1 exited with code {0}" -f $pwshResult.ExitCode
+            if ($pwshResult.StdErr) { $msg = "$msg`n$($pwshResult.StdErr.Trim())" }
+            if ($pwshResult.StdOut) { $msg = "$msg`n$($pwshResult.StdOut.Trim())" }
+            throw $msg
+          }
+        }
       }
-    if (-not [string]::IsNullOrWhiteSpace($InvokeScriptPath)) {
-      $compareArgs += '-InvokeScriptPath'
-      $compareArgs += $InvokeScriptPath
-    }
-    if ($KeepArtifactsOnNoDiff.IsPresent) {
-      $compareArgs += '-KeepArtifactsOnNoDiff'
-    }
-    $pwshResult = Invoke-Pwsh -Arguments $compareArgs
-    if ($pwshResult.ExitCode -ne 0) {
-      if ($pwshResult.ExitCode -eq 1) {
-        Write-Verbose 'Compare-RefsToTemp reported exit code 1 (diff detected); continuing.'
-      } else {
-        $msg = "Compare-RefsToTemp.ps1 exited with code {0}" -f $pwshResult.ExitCode
-        if ($pwshResult.StdErr) { $msg = "$msg`n$($pwshResult.StdErr.Trim())" }
-        if ($pwshResult.StdOut) { $msg = "$msg`n$($pwshResult.StdOut.Trim())" }
-        throw $msg
-      }
-    }
 
-      $summaryPath = Join-Path $modeResultsResolved ("{0}-summary.json" -f $comparisonRecord.outName)
-      $execPath = Join-Path $modeResultsResolved ("{0}-exec.json" -f $comparisonRecord.outName)
-      if (-not (Test-Path -LiteralPath $summaryPath)) {
-        throw ("Summary not found at {0}" -f $summaryPath)
+      if (-not $summaryJson) {
+        if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+          throw ("Summary not found at {0}" -f $summaryPath)
+        }
+        $summaryJson = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -Depth 8
       }
-      $summaryJson = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -Depth 8
 
       $diff = [bool]$summaryJson.cli.diff
       $comparisonRecord.result = [ordered]@{
@@ -784,6 +847,46 @@ foreach ($modeSpec in $modeSpecs) {
         exitCode    = $summaryJson.cli.exitCode
         duration_s  = $summaryJson.cli.duration_s
         command     = $summaryJson.cli.command
+      }
+      $highlights = @()
+      if ($summaryJson.cli -and $summaryJson.cli.PSObject.Properties['highlights'] -and $summaryJson.cli.highlights) {
+        $highlights += @($summaryJson.cli.highlights | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      }
+      if ($summaryJson.cli -and $summaryJson.cli.PSObject.Properties['includedAttributes'] -and $summaryJson.cli.includedAttributes) {
+        $includedNames = @()
+        foreach ($attr in @($summaryJson.cli.includedAttributes)) {
+          if (-not $attr) { continue }
+          $name = $attr.name
+          if ([string]::IsNullOrWhiteSpace($name)) { continue }
+          $state = $null
+          if ($attr.PSObject.Properties['included']) {
+            if ([bool]$attr.included) { $state = 'included' } else { $state = 'excluded' }
+          }
+          if ($state -eq 'included' -or -not $state) {
+            $includedNames += [string]$name
+          }
+        }
+        if ($includedNames.Count -gt 0) {
+          $highlights += ("Attributes: {0}" -f ([string]::Join(', ', ($includedNames | Select-Object -Unique))))
+        }
+      }
+      if ($highlights.Count -gt 0) {
+        $comparisonRecord.result.highlights = @($highlights | Select-Object -Unique)
+      }
+      $categories = @(
+        Get-ComparisonCategories -Highlights $highlights -HasDiff:$diff |
+          Select-Object -Unique
+      )
+      if ($categories -and $categories.Count -gt 0) {
+        $comparisonRecord.result.categories = $categories
+        foreach ($category in $categories) {
+          $categoryKey = [string]$category
+          if ([string]::IsNullOrWhiteSpace($categoryKey)) { continue }
+          if (-not $modeCategoryCounts.Contains($categoryKey)) {
+            $modeCategoryCounts[$categoryKey] = 0
+          }
+          $modeCategoryCounts[$categoryKey]++
+        }
       }
       if ($summaryJson.cli.PSObject.Properties['reportFormat']) {
         $comparisonRecord.reportFormat = $summaryJson.cli.reportFormat
@@ -865,6 +968,13 @@ foreach ($modeSpec in $modeSpecs) {
     $modeManifest.status = 'ok'
   }
 
+  $sortedModeCategories = [ordered]@{}
+  foreach ($categoryName in ($modeCategoryCounts.Keys | Sort-Object)) {
+    $sortedModeCategories[$categoryName] = [int]$modeCategoryCounts[$categoryName]
+  }
+  $modeManifest.stats.categoryCounts = $sortedModeCategories
+  $modeCategoryCounts = $sortedModeCategories
+
   $modeManifest | ConvertTo-Json -Depth 8 | Out-File -FilePath $modeManifestPath -Encoding utf8
   $modeManifestResolved = (Resolve-Path -LiteralPath $modeManifestPath).Path
 
@@ -923,6 +1033,16 @@ foreach ($modeSpec in $modeSpecs) {
     stats        = $modeManifest.stats
     status       = $modeManifest.status
   }
+  foreach ($categoryKey in $modeCategoryCounts.Keys) {
+    $countValue = $modeCategoryCounts[$categoryKey]
+    if ($null -eq $countValue) { continue }
+    $categoryName = [string]$categoryKey
+    if ([string]::IsNullOrWhiteSpace($categoryName)) { continue }
+    if (-not $aggregateCategoryCounts.Contains($categoryName)) {
+      $aggregateCategoryCounts[$categoryName] = 0
+    }
+    $aggregateCategoryCounts[$categoryName] += [int]$countValue
+  }
 
   $totalProcessed += $processed
   $totalDiffs += $diffCount
@@ -934,6 +1054,34 @@ $summaryLines += ''
 $summaryLines += "- Total processed pairs: $totalProcessed"
 $summaryLines += "- Total diffs: $totalDiffs"
 $summaryLines += "- Total missing pairs: $totalMissing"
+
+$sortedAggregateCategories = [ordered]@{}
+foreach ($categoryName in ($aggregateCategoryCounts.Keys | Sort-Object)) {
+  $sortedAggregateCategories[$categoryName] = [int]$aggregateCategoryCounts[$categoryName]
+}
+$aggregate.stats.categoryCounts = $sortedAggregateCategories
+$aggregateCategoryCounts = $sortedAggregateCategories
+if ($aggregateCategoryCounts.Count -gt 0) {
+  $categorySummaryParts = New-Object System.Collections.Generic.List[string]
+  foreach ($categoryKey in $aggregateCategoryCounts.Keys) {
+    $countValue = $aggregateCategoryCounts[$categoryKey]
+    $displayName = $categoryKey
+    if (-not [string]::IsNullOrWhiteSpace($categoryKey)) {
+      switch ($categoryKey) {
+        'block-diagram' { $displayName = 'block diagram' }
+        'front-panel'   { $displayName = 'front panel' }
+        'attributes'    { $displayName = 'attributes' }
+        'connector-pane'{ $displayName = 'connector pane' }
+        'cosmetic'      { $displayName = 'cosmetic' }
+        'unspecified'   { $displayName = 'unspecified' }
+      }
+    }
+    $categorySummaryParts.Add(("{0} ({1})" -f $displayName, $countValue)) | Out-Null
+  }
+  if ($categorySummaryParts.Count -gt 0) {
+    $summaryLines += "- Category counts: $($categorySummaryParts -join ', ')"
+  }
+}
 
 if ($hasStepSummary -and $modeSummaryRows.Count -gt 0) {
   $summaryLines += ''
@@ -1026,6 +1174,10 @@ Write-GitHubOutput -Key 'total-diffs' -Value $totalDiffs -DestPath $GitHubOutput
 $aggregateStopReason = if ($aggregate.status -eq 'ok') { 'complete' } else { 'failed' }
 Write-GitHubOutput -Key 'stop-reason' -Value $aggregateStopReason -DestPath $GitHubOutputPath
 Write-GitHubOutput -Key 'target-path' -Value $targetRel -DestPath $GitHubOutputPath
+if ($aggregateCategoryCounts.Count -gt 0) {
+  $categoryJson = ConvertTo-Json $aggregateCategoryCounts -Depth 4 -Compress
+  Write-GitHubOutput -Key 'category-counts-json' -Value $categoryJson -DestPath $GitHubOutputPath
+}
 
 $modeManifestSummary = $aggregate.modes | ForEach-Object {
   [ordered]@{

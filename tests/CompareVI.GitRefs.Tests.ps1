@@ -80,7 +80,13 @@ param(
   [string]$LVComparePath,
   [string[]]$Flags,
   [switch]$RenderReport,
-  [switch]$Quiet
+  [switch]$Quiet,
+  [switch]$LeakCheck,
+  [double]$LeakGraceSeconds = 0,
+  [string]$LeakJsonPath,
+  [string]$CaptureScriptPath,
+  [Nullable[int]]$TimeoutSeconds,
+  [Parameter(ValueFromRemainingArguments = $true)][string[]]$PassThru
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -138,35 +144,54 @@ $capture = [ordered]@{
   }
 }
 $capture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $capturePath -Encoding utf8
+
+if ($LeakCheck -and $LeakJsonPath) {
+  $leakDir = Split-Path -Parent $LeakJsonPath
+  if ($leakDir) { New-Item -ItemType Directory -Path $leakDir -Force | Out-Null }
+  $leakInfo = [ordered]@{
+    schema       = 'lvcompare-leak-v1'
+    generatedAt  = (Get-Date).ToString('o')
+    leakDetected = $false
+    processes    = @()
+    graceSeconds = $LeakGraceSeconds
+  }
+  $leakInfo | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $LeakJsonPath -Encoding utf8
+}
 exit 1
 '@
     Set-Content -LiteralPath $stub -Value $stubContent -Encoding utf8
 
-    $rd = Join-Path $TestDrive 'ref-compare-detail'
-    New-Item -ItemType Directory -Path $rd -Force | Out-Null
+    $resultsDir = Join-Path $TestDrive 'ref-compare-detail'
+    New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
     & pwsh -NoLogo -NoProfile -File (Join-Path $_repo 'tools/Compare-RefsToTemp.ps1') `
       -ViName (Split-Path -Leaf $_target) `
       -RefA $pair.A `
       -RefB $pair.B `
-      -ResultsDir $rd `
+      -ResultsDir $resultsDir `
       -OutName 'detail' `
       -Detailed `
       -RenderReport `
       -InvokeScriptPath $stub `
-      -FailOnDiff:$false `
-      -Quiet | Out-Null
+      -LeakCheck `
+      -LeakGraceSeconds 2.5 `
+      -LeakJsonPath (Join-Path $resultsDir 'detail-leak.json') `
+      -FailOnDiff:$false | Out-Null
 
-    $exec = Join-Path $rd 'detail-exec.json'
-    $sum  = Join-Path $rd 'detail-summary.json'
+    $exec = Join-Path $resultsDir 'detail-exec.json'
+    $sum  = Join-Path $resultsDir 'detail-summary.json'
     Test-Path -LiteralPath $exec | Should -BeTrue
     Test-Path -LiteralPath $sum  | Should -BeTrue
 
     $s = Get-Content -LiteralPath $sum -Raw | ConvertFrom-Json
-    $s.cli.diff | Should -BeTrue
+    Copy-Item -LiteralPath $sum -Destination (Join-Path $_repo 'tests/results/gitrefs-detail-summary.json') -Force
+    [int]$s.cli.exitCode | Should -Be 1
     ($s.out.captureJson -as [string]) | Should -Match 'lvcompare-capture.json'
     ($s.out.reportHtml -as [string])  | Should -Match 'compare-report.html'
     $s.path | Should -Be $_target
     $s.cli.highlights | Should -Contain 'Block Diagram Differences detected.'
     $s.cli.artifacts.imageCount | Should -Be 1
+    $s.cli.artifacts.leakDetected | Should -BeFalse
+    $s.cli.artifacts.graceSeconds | Should -Be 2.5
+    $s.cli.artifacts.PSObject.Properties.Name | Should -Contain 'processes'
   }
 }

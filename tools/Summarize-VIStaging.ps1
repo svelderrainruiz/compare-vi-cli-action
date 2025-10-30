@@ -146,6 +146,83 @@ function Get-DiffDetailPreview {
     return $preview
 }
 
+function Get-CategoryMetadata {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+    $slug = $Name.Trim().ToLowerInvariant()
+    $label = $slug
+    $classification = 'signal'
+    switch ($slug) {
+        'block-diagram' { $label = 'Block diagram' }
+        'front-panel'   { $label = 'Front panel' }
+        'attributes'    { $label = 'Attributes' }
+        'connector-pane'{ $label = 'Connector pane' }
+        'cosmetic' {
+            $label = 'Cosmetic'
+            $classification = 'noise'
+        }
+        'unspecified' {
+            $label = 'Unspecified'
+            $classification = 'neutral'
+        }
+        default {
+            $spaced = ($slug -replace '[-_]', ' ')
+            $label = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($spaced)
+            $classification = 'signal'
+        }
+    }
+
+    return [pscustomobject]@{
+        slug           = $slug
+        label          = $label
+        classification = $classification
+    }
+}
+
+function Resolve-CategorySlugFromName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+    $token = $Name.Trim().ToLowerInvariant()
+    if ($token -match 'cosmetic') { return 'cosmetic' }
+    if ($token -match 'block diagram') { return 'block-diagram' }
+    if ($token -match 'control changes' -or $token -match 'front panel') { return 'front-panel' }
+    if ($token -match 'vi attribute' -or $token -match 'attribute') { return 'attributes' }
+    if ($token -match 'connector') { return 'connector-pane' }
+    return ($token -replace '[^a-z0-9]+','-').Trim('-')
+}
+
+function Get-CategoryDetailsFromNames {
+    param([System.Collections.IEnumerable]$Names)
+
+    $details = New-Object System.Collections.Generic.List[pscustomobject]
+    if (-not $Names) { return @() }
+
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $Names) {
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $slug = Resolve-CategorySlugFromName -Name $name
+        if (-not $slug) { continue }
+        $meta = Get-CategoryMetadata -Name $slug
+        if (-not $meta) { continue }
+        $label = $name
+        if ([string]::IsNullOrWhiteSpace($label)) {
+            $label = $meta.label
+        }
+        $key = '{0}|{1}' -f $meta.slug, $label
+        if ($seen.Add($key)) {
+            $details.Add([pscustomobject]@{
+                slug           = $meta.slug
+                label          = $label
+                classification = $meta.classification
+            }) | Out-Null
+        }
+    }
+
+    return @($details)
+}
+
 function Build-MarkdownTable {
     param(
         [pscustomobject[]]$Pairs,
@@ -170,14 +247,40 @@ function Build-MarkdownTable {
             default   { $pair.status }
         }
 
-        $categories = if ($pair.diffCategories -and $pair.diffCategories.Count -gt 0) {
-            ($pair.diffCategories -join ', ')
-        } elseif ($pair.status -eq 'match') {
-            '-'
-        } elseif ($pair.status -eq 'skipped') {
-            'staged bundle missing'
-        } else {
-            'n/a'
+        $categoryLines = New-Object System.Collections.Generic.List[string]
+        $hasCategories = $false
+        if ($pair.PSObject.Properties['diffCategoryDetails'] -and $pair.diffCategoryDetails) {
+            foreach ($detail in $pair.diffCategoryDetails) {
+                if (-not $detail) { continue }
+                $text = [string]$detail.label
+                if ([string]::IsNullOrWhiteSpace($text)) { $text = $detail.slug }
+                switch ($detail.classification) {
+                    'noise'   { $text = '{0} _(noise)_' -f $text }
+                    'neutral' { $text = '{0} _(neutral)_' -f $text }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($text)) {
+                    $categoryLines.Add($text) | Out-Null
+                }
+            }
+            if ($categoryLines.Count -gt 0) {
+                $hasCategories = $true
+            }
+        }
+        if (-not $hasCategories -and $pair.diffCategories -and $pair.diffCategories.Count -gt 0) {
+            foreach ($rawCategory in $pair.diffCategories) {
+                if ([string]::IsNullOrWhiteSpace($rawCategory)) { continue }
+                $categoryLines.Add($rawCategory) | Out-Null
+            }
+            if ($categoryLines.Count -gt 0) {
+                $hasCategories = $true
+            }
+        }
+        if (-not $hasCategories) {
+            switch ($pair.status) {
+                'match'   { $categoryLines.Add('-') | Out-Null }
+                'skipped' { $categoryLines.Add('staged bundle missing') | Out-Null }
+                default   { $categoryLines.Add('n/a') | Out-Null }
+            }
         }
 
         $detailList = @()
@@ -186,12 +289,14 @@ function Build-MarkdownTable {
         }
         if ($detailList.Count -gt 0) {
             $detailMarkup = "<small>{0}</small>" -f ($detailList -join '<br/>')
-            if ($categories -and $categories -ne '-' -and $categories -ne 'n/a') {
-                $categories = "$categories<br/>$detailMarkup"
+            if ($hasCategories) {
+                $categoryLines.Add($detailMarkup) | Out-Null
             } else {
-                $categories = $detailMarkup
+                $categoryLines.Clear()
+                $categoryLines.Add($detailMarkup) | Out-Null
             }
         }
+        $categories = [string]::Join('<br/>', $categoryLines.ToArray())
 
         $included = if ($pair.includedAttributes -and $pair.includedAttributes.Count -gt 0) {
             ($pair.includedAttributes | ForEach-Object {
@@ -271,6 +376,7 @@ $totals = [ordered]@{
     skipped      = 0
     error        = 0
     leakWarnings = 0
+    categoryCounts = [ordered]@{}
 }
 
 $compareRoot = $null
@@ -358,6 +464,21 @@ foreach ($entry in $entries) {
         $categories.Add('Block Diagram Cosmetic')
     }
 
+    $categoryDetails = Get-CategoryDetailsFromNames -Names $categories
+    foreach ($detail in $categoryDetails) {
+        if (-not $detail) { continue }
+        $slugKey = [string]$detail.slug
+        if ([string]::IsNullOrWhiteSpace($slugKey)) { continue }
+        if (-not $totals.categoryCounts.Contains($slugKey)) {
+            $totals.categoryCounts[$slugKey] = 0
+        }
+        try {
+            $totals.categoryCounts[$slugKey] += 1
+        } catch {
+            $totals.categoryCounts[$slugKey] = ($totals.categoryCounts[$slugKey] + 1)
+        }
+    }
+
     $includedList = New-Object System.Collections.Generic.List[pscustomobject]
     foreach ($key in $included.Keys) {
         $includedList.Add([pscustomobject]@{
@@ -430,7 +551,8 @@ foreach ($entry in $entries) {
         capturePath       = $capturePath
         reportPath        = $reportPath
         reportRelative    = $reportRelative
-        diffCategories    = $categories
+        diffCategories    = @($categories.ToArray())
+        diffCategoryDetails = @($categoryDetails)
         diffHeadings      = $headings
         diffDetails       = $details
         diffDetailPreview = $detailPreviewList
@@ -444,7 +566,13 @@ foreach ($entry in $entries) {
     $pairs.Add($pairInfo)
 }
 
-$totalsObj = [pscustomobject]$totals
+ $sortedCategoryTotals = [ordered]@{}
+ foreach ($categoryKey in ($totals.categoryCounts.Keys | Sort-Object)) {
+     $sortedCategoryTotals[$categoryKey] = [int]$totals.categoryCounts[$categoryKey]
+ }
+ $totals.categoryCounts = $sortedCategoryTotals
+
+ $totalsObj = [pscustomobject]$totals
 $markdown = Build-MarkdownTable -Pairs $pairs -Totals $totalsObj -CompareDir $compareRoot
 
 $result = [pscustomobject]@{

@@ -136,6 +136,117 @@ function Coalesce {
   return $Fallback
 }
 
+function Get-CategoryMetadata {
+  param([string]$Name)
+
+  if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
+  $slug = $Name.Trim().ToLowerInvariant()
+  $label = $slug
+  $classification = 'signal'
+  switch ($slug) {
+    'block-diagram' { $label = 'Block diagram' }
+    'front-panel'   { $label = 'Front panel' }
+    'attributes'    { $label = 'Attributes' }
+    'connector-pane'{ $label = 'Connector pane' }
+    'cosmetic' {
+      $label = 'Cosmetic'
+      $classification = 'noise'
+    }
+    'unspecified' {
+      $label = 'Unspecified'
+      $classification = 'neutral'
+    }
+    default {
+      $spaced = ($slug -replace '[-_]', ' ')
+      $titleCase = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($spaced)
+      $label = $titleCase
+      $classification = 'signal'
+    }
+  }
+  return [pscustomobject]@{
+    slug           = $slug
+    label          = $label
+    classification = $classification
+  }
+}
+
+function Get-CategoryLabelEntries {
+  param([object]$Categories)
+
+  $entries = New-Object System.Collections.Generic.List[pscustomobject]
+  if ($null -eq $Categories) { return @() }
+
+  $items = @()
+  if ($Categories -is [System.Collections.IEnumerable] -and -not ($Categories -is [string])) {
+    $items = @($Categories)
+  } else {
+    $items = @($Categories)
+  }
+
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($item in $items) {
+    if ($null -eq $item) { continue }
+    $text = [string]$item
+    if ([string]::IsNullOrWhiteSpace($text)) { continue }
+    $meta = Get-CategoryMetadata -Name $text
+    if ($meta -and $seen.Add($meta.slug)) {
+      $entries.Add($meta) | Out-Null
+    }
+  }
+
+  return @($entries | Sort-Object -Property label, slug)
+}
+
+function Get-CategoryCountEntries {
+  param([object]$CategoryCounts)
+
+  $map = @{}
+  if ($null -eq $CategoryCounts) { return @() }
+
+  if ($CategoryCounts -is [System.Collections.IDictionary]) {
+    foreach ($key in $CategoryCounts.Keys) {
+      $value = $CategoryCounts[$key]
+      $meta = Get-CategoryMetadata -Name $key
+      if (-not $meta) { continue }
+      if (-not $map.ContainsKey($meta.slug)) {
+        $map[$meta.slug] = [pscustomobject]@{
+          slug           = $meta.slug
+          label          = $meta.label
+          classification = $meta.classification
+          count          = 0
+        }
+      }
+      try {
+        $map[$meta.slug].count += [int]$value
+      } catch {
+        $map[$meta.slug].count += 0
+      }
+    }
+  } elseif ($CategoryCounts -and $CategoryCounts.PSObject) {
+    foreach ($prop in $CategoryCounts.PSObject.Properties) {
+      if (-not $prop) { continue }
+      $meta = Get-CategoryMetadata -Name $prop.Name
+      if (-not $meta) { continue }
+      if (-not $map.ContainsKey($meta.slug)) {
+        $map[$meta.slug] = [pscustomobject]@{
+          slug           = $meta.slug
+          label          = $meta.label
+          classification = $meta.classification
+          count          = 0
+        }
+      }
+      $value = $prop.Value
+      try {
+        $map[$meta.slug].count += [int]$value
+      } catch {
+        $map[$meta.slug].count += 0
+      }
+    }
+  }
+
+  return @($map.Values | Sort-Object -Property label, slug)
+}
+
 $manifestResolved = Resolve-ExistingPath -Path $ManifestPath -Description 'Manifest'
 if (-not $HistoryContextPath) {
   $HistoryContextPath = Join-Path (Split-Path -Parent $manifestResolved) 'history-context.json'
@@ -237,8 +348,40 @@ function Build-FallbackHistoryContext {
         if ($resultNode.PSObject.Properties['execPath'] -and $resultNode.execPath) {
           $resultPayload.execPath = $resultNode.execPath
         }
-        if ($resultNode.PSObject.Properties['command'] -and $resultNode.command) {
-          $resultPayload.command = $resultNode.command
+      if ($resultNode.PSObject.Properties['command'] -and $resultNode.command) {
+        $resultPayload.command = $resultNode.command
+      }
+        $highlightSet = @()
+        if ($resultNode.PSObject.Properties['highlights'] -and $resultNode.highlights) {
+          $highlightSet += @($resultNode.highlights | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+        if ($highlightSet.Count -eq 0 -and $resultNode.PSObject.Properties['summaryPath'] -and $resultNode.summaryPath -and (Test-Path -LiteralPath $resultNode.summaryPath)) {
+          try {
+            $summaryProbe = Get-Content -LiteralPath $resultNode.summaryPath -Raw | ConvertFrom-Json -Depth 8
+            if ($summaryProbe -and $summaryProbe.cli) {
+              if ($summaryProbe.cli.PSObject.Properties['highlights'] -and $summaryProbe.cli.highlights) {
+                $highlightSet += @($summaryProbe.cli.highlights | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+              }
+              if ($summaryProbe.cli.PSObject.Properties['includedAttributes'] -and $summaryProbe.cli.includedAttributes) {
+                $includedList = @()
+                foreach ($attrItem in @($summaryProbe.cli.includedAttributes)) {
+                  if (-not $attrItem) { continue }
+                  $attrName = $attrItem.name
+                  if ([string]::IsNullOrWhiteSpace($attrName)) { continue }
+                  if (-not $attrItem.PSObject.Properties['included'] -or [bool]$attrItem.included) {
+                    $includedList += [string]$attrName
+                  }
+                }
+                if ($includedList.Count -gt 0) {
+                  $highlightSet += ("Attributes: {0}" -f ([string]::Join(', ', ($includedList | Select-Object -Unique))))
+                }
+              }
+            }
+          } catch {
+          }
+        }
+        if ($highlightSet.Count -gt 0) {
+          $resultPayload.highlights = @($highlightSet | Select-Object -Unique)
         }
       }
 
@@ -263,6 +406,7 @@ function Build-FallbackHistoryContext {
           subject = if ($headMeta) { $headMeta.subject } else { $null }
         }
         result = [pscustomobject]$resultPayload
+        highlights = if ($resultPayload.Contains('highlights') -and $resultPayload.highlights) { @($resultPayload.highlights) } else { @() }
       })
     }
   }
@@ -320,8 +464,8 @@ if ($modeEntries.Count -gt 0) {
   $summaryLines.Add('')
   $summaryLines.Add('## Mode overview')
   $summaryLines.Add('')
-  $summaryLines.Add('| Mode | Processed | Diffs | Flags |')
-  $summaryLines.Add('| --- | --- | --- | --- |')
+  $summaryLines.Add('| Mode | Processed | Diffs | Categories | Flags |')
+  $summaryLines.Add('| --- | --- | --- | --- | --- |')
   foreach ($mode in $modeEntries) {
     $flagDisplay = '_none_'
     if ($mode.flags) {
@@ -330,7 +474,24 @@ if ($modeEntries.Count -gt 0) {
         $flagDisplay = ($flags | ForEach-Object { ('`{0}`' -f $_) }) -join '<br>'
       }
     }
-    $summaryLines.Add(('| {0} | {1} | {2} | {3} |' -f (Coalesce $mode.name 'unknown'), (Coalesce $mode.stats.processed 'n/a'), (Coalesce $mode.stats.diffs 'n/a'), $flagDisplay))
+    $categoryDisplay = '_none_'
+    $categoryEntries = Get-CategoryCountEntries -CategoryCounts $mode.stats.categoryCounts
+    if ($categoryEntries -and $categoryEntries.Count -gt 0) {
+      $categoryParts = New-Object System.Collections.Generic.List[string]
+      foreach ($entry in $categoryEntries) {
+        $labelText = [string]$entry.label
+        switch ($entry.classification) {
+          'noise'      { $labelText = '{0} _(noise)_' -f $labelText }
+          'neutral'    { $labelText = '{0} _(neutral)_' -f $labelText }
+        }
+        $displayValue = if ($entry.count -gt 0) { "$labelText ($($entry.count))" } else { $labelText }
+        $categoryParts.Add($displayValue) | Out-Null
+      }
+      if ($categoryParts.Count -gt 0) {
+        $categoryDisplay = $categoryParts -join '<br>'
+      }
+    }
+    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} |' -f (Coalesce $mode.name 'unknown'), (Coalesce $mode.stats.processed 'n/a'), (Coalesce $mode.stats.diffs 'n/a'), $categoryDisplay, $flagDisplay))
   }
 }
 
@@ -340,8 +501,8 @@ if ($comparisons.Count -gt 0) {
   $summaryLines.Add('')
   $summaryLines.Add('## Commit pairs')
   $summaryLines.Add('')
-  $summaryLines.Add('| Mode | Pair | Base | Head | Diff | Duration (s) | Report |')
-  $summaryLines.Add('| --- | --- | --- | --- | --- | --- | --- |')
+  $summaryLines.Add('| Mode | Pair | Base | Head | Diff | Duration (s) | Categories | Report | Highlights |')
+  $summaryLines.Add('| --- | --- | --- | --- | --- | --- | --- | --- | --- |')
   $comparisonSubLines = New-Object System.Collections.Generic.List[string]
   foreach ($entry in $comparisons) {
     $baseRef = Coalesce $entry.base.short $entry.base.full
@@ -385,7 +546,36 @@ if ($comparisons.Count -gt 0) {
         $reportCell = ('`{0}`' -f $reportPath)
       }
     }
-    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} |' -f (Coalesce $entry.mode 'n/a'), (Coalesce $entry.index 'n/a'), $baseRef, $headRef, $diffCell, $duration, $reportCell))
+    $categoryText = '_none_'
+    $categoryEntries = @()
+    if ($resultNode -and $resultNode.PSObject.Properties['categories'] -and $resultNode.categories) {
+      $categoryEntries = Get-CategoryLabelEntries -Categories $resultNode.categories
+  if ($categoryEntries -and $categoryEntries.Count -gt 0) {
+        $categoryParts = New-Object System.Collections.Generic.List[string]
+        foreach ($entryInfo in $categoryEntries) {
+          $labelValue = [string]$entryInfo.label
+          switch ($entryInfo.classification) {
+            'noise'   { $labelValue = '{0} _(noise)_' -f $labelValue }
+            'neutral' { $labelValue = '{0} _(neutral)_' -f $labelValue }
+          }
+          $categoryParts.Add($labelValue) | Out-Null
+        }
+        if ($categoryParts.Count -gt 0) {
+          $categoryText = $categoryParts -join '<br />'
+        }
+      }
+    }
+    $highlightText = ''
+    $highlightCollection = @()
+    if ($entry.PSObject.Properties['highlights'] -and $entry.highlights) {
+      $highlightCollection = @($entry.highlights)
+    }
+    $highlightCollection = @($highlightCollection | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($highlightCollection.Count -gt 0) {
+      $highlightText = [string]::Join('<br />', $highlightCollection)
+    }
+    if ([string]::IsNullOrWhiteSpace($highlightText)) { $highlightText = '_none_' }
+    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |' -f (Coalesce $entry.mode 'n/a'), (Coalesce $entry.index 'n/a'), $baseRef, $headRef, $diffCell, $duration, $categoryText, $reportCell, $highlightText))
     $comparisonSubLines.Add(('<sub>{0} - {1}</sub>' -f $baseRef, $headRef))
     $comparisonHtmlRows.Add([pscustomobject]@{
       Mode       = Coalesce $entry.mode 'n/a'
@@ -401,6 +591,11 @@ if ($comparisons.Count -gt 0) {
       ReportRelative = $reportRelativeNormalized
       ReportDisplay = $reportCell
       ExitCode   = if ($resultNode -and $resultNode.PSObject.Properties['exitCode']) { $resultNode.exitCode } else { $null }
+      Highlights = if ($entry.PSObject.Properties['highlights'] -and $entry.highlights) { @($entry.highlights) } else { @() }
+      Categories = $categoryEntries
+      CategorySlugs = if ($categoryEntries) { @($categoryEntries | ForEach-Object { $_.slug }) } else { @() }
+      CategoriesDisplay = $categoryText
+      HighlightsDisplay = $highlightText
     })
   }
   if ($comparisonSubLines.Count -gt 0) {
@@ -470,6 +665,10 @@ if ($emitHtml -and $HtmlPath) {
   [void]$htmlBuilder.AppendLine('    .diff-status { color: #92400e; font-weight: 600; }')
   [void]$htmlBuilder.AppendLine('    .muted { color: #6b7280; font-style: italic; }')
   [void]$htmlBuilder.AppendLine('    .report-path code { word-break: break-all; }')
+  [void]$htmlBuilder.AppendLine('    .cat { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px; background: #e5e7eb; color: #1f2937; font-size: 0.85rem; margin: 0 0.25rem 0.25rem 0; }')
+  [void]$htmlBuilder.AppendLine('    .cat-signal { background: #d1fae5; color: #064e3b; }')
+  [void]$htmlBuilder.AppendLine('    .cat-noise { background: #fef3c7; color: #92400e; }')
+  [void]$htmlBuilder.AppendLine('    .cat-neutral { background: #e0e7ff; color: #312e81; }')
   [void]$htmlBuilder.AppendLine('    footer { margin-top: 2.5rem; font-size: 0.9rem; color: #4b5563; }')
   [void]$htmlBuilder.AppendLine('  </style>')
   [void]$htmlBuilder.AppendLine('</head>')
@@ -531,7 +730,7 @@ if ($emitHtml -and $HtmlPath) {
   [void]$htmlBuilder.AppendLine('  <h2>Commit pairs</h2>')
   if ($comparisonHtmlRows.Count -gt 0) {
     [void]$htmlBuilder.AppendLine('  <table>')
-    [void]$htmlBuilder.AppendLine('    <thead><tr><th>Mode</th><th>Pair</th><th>Base</th><th>Head</th><th>Diff</th><th>Duration (s)</th><th>Report</th></tr></thead>')
+    [void]$htmlBuilder.AppendLine('    <thead><tr><th>Mode</th><th>Pair</th><th>Base</th><th>Head</th><th>Diff</th><th>Duration (s)</th><th>Categories</th><th>Report</th><th>Highlights</th></tr></thead>')
     [void]$htmlBuilder.AppendLine('    <tbody>')
     foreach ($row in $comparisonHtmlRows) {
       $diffClass = if ($row.Diff) { 'diff-yes' } elseif ($row.Status) { 'diff-status' } else { 'diff-no' }
@@ -542,6 +741,44 @@ if ($emitHtml -and $HtmlPath) {
       } elseif ($row.Duration -ne $null) {
         $durationDisplay = ('{0:N2}' -f $row.Duration)
       }
+      $categoryHtml = '<span class="muted">none</span>'
+      $categoryAttr = ''
+      $categorySource = $row.Categories
+      if ($categorySource -and $categorySource.Count -gt 0) {
+        $categorySpans = New-Object System.Collections.Generic.List[string]
+        foreach ($catEntry in $categorySource) {
+          if ($null -eq $catEntry) { continue }
+          $catSlug = ConvertTo-HtmlSafe $catEntry.slug
+          $catLabel = ConvertTo-HtmlSafe $catEntry.label
+          $classList = New-Object System.Collections.Generic.List[string]
+          $classList.Add('cat') | Out-Null
+          switch ($catEntry.classification) {
+            'noise'   { $classList.Add('cat-noise') | Out-Null }
+            'neutral' { $classList.Add('cat-neutral') | Out-Null }
+            default   { $classList.Add('cat-signal') | Out-Null }
+          }
+          $classAttr = [string]::Join(' ', $classList)
+          $categorySpans.Add('<span class="{0}" data-cat="{1}">{2}</span>' -f $classAttr, $catSlug, $catLabel) | Out-Null
+        }
+        if ($categorySpans.Count -gt 0) {
+          $categoryHtml = [string]::Join('<br />', $categorySpans)
+        }
+      } elseif ($row.CategoriesDisplay -and $row.CategoriesDisplay -ne '_none_') {
+        $displayParts = $row.CategoriesDisplay -split '<br\s*/?>'
+        $encodedParts = $displayParts | ForEach-Object { ConvertTo-HtmlSafe $_ }
+        if ($encodedParts.Count -gt 0) {
+          $categoryHtml = [string]::Join('<br />', $encodedParts)
+        }
+      }
+      $categorySlugs = @()
+      if ($row.CategorySlugs) {
+        $categorySlugs = @($row.CategorySlugs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      }
+      if ($categorySlugs.Count -gt 0) {
+        $safeSlugs = $categorySlugs | ForEach-Object { ($_ -replace '[^a-z0-9\-\._]', '-') }
+        $categoryAttr = ' data-categories="{0}"' -f ([string]::Join(' ', $safeSlugs))
+      }
+
       $reportHtml = '<span class="muted">missing</span>'
       if ($row.ReportRelative) {
         $reportHref = $row.ReportRelative -replace '\\','/'
@@ -549,7 +786,35 @@ if ($emitHtml -and $HtmlPath) {
       } elseif ($row.ReportPath) {
         $reportHtml = ('<code>{0}</code>' -f (ConvertTo-HtmlSafe $row.ReportPath))
       }
-      [void]$htmlBuilder.AppendLine(("      <tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td class=""{4}"">{5}</td><td>{6}</td><td class=""report-path"">{7}</td></tr>" -f (ConvertTo-HtmlSafe (Coalesce $row.Mode 'n/a')), (ConvertTo-HtmlSafe (Coalesce $row.Index 'n/a')), (ConvertTo-HtmlSafe $row.BaseLabel), (ConvertTo-HtmlSafe $row.HeadLabel), $diffClass, $diffLabel, $durationDisplay, $reportHtml))
+
+      $highlightHtml = '<span class="muted">none</span>'
+      $highlightSource = $row.Highlights
+      if (-not $highlightSource -and $row.HighlightsDisplay) {
+        $highlightSource = @($row.HighlightsDisplay)
+      }
+      $highlightItems = @()
+      if ($highlightSource -ne $null) {
+        $highlightItems = @($highlightSource)
+      }
+      $highlightItems = @($highlightItems | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      if ($highlightItems.Count -gt 0) {
+        $highlightHtml = [string]::Join('<br />', ($highlightItems | ForEach-Object { ConvertTo-HtmlSafe $_ }))
+      }
+
+      [void]$htmlBuilder.AppendLine((
+        "      <tr{0}><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td class=""{5}"">{6}</td><td>{7}</td><td>{8}</td><td class=""report-path"">{9}</td><td>{10}</td></tr>" -f
+        $categoryAttr,
+        (ConvertTo-HtmlSafe (Coalesce $row.Mode 'n/a')),
+        (ConvertTo-HtmlSafe (Coalesce $row.Index 'n/a')),
+        (ConvertTo-HtmlSafe $row.BaseLabel),
+        (ConvertTo-HtmlSafe $row.HeadLabel),
+        $diffClass,
+        $diffLabel,
+        $durationDisplay,
+        $categoryHtml,
+        $reportHtml,
+        $highlightHtml
+      ))
     }
     [void]$htmlBuilder.AppendLine('    </tbody>')
     [void]$htmlBuilder.AppendLine('  </table>')

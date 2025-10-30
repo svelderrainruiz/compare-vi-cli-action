@@ -3251,7 +3251,7 @@ try {
       }
 
       if ($shouldCopyLatest) {
-        $destDir = Split-Path -LiteralPath $destReport -Parent
+        $destDir = [System.IO.Path]::GetDirectoryName($destReport)
         if ($destDir -and $latest.DirectoryName) {
           if ([string]::Equals($latest.DirectoryName, $destDir, [System.StringComparison]::OrdinalIgnoreCase) -and
               [string]::Equals($latest.Name, 'compare-report.html', [System.StringComparison]::OrdinalIgnoreCase)) {
