@@ -9,33 +9,33 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 _No unreleased changes yet._
 
-## [v0.5.3] - 2025-10-29
+## [v0.5.3] - 2025-10-30
 
 ### Added
 
-- Staged LVCompare automation now records per-pair leak metadata (`compare-leak.json`) and surfaces leak counts through
-  `tools/Run-StagedLVCompare.ps1`, `tools/Summarize-VIStaging.ps1`, and the `/vi-stage` PR summary table so reviewers can
-  triage lingering LabVIEW/LVCompare processes without downloading artifacts.
-- Timeout overrides can be supplied end-to-end (`tools/Run-StagedLVCompare.ps1`, `tools/Run-HeadlessCompare.ps1`,
-  `Invoke-LVCompare.ps1`, `scripts/Capture-LVCompare.ps1`, `tools/LabVIEWCli.psm1`) allowing LVCompare runs to fail-fast
-  during long captures.
-- Validate’s session-index job now hardens Pester installation by retrying against PSGallery, falling back to
-  `Install-PSResource`, and mirroring the 5.7.1 module from the CDN when the gallery is unavailable; the reusable Pester
-  dispatcher shares the same bootstrap.
+- History and staging compares now surface structured diff categories and highlight snippets. `tools/Compare-VIHistory.ps1`,
+  `tools/Render-VIHistoryReport.ps1`, and `tools/Summarize-VIStaging.ps1` annotate each comparison with signal/cosmetic
+  badges and aggregate counts so reviewers can filter noise without downloading artifacts.
+- New report fixtures (`fixtures/vi-report/*`) plus focused test coverage
+  (`tests/Run-StagedLVCompare.Report.Tests.ps1`, expanded history/staging suites) validate block-diagram, front-panel, and
+  attribute coverage in captured LVCompare reports.
+- `vi-compare-refs.yml` exposes an optional `notify_issue` input that posts run summaries directly to a GitHub issue, and
+  the workflow publishes the rendered Markdown/HTML report paths through job outputs for downstream automation.
 
 ### Changed
 
-- Developer guide and PR release docs now describe the new leak/timeout environment toggles for staged comparisons and
-  clarify the `/vi-history` report table.
-- `pr-vi-staging.yml` surfaces leak totals in workflow summaries and PR comments for easier triage.
-- `tools/Stage-CompareInputs.ps1` propagates `AllowSameLeaf` when mirroring dependency trees so downstream helpers
-  respect same-leaf comparisons, and the guard suite reflectively allows the PR history smoke helper.
+- Manual compare workflow now defaults to `compare_modes="default,full"` so releases capture a full (no-ignore) pass
+  alongside the filtered baseline; helper documentation and VS Code tasks explain the new preset.
+- History report rendering adds category badges, per-mode category counts, and highlight columns to the Markdown and HTML
+  outputs. The staging PR summary tables mirror the same presentation so category noise is visible at a glance.
+- Priority policy fixtures/tests align with the updated branch-protection contract (develop/main/release),
+  ensuring `priority:policy` continues to guard the current required checks.
 
 ### Fixed
 
-- Guard tests tolerate legitimate `Head.vi` references used by the PR VI history smoke helper.
-- Staging helpers now propagate `AllowSameLeaf` correctly through `Run-HeadlessCompare`/`Run-StagedLVCompare`, ensuring
-  same-leaf dependency comparisons remain opt-in.
+- `Invoke-LVCompare.ps1` and downstream helpers propagate leak metadata and timeout arguments reliably when staging
+  workflows re-run comparisons, avoiding stale PID tracker entries in history and staging summaries.
+- Fixture drift comment tests harden path resolution to prevent strict-mode faults during CI setup failures.
 
 ## [v0.5.2] - 2025-10-23
 
