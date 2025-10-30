@@ -424,6 +424,14 @@ jobs:
             }
             pwsh -NoLogo -NoProfile -File $lockScript -Action Heartbeat | Out-Null
           }
+          if (-not $env:GITHUB_OUTPUT) {
+            $fallbackOutput = Join-Path (Get-Location) 'tests/results/dispatcher-github-output.txt'
+            $fallbackDir = Split-Path -Parent $fallbackOutput
+            if (-not (Test-Path -LiteralPath $fallbackDir)) {
+              New-Item -ItemType Directory -Path $fallbackDir -Force | Out-Null
+            }
+            $env:GITHUB_OUTPUT = [System.IO.Path]::GetFullPath($fallbackOutput)
+          }
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           if ($exitCode -ne 0) {
             Write-Host "::error::Pester dispatcher exited with code $exitCode"
