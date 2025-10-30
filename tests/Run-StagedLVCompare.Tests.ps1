@@ -9,6 +9,20 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         Set-Location $script:repoRoot
     }
 
+    BeforeEach {
+        $script:envSnapshot = @{
+            GITHUB_OUTPUT                         = $env:GITHUB_OUTPUT
+            RUN_STAGED_LVCOMPARE_FLAGS            = $env:RUN_STAGED_LVCOMPARE_FLAGS
+            RUN_STAGED_LVCOMPARE_FLAGS_MODE       = $env:RUN_STAGED_LVCOMPARE_FLAGS_MODE
+            RUN_STAGED_LVCOMPARE_REPLACE_FLAGS    = $env:RUN_STAGED_LVCOMPARE_REPLACE_FLAGS
+            RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS  = $env:RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS
+            RUN_STAGED_LVCOMPARE_LEAK_CHECK       = $env:RUN_STAGED_LVCOMPARE_LEAK_CHECK
+            RUN_STAGED_LVCOMPARE_LEAK_GRACE_SECONDS = $env:RUN_STAGED_LVCOMPARE_LEAK_GRACE_SECONDS
+            VI_STAGE_COMPARE_FLAGS                = $env:VI_STAGE_COMPARE_FLAGS
+            VI_STAGE_COMPARE_FLAGS_MODE           = $env:VI_STAGE_COMPARE_FLAGS_MODE
+        }
+    }
+
     AfterAll {
         if ($script:originalLocation) {
             Set-Location $script:originalLocation
@@ -16,15 +30,26 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
     }
 
     AfterEach {
-        Remove-Item Env:GITHUB_OUTPUT -ErrorAction SilentlyContinue
-        Remove-Item Env:RUN_STAGED_LVCOMPARE_FLAGS -ErrorAction SilentlyContinue
-        Remove-Item Env:RUN_STAGED_LVCOMPARE_FLAGS_MODE -ErrorAction SilentlyContinue
-        Remove-Item Env:RUN_STAGED_LVCOMPARE_REPLACE_FLAGS -ErrorAction SilentlyContinue
-        Remove-Item Env:RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS -ErrorAction SilentlyContinue
-        Remove-Item Env:RUN_STAGED_LVCOMPARE_LEAK_CHECK -ErrorAction SilentlyContinue
-        Remove-Item Env:RUN_STAGED_LVCOMPARE_LEAK_GRACE_SECONDS -ErrorAction SilentlyContinue
-        Remove-Item Env:VI_STAGE_COMPARE_FLAGS -ErrorAction SilentlyContinue
-        Remove-Item Env:VI_STAGE_COMPARE_FLAGS_MODE -ErrorAction SilentlyContinue
+        $keys = @(
+            'GITHUB_OUTPUT',
+            'RUN_STAGED_LVCOMPARE_FLAGS',
+            'RUN_STAGED_LVCOMPARE_FLAGS_MODE',
+            'RUN_STAGED_LVCOMPARE_REPLACE_FLAGS',
+            'RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS',
+            'RUN_STAGED_LVCOMPARE_LEAK_CHECK',
+            'RUN_STAGED_LVCOMPARE_LEAK_GRACE_SECONDS',
+            'VI_STAGE_COMPARE_FLAGS',
+            'VI_STAGE_COMPARE_FLAGS_MODE'
+        )
+        foreach ($key in $keys) {
+            $value = $script:envSnapshot[$key]
+            if ($null -ne $value -and $value -ne '') {
+                Set-Item -Path ("Env:{0}" -f $key) -Value $value
+            } else {
+                Remove-Item -Path ("Env:{0}" -f $key) -ErrorAction SilentlyContinue
+            }
+        }
+        Remove-Variable -Name envSnapshot -Scope Script -ErrorAction SilentlyContinue
     }
 
     It 'records match when LVCompare exits 0' {
