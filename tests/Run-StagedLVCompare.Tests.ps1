@@ -7,6 +7,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $script:scriptPath = Join-Path $script:repoRoot 'tools' 'Run-StagedLVCompare.ps1'
         $script:originalLocation = Get-Location
         Set-Location $script:repoRoot
+        $script:originalGithubOutput = $env:GITHUB_OUTPUT
     }
 
     BeforeEach {
@@ -31,7 +32,6 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
 
     AfterEach {
         $keys = @(
-            'GITHUB_OUTPUT',
             'RUN_STAGED_LVCOMPARE_FLAGS',
             'RUN_STAGED_LVCOMPARE_FLAGS_MODE',
             'RUN_STAGED_LVCOMPARE_REPLACE_FLAGS',
@@ -48,6 +48,11 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
             } else {
                 Remove-Item -Path ("Env:{0}" -f $key) -ErrorAction SilentlyContinue
             }
+        }
+        if ($script:originalGithubOutput) {
+            Set-Item -Path Env:GITHUB_OUTPUT -Value $script:originalGithubOutput
+        } else {
+            Remove-Item -Path Env:GITHUB_OUTPUT -ErrorAction SilentlyContinue
         }
         Remove-Variable -Name envSnapshot -Scope Script -ErrorAction SilentlyContinue
     }
