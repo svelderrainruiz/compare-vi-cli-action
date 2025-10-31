@@ -76,7 +76,8 @@ the same summary table to a GitHub issue for stakeholders.
 - The job is read-only (no pushes or release writes) and produces the same artifact layout as `/vi-stage`, giving
   reviewers deterministic bundles without manual staging. The workflow executes on the trusted self-hosted Windows
   runner (`self-hosted, Windows, X64`) so the same LVCompare install used in CI handles fork PRs.
-- Manual `/vi-stage` and `/vi-history` dispatches accept a `fetch_depth` input (default `20`) if you need to pull a deeper history when testing locally.
+- Manual `/vi-stage` and `/vi-history` dispatches accept a `fetch_depth` input (default `20`) when you need to pull a
+  deeper history for local tests.
 - To rehearse the fork flow locally, run `pwsh -File tools/Test-ForkSimulation.ps1` in three passes: `-DryRun` shows the
   steps, the default run opens a draft PR and validates the automatic compare job, and `-KeepBranch` preserves the
   scratch branch while the staging/history dispatches finish so you can inspect the artifacts.
@@ -140,6 +141,3 @@ Renaming the workflow inputs breaks compatibility with previous revisions, so th
 next release should cut a new major tag (for example `v1.0.0`). Update downstream
 automation or scheduled triggers to use the new `vi_path` / `compare_ref` inputs
 before adopting the release.
-
-
-
