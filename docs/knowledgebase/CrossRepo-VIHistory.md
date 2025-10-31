@@ -55,6 +55,20 @@ standing issue #527).
 - We should publish a reusable workflow or module so that downstream projects
   can run Compare-VIHistory end-to-end without cloning this repository.
 
+## Packaging decision (2025-10-31)
+
+For issue #527 we will proceed with the **PowerShell module** approach:
+
+- Create a module (working name `CompareVI.Tools`) that exports
+  `Compare-VIHistory`, `Compare-RefsToTemp`, bucket metadata helpers, and the
+  vendor resolver.
+- Publish the module as part of the compare-vi-cli-action release process,
+  making it installable via `Install-Module` / `Save-Module`.
+- Provide a simple wrapper script so GitHub workflows can import the module and
+  invoke `Compare-VIHistory` without copying files.
+- Still generate a zip bundle from the release pipeline for consumers that
+  prefer fixed artifacts (secondary path).
+
 ## Next steps (tracked by issue #527)
 
 - **Packaging options**  
