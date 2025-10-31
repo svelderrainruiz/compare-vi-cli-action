@@ -19,7 +19,7 @@ Release Artifacts
 Validation (must be green)
 
 - [x] Pester (hosted Windows) - `Invoke-PesterTests.ps1`, 2025-10-31.
-- [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31 (run `18963479511`).
+- [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31 (run `18963549749`).
 - [ ] Fixture Drift (Windows/Ubuntu) - TODO.
 - [x] Validate workflow (release/v0.5.4) - run `priority:validate -- --ref release/v0.5.4` (run `18963495757`).
 - [ ] Manual VI Compare refs (`vi-compare-refs.yml`) - ensure artifacts upload for the release branch.
