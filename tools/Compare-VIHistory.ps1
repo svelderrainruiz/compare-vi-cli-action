@@ -338,6 +338,9 @@ function Test-FileExistsAtRef {
   foreach ($arg in @('cat-file','-e', $expr)) { [void]$psi.ArgumentList.Add($arg) }
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
+  if ($script:repoRoot) {
+    try { $psi.WorkingDirectory = $script:repoRoot } catch {}
+  }
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $proc = [System.Diagnostics.Process]::Start($psi)
