@@ -571,9 +571,19 @@ if ($commitList.Count -eq 0) {
 $compareScript = $null
 $scriptsOverride = $env:COMPAREVI_SCRIPTS_ROOT
 if (-not [string]::IsNullOrWhiteSpace($scriptsOverride)) {
-  $overrideCandidate = Join-Path $scriptsOverride 'Compare-RefsToTemp.ps1'
-  if (Test-Path -LiteralPath $overrideCandidate -PathType Leaf) {
-    $compareScript = $overrideCandidate
+  if (Test-Path -LiteralPath $scriptsOverride -PathType Leaf) {
+    $compareScript = $scriptsOverride
+  } else {
+    $overrideCandidates = @(
+      (Join-Path $scriptsOverride 'Compare-RefsToTemp.ps1'),
+      (Join-Path (Join-Path $scriptsOverride 'tools') 'Compare-RefsToTemp.ps1')
+    )
+    foreach ($candidate in $overrideCandidates) {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $compareScript = $candidate
+        break
+      }
+    }
   }
 }
 
@@ -746,7 +756,8 @@ foreach ($modeSpec in $modeSpecs) {
     }
 
     $parentExpr = ('{0}^' -f $headCommit)
-    $parentRaw = Invoke-Git -Arguments @('rev-parse', $parentExpr) -Quiet
+    $parentRaw = $null
+    try { $parentRaw = Invoke-Git -Arguments @('rev-parse', $parentExpr) -Quiet } catch { $parentRaw = $null }
     $parentCommit = ($parentRaw -split "`n")[0].Trim()
     if (-not $parentCommit) {
       $stopReason = 'reached-root'

@@ -28,6 +28,26 @@ try { git --version | Out-Null } catch { throw 'git is required on PATH to fetch
 
 $repoRoot = (Get-Location).Path
 
+function Resolve-CompareVIScriptsRoot {
+  param([string]$PrimaryRoot)
+
+  $candidateRoots = New-Object System.Collections.Generic.List[string]
+  if (-not [string]::IsNullOrWhiteSpace($PrimaryRoot)) {
+    $candidateRoots.Add($PrimaryRoot) | Out-Null
+  }
+  $scriptsOverride = [System.Environment]::GetEnvironmentVariable('COMPAREVI_SCRIPTS_ROOT','Process')
+  if (-not [string]::IsNullOrWhiteSpace($scriptsOverride)) {
+    $candidateRoots.Add($scriptsOverride) | Out-Null
+  }
+  foreach ($root in $candidateRoots) {
+    $moduleCandidate = Join-Path (Join-Path $root 'scripts') 'CompareVI.psm1'
+    if (Test-Path -LiteralPath $moduleCandidate -PathType Leaf) {
+      return $root
+    }
+  }
+  return $PrimaryRoot
+}
+
 function Split-ArgString {
   param([string]$Value)
   if ([string]::IsNullOrWhiteSpace($Value)) { return @() }
@@ -222,13 +242,27 @@ if ($RenderReport.IsPresent -and $reportFormatEffective -ne 'html') {
 $renderReportRequested = ($reportFormatEffective -eq 'html')
 $detailRequested = $Detailed.IsPresent -or $renderReportRequested -or ($reportFormatEffective -ne 'html')
 Write-Host ("[Debug] detailRequested={0} renderReportRequested={1} reportFormat={2}" -f $detailRequested, $renderReportRequested, $reportFormatEffective)
+$scriptsRoot = Resolve-CompareVIScriptsRoot -PrimaryRoot $repoRoot
 $flagTokens = Split-ArgString -Value $LvCompareArgs
 $customInvokeProvided = -not [string]::IsNullOrWhiteSpace($InvokeScriptPath)
 $lvComparePathResolved = Normalize-ExistingPath $LvComparePath
 $labviewExeResolved    = Normalize-ExistingPath $LabVIEWExePath
 $invokeScriptResolved  = $null
 if ($detailRequested -or $InvokeScriptPath) {
-  if (-not $InvokeScriptPath) { $InvokeScriptPath = Join-Path (Join-Path $repoRoot 'tools') 'Invoke-LVCompare.ps1' }
+  if (-not $InvokeScriptPath) {
+    $invokeCandidates = @(
+      Join-Path (Join-Path $repoRoot 'tools') 'Invoke-LVCompare.ps1'
+    )
+    if ($scriptsRoot -and $scriptsRoot -ne $repoRoot) {
+      $invokeCandidates += Join-Path (Join-Path $scriptsRoot 'tools') 'Invoke-LVCompare.ps1'
+    }
+    foreach ($candidate in $invokeCandidates) {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $InvokeScriptPath = $candidate
+        break
+      }
+    }
+  }
   $invokeScriptResolved = Normalize-ExistingPath $InvokeScriptPath
   if (-not (Test-Path -LiteralPath $invokeScriptResolved -PathType Leaf)) {
     throw "Invoke-LVCompare script not found: $invokeScriptResolved"
@@ -266,7 +300,12 @@ $shaBase = (Get-FileHash -Algorithm SHA256 -LiteralPath $base).Hash.ToUpperInvar
 $shaHead = (Get-FileHash -Algorithm SHA256 -LiteralPath $head).Hash.ToUpperInvariant()
 $expectDiff = ($bytesBase -ne $bytesHead) -or ($shaBase -ne $shaHead)
 
-Import-Module (Join-Path (Join-Path $repoRoot 'scripts') 'CompareVI.psm1') -Force
+$compareModuleRoot = Resolve-CompareVIScriptsRoot -PrimaryRoot $repoRoot
+$compareModulePath = Join-Path (Join-Path $compareModuleRoot 'scripts') 'CompareVI.psm1'
+if (-not (Test-Path -LiteralPath $compareModulePath -PathType Leaf)) {
+  throw "CompareVI module not found. Checked: $compareModulePath"
+}
+Import-Module $compareModulePath -Force
 
 $cliExit = $null
 $cliDiff = $false
