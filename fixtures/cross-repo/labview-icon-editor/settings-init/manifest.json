@@ -1,0 +1,59 @@
+{
+  "schema": "vi-compare/history-suite@v1",
+  "generatedAt": "2025-10-30T23:59:00Z",
+  "targetPath": "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi",
+  "requestedStartRef": "HEAD",
+  "startRef": "8e3f56a41ce7f06519f77dd021d7f0b91234abcd",
+  "endRef": "",
+  "maxPairs": 3,
+  "failFast": false,
+  "failOnDiff": false,
+  "reportFormat": "html",
+  "resultsDir": "fixtures/cross-repo/labview-icon-editor/settings-init",
+  "modes": [
+    {
+      "name": "default",
+      "slug": "default",
+      "reportFormat": "html",
+      "flags": [
+        "-nobd",
+        "-noattr",
+        "-nofp",
+        "-nofppos",
+        "-nobdcosm"
+      ],
+      "manifestPath": "fixtures/cross-repo/labview-icon-editor/settings-init/default-manifest.json",
+      "resultsDir": "fixtures/cross-repo/labview-icon-editor/settings-init",
+      "stats": {
+        "processed": 2,
+        "diffs": 1,
+        "lastDiffIndex": 2,
+        "lastDiffCommit": "1f2d3c4b5a6e70918273645abcedf0123456789a",
+        "stopReason": "complete",
+        "errors": 0,
+        "missing": 0,
+        "categoryCounts": {
+          "vi-attribute": 2
+        },
+        "bucketCounts": {
+          "metadata": 2
+        }
+      },
+      "status": "ok"
+    }
+  ],
+  "stats": {
+    "modes": 1,
+    "processed": 2,
+    "diffs": 1,
+    "errors": 0,
+    "missing": 0,
+    "categoryCounts": {
+      "vi-attribute": 2
+    },
+    "bucketCounts": {
+      "metadata": 2
+    }
+  },
+  "status": "ok"
+}

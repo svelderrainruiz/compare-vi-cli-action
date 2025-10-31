@@ -1,0 +1,53 @@
+{
+  "schema": "vi-compare/history@v1",
+  "mode": "default",
+  "targetPath": "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi",
+  "stats": {
+    "processed": 2,
+    "diffs": 1,
+    "errors": 0,
+    "missing": 0,
+    "stopReason": "complete",
+    "categoryCounts": {
+      "vi-attribute": 2
+    },
+    "bucketCounts": {
+      "metadata": 2
+    }
+  },
+  "comparisons": [
+    {
+      "index": 1,
+      "head": {
+        "ref": "9a8728f4d0bb"
+      },
+      "base": {
+        "ref": "6c5d77b9e120"
+      },
+      "result": {
+        "diff": false,
+        "bucket": "metadata",
+        "categories": [
+          "VI Attribute - Window Size/Appearance"
+        ]
+      }
+    },
+    {
+      "index": 2,
+      "head": {
+        "ref": "1f2d3c4b5a6e"
+      },
+      "base": {
+        "ref": "9a8728f4d0bb"
+      },
+      "result": {
+        "diff": true,
+        "bucket": "metadata",
+        "categories": [
+          "VI Attribute - Miscellaneous"
+        ]
+      }
+    }
+  ],
+  "status": "ok"
+}

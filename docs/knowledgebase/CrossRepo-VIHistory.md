@@ -20,55 +20,49 @@ standing issue #527).
    git clone https://github.com/LabVIEW-Community-CI-CD/labview-icon-editor.git
    ```
 
-2. **Copy the helper script**
+2. **Import the module**
 
-   `Compare-VIHistory.ps1` expects `tools/Compare-RefsToTemp.ps1` to be present
-   in the target repo. For now, copy it from this repo:
+   From the cloned `compare-vi-cli-action` repository run:
 
    ```powershell
-   New-Item -ItemType Directory labview-icon-editor/tools -Force | Out-Null
-   Copy-Item ..\compare-vi-cli-action\tools\Compare-RefsToTemp.ps1 `
-     labview-icon-editor\tools\Compare-RefsToTemp.ps1 `
-     -Force
+   Import-Module (Join-Path $PWD 'tools/CompareVI.Tools/CompareVI.Tools.psd1') -Force
    ```
+
+   The module exposes `Invoke-CompareVIHistory` and redirects all helper lookups
+   back to this repository.
 
 3. **Run the history helper**
 
    ```powershell
-   pwsh -File ..\compare-vi-cli-action\tools\Compare-VIHistory.ps1 `
+   Set-Location labview-icon-editor
+   Invoke-CompareVIHistory `
      -TargetPath "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi" `
      -MaxPairs 6 `
      -RenderReport `
-     -FailOnDiff:$false
+     -FailOnDiff:$false `
+     -InvokeScriptPath ..\compare-vi-cli-action\tools\Invoke-LVCompare.ps1
    ```
 
    - Outputs land in `tests/results/ref-compare/history/` inside the cloned
- repo (`history-report.md`, `history-report.html`, manifest JSON, etc.).
- - Works for any VI path with commit history; use `-StartRef` if you need to
-   anchor to an older commit.
+     repo (`history-report.md`, `history-report.html`, manifest JSON, etc.).
+   - Works for any VI path with commit history; use `-StartRef` if you need to
+     anchor to an older commit.
+   - When LabVIEW is not available locally, point `-InvokeScriptPath` at a
+     testing stub so the pipeline still emits manifests and reports.
 
-### Using the module wrapper
+### Reference fixtures
 
-Once `CompareVI.Tools` is published you can replace steps 2–3 with:
-
-```powershell
-Install-Module CompareVI.Tools -Scope CurrentUser
-Import-Module CompareVI.Tools
-Set-Location labview-icon-editor
-Invoke-CompareVIHistory `
-  -TargetPath "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi" `
-  -MaxPairs 6 `
-  -RenderReport
-```
-
-The module sets up the helper path automatically; downstream repos simply need
-the module on the PowerShell module path.
+The repository ships a synthetic snapshot under
+`fixtures/cross-repo/labview-icon-editor/settings-init/` (Markdown, HTML, and
+JSON manifests). `tests/CompareVI.CrossRepo.Fixtures.Tests.ps1` validates that
+the recorded metadata bucket counts (2 entries in the `metadata` bucket) stay
+in sync with the documentation. Use the fixture as a template when capturing
+new cross-repo runs.
 
 ## Observations / gaps
 
-- The only blocker for external repos is shipping `Compare-RefsToTemp.ps1`.
-  Packaging that helper (PowerShell module, shared zip, or workflow download)
-  would eliminate manual copying.
+- With `CompareVI.Tools` we can reuse `Compare-VIHistory` and
+  `Compare-RefsToTemp` without copying scripts into the target repository.
 - We should publish a reusable workflow or module so that downstream projects
   can run Compare-VIHistory end-to-end without cloning this repository.
 
