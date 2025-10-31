@@ -70,6 +70,7 @@
         "docs/INTEGRATION_TESTS.md",
         "docs/knowledgebase/FEATURE_BRANCH_POLICY.md",
         "docs/knowledgebase/LVCompare-Git-CLI-Guide_Windows-LabVIEW-2025Q3.md",
+        "docs/knowledgebase/CrossRepo-VIHistory.md",
         "docs/knowledgebase/DOCKER_TOOLS_PARITY.md",
         "docs/LABVIEW_GATING.md",
         "docs/LINT_BACKLOG_PLAN.md",
