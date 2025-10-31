@@ -55,6 +55,10 @@
 - Successful runs now add the `vi-staging-ready` label to the PR (configurable via workflow input) so reviewers can spot staged bundles at a glance. The label is removed automatically if staging finds no VI pairs or the workflow fails.
 - A dedicated smoke workflow (`Smoke VI Staging`) is available via manual dispatch; it exercises the helper end-to-end and uploads the summary artifact for traceability.
 - The summary and PR comment include direct download links for the `vi-compare-manifest` and `vi-compare-staging` artifacts (links expire after roughly one hour; rerun `/vi-stage` to refresh).
+- Both the Markdown summary and PR comment now list the business buckets alongside raw categories
+  (`Buckets: Functional behavior, Metadata`, etc.) and the JSON payloads expose structured bucket counts. Reviewers or
+  automation can triage differences by bucket rather than re-parsing LVCompare output, and fork smokes gate on the bucket
+  coverage signal.
 - Local parity: the same experience can be reproduced offline with
   ```powershell
   pwsh -File tools/Get-PRVIDiffManifest.ps1 -BaseRef origin/develop -HeadRef HEAD -OutputPath vi-manifest.json
@@ -155,6 +159,9 @@ gh workflow run vi-compare-refs.yml `
   stats, and the `manifestPath` for that mode's detailed results.
 - `scripts/Run-VIHistory.ps1` also writes `tests/results/ref-compare/history/history-context.json` (`schema: vi-compare/history-context@v1`) summarising the commit pairs whenever the upstream context file is present. If the context cannot be read, the renderer falls back to the per-mode manifests and enriches them with commit metadata pulled from `git`, ensuring the generated `history-report.md` / `history-report.html` still lists every pair with author/date context, explicit diff outcome, run duration, and-when differences exist-relative links to the LVCompare report and preserved artifact directory.
 - The Markdown/HTML history reports include a `Categories` column that surfaces the same badge set as staging (`cat-signal`, `cat-noise`, `cat-neutral`). Each comparison record in the per-mode manifests carries the raw category slug list so tooling can distinguish signal vs cosmetic diffs without re-scraping the HTML.
+- Reports now add a `Buckets` column and aggregate bucket totals so reviewers can immediately see whether a run touched
+  functional behaviour, UI/visual changes, or metadata-only adjustments. The GitHub outputs ship both `category-counts-json`
+  and `bucket-counts-json`, keeping dashboards in sync with the human-readable summaries.
 - GitHub outputs include `manifest_path` (suite manifest), `results_dir` (root history directory), `mode_manifests_json`
   (JSON array enumerating each mode's manifest path, results directory, and summary stats), plus the history report
   pointers. The compare step emits `history-report-md` / `history-report-html`, and the workflow surfaces those as job
@@ -172,6 +179,8 @@ gh workflow run vi-compare-refs.yml `
   within the mode directory, and the workflow uploads them as `vi-compare-diff-artifacts`. Runs without differences discard those directories so the
   diff artifact upload is skipped.
 - The job summary includes a Markdown table for each mode (processed pairs, diff count, missing count, and last diff details).
+- The step-summary also prints bucket totals per run (`Bucket counts: Functional behavior (3), Metadata (1)`), mirroring
+  the JSON output so pasted acceptance notes retain the same context reviewers see on the workflow run.
 - When `notify_issue` is set, the workflow posts the same table to the referenced issue so stakeholders can track results.
 
 ## Running the helper locally
@@ -237,3 +246,16 @@ gh workflow run vi-compare-refs.yml `
 - The command-driven workflows (pr-vi-staging.yml, pr-vi-history.yml) now reuse the helper so they operate on fork commits safely without bespoke checkout logic.
 - Manual `/vi-stage` and `/vi-history` dispatches accept an optional `fetch_depth` input (default `20`) so you can deepen history when needed.
 - PR auto-approval depends on the standing label gate: the new auto-approve label workflow toggles the label automatically once Validate succeeds for eligible PRs.
+
+### Acceptance checklist (bucket coverage)
+
+- [ ] Fork smokes cover at least two staged VI pairs in a single run (for example `vi-attr/Base.vi` +
+      `vi-stage/bd-functional.vi`) so functional and metadata buckets appear together.
+- [ ] Staging summaries include bucket lines in both Markdown and PR comments, and the JSON payload exposes
+      `totals.bucketCounts`.
+- [ ] History reports (`history-report.md` / `.html`) render a `Buckets` column and the suite manifest exports
+      `bucketCounts` alongside `categoryCounts`.
+- [ ] GitHub outputs (`bucket-counts-json`) and telemetry carry the bucket totals so downstream automation can detect
+      missing coverage.
+- [ ] Documentation and helper usage notes stay in sync with the bucket terminology (Functional behavior, UI / visual,
+      Metadata) and explain how to add new fixtures or buckets.
