@@ -52,6 +52,7 @@ standing issue #527).
 Once `CompareVI.Tools` is published you can replace steps 2–3 with:
 
 ```powershell
+Install-Module CompareVI.Tools -Scope CurrentUser
 Import-Module CompareVI.Tools
 Set-Location labview-icon-editor
 Invoke-CompareVIHistory `
