@@ -46,6 +46,13 @@ try {
   }
 } catch {}
 
+try {
+  $categoryModule = Join-Path (Split-Path -Parent $PSCommandPath) 'VICategoryBuckets.psm1'
+  if (Test-Path -LiteralPath $categoryModule -PathType Leaf) {
+    Import-Module $categoryModule -Force
+  }
+} catch {}
+
 function Split-ArgString {
   param([string]$Value)
   if ([string]::IsNullOrWhiteSpace($Value)) { return @() }
@@ -599,6 +606,7 @@ $aggregate = [ordered]@{
     errors    = 0
     missing   = 0
     categoryCounts = [ordered]@{}
+    bucketCounts   = [ordered]@{}
   }
   status      = 'pending'
 }
@@ -610,6 +618,7 @@ $totalMissing = 0
 $modeSummaryRows = New-Object System.Collections.Generic.List[object]
 $diffHighlights = New-Object System.Collections.Generic.List[string]
 $aggregateCategoryCounts = $aggregate.stats.categoryCounts
+$aggregateBucketCounts = $aggregate.stats.bucketCounts
 
 foreach ($modeSpec in $modeSpecs) {
   $modeName = $modeSpec.Name
@@ -690,11 +699,13 @@ foreach ($modeSpec in $modeSpecs) {
       errors         = 0
       missing        = 0
       categoryCounts = [ordered]@{}
+      bucketCounts   = [ordered]@{}
     }
     status      = 'pending'
   }
 
   $modeCategoryCounts = $modeManifest.stats.categoryCounts
+  $modeBucketCounts = $modeManifest.stats.bucketCounts
 
   $processed = 0
   $diffCount = 0
@@ -879,6 +890,16 @@ foreach ($modeSpec in $modeSpecs) {
       )
       if ($categories -and $categories.Count -gt 0) {
         $comparisonRecord.result.categories = $categories
+        $categoryInfo = Get-VICategoryBuckets -Names $categories
+        if ($categoryInfo -and $categoryInfo.Details) {
+          $comparisonRecord.result.categoryDetails = $categoryInfo.Details
+        }
+        if ($categoryInfo -and $categoryInfo.BucketSlugs) {
+          $comparisonRecord.result.categoryBuckets = $categoryInfo.BucketSlugs
+        }
+        if ($categoryInfo -and $categoryInfo.BucketDetails) {
+          $comparisonRecord.result.categoryBucketDetails = $categoryInfo.BucketDetails
+        }
         foreach ($category in $categories) {
           $categoryKey = [string]$category
           if ([string]::IsNullOrWhiteSpace($categoryKey)) { continue }
@@ -886,6 +907,16 @@ foreach ($modeSpec in $modeSpecs) {
             $modeCategoryCounts[$categoryKey] = 0
           }
           $modeCategoryCounts[$categoryKey]++
+        }
+        if ($categoryInfo -and $categoryInfo.BucketSlugs) {
+          foreach ($bucketSlug in $categoryInfo.BucketSlugs) {
+            $bucketKey = [string]$bucketSlug
+            if ([string]::IsNullOrWhiteSpace($bucketKey)) { continue }
+            if (-not $modeBucketCounts.Contains($bucketKey)) {
+              $modeBucketCounts[$bucketKey] = 0
+            }
+            $modeBucketCounts[$bucketKey]++
+          }
         }
       }
       if ($summaryJson.cli.PSObject.Properties['reportFormat']) {
@@ -1043,6 +1074,16 @@ foreach ($modeSpec in $modeSpecs) {
     }
     $aggregateCategoryCounts[$categoryName] += [int]$countValue
   }
+  foreach ($bucketKey in $modeBucketCounts.Keys) {
+    $bucketValue = $modeBucketCounts[$bucketKey]
+    if ($null -eq $bucketValue) { continue }
+    $bucketName = [string]$bucketKey
+    if ([string]::IsNullOrWhiteSpace($bucketName)) { continue }
+    if (-not $aggregateBucketCounts.Contains($bucketName)) {
+      $aggregateBucketCounts[$bucketName] = 0
+    }
+    $aggregateBucketCounts[$bucketName] += [int]$bucketValue
+  }
 
   $totalProcessed += $processed
   $totalDiffs += $diffCount
@@ -1061,6 +1102,13 @@ foreach ($categoryName in ($aggregateCategoryCounts.Keys | Sort-Object)) {
 }
 $aggregate.stats.categoryCounts = $sortedAggregateCategories
 $aggregateCategoryCounts = $sortedAggregateCategories
+
+$sortedAggregateBuckets = [ordered]@{}
+foreach ($bucketName in ($aggregateBucketCounts.Keys | Sort-Object)) {
+  $sortedAggregateBuckets[$bucketName] = [int]$aggregateBucketCounts[$bucketName]
+}
+$aggregate.stats.bucketCounts = $sortedAggregateBuckets
+$aggregateBucketCounts = $sortedAggregateBuckets
 if ($aggregateCategoryCounts.Count -gt 0) {
   $categorySummaryParts = New-Object System.Collections.Generic.List[string]
   foreach ($categoryKey in $aggregateCategoryCounts.Keys) {
@@ -1081,6 +1129,25 @@ if ($aggregateCategoryCounts.Count -gt 0) {
   if ($categorySummaryParts.Count -gt 0) {
     $summaryLines += "- Category counts: $($categorySummaryParts -join ', ')"
   }
+}
+$bucketSummaryParts = New-Object System.Collections.Generic.List[string]
+foreach ($bucketKey in $aggregateBucketCounts.Keys) {
+  $bucketCount = $aggregateBucketCounts[$bucketKey]
+  $bucketLabel = $bucketKey
+  $bucketMeta = Get-VIBucketMetadata -BucketSlug $bucketKey
+  if ($bucketMeta) {
+    $bucketLabel = $bucketMeta.label
+    switch ($bucketMeta.classification) {
+      'noise'   { $bucketLabel = '{0} (noise)' -f $bucketLabel }
+      'neutral' { $bucketLabel = '{0} (neutral)' -f $bucketLabel }
+    }
+  }
+  $bucketSummaryParts.Add(("{0} ({1})" -f $bucketLabel, $bucketCount)) | Out-Null
+}
+if ($bucketSummaryParts.Count -gt 0) {
+  $summaryLines += "- Bucket counts: $($bucketSummaryParts -join ', ')"
+} else {
+  $summaryLines += "- Bucket counts: none"
 }
 
 if ($hasStepSummary -and $modeSummaryRows.Count -gt 0) {
@@ -1178,6 +1245,12 @@ if ($aggregateCategoryCounts.Count -gt 0) {
   $categoryJson = ConvertTo-Json $aggregateCategoryCounts -Depth 4 -Compress
   Write-GitHubOutput -Key 'category-counts-json' -Value $categoryJson -DestPath $GitHubOutputPath
 }
+if ($aggregateBucketCounts.Count -gt 0) {
+  $bucketJson = ConvertTo-Json $aggregateBucketCounts -Depth 4 -Compress
+} else {
+  $bucketJson = '{}'
+}
+Write-GitHubOutput -Key 'bucket-counts-json' -Value $bucketJson -DestPath $GitHubOutputPath
 
 $modeManifestSummary = $aggregate.modes | ForEach-Object {
   [ordered]@{

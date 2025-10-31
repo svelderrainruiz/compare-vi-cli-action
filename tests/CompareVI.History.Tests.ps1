@@ -802,6 +802,13 @@ exit 0
     $modeSummary = $modeJsonValue | ConvertFrom-Json
     $modeSummary.Count | Should -Be 2
 
+    $bucketJsonLine = $outputLines | Where-Object { $_ -like 'bucket-counts-json=*' } | Select-Object -First 1
+    $bucketJsonLine | Should -Not -BeNullOrEmpty
+    $bucketJson = (($bucketJsonLine -split '=', 2)[1]).Trim()
+    $bucketJson | Should -Not -BeNullOrEmpty
+    $bucketCounts = $bucketJson | ConvertFrom-Json
+    ($bucketCounts -is [System.Management.Automation.PSCustomObject]) | Should -BeTrue
+
     $bySlug = @{}
     foreach ($entry in $modeSummary) {
       $entry | Should -Not -BeNullOrEmpty
@@ -831,13 +838,16 @@ exit 0
     $summaryContent = Get-Content -LiteralPath $summaryPath -Raw
     $summaryContent | Should -Match 'VI history report'
     $summaryContent | Should -Match 'history-report.md'
+    $summaryContent | Should -Match 'Bucket counts'
   }
 
   It 'renders enriched history report with commit metadata and artifact links' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
     $previousDiff = $env:STUB_COMPARE_DIFF
+    $previousFixture = $env:STUB_COMPARE_REPORT_FIXTURE
     try {
       $env:STUB_COMPARE_DIFF = '1'
+      $env:STUB_COMPARE_REPORT_FIXTURE = Join-Path $_repoRoot 'fixtures' 'vi-report' 'vi-attribute'
       $pair = $_pairs[0]
       $rd = Join-Path $TestDrive 'history-report-rich'
 
@@ -852,7 +862,7 @@ exit 0
 
       $historyMd = Get-Content -LiteralPath (Join-Path $rd 'history-report.md') -Raw
       $historyMd | Should -Match '\#\# Commit pairs'
-      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Report \| Highlights \|'
+      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
       $historyMd | Should -Match '\*\*diff\*\*'
       $historyMd | Should -Match '\[report\]\(\./'
       $historyMd | Should -Match '<sub>.* - .*<\/sub>'
@@ -861,12 +871,19 @@ exit 0
       $historyHtml = Get-Content -LiteralPath (Join-Path $rd 'history-report.html') -Raw
       $historyHtml | Should -Match '<h2>Attribute coverage</h2>'
       $historyHtml | Should -Match '<th>Categories</th>'
+      $historyHtml | Should -Match '<th>Buckets</th>'
       $historyHtml | Should -Match '<td class="diff-yes">Diff</td>'
+      $historyHtml | Should -Match 'class="bucket"'
     } finally {
       if ($null -eq $previousDiff) {
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
       } else {
         $env:STUB_COMPARE_DIFF = $previousDiff
+      }
+      if ($null -eq $previousFixture) {
+        Remove-Item Env:STUB_COMPARE_REPORT_FIXTURE -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_REPORT_FIXTURE = $previousFixture
       }
     }
   }
@@ -1030,7 +1047,7 @@ exit 0
         -FailOnDiff:$false | Out-Null
 
       $diffReport = Get-Content -LiteralPath (Join-Path $diffDir 'history-report.md') -Raw
-      $diffReport | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Report \| Highlights \|'
+      $diffReport | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
       $diffReport | Should -Match '\| Diffs \|\s*1\s*\|'
       $diffReport | Should -Match '\| default \|\s*1\s*\|'
       $diffReport | Should -Match '-nobd'
@@ -1047,7 +1064,7 @@ exit 0
         -FailOnDiff:$false | Out-Null
 
       $cleanReport = Get-Content -LiteralPath (Join-Path $cleanDir 'history-report.md') -Raw
-      $cleanReport | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Report \| Highlights \|'
+      $cleanReport | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
       $cleanReport | Should -Match '\| Diffs \|\s*0\s*\|'
       $cleanReport | Should -Match '-nobd'
     } finally {
@@ -1127,7 +1144,7 @@ exit 0
         -FailOnDiff:$false | Out-Null
 
       $historyMd = Get-Content -LiteralPath (Join-Path $rd 'history-report.md') -Raw
-      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Report \| Highlights \|'
+      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
       $historyMd | Should -Match '\| default \|\s*1\s*\|'
       $historyMd | Should -Match '\| attributes \|\s*1\s*\|'
     } finally {

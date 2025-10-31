@@ -13,6 +13,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+try {
+  $categoryModule = Join-Path (Split-Path -Parent $PSCommandPath) 'VICategoryBuckets.psm1'
+  if (Test-Path -LiteralPath $categoryModule -PathType Leaf) {
+    Import-Module $categoryModule -Force
+  }
+} catch {}
+
 function Resolve-ExistingPath {
   param(
     [string]$Path,
@@ -139,35 +146,7 @@ function Coalesce {
 function Get-CategoryMetadata {
   param([string]$Name)
 
-  if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
-  $slug = $Name.Trim().ToLowerInvariant()
-  $label = $slug
-  $classification = 'signal'
-  switch ($slug) {
-    'block-diagram' { $label = 'Block diagram' }
-    'front-panel'   { $label = 'Front panel' }
-    'attributes'    { $label = 'Attributes' }
-    'connector-pane'{ $label = 'Connector pane' }
-    'cosmetic' {
-      $label = 'Cosmetic'
-      $classification = 'noise'
-    }
-    'unspecified' {
-      $label = 'Unspecified'
-      $classification = 'neutral'
-    }
-    default {
-      $spaced = ($slug -replace '[-_]', ' ')
-      $titleCase = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($spaced)
-      $label = $titleCase
-      $classification = 'signal'
-    }
-  }
-  return [pscustomobject]@{
-    slug           = $slug
-    label          = $label
-    classification = $classification
-  }
+  return Get-VICategoryMetadata -Name $Name
 }
 
 function Get-CategoryLabelEntries {
@@ -240,6 +219,78 @@ function Get-CategoryCountEntries {
         $map[$meta.slug].count += [int]$value
       } catch {
         $map[$meta.slug].count += 0
+      }
+    }
+  }
+
+  return @($map.Values | Sort-Object -Property label, slug)
+}
+
+function Get-BucketLabelEntries {
+  param([object]$Buckets)
+
+  $entries = New-Object System.Collections.Generic.List[pscustomobject]
+  if ($null -eq $Buckets) { return @() }
+
+  $items = @()
+  if ($Buckets -is [System.Collections.IEnumerable] -and -not ($Buckets -is [string])) {
+    $items = @($Buckets)
+  } else {
+    $items = @($Buckets)
+  }
+
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($item in $items) {
+    if ($null -eq $item) { continue }
+    $slug = $null
+    if ($item -is [pscustomobject]) {
+      if ($item.PSObject.Properties['bucketSlug']) {
+        $slug = [string]$item.bucketSlug
+      } elseif ($item.PSObject.Properties['slug']) {
+        $slug = [string]$item.slug
+      }
+    } else {
+      $slug = [string]$item
+    }
+    if ([string]::IsNullOrWhiteSpace($slug)) { continue }
+    if ($seen.Add($slug)) {
+      $meta = Get-VIBucketMetadata -BucketSlug $slug
+      if ($meta) {
+        $entries.Add([pscustomobject]@{
+          slug           = $meta.slug
+          label          = $meta.label
+          classification = $meta.classification
+        }) | Out-Null
+      }
+    }
+  }
+
+  return @($entries | Sort-Object -Property label, slug)
+}
+
+function Get-BucketCountEntries {
+  param([object]$BucketCounts)
+
+  $map = @{}
+  if ($null -eq $BucketCounts) { return @() }
+
+  if ($BucketCounts -is [System.Collections.IDictionary]) {
+    foreach ($key in $BucketCounts.Keys) {
+      $value = $BucketCounts[$key]
+      $meta = Get-VIBucketMetadata -BucketSlug $key
+      if (-not $meta) { continue }
+      if (-not $map.ContainsKey($meta.slug)) {
+        $map[$meta.slug] = [pscustomobject]@{
+          slug           = $meta.slug
+          label          = $meta.label
+          classification = $meta.classification
+          count          = 0
+        }
+      }
+      try {
+        $map[$meta.slug].count += [int]$value
+      } catch {
+        $map[$meta.slug].count = ($map[$meta.slug].count + [int]$value)
       }
     }
   }
@@ -458,14 +509,38 @@ if ($stats) {
   if ($stats.errors -ne $null) {
     $summaryLines.Add(('| Errors | {0} |' -f $stats.errors))
   }
+  $categorySummaryEntries = Get-CategoryCountEntries -CategoryCounts $stats.categoryCounts
+  if ($categorySummaryEntries -and $categorySummaryEntries.Count -gt 0) {
+    $categoryParts = $categorySummaryEntries | ForEach-Object {
+      $labelValue = [string]$_.label
+      switch ($_.classification) {
+        'noise'   { $labelValue = '{0} _(noise)_' -f $labelValue }
+        'neutral' { $labelValue = '{0} _(neutral)_' -f $labelValue }
+      }
+      '{0} ({1})' -f $labelValue, $_.count
+    }
+    $summaryLines.Add(('| Categories | {0} |' -f ($categoryParts -join '<br>')))
+  }
+  $bucketSummaryEntries = Get-BucketCountEntries -BucketCounts $stats.bucketCounts
+  if ($bucketSummaryEntries -and $bucketSummaryEntries.Count -gt 0) {
+    $bucketParts = $bucketSummaryEntries | ForEach-Object {
+      $labelValue = [string]$_.label
+      switch ($_.classification) {
+        'noise'   { $labelValue = '{0} _(noise)_' -f $labelValue }
+        'neutral' { $labelValue = '{0} _(neutral)_' -f $labelValue }
+      }
+      '{0} ({1})' -f $labelValue, $_.count
+    }
+    $summaryLines.Add(('| Buckets | {0} |' -f ($bucketParts -join '<br>')))
+  }
 }
 
 if ($modeEntries.Count -gt 0) {
   $summaryLines.Add('')
   $summaryLines.Add('## Mode overview')
   $summaryLines.Add('')
-  $summaryLines.Add('| Mode | Processed | Diffs | Categories | Flags |')
-  $summaryLines.Add('| --- | --- | --- | --- | --- |')
+  $summaryLines.Add('| Mode | Processed | Diffs | Categories | Buckets | Flags |')
+  $summaryLines.Add('| --- | --- | --- | --- | --- | --- |')
   foreach ($mode in $modeEntries) {
     $flagDisplay = '_none_'
     if ($mode.flags) {
@@ -491,7 +566,24 @@ if ($modeEntries.Count -gt 0) {
         $categoryDisplay = $categoryParts -join '<br>'
       }
     }
-    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} |' -f (Coalesce $mode.name 'unknown'), (Coalesce $mode.stats.processed 'n/a'), (Coalesce $mode.stats.diffs 'n/a'), $categoryDisplay, $flagDisplay))
+    $bucketDisplay = '_none_'
+    $bucketEntries = Get-BucketCountEntries -BucketCounts $mode.stats.bucketCounts
+    if ($bucketEntries -and $bucketEntries.Count -gt 0) {
+      $bucketParts = New-Object System.Collections.Generic.List[string]
+      foreach ($bucketEntry in $bucketEntries) {
+        $bucketLabel = [string]$bucketEntry.label
+        switch ($bucketEntry.classification) {
+          'noise'   { $bucketLabel = '{0} _(noise)_' -f $bucketLabel }
+          'neutral' { $bucketLabel = '{0} _(neutral)_' -f $bucketLabel }
+        }
+        $bucketDisplayValue = if ($bucketEntry.count -gt 0) { "$bucketLabel ($($bucketEntry.count))" } else { $bucketLabel }
+        $bucketParts.Add($bucketDisplayValue) | Out-Null
+      }
+      if ($bucketParts.Count -gt 0) {
+        $bucketDisplay = $bucketParts -join '<br>'
+      }
+    }
+    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} |' -f (Coalesce $mode.name 'unknown'), (Coalesce $mode.stats.processed 'n/a'), (Coalesce $mode.stats.diffs 'n/a'), $categoryDisplay, $bucketDisplay, $flagDisplay))
   }
 }
 
@@ -501,8 +593,8 @@ if ($comparisons.Count -gt 0) {
   $summaryLines.Add('')
   $summaryLines.Add('## Commit pairs')
   $summaryLines.Add('')
-  $summaryLines.Add('| Mode | Pair | Base | Head | Diff | Duration (s) | Categories | Report | Highlights |')
-  $summaryLines.Add('| --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+  $summaryLines.Add('| Mode | Pair | Base | Head | Diff | Duration (s) | Categories | Buckets | Report | Highlights |')
+  $summaryLines.Add('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
   $comparisonSubLines = New-Object System.Collections.Generic.List[string]
   foreach ($entry in $comparisons) {
     $baseRef = Coalesce $entry.base.short $entry.base.full
@@ -575,7 +667,28 @@ if ($comparisons.Count -gt 0) {
       $highlightText = [string]::Join('<br />', $highlightCollection)
     }
     if ([string]::IsNullOrWhiteSpace($highlightText)) { $highlightText = '_none_' }
-    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} |' -f (Coalesce $entry.mode 'n/a'), (Coalesce $entry.index 'n/a'), $baseRef, $headRef, $diffCell, $duration, $categoryText, $reportCell, $highlightText))
+    $bucketText = '_none_'
+    $bucketLabelEntries = @()
+    if ($resultNode -and $resultNode.PSObject.Properties['categoryBucketDetails'] -and $resultNode.categoryBucketDetails) {
+      $bucketLabelEntries = Get-BucketLabelEntries -Buckets $resultNode.categoryBucketDetails
+    } elseif ($resultNode -and $resultNode.PSObject.Properties['categoryBuckets'] -and $resultNode.categoryBuckets) {
+      $bucketLabelEntries = Get-BucketLabelEntries -Buckets $resultNode.categoryBuckets
+    }
+    if ($bucketLabelEntries -and $bucketLabelEntries.Count -gt 0) {
+      $bucketParts = New-Object System.Collections.Generic.List[string]
+      foreach ($bucketEntry in $bucketLabelEntries) {
+        $bucketLabelValue = [string]$bucketEntry.label
+        switch ($bucketEntry.classification) {
+          'noise'   { $bucketLabelValue = '{0} _(noise)_' -f $bucketLabelValue }
+          'neutral' { $bucketLabelValue = '{0} _(neutral)_' -f $bucketLabelValue }
+        }
+        $bucketParts.Add($bucketLabelValue) | Out-Null
+      }
+      if ($bucketParts.Count -gt 0) {
+        $bucketText = $bucketParts -join '<br />'
+      }
+    }
+    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} |' -f (Coalesce $entry.mode 'n/a'), (Coalesce $entry.index 'n/a'), $baseRef, $headRef, $diffCell, $duration, $categoryText, $bucketText, $reportCell, $highlightText))
     $comparisonSubLines.Add(('<sub>{0} - {1}</sub>' -f $baseRef, $headRef))
     $comparisonHtmlRows.Add([pscustomobject]@{
       Mode       = Coalesce $entry.mode 'n/a'
@@ -595,6 +708,9 @@ if ($comparisons.Count -gt 0) {
       Categories = $categoryEntries
       CategorySlugs = if ($categoryEntries) { @($categoryEntries | ForEach-Object { $_.slug }) } else { @() }
       CategoriesDisplay = $categoryText
+      Buckets   = $bucketLabelEntries
+      BucketSlugs = if ($bucketLabelEntries) { @($bucketLabelEntries | ForEach-Object { $_.slug }) } elseif ($resultNode -and $resultNode.PSObject.Properties['categoryBuckets']) { @($resultNode.categoryBuckets) } else { @() }
+      BucketsDisplay = $bucketText
       HighlightsDisplay = $highlightText
     })
   }
@@ -730,7 +846,7 @@ if ($emitHtml -and $HtmlPath) {
   [void]$htmlBuilder.AppendLine('  <h2>Commit pairs</h2>')
   if ($comparisonHtmlRows.Count -gt 0) {
     [void]$htmlBuilder.AppendLine('  <table>')
-    [void]$htmlBuilder.AppendLine('    <thead><tr><th>Mode</th><th>Pair</th><th>Base</th><th>Head</th><th>Diff</th><th>Duration (s)</th><th>Categories</th><th>Report</th><th>Highlights</th></tr></thead>')
+    [void]$htmlBuilder.AppendLine('    <thead><tr><th>Mode</th><th>Pair</th><th>Base</th><th>Head</th><th>Diff</th><th>Duration (s)</th><th>Categories</th><th>Buckets</th><th>Report</th><th>Highlights</th></tr></thead>')
     [void]$htmlBuilder.AppendLine('    <tbody>')
     foreach ($row in $comparisonHtmlRows) {
       $diffClass = if ($row.Diff) { 'diff-yes' } elseif ($row.Status) { 'diff-status' } else { 'diff-no' }
@@ -758,7 +874,7 @@ if ($emitHtml -and $HtmlPath) {
             default   { $classList.Add('cat-signal') | Out-Null }
           }
           $classAttr = [string]::Join(' ', $classList)
-          $categorySpans.Add('<span class="{0}" data-cat="{1}">{2}</span>' -f $classAttr, $catSlug, $catLabel) | Out-Null
+          $categorySpans.Add("<span class=""$classAttr"" data-cat=""$catSlug"">$catLabel</span>") | Out-Null
         }
         if ($categorySpans.Count -gt 0) {
           $categoryHtml = [string]::Join('<br />', $categorySpans)
@@ -777,6 +893,68 @@ if ($emitHtml -and $HtmlPath) {
       if ($categorySlugs.Count -gt 0) {
         $safeSlugs = $categorySlugs | ForEach-Object { ($_ -replace '[^a-z0-9\-\._]', '-') }
         $categoryAttr = ' data-categories="{0}"' -f ([string]::Join(' ', $safeSlugs))
+      }
+
+      $bucketHtml = '<span class="muted">none</span>'
+      $bucketAttr = ''
+      $bucketSource = $row.Buckets
+      if (-not $bucketSource -and $row.BucketsDisplay) {
+        $bucketSource = @($row.BucketsDisplay)
+      }
+      if ($bucketSource) {
+        if ($bucketSource -isnot [System.Collections.IEnumerable] -or ($bucketSource -is [string])) {
+          $bucketSource = @($bucketSource)
+        }
+      }
+      if ($bucketSource -and $bucketSource.Count -gt 0) {
+        $bucketSpans = New-Object System.Collections.Generic.List[string]
+        foreach ($bucketEntry in $bucketSource) {
+          if ($null -eq $bucketEntry) { continue }
+          $bucketLabel = $bucketEntry
+          $bucketSlugValue = $null
+          $bucketClassList = New-Object System.Collections.Generic.List[string]
+          $bucketClassList.Add('bucket') | Out-Null
+          if ($bucketEntry -is [pscustomobject]) {
+            if ($bucketEntry.PSObject.Properties['label']) {
+              $bucketLabel = $bucketEntry.label
+            }
+            if ($bucketEntry.PSObject.Properties['slug']) {
+              $bucketSlugValue = $bucketEntry.slug
+            }
+            if ($bucketEntry.PSObject.Properties['classification']) {
+              switch ([string]$bucketEntry.classification) {
+                'noise'   { $bucketClassList.Add('bucket-noise') | Out-Null }
+                'neutral' { $bucketClassList.Add('bucket-neutral') | Out-Null }
+                default   { $bucketClassList.Add('bucket-signal') | Out-Null }
+              }
+            }
+          }
+          $bucketLabelEncoded = ConvertTo-HtmlSafe $bucketLabel
+          $bucketSlugAttr = ConvertTo-HtmlSafe $bucketSlugValue
+          $bucketClassAttr = [string]::Join(' ', $bucketClassList)
+          if (-not [string]::IsNullOrWhiteSpace($bucketLabelEncoded)) {
+            if ([string]::IsNullOrWhiteSpace($bucketSlugAttr)) {
+              $bucketSpans.Add("<span class=""$bucketClassAttr"">$bucketLabelEncoded</span>") | Out-Null
+            } else {
+              $bucketSpans.Add("<span class=""$bucketClassAttr"" data-bucket=""$bucketSlugAttr"">$bucketLabelEncoded</span>") | Out-Null
+            }
+          }
+        }
+        if ($bucketSpans.Count -gt 0) {
+          $bucketHtml = [string]::Join('<br />', $bucketSpans)
+        } elseif ($row.BucketsDisplay -and $row.BucketsDisplay -ne '_none_') {
+          $bucketHtml = ConvertTo-HtmlSafe $row.BucketsDisplay
+        }
+      } elseif ($row.BucketsDisplay -and $row.BucketsDisplay -ne '_none_') {
+        $bucketHtml = ConvertTo-HtmlSafe $row.BucketsDisplay
+      }
+      $bucketSlugs = @()
+      if ($row.BucketSlugs) {
+        $bucketSlugs = @($row.BucketSlugs | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      }
+      if ($bucketSlugs.Count -gt 0) {
+        $safeBucketSlugs = $bucketSlugs | ForEach-Object { ($_ -replace '[^a-z0-9\-\._]', '-') }
+        $bucketAttr = ' data-buckets="{0}"' -f ([string]::Join(' ', $safeBucketSlugs))
       }
 
       $reportHtml = '<span class="muted">missing</span>'
@@ -801,20 +979,13 @@ if ($emitHtml -and $HtmlPath) {
         $highlightHtml = [string]::Join('<br />', ($highlightItems | ForEach-Object { ConvertTo-HtmlSafe $_ }))
       }
 
-      [void]$htmlBuilder.AppendLine((
-        "      <tr{0}><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td class=""{5}"">{6}</td><td>{7}</td><td>{8}</td><td class=""report-path"">{9}</td><td>{10}</td></tr>" -f
-        $categoryAttr,
-        (ConvertTo-HtmlSafe (Coalesce $row.Mode 'n/a')),
-        (ConvertTo-HtmlSafe (Coalesce $row.Index 'n/a')),
-        (ConvertTo-HtmlSafe $row.BaseLabel),
-        (ConvertTo-HtmlSafe $row.HeadLabel),
-        $diffClass,
-        $diffLabel,
-        $durationDisplay,
-        $categoryHtml,
-        $reportHtml,
-        $highlightHtml
-      ))
+      $rowAttr = "$categoryAttr$bucketAttr"
+      $modeCell = ConvertTo-HtmlSafe (Coalesce $row.Mode 'n/a')
+      $indexCell = ConvertTo-HtmlSafe (Coalesce $row.Index 'n/a')
+      $baseCell = ConvertTo-HtmlSafe $row.BaseLabel
+      $headCell = ConvertTo-HtmlSafe $row.HeadLabel
+      $line = "      <tr$rowAttr><td>$modeCell</td><td>$indexCell</td><td>$baseCell</td><td>$headCell</td><td class=""$diffClass"">$diffLabel</td><td>$durationDisplay</td><td>$categoryHtml</td><td>$bucketHtml</td><td class=""report-path"">$reportHtml</td><td>$highlightHtml</td></tr>"
+      [void]$htmlBuilder.AppendLine($line)
     }
     [void]$htmlBuilder.AppendLine('    </tbody>')
     [void]$htmlBuilder.AppendLine('  </table>')

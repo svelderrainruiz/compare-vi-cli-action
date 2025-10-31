@@ -18,7 +18,7 @@ function Get-ReportFixtureCases {
                 'VI Attribute - Miscellaneous'
             )
             Expected    = @(
-                [pscustomobject]@{ slug = 'attributes'; classification = 'signal' }
+                [pscustomobject]@{ slug = 'vi-attribute'; classification = 'neutral' }
             )
         }
         [ordered]@{
@@ -30,7 +30,7 @@ function Get-ReportFixtureCases {
             )
             Expected    = @(
                 [pscustomobject]@{ slug = 'block-diagram'; classification = 'signal' }
-                [pscustomobject]@{ slug = 'cosmetic'; classification = 'noise' }
+                [pscustomobject]@{ slug = 'block-diagram-cosmetic'; classification = 'noise' }
             )
         }
         [ordered]@{

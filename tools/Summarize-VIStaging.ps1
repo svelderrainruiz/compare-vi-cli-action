@@ -34,6 +34,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+try {
+    $categoryModule = Join-Path (Split-Path -Parent $PSCommandPath) 'VICategoryBuckets.psm1'
+    if (Test-Path -LiteralPath $categoryModule -PathType Leaf) {
+        Import-Module $categoryModule -Force
+    }
+} catch {}
+
 function Resolve-ExistingFile {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
@@ -146,81 +153,10 @@ function Get-DiffDetailPreview {
     return $preview
 }
 
-function Get-CategoryMetadata {
-    param([string]$Name)
-
-    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
-    $slug = $Name.Trim().ToLowerInvariant()
-    $label = $slug
-    $classification = 'signal'
-    switch ($slug) {
-        'block-diagram' { $label = 'Block diagram' }
-        'front-panel'   { $label = 'Front panel' }
-        'attributes'    { $label = 'Attributes' }
-        'connector-pane'{ $label = 'Connector pane' }
-        'cosmetic' {
-            $label = 'Cosmetic'
-            $classification = 'noise'
-        }
-        'unspecified' {
-            $label = 'Unspecified'
-            $classification = 'neutral'
-        }
-        default {
-            $spaced = ($slug -replace '[-_]', ' ')
-            $label = [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($spaced)
-            $classification = 'signal'
-        }
-    }
-
-    return [pscustomobject]@{
-        slug           = $slug
-        label          = $label
-        classification = $classification
-    }
-}
-
-function Resolve-CategorySlugFromName {
-    param([string]$Name)
-
-    if ([string]::IsNullOrWhiteSpace($Name)) { return $null }
-    $token = $Name.Trim().ToLowerInvariant()
-    if ($token -match 'cosmetic') { return 'cosmetic' }
-    if ($token -match 'block diagram') { return 'block-diagram' }
-    if ($token -match 'control changes' -or $token -match 'front panel') { return 'front-panel' }
-    if ($token -match 'vi attribute' -or $token -match 'attribute') { return 'attributes' }
-    if ($token -match 'connector') { return 'connector-pane' }
-    return ($token -replace '[^a-z0-9]+','-').Trim('-')
-}
-
 function Get-CategoryDetailsFromNames {
     param([System.Collections.IEnumerable]$Names)
 
-    $details = New-Object System.Collections.Generic.List[pscustomobject]
-    if (-not $Names) { return @() }
-
-    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($name in $Names) {
-        if ([string]::IsNullOrWhiteSpace($name)) { continue }
-        $slug = Resolve-CategorySlugFromName -Name $name
-        if (-not $slug) { continue }
-        $meta = Get-CategoryMetadata -Name $slug
-        if (-not $meta) { continue }
-        $label = $name
-        if ([string]::IsNullOrWhiteSpace($label)) {
-            $label = $meta.label
-        }
-        $key = '{0}|{1}' -f $meta.slug, $label
-        if ($seen.Add($key)) {
-            $details.Add([pscustomobject]@{
-                slug           = $meta.slug
-                label          = $label
-                classification = $meta.classification
-            }) | Out-Null
-        }
-    }
-
-    return @($details)
+    return @(ConvertTo-VICategoryDetails -Names $Names)
 }
 
 function Build-MarkdownTable {
@@ -296,6 +232,56 @@ function Build-MarkdownTable {
                 $categoryLines.Add($detailMarkup) | Out-Null
             }
         }
+
+        $bucketLines = New-Object System.Collections.Generic.List[string]
+        if ($pair.PSObject.Properties['diffBucketDetails'] -and $pair.diffBucketDetails) {
+            foreach ($bucket in $pair.diffBucketDetails) {
+                if (-not $bucket) { continue }
+                $bucketLabel = $null
+                if ($bucket.PSObject.Properties['bucketLabel']) {
+                    $bucketLabel = [string]$bucket.bucketLabel
+                }
+                if ([string]::IsNullOrWhiteSpace($bucketLabel) -and $bucket.PSObject.Properties['label']) {
+                    $bucketLabel = [string]$bucket.label
+                }
+                if ([string]::IsNullOrWhiteSpace($bucketLabel)) {
+                    $bucketLabel = [string]$bucket.slug
+                }
+                $bucketClassification = $null
+                if ($bucket.PSObject.Properties['bucketClassification']) {
+                    $bucketClassification = [string]$bucket.bucketClassification
+                } elseif ($bucket.PSObject.Properties['classification']) {
+                    $bucketClassification = [string]$bucket.classification
+                }
+                switch ($bucketClassification) {
+                    'noise'   { $bucketLabel = '{0} _(noise)_' -f $bucketLabel }
+                    'neutral' { $bucketLabel = '{0} _(neutral)_' -f $bucketLabel }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($bucketLabel)) {
+                    $bucketLines.Add($bucketLabel) | Out-Null
+                }
+            }
+        } elseif ($pair.PSObject.Properties['diffBuckets'] -and $pair.diffBuckets) {
+            foreach ($bucketSlug in $pair.diffBuckets) {
+                if ([string]::IsNullOrWhiteSpace($bucketSlug)) { continue }
+                $bucketMeta = Get-VIBucketMetadata -BucketSlug $bucketSlug
+                $bucketLabel = if ($bucketMeta) { $bucketMeta.label } else { $bucketSlug }
+                if ($bucketMeta) {
+                    switch ($bucketMeta.classification) {
+                        'noise'   { $bucketLabel = '{0} _(noise)_' -f $bucketLabel }
+                        'neutral' { $bucketLabel = '{0} _(neutral)_' -f $bucketLabel }
+                    }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($bucketLabel)) {
+                    $bucketLines.Add($bucketLabel) | Out-Null
+                }
+            }
+        }
+        if ($bucketLines.Count -gt 0) {
+            $bucketMarkup = "<small>Buckets: $($bucketLines -join ', ')</small>"
+            $categoryLines.Add($bucketMarkup) | Out-Null
+        }
+
         $categories = [string]::Join('<br/>', $categoryLines.ToArray())
 
         $included = if ($pair.includedAttributes -and $pair.includedAttributes.Count -gt 0) {
@@ -346,6 +332,30 @@ function Build-MarkdownTable {
     if ($CompareDir) {
         $summaryLines += ('Artifacts rooted at `{0}`.' -f $CompareDir.Replace('\','/'))
     }
+    if ($Totals.PSObject.Properties['categoryCounts'] -and $Totals.categoryCounts.Keys.Count -gt 0) {
+        $categoryParts = New-Object System.Collections.Generic.List[string]
+        foreach ($categoryKey in ($Totals.categoryCounts.Keys | Sort-Object)) {
+            $countValue = $Totals.categoryCounts[$categoryKey]
+            $meta = Get-VICategoryMetadata -Name $categoryKey
+            $label = if ($meta) { $meta.label } else { $categoryKey }
+            $categoryParts.Add("$label ($countValue)") | Out-Null
+        }
+        if ($categoryParts.Count -gt 0) {
+            $summaryLines += ("Categories: $($categoryParts -join ', ')")
+        }
+    }
+    if ($Totals.PSObject.Properties['bucketCounts'] -and $Totals.bucketCounts.Keys.Count -gt 0) {
+        $bucketParts = New-Object System.Collections.Generic.List[string]
+        foreach ($bucketKey in ($Totals.bucketCounts.Keys | Sort-Object)) {
+            $countValue = $Totals.bucketCounts[$bucketKey]
+            $bucketMeta = Get-VIBucketMetadata -BucketSlug $bucketKey
+            $label = if ($bucketMeta) { $bucketMeta.label } else { $bucketKey }
+            $bucketParts.Add("$label ($countValue)") | Out-Null
+        }
+        if ($bucketParts.Count -gt 0) {
+            $summaryLines += ("Buckets: $($bucketParts -join ', ')")
+        }
+    }
 
     return ($summaryLines + '' + $rows) -join "`n"
 }
@@ -377,6 +387,7 @@ $totals = [ordered]@{
     error        = 0
     leakWarnings = 0
     categoryCounts = [ordered]@{}
+    bucketCounts   = [ordered]@{}
 }
 
 $compareRoot = $null
@@ -465,17 +476,45 @@ foreach ($entry in $entries) {
     }
 
     $categoryDetails = Get-CategoryDetailsFromNames -Names $categories
-    foreach ($detail in $categoryDetails) {
-        if (-not $detail) { continue }
-        $slugKey = [string]$detail.slug
-        if ([string]::IsNullOrWhiteSpace($slugKey)) { continue }
-        if (-not $totals.categoryCounts.Contains($slugKey)) {
-            $totals.categoryCounts[$slugKey] = 0
-        }
-        try {
-            $totals.categoryCounts[$slugKey] += 1
-        } catch {
-            $totals.categoryCounts[$slugKey] = ($totals.categoryCounts[$slugKey] + 1)
+    $bucketDetails = New-Object System.Collections.Generic.List[pscustomobject]
+    $bucketSlugs = New-Object System.Collections.Generic.List[string]
+    if ($categoryDetails -and $categoryDetails.Count -gt 0) {
+        $bucketSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($detail in $categoryDetails) {
+            if (-not $detail) { continue }
+            $slugKey = [string]$detail.slug
+            if (-not [string]::IsNullOrWhiteSpace($slugKey)) {
+                if (-not $totals.categoryCounts.Contains($slugKey)) {
+                    $totals.categoryCounts[$slugKey] = 0
+                }
+                try {
+                    $totals.categoryCounts[$slugKey] += 1
+                } catch {
+                    $totals.categoryCounts[$slugKey] = ($totals.categoryCounts[$slugKey] + 1)
+                }
+            }
+
+            $bucketSlug = $null
+            if ($detail.PSObject.Properties['bucketSlug']) {
+                $bucketSlug = [string]$detail.bucketSlug
+            }
+            if (-not [string]::IsNullOrWhiteSpace($bucketSlug)) {
+                if (-not $totals.bucketCounts.Contains($bucketSlug)) {
+                    $totals.bucketCounts[$bucketSlug] = 0
+                }
+                try {
+                    $totals.bucketCounts[$bucketSlug] += 1
+                } catch {
+                    $totals.bucketCounts[$bucketSlug] = ($totals.bucketCounts[$bucketSlug] + 1)
+                }
+                if ($bucketSeen.Add($bucketSlug)) {
+                    $bucketMeta = Get-VIBucketMetadata -BucketSlug $bucketSlug
+                    if ($bucketMeta) {
+                        $bucketDetails.Add($bucketMeta) | Out-Null
+                    }
+                    $bucketSlugs.Add($bucketSlug) | Out-Null
+                }
+            }
         }
     }
 
@@ -553,6 +592,8 @@ foreach ($entry in $entries) {
         reportRelative    = $reportRelative
         diffCategories    = @($categories.ToArray())
         diffCategoryDetails = @($categoryDetails)
+        diffBuckets       = @($bucketSlugs.ToArray())
+        diffBucketDetails = @($bucketDetails.ToArray())
         diffHeadings      = $headings
         diffDetails       = $details
         diffDetailPreview = $detailPreviewList
@@ -566,13 +607,19 @@ foreach ($entry in $entries) {
     $pairs.Add($pairInfo)
 }
 
- $sortedCategoryTotals = [ordered]@{}
- foreach ($categoryKey in ($totals.categoryCounts.Keys | Sort-Object)) {
-     $sortedCategoryTotals[$categoryKey] = [int]$totals.categoryCounts[$categoryKey]
- }
- $totals.categoryCounts = $sortedCategoryTotals
+$sortedCategoryTotals = [ordered]@{}
+foreach ($categoryKey in ($totals.categoryCounts.Keys | Sort-Object)) {
+    $sortedCategoryTotals[$categoryKey] = [int]$totals.categoryCounts[$categoryKey]
+}
+$totals.categoryCounts = $sortedCategoryTotals
 
- $totalsObj = [pscustomobject]$totals
+$sortedBucketTotals = [ordered]@{}
+foreach ($bucketKey in ($totals.bucketCounts.Keys | Sort-Object)) {
+    $sortedBucketTotals[$bucketKey] = [int]$totals.bucketCounts[$bucketKey]
+}
+$totals.bucketCounts = $sortedBucketTotals
+
+$totalsObj = [pscustomobject]$totals
 $markdown = Build-MarkdownTable -Pairs $pairs -Totals $totalsObj -CompareDir $compareRoot
 
 $result = [pscustomobject]@{

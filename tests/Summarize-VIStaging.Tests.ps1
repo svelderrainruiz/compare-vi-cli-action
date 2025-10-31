@@ -72,8 +72,12 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $result.pairs[0].diffCategories | Should -Contain 'VI Attribute'
         $result.pairs[0].diffCategories | Should -Contain 'Block Diagram Functional'
         $result.pairs[0].diffCategoryDetails | Should -Not -BeNullOrEmpty
-        ($result.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq 'attributes' }).Count | Should -Be 1
-        ($result.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq 'block-diagram' }).Count | Should -Be 1
+        ($result.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq 'vi-attribute' }).Count | Should -Be 1
+        ($result.pairs[0].diffCategoryDetails | Where-Object { $_.slug -eq 'block-diagram-functional' }).Count | Should -Be 1
+        $result.pairs[0].diffBuckets | Should -Contain 'metadata'
+        $result.pairs[0].diffBuckets | Should -Contain 'functional-behavior'
+        ($result.pairs[0].diffBucketDetails | Where-Object { $_.slug -eq 'metadata' }).Count | Should -Be 1
+        ($result.pairs[0].diffBucketDetails | Where-Object { $_.slug -eq 'functional-behavior' }).Count | Should -Be 1
         $result.pairs[0].includedAttributes.Count | Should -BeGreaterThan 0
         ($result.pairs[0].includedAttributes | Where-Object { $_.name -eq 'VI Attribute' }).value | Should -BeTrue
         (@($result.pairs[0].diffDetailPreview | Where-Object { $_ -match 'Difference Type: VI icon' })).Count | Should -BeGreaterThan 0
@@ -84,14 +88,19 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $markdown = Get-Content -LiteralPath $mdPath -Raw
         $markdown | Should -Match 'VI Attribute'
         $markdown | Should -Match 'Difference Type: VI icon'
+        $markdown | Should -Match 'Buckets:'
+        $markdown | Should -Match 'Functional behavior'
+        $markdown | Should -Match 'Metadata'
 
         Test-Path -LiteralPath $jsonPath | Should -BeTrue
         $jsonPayload = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -Depth 6
         $jsonPayload.totals.diff | Should -Be 1
         (@($jsonPayload.pairs[0].diffDetailPreview | Where-Object { $_ -match 'Difference Type: VI icon' })).Count | Should -BeGreaterThan 0
         $jsonPayload.pairs[0].diffCategoryDetails | Should -Not -BeNullOrEmpty
-        $jsonPayload.totals.categoryCounts.attributes | Should -Be 1
-        $jsonPayload.totals.categoryCounts.'block-diagram' | Should -Be 1
+        $jsonPayload.totals.categoryCounts.'vi-attribute' | Should -Be 1
+        $jsonPayload.totals.categoryCounts.'block-diagram-functional' | Should -Be 1
+        $jsonPayload.totals.bucketCounts.'metadata' | Should -Be 1
+        $jsonPayload.totals.bucketCounts.'functional-behavior' | Should -Be 1
     }
 
     It 'handles missing report gracefully' {
@@ -116,6 +125,8 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $result.pairs[0].status | Should -Be 'skipped'
         $result.pairs[0].diffCategories.Count | Should -Be 0
         $result.pairs[0].diffCategoryDetails.Count | Should -Be 0
+        $result.pairs[0].diffBuckets.Count | Should -Be 0
+        $result.pairs[0].diffBucketDetails.Count | Should -Be 0
         $result.markdown | Should -Match 'Totals'
     }
 
