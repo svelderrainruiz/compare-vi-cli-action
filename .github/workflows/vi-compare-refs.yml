@@ -16,7 +16,7 @@ on:
       compare_depth:
         description: 'Maximum commit pairs to evaluate (0 = no limit)'
         required: false
-        default: '10'
+        default: '0'
         type: string
       compare_modes:
         description: 'Comma/semicolon separated modes to evaluate (default,attributes,front-panel,block-diagram,all,full)'
@@ -192,7 +192,7 @@ jobs:
           }
           if ($startRef) { $invokeParams.StartRef = $startRef }
           if ($endRef) { $invokeParams.EndRef = $endRef }
-          if ($null -ne $parsedMaxPairs) {
+          if ($null -ne $parsedMaxPairs -and $parsedMaxPairs -gt 0) {
             $invokeParams.MaxPairs = [int]$parsedMaxPairs
           }
           if (-not [string]::IsNullOrWhiteSpace($env:EXTRA_FLAGS)) {

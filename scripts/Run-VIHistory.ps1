@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$ViPath,
   [string]$StartRef = 'HEAD',
-  [int]$MaxPairs = 10,
+  [Nullable[int]]$MaxPairs,
   [switch]$HtmlReport = $true
 )
 
@@ -86,7 +86,7 @@ function Get-CompareHistoryGuidance {
     [string]$ErrorMessage,
     [string]$RepoRelativePath,
     [string]$StartRef,
-    [int]$MaxPairs,
+    [Nullable[int]]$MaxPairs,
     [string]$ResultsDir
   )
 
@@ -98,7 +98,8 @@ function Get-CompareHistoryGuidance {
   $guidance = $null
 
   if ($message -match '^No commits found for .+ reachable from .+$') {
-    $guidance = ("No commits for `{0}` are reachable from `{1}`. Increase `-MaxPairs` (current: {2}) or choose an earlier start ref (for example `develop~5`). `git log --follow -- {0}` can help confirm history." -f $RepoRelativePath, $StartRef, $MaxPairs)
+    $maxPairsLabel = if ($MaxPairs -and $MaxPairs -gt 0) { $MaxPairs } else { 'unlimited' }
+    $guidance = ("No commits for `{0}` are reachable from `{1}`. Increase `-MaxPairs` (current: {2}) or choose an earlier start ref (for example `develop~5`). `git log --follow -- {0}` can help confirm history." -f $RepoRelativePath, $StartRef, $maxPairsLabel)
   } elseif ($message -eq 'No comparison modes executed.') {
     $guidance = ("No compare modes ran for `{0}`. Ensure the VI has prior revisions relative to `{1}` and that history automation hasn't pruned the branch." -f $RepoRelativePath, $StartRef)
   } elseif ($message -match 'git merge-base --is-ancestor failed') {
@@ -171,12 +172,18 @@ try {
     return
   }
 
+  $compareArgs = @{
+    TargetPath = $ViPath
+    StartRef   = $StartRef
+    Detailed   = $true
+  }
+  if ($PSBoundParameters.ContainsKey('MaxPairs') -and $MaxPairs -and $MaxPairs -gt 0) {
+    $compareArgs['MaxPairs'] = $MaxPairs
+  }
+
   try {
     pwsh -NoLogo -NoProfile -File (Join-Path $repoRoot 'tools' 'Compare-VIHistory.ps1') `
-      -TargetPath $ViPath `
-      -StartRef $StartRef `
-      -MaxPairs $MaxPairs `
-      -Detailed `
+      @compareArgs `
       -RenderReport:$HtmlReport.IsPresent
   } catch {
     $compareMessage = $_.Exception.Message

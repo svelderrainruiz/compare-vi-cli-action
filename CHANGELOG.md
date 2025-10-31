@@ -7,7 +7,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
-_No unreleased changes yet._
+### Changed
+
+- `tools/Compare-VIHistory.ps1` now walks every reachable commit pair by default. Wrapper scripts and workflows only cap
+  history when `-MaxPairs`/`max_pairs` is explicitly supplied, keeping manifests and reports complete without extra flags.
+
+### Documentation
+
+- Updated README, developer guide, and workflow notes to describe the optional `-MaxPairs` cap and refreshed examples to
+  highlight the new default behaviour.
 
 ## [v0.5.4] - 2025-10-31
 

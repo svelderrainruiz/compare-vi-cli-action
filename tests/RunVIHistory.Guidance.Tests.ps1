@@ -94,6 +94,12 @@ Describe 'Run-VIHistory guidance helper' {
       $result | Should -Match 'git log --follow -- VI1\.vi'
     }
 
+    It 'labels the current MaxPairs as unlimited when no cap is provided' {
+      $msg = 'No commits found for VI1.vi reachable from HEAD'
+      $result = Get-CompareHistoryGuidance -ErrorMessage $msg -RepoRelativePath 'VI1.vi' -StartRef 'HEAD' -MaxPairs $null -ResultsDir 'outDir'
+      $result | Should -Match 'current: unlimited'
+    }
+
     It 'advises verifying prior revisions when no comparison modes execute' {
       $msg = 'No comparison modes executed.'
       $result = Get-CompareHistoryGuidance -ErrorMessage $msg -RepoRelativePath 'VI1.vi' -StartRef 'HEAD' -MaxPairs 3 -ResultsDir 'outDir'

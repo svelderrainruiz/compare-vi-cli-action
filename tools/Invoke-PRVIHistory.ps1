@@ -18,7 +18,8 @@
   per VI). Defaults to `tests/results/pr-vi-history`.
 
 .PARAMETER MaxPairs
-  Maximum commit pairs to evaluate per VI (default: 5; pass 0 for no limit).
+  Optional cap on commit pairs to evaluate per VI. When omitted or set to 0,
+  the helper compares every available revision pair.
 
 .PARAMETER Mode
   Optional Compare-VIHistory mode list (for example `default`, `attributes`).
@@ -51,7 +52,7 @@ param(
 
     [string]$ResultsRoot = 'tests/results/pr-vi-history',
 
-    [int]$MaxPairs = 5,
+    [Nullable[int]]$MaxPairs,
 
     [string[]]$Mode,
 
@@ -70,6 +71,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+$maxPairsValue = if ($PSBoundParameters.ContainsKey('MaxPairs')) { $MaxPairs } else { $null }
+$maxPairsRequested = ($null -ne $maxPairsValue) -and ($maxPairsValue -gt 0)
 
 function Resolve-ExistingFile {
     param(
@@ -438,7 +442,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
         OutPrefix  = $sanitized
     }
     Write-Verbose ("[{0}/{1}] Target '{2}' (origin: {3}) -> compare path '{4}'" -f ($i + 1), $targets.Count, $repoPath, $target.origin, $effectiveTargetPath)
-    if ($MaxPairs -gt 0) { $compareArgs.MaxPairs = $MaxPairs }
+    if ($maxPairsRequested) { $compareArgs.MaxPairs = $maxPairsValue }
     if ($Mode) { $compareArgs.Mode = $Mode }
     if (-not [string]::IsNullOrWhiteSpace($StartRef)) { $compareArgs.StartRef = $StartRef }
     if (-not [string]::IsNullOrWhiteSpace($EndRef)) { $compareArgs.EndRef = $EndRef }
@@ -567,7 +571,7 @@ $summary = [pscustomobject]@{
     generatedAt = (Get-Date).ToString('o')
     manifest    = $resolvedManifest
     resultsRoot = $resultsRootResolved
-    maxPairs    = $MaxPairs
+    maxPairs    = if ($maxPairsRequested) { $maxPairsValue } else { $null }
     modes       = if ($Mode) { @($Mode) } else { $null }
     totals      = [pscustomobject]@{
         targets          = $summaryTargets.Count

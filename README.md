@@ -86,7 +86,7 @@ the same summary table to a GitHub issue for stakeholders.
 
 | Input name                 | Default   | Description                                                                 |
 | -------------------------- | --------- | --------------------------------------------------------------------------- |
-| `compare_depth`            | `10`      | Maximum commit pairs to evaluate (`0` = no limit)                           |
+| `compare_depth`            | `0`       | Maximum commit pairs to evaluate (`0` = no limit)                           |
 | `compare_modes`            | `default` | Comma/semicolon list of compare modes (`default,attributes,front-panel`) |
 | `compare_ignore_flags`     | `none`    | LVCompare ignore toggles (`none`, `default`, or comma-separated flags)      |
 | `compare_additional_flags` | ` `       | Extra LVCompare switches (space-delimited)                                  |
@@ -106,10 +106,12 @@ You can run the same compare logic locally:
 pwsh -NoLogo -NoProfile -File tools/Compare-VIHistory.ps1 `
   -TargetPath Fixtures/Loop.vi `
   -StartRef develop `
-  -MaxPairs 5 `
   -Detailed `
   -RenderReport
 ```
+
+The helper now processes every reachable commit pair by default. Supply
+`-MaxPairs <n>` when you need to cap the history for large or exploratory runs.
 
 Artifacts are written under `tests/results/ref-compare/history/` using the same
 schema as the workflow outputs.

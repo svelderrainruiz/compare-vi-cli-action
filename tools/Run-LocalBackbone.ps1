@@ -2,7 +2,7 @@ param(
   [switch]$SkipPrioritySync,
   [string[]]$CompareViName,
   [string]$CompareBranch = 'HEAD',
-  [int]$CompareMaxPairs = 1,
+  [Nullable[int]]$CompareMaxPairs,
   [switch]$CompareIncludeIdenticalPairs,
   [switch]$CompareFailOnDiff,
   [string]$CompareLvCompareArgs,
@@ -153,9 +153,11 @@ try {
           '-NoLogo', '-NoProfile',
           '-File', (Join-Path $repoRoot 'tools' 'Compare-VIHistory.ps1'),
           '-ViName', $vi,
-          '-Branch', $CompareBranch,
-          '-MaxPairs', [Math]::Max(1, $CompareMaxPairs)
+          '-Branch', $CompareBranch
         )
+        if ($CompareMaxPairs -and $CompareMaxPairs -gt 0) {
+          $args += @('-MaxPairs', $CompareMaxPairs)
+        }
         if ($CompareIncludeIdenticalPairs) { $args += '-IncludeIdenticalPairs' }
         if ($CompareFailOnDiff) { $args += '-FailOnDiff' }
         if ($CompareLvCompareArgs) {

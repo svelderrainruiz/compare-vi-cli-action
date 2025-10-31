@@ -35,13 +35,13 @@ standing issue #527).
 
    ```powershell
    Set-Location labview-icon-editor
-   Invoke-CompareVIHistory `
-     -TargetPath "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi" `
-     -MaxPairs 6 `
-     -RenderReport `
-     -FailOnDiff:$false `
-     -InvokeScriptPath ..\compare-vi-cli-action\tools\Invoke-LVCompare.ps1
-   ```
+Invoke-CompareVIHistory `
+  -TargetPath "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi" `
+  -RenderReport `
+  -FailOnDiff:$false `
+  -InvokeScriptPath ..\compare-vi-cli-action\tools\Invoke-LVCompare.ps1
+```
+Add `-MaxPairs <n>` when you need to cap the number of commit pairs in the cross-repo run.
 
    - Outputs land in `tests/results/ref-compare/history/` inside the cloned
      repo (`history-report.md`, `history-report.html`, manifest JSON, etc.).
