@@ -13,10 +13,10 @@
 
 - [x] Pester tests (windows-latest) green - `Invoke-PesterTests.ps1` (419 tests) 2025-10-31.
 - [x] Pester (self-hosted, IntegrationMode include) green - `Invoke-PesterTests.ps1 -IntegrationMode include` 2025-10-31 (Integration Runbook Validation).
-- [ ] Fixture Drift (Windows/Ubuntu) green.
+- [x] Fixture Drift (Windows/Ubuntu) green - Fixture Drift Validation run `18963669363`.
 - [x] Validate: mergeability probe OK; branch-policy guard OK; docs link check OK - `Validate` workflow (workflow_dispatch) on `release/v0.5.4`.
-- [ ] `vi-compare-refs` auto-publish workflow green for `release/v0.5.4`.
-- [ ] Session-index leak report clean (no rogue LabVIEW/LVCompare after runs).
+- [x] `vi-compare-refs` auto-publish workflow green for `release/v0.5.4` - run `18963732460`.
+- [x] Session-index leak report clean (no rogue LabVIEW/LVCompare after runs) - `tools/Detect-RogueLV.ps1 -FailOnRogue`.
 
 ## Post-merge
 

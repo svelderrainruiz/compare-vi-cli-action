@@ -20,10 +20,10 @@ Validation (must be green)
 
 - [x] Pester (hosted Windows) - `Invoke-PesterTests.ps1`, 2025-10-31.
 - [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31 (Integration Runbook Validation).
-- [ ] Fixture Drift (Windows/Ubuntu) - TODO.
+- [x] Fixture Drift (Windows/Ubuntu) - Fixture Drift Validation run `18963669363`.
 - [x] Validate workflow (release/v0.5.4) - `Validate` workflow (workflow_dispatch) on `release/v0.5.4`.
-- [ ] Manual VI Compare refs (`vi-compare-refs.yml`) - ensure artifacts upload for the release branch.
-- [ ] Session-index leak report clean - confirm no rogue LabVIEW/LVCompare processes after staging/history runs.
+- [x] Manual VI Compare refs (`vi-compare-refs.yml`) - run `18963732460`.
+- [x] Session-index leak report clean - `tools/Detect-RogueLV.ps1 -FailOnRogue` (no processes detected).
 
 Upgrade Notes
 
