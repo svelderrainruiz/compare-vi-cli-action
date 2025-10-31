@@ -39,17 +39,15 @@ Quick reference for building, testing, and releasing the LVCompare composite act
     - Successful runs upload `tests/results/_agent/smoke/vi-stage/smoke-*.json`
       summaries and assert the scratch PR carries the `vi-staging-ready` label.
     - Scenario catalog (defined in `Get-VIStagingSmokeScenarios`):
-
-      | Scenario        | Fixture prep                                                                 | Expected LVCompare |
-      |-----------------|------------------------------------------------------------------------------|--------------------|
-      | `no-diff`       | Copy `fixtures/vi-attr/Head.vi` onto `Base.vi`                               | match              |
-      | `vi2-diff`      | Write tracked fixtures `tmp-commit-236ffab/{VI1,VI2}.vi` into `fixtures/vi-attr/{Base,Head}.vi` (block diagram cosmetic diff) | diff |
-      | `attr-diff`     | Stage the attribute fixtures `fixtures/vi-attr/attr/{BaseAttr,HeadAttr}.vi`  | diff |
-      | `fp-cosmetic`   | Stage `fixtures/vi-stage/fp-cosmetic/{Base,Head}.vi` (front-panel cosmetic tweak) | diff |
-      | `connector-pane`| Stage `fixtures/vi-stage/connector-pane/{Base,Head}.vi` (connector assignment change) | diff |
-      | `bd-cosmetic`   | Stage `fixtures/vi-stage/bd-cosmetic/{Base,Head}.vi` (block-diagram cosmetic label) | diff |
-      | `control-rename`| Stage `fixtures/vi-stage/control-rename/{Base,Head}.vi` (control rename)     | diff |
-      | `fp-window`     | Stage `fixtures/vi-stage/fp-window/{Base,Head}.vi` (window sizing change)    | diff |
+      - `no-diff`: Copy `fixtures/vi-attr/Head.vi` onto `Base.vi` → match.
+      - `vi2-diff`: Stage `tmp-commit-236ffab/{VI1,VI2}.vi` into `fixtures/vi-attr/{Base,Head}.vi` (block-diagram
+        cosmetic) → diff.
+      - `attr-diff`: Stage `fixtures/vi-attr/attr/{BaseAttr,HeadAttr}.vi` → diff.
+      - `fp-cosmetic`: Stage `fixtures/vi-stage/fp-cosmetic/{Base,Head}.vi` (front-panel cosmetic tweak) → diff.
+      - `connector-pane`: Stage `fixtures/vi-stage/connector-pane/{Base,Head}.vi` (connector assignment change) → diff.
+      - `bd-cosmetic`: Stage `fixtures/vi-stage/bd-cosmetic/{Base,Head}.vi` (block-diagram cosmetic label) → diff.
+      - `control-rename`: Stage `fixtures/vi-stage/control-rename/{Base,Head}.vi` (control rename) → diff.
+      - `fp-window`: Stage `fixtures/vi-stage/fp-window/{Base,Head}.vi` (window sizing change) → diff.
 
       Treat these fixtures as read-only baselines—update them only when you intend
       to change the smoke matrix. The `/vi-stage` PR comment includes this table
@@ -101,8 +99,8 @@ Quick reference for building, testing, and releasing the LVCompare composite act
          Use the default `-MaxPairs 6`; artifacts land under `tests/results/pr-vi-history/` (aggregate manifest plus
          `history-report.{md,html}` per target). Enable `-Verbose` locally to see the resolved helper path and origin
          (base/head) for each target.
-      3. `tools/Summarize-PRVIHistory.ps1` renders the PR table with change types, comparison/diff counts, and relative
-         report paths so reviewers can triage without downloading the artifact bundle.
+      3. `tools/Summarize-PRVIHistory.ps1` renders the PR table with change types, comparison/diff counts, and
+         relative report paths so reviewers can triage without downloading the artifact bundle.
     - Override the history depth via the workflow_dispatch input `max_pairs` when you need a longer runway; otherwise
       accept the default for quick attribution. The workflow uploads the results directory as
       `pr-vi-history-<pr-number>.zip` for local inspection.
@@ -110,12 +108,15 @@ Quick reference for building, testing, and releasing the LVCompare composite act
       runner variables when you need to restore selective filters:
       - `PR_VI_HISTORY_COMPARE_FLAGS_MODE` / `VI_HISTORY_COMPARE_FLAGS_MODE` (values `replace` or `append`)
       - `PR_VI_HISTORY_COMPARE_FLAGS` / `VI_HISTORY_COMPARE_FLAGS` (newline-delimited flag list)
-      - `PR_VI_HISTORY_COMPARE_REPLACE_FLAGS` / `VI_HISTORY_COMPARE_REPLACE_FLAGS` (force replace/append for a single run)
+      - `PR_VI_HISTORY_COMPARE_REPLACE_FLAGS` / `VI_HISTORY_COMPARE_REPLACE_FLAGS`
+        (force replace/append for a single run)
+
+```bash
 node tools/npm/run-script.mjs build
 node tools/npm/run-script.mjs generate:outputs
 node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 ./tools/PrePush-Checks.ps1  # actionlint, optional YAML round-trip
-``
+```
 
 ## Release checklist
 
@@ -154,12 +155,12 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 
 ## CI automation secrets
 
-- `AUTO_APPROVE_TOKEN` - Personal access token (PAT) used by the `PR Auto-approve` workflow to submit an approval once the
-  `Validate` workflow succeeds. The token must belong to an account with review rights on this repository. Grant the token
-  the minimal scopes required (`public_repo` is sufficient for GitHub.com repos). When the secret is unset the workflow
-  quietly skips auto-approval.
-- `AUTO_APPROVE_LABEL` *(optional)* - When set, the auto-approval workflow only acts on PRs carrying this label. The default
-  label is `auto-approve` if the secret is omitted. Set the secret to `none` to disable label gating.
+- `AUTO_APPROVE_TOKEN` - Personal access token (PAT) used by the `PR Auto-approve` workflow to submit an approval once
+  the `Validate` workflow succeeds. The token must belong to an account with review rights on this repository. Grant the
+  token the minimal scopes required (`public_repo` is sufficient for GitHub.com repos). When the secret is unset the
+  workflow quietly skips auto-approval.
+- `AUTO_APPROVE_LABEL` *(optional)* - When set, the auto-approval workflow only acts on PRs carrying this label. The
+  default label is `auto-approve` if the secret is omitted. Set the secret to `none` to disable label gating.
 - `AUTO_APPROVE_ALLOWED` *(optional)* - Comma-separated list of GitHub usernames permitted for auto-approval (e.g.,
   `svelderrainruiz,octocat`). If omitted, all authors are eligible.
 
@@ -246,17 +247,21 @@ pwsh -File tools/Print-AgentHandoff.ps1 -ApplyToggles -AutoTrim
 
 ## Quick verification
 
-``powershell
+```powershell
 ./tools/Quick-VerifyCompare.ps1                # temp files
 ./tools/Quick-VerifyCompare.ps1 -Same          # identical path preview
 ./tools/Quick-VerifyCompare.ps1 -Base A.vi -Head B.vi
-``
+```
 
 Preview LVCompare command without executing:
 
-``powershell
-pwsh -File scripts/CompareVI.ps1 -Base VI1.vi -Head VI2.vi -LvCompareArgs "-nobdcosm" -PreviewArgs
-``
+```powershell
+pwsh -File scripts/CompareVI.ps1 `
+  -Base VI1.vi `
+  -Head VI2.vi `
+  -LvCompareArgs "-nobdcosm" `
+  -PreviewArgs
+```
 
 ## References
 
@@ -265,17 +270,26 @@ pwsh -File scripts/CompareVI.ps1 -Base VI1.vi -Head VI2.vi -LvCompareArgs "-nobd
 - [`docs/SCHEMA_HELPER.md`](./SCHEMA_HELPER.md)
 - [`docs/TROUBLESHOOTING.md`](./TROUBLESHOOTING.md)
 
-
-
 ### Fork pull request automation
 
-- Fork PRs targeting develop automatically run the **VI Compare (Fork PR)** workflow. The job checks out the head commit using the shared etch-pr-head helper, stages the affected VIs, runs LVCompare on the self-hosted runner, and uploads artifacts identical to /vi-stage.
-- /vi-stage and /vi-history commands remain available for both upstream and fork contributions. Those workflows now also use the fetch helper so they can operate on fork heads safely.
-- The new **PR Auto-approve Label** workflow runs after Validate. When a PR targets develop, is not a fork/draft, its checks are green, and (optionally) the author is allowed, the workflow adds the auto-approve label automatically. If any condition fails, the label is removed.
-- When the workflow skips a PR, it now emits structured outputs (`autoapprove_reason`, `autoapprove_checks`, `autoapprove_detail`) and `::notice::` messages (for example, merge conflicts or failing checks). Downstream automation can inspect those outputs to surface richer status or trigger follow-up actions.
-- Auto-approve still requires AUTO_APPROVE_TOKEN, optional AUTO_APPROVE_LABEL (default uto-approve), and optional AUTO_APPROVE_ALLOWED. The label lifecycle is now fully automated so contributors don't need to toggle it manually.
-- Manual `/vi-stage` and `/vi-history` workflows accept an optional `fetch_depth` input (default `20`). Increase it when you need additional commit history before running compares.
+- Fork PRs targeting `develop` automatically run the **VI Compare (Fork PR)** workflow. The job checks out the head
+  commit using the shared `fetch-pr-head` helper, stages the affected VIs, runs LVCompare on the self-hosted runner, and
+  uploads artifacts identical to the `/vi-stage` workflow.
+- `/vi-stage` and `/vi-history` commands remain available for both upstream and fork contributions. They now re-use the
+  fetch helper so they can operate on fork heads safely.
+- The **PR Auto-approve Label** workflow runs after Validate. When a PR targets `develop`, is not a fork or draft, its
+  checks are green, and (optionally) the author is allowed, the workflow adds the auto-approve label automatically. If
+  any condition fails, the label is removed.
+- When the workflow skips a PR it emits structured outputs (`autoapprove_reason`, `autoapprove_checks`,
+  `autoapprove_detail`) and `::notice::` messages (for example, merge conflicts or failing checks). Downstream
+  automation can inspect those outputs to surface richer status or trigger follow-up actions.
+- Auto-approve still requires `AUTO_APPROVE_TOKEN`, optional `AUTO_APPROVE_LABEL` (defaults to `auto-approve`), and
+  optional `AUTO_APPROVE_ALLOWED`. The label lifecycle is now fully automated so contributors do not need to toggle it
+  manually.
+- Manual `/vi-stage` and `/vi-history` workflows accept an optional `fetch_depth` input (default `20`). Increase it when
+  you need additional commit history before running compares.
 - Use `tools/Test-ForkSimulation.ps1` when validating fork automation. Run it in three passes: `-DryRun` prints the
   plan, the default run pushes a scratch branch, opens a draft PR, and waits for the fork compare workflow, and adding
   `-KeepBranch` preserves the branch/PR after the staging and history dispatches complete for manual inspection.
-- When testing fork scenarios locally, use the composite ./.github/actions/fetch-pr-head to simulate pull/<id>/head checkouts before invoking staging/history helpers.
+- When testing fork scenarios locally, use the composite `.github/actions/fetch-pr-head` action to simulate
+  `pull/<id>/head` checkouts before invoking the staging or history helpers.

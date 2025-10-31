@@ -17,15 +17,16 @@ Highlights
 
 Upgrade Notes
 
-- Plan to ingest `bucket-counts-json` (in addition to `category-counts-json`) from CompareVI history/staging outputs; the
-  older category-only feeds remain but the new bucket summaries carry the primary signal.
+- Plan to ingest `bucket-counts-json` (in addition to `category-counts-json`) from CompareVI history/staging outputs.
+  The older category-only feeds remain but the new bucket summaries carry the primary signal.
 - Report fixtures now rely on normalized slugs (`vi-attribute`, `block-diagram-cosmetic`, etc.); regenerate or update
   local fixtures when extending the bucket catalog.
 
 Validation Checklist
 
 - [x] Pester (hosted Windows) - `Invoke-PesterTests.ps1`, 2025-10-31.
-- [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31 (Integration Runbook Validation).
+- [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31
+  (Integration Runbook Validation).
 - [x] Fixture Drift (Windows/Ubuntu) - Fixture Drift Validation run `18963669363`.
 - [x] Validate workflow (`Validate / lint`, `Validate / fixtures`, `Validate / session-index`) for `release/v0.5.4` -
   `Validate` workflow (workflow_dispatch) on `release/v0.5.4`.
