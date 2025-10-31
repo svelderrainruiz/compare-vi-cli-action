@@ -9,6 +9,22 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 _No unreleased changes yet._
 
+## [v0.5.4] - 2025-10-31
+
+### Added
+
+- Bucket-aware VI compare summaries – `tools/VICategoryBuckets.psm1`, `tools/Summarize-VIStaging.ps1`,
+  `tools/Compare-VIHistory.ps1`, and `tools/Render-VIHistoryReport.ps1` now surface business buckets (Functional
+  behavior, UI / visual, Metadata) in Markdown/HTML reports, CLI outputs, and GitHub telemetry so reviewers and
+  automation can triage diffs without downloading artifacts.
+- New staging/history unit coverage (`tests/VICategoryBuckets.Tests.ps1`,
+  `tests/Render-VIHistoryReport.Tests.ps1`, expanded history/staging suites) guards the bucket plumbing end-to-end.
+
+### Changed
+
+- VI history report fixtures align with normalized bucket slugs/classifications, ensuring staged compare smoke tests
+  accept both raw categories and the new bucket signals.
+
 ## [v0.5.3] - 2025-10-30
 
 ### Added
