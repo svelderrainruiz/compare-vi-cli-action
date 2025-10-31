@@ -25,9 +25,9 @@ Upgrade Notes
 Validation Checklist
 
 - [x] Pester (hosted Windows) - `Invoke-PesterTests.ps1`, 2025-10-31.
-- [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31 (run `18963441275`).
+- [x] Pester (self-hosted, IntegrationMode include) - `Invoke-PesterTests.ps1 -IntegrationMode include`, 2025-10-31 (run `18963479511`).
 - [ ] Fixture Drift (Windows/Ubuntu).
-- [x] Validate workflow (`Validate / lint`, `Validate / fixtures`, `Validate / session-index`) for `release/v0.5.4` - run `18963398180`.
+- [x] Validate workflow (`Validate / lint`, `Validate / fixtures`, `Validate / session-index`) for `release/v0.5.4` - run `18963495757`.
 - [ ] Manual VI Compare refs (`vi-compare-refs.yml`) on `release/v0.5.4` - artifacts uploaded.
 - [ ] Session-index leak report clean - no rogue LabVIEW/LVCompare processes after staging/history runs.
 
