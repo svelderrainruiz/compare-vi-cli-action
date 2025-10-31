@@ -463,6 +463,46 @@ exit 0
     ($manifest.comparisons[0].result.PSObject.Properties['artifactDir']) | Should -Be $null
   }
 
+  It 'processes full history when MaxPairs is omitted' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+
+    $originalDiff = $env:STUB_COMPARE_DIFF
+    $env:STUB_COMPARE_DIFF = '0'
+    try {
+      $pair = $_pairs[0]
+      $rd = Join-Path $TestDrive 'history-unbounded'
+      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
+        -TargetPath $_target `
+        -StartRef $pair.Head `
+        -InvokeScriptPath $_stubPath `
+        -ResultsDir $rd `
+        -FailOnDiff:$false `
+        -Mode default `
+        -ReportFormat html | Out-Null
+
+      $suitePath = Join-Path $rd 'manifest.json'
+      Test-Path -LiteralPath $suitePath | Should -BeTrue
+      $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
+      $aggregate.maxPairs | Should -BeNullOrEmpty
+
+      $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'default' }
+      $modeEntry | Should -Not -BeNullOrEmpty
+      $modeEntry.maxPairs | Should -BeNullOrEmpty
+      Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
+
+      $modeManifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
+      $modeManifest.maxPairs | Should -BeNullOrEmpty
+      $modeManifest.stats.stopReason | Should -Be 'complete'
+      $modeManifest.stats.processed | Should -BeGreaterThan 0
+    } finally {
+      if ($null -eq $originalDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $originalDiff
+      }
+    }
+  }
+
   It 'retains artifact directory when the stub reports a diff' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
     $env:STUB_COMPARE_DIFF = '1'

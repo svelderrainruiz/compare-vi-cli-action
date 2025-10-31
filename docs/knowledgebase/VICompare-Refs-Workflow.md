@@ -83,18 +83,18 @@
   normally to open a draft PR and validate the automatic compare job, then repeat with `-KeepBranch` when you want the
   scratch branch preserved while the `/vi-stage` and `/vi-history` dispatches finish.
 - Comment `/vi-history` when you want the automation to walk commit history for every VI in the PR. The companion
-  workflow (`pr-vi-history.yml`) generates the diff manifest, runs `tools/Invoke-PRVIHistory.ps1` (default `-MaxPairs 6`;
-  add `-Verbose` locally to see the resolved helper and whether we lifted the path from the base or head tree),
-  renders the Markdown table via `tools/Summarize-PRVIHistory.ps1`, uploads `tests/results/pr-vi-history/`, and replies
-  to the PR with the same table. Supply `max_pairs=<n>` in the comment (or the workflow_dispatch input) when you need a
-  deeper history window.
+  workflow (`pr-vi-history.yml`) generates the diff manifest, runs `tools/Invoke-PRVIHistory.ps1` (which now walks every
+  reachable commit pair by default; add `max_pairs=<n>` in the comment or `-MaxPairs <n>` locally when you need a
+  deliberate cap; enable `-Verbose` locally to see the resolved helper and whether we lifted the path from the base or
+  head tree), renders the Markdown table via `tools/Summarize-PRVIHistory.ps1`, uploads `tests/results/pr-vi-history/`,
+  and replies to the PR with the same table.
   The `tools/Test-PRVIHistorySmoke.ps1` helper now also verifies that the PR comment lands successfully when the workflow
   finishes, so a green smoke run means reviewers can rely on the summary table without spelunking artifacts. Pass
   `-Scenario sequential` to replay a multi-category fixture chain and validate the richer history dashboard before
   exercising a live pull request.
   ```powershell
   pwsh -File tools/Get-PRVIDiffManifest.ps1 -BaseRef origin/develop -HeadRef HEAD -OutputPath vi-history-manifest.json
-  pwsh -File tools/Invoke-PRVIHistory.ps1 -ManifestPath vi-history-manifest.json -ResultsRoot tests/results/pr-vi-history -MaxPairs 6
+  pwsh -File tools/Invoke-PRVIHistory.ps1 -ManifestPath vi-history-manifest.json -ResultsRoot tests/results/pr-vi-history
   pwsh -File tools/Summarize-PRVIHistory.ps1 -SummaryPath tests/results/pr-vi-history/vi-history-summary.json -MarkdownPath vi-history-summary.md
   ```
   For a full end-to-end validation, run the smoke helper (`pwsh -File tools/Test-PRVIHistorySmoke.ps1` or `npm run smoke:vi-history`) to create a scratch PR, dispatch the workflow, and record the results under `tests/results/_agent/smoke/vi-history/`.
@@ -104,7 +104,7 @@
 - `vi_path` (required): repository-relative `.vi` path (example `Fixtures/Loop.vi`). Use the exact casing committed
   to git.
 - `compare_ref` (optional): branch/tag/commit where the walk begins. Defaults to `HEAD` when blank.
-- `compare_depth` (optional): limit comparisons (set to `"0"` for no limit). The workflow defaults to `10`.
+- `compare_depth` (optional): limit comparisons (set to `"0"` for no limit). The workflow now defaults to `0`.
   - Input must be a non-negative integer; anything else fails fast with a clear message.
 - `compare_fail_fast` (`true`/`false`): stop iterating after the first detected diff (still uploads results, does not fail the job).
 - `compare_fail_on_diff` (`true`/`false`): exit the job with failure status if any LVCompare run reports differences.
@@ -128,14 +128,14 @@
 - **Default history sweep** - leave inputs at their defaults and supply only `vi_path`. The workflow walks the first
   ten commit pairs starting at `HEAD`, surfaces every difference (no suppression), and uploads a lightweight manifest.
 - **Attribute audit** - set `compare_modes` to `default,attributes` so the second pass runs with `-noattr`, letting you contrast the full-detail manifest against a suppressed one.
-- **Deep dive** - bump `compare_depth` to `0` (unbounded) and enable `compare_fail_fast='true'` when you just need to know whether any
+- **Deep dive** - leave `compare_depth` at `0` (or set it explicitly) and enable `compare_fail_fast='true'` when you just need to know whether any
   difference exists in the history span.
 
 ### Local automation helpers
 
 - `scripts/Run-VIHistory.ps1` regenerates local history results, prints the enriched Markdown summary (including attribute coverage), previews the first few commit pairs it processed, and drops both `history-context.json` (commit metadata, when available) and `history-report.md` (single-document summary; plus `history-report.html` when `-HtmlReport`) under the history results directory. When the context JSON is missing or corrupted, the renderer derives the commit table directly from the per-mode manifests and queries `git` for author/date/subject details so the report still carries complete coverage information. If the renderer itself is unavailable, the helper writes a lightweight fallback report so the Markdown summary is always present:
     ```powershell
-    pwsh -File scripts/Run-VIHistory.ps1 -ViPath Fixtures/Loop.vi -StartRef HEAD -MaxPairs 3
+    pwsh -File scripts/Run-VIHistory.ps1 -ViPath Fixtures/Loop.vi -StartRef HEAD
     ```
 - `scripts/Dispatch-VIHistoryWorkflow.ps1` dispatches the GitHub workflow with consistent parameters once you are happy with the local preview:
   ```powershell
@@ -148,7 +148,7 @@ Example CLI dispatch (requires `gh workflow run` permissions):
 gh workflow run vi-compare-refs.yml `
   -f vi_path='VI1.vi' `
   -f compare_ref='develop' `
-  -f compare_depth='5' `
+  -f compare_depth='0' `
   -f compare_fail_fast='true'
 ```
 
@@ -191,10 +191,10 @@ gh workflow run vi-compare-refs.yml `
   pwsh -NoLogo -NoProfile -File tools/Compare-VIHistory.ps1 `
     -TargetPath VI1.vi `
     -StartRef HEAD `
-    -MaxPairs 3 `
     -Detailed `
     -RenderReport
   ```
+  Add `-MaxPairs <n>` when you intentionally need to limit the number of comparisons.
 
 - Combine `-FailFast` to stop after the first difference or `-FailOnDiff` to exit non-zero for gating scripts.
 - The helper writes the suite manifest plus per-mode directories under `tests/results/ref-compare/history/` by default;

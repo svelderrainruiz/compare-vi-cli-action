@@ -111,6 +111,88 @@ Describe 'Invoke-PRVIHistory.ps1' {
         Test-Path -LiteralPath $result.targets[0].reportMd -PathType Leaf | Should -BeTrue
     }
 
+    It 'omits MaxPairs when no cap is provided and records null in the summary' {
+        $tempDir = Join-Path $TestDrive 'history-fixtures-unbounded'
+        New-Item -ItemType Directory -Path $tempDir | Out-Null
+
+        $headPath = Join-Path $tempDir 'Head.vi'
+        Set-Content -LiteralPath $headPath -Value 'vi-bytes'
+
+        $manifestPath = Join-Path $TestDrive 'vi-diff-manifest-unbounded.json'
+        $manifest = [ordered]@{
+            schema      = 'vi-diff-manifest@v1'
+            generatedAt = (Get-Date).ToString('o')
+            baseRef     = 'base'
+            headRef     = 'head'
+            pairs       = @(
+                [ordered]@{
+                    changeType = 'modified'
+                    basePath   = 'Base.vi'
+                    headPath   = $headPath
+                }
+            )
+        }
+        $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+
+        $resultsRoot = Join-Path $TestDrive 'history-results-unbounded'
+        $invocations = [System.Collections.Generic.List[hashtable]]::new()
+        $compareStub = {
+            param([hashtable]$Arguments)
+            $invocations.Add($Arguments) | Out-Null
+
+            New-Item -ItemType Directory -Path $Arguments.ResultsDir -Force | Out-Null
+            $summaryManifest = [ordered]@{
+                schema      = 'vi-compare/history-suite@v1'
+                targetPath  = $Arguments.TargetPath
+                requestedStartRef = $Arguments.StartRef
+                startRef    = $Arguments.StartRef
+                maxPairs    = $null
+                stats       = [ordered]@{
+                    processed = 2
+                    diffs     = 0
+                    missing   = 0
+                }
+                modes       = @(
+                    [ordered]@{
+                        name = 'default'
+                        stats = [ordered]@{
+                            processed = 2
+                            diffs     = 0
+                            missing   = 0
+                            stopReason = 'complete'
+                        }
+                        comparisons = @()
+                    }
+                )
+            }
+            $manifestOut = Join-Path $Arguments.ResultsDir 'manifest.json'
+            $summaryManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestOut -Encoding utf8
+            Set-Content -LiteralPath (Join-Path $Arguments.ResultsDir 'history-report.md') -Value '# history' -Encoding utf8
+        }.GetNewClosure()
+
+        Push-Location $repoRoot
+        try {
+            $result = & $scriptPath `
+                -ManifestPath $manifestPath `
+                -ResultsRoot $resultsRoot `
+                -CompareInvoker $compareStub `
+                -SkipRenderReport
+        }
+        finally {
+            Pop-Location
+        }
+
+        $invocations.Count | Should -Be 1
+        $invocations[0].ContainsKey('MaxPairs') | Should -BeFalse
+
+        $result.maxPairs | Should -BeNullOrEmpty
+        $result.targets | Should -Not -BeNullOrEmpty
+        $result.targets[0].status | Should -Be 'completed'
+        $result.targets[0].stats.processed | Should -Be 2
+
+        Test-Path -LiteralPath $result.targets[0].manifest -PathType Leaf | Should -BeTrue
+    }
+
     It 'prefers repo-relative target paths when the VI resides in the repository' {
         $manifestPath = Join-Path $TestDrive 'vi-diff-rel.json'
         $manifest = [ordered]@{

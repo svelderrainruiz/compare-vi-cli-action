@@ -41,6 +41,8 @@ $ErrorActionPreference = 'Stop'
 
 Set-Variable -Name repoRoot -Scope Script -Value $null
 
+$maxPairsRequested = $PSBoundParameters.ContainsKey('MaxPairs') -and $MaxPairs -gt 0
+
 try {
   $vendorModule = Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1'
   if (Test-Path -LiteralPath $vendorModule -PathType Leaf) {
@@ -557,7 +559,7 @@ Ensure-FileExistsAtRef -Ref $startRef -Path $targetRel
 if ($endRef) { Ensure-FileExistsAtRef -Ref $endRef -Path $targetRel }
 
 $revArgs = @('rev-list','--first-parent',$startRef)
-if ($MaxPairs -gt 0) {
+if ($maxPairsRequested) {
   $revArgs += ("--max-count={0}" -f ([int]($MaxPairs + 5)))
 }
 $revArgs += '--'
@@ -625,7 +627,7 @@ $aggregate = [ordered]@{
   requestedStartRef = $requestedStartRef
   startRef    = $startRef
   endRef      = $endRef
-  maxPairs    = $MaxPairs
+  maxPairs    = if ($maxPairsRequested) { $MaxPairs } else { $null }
   failFast    = [bool]$FailFast.IsPresent
   failOnDiff  = [bool]$FailOnDiff.IsPresent
   reportFormat = $reportFormatEffective
@@ -713,7 +715,7 @@ foreach ($modeSpec in $modeSpecs) {
     requestedStartRef = $requestedStartRef
     startRef    = $startRef
     endRef      = $endRef
-    maxPairs    = $MaxPairs
+    maxPairs    = if ($maxPairsRequested) { $MaxPairs } else { $null }
     failFast    = [bool]$FailFast.IsPresent
     failOnDiff  = [bool]$FailOnDiff.IsPresent
     mode        = $modeName
@@ -771,7 +773,7 @@ foreach ($modeSpec in $modeSpecs) {
     }
 
     $index = $processed + 1
-    if ($MaxPairs -gt 0 -and $index -gt $MaxPairs) {
+    if ($maxPairsRequested -and $index -gt $MaxPairs) {
       $stopReason = 'max-pairs'
       break
     }

@@ -96,8 +96,10 @@ Quick reference for building, testing, and releasing the LVCompare composite act
       1. `tools/Get-PRVIDiffManifest.ps1` enumerates VI changes between the PR base/head commits.
       2. `tools/Invoke-PRVIHistory.ps1` resolves the history helper once
          (works with repo-relative targets) and runs the compare suite per VI.
-         Use the default `-MaxPairs 6`; artifacts land under `tests/results/pr-vi-history/` (aggregate manifest plus
-         `history-report.{md,html}` per target). Enable `-Verbose` locally to see the resolved helper path and origin
+        The helper now walks every reachable commit pair by default; pass `-MaxPairs <n>` only when you need
+        a deliberate cap (for example the history smoke script still uses `-MaxPairs 6` to keep the loop fast).
+        Artifacts land under `tests/results/pr-vi-history/` (aggregate manifest plus `history-report.{md,html}` per
+        target). Enable `-Verbose` locally to see the resolved helper path and origin
          (base/head) for each target.
       3. `tools/Summarize-PRVIHistory.ps1` renders the PR table with change types, comparison/diff counts, and
          relative report paths so reviewers can triage without downloading the artifact bundle.
@@ -200,7 +202,8 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 - `scripts/Run-VIHistory.ps1` - regenerates the manual compare suite locally,
   verifies the target VI exists at the selected ref, and prints the Markdown
   summary (attribute coverage included) for issue comments. You can also call it
-  via `npm run history:run -- -ViPath Fixtures/Loop.vi -StartRef HEAD -MaxPairs 3`.
+  via `npm run history:run -- -ViPath Fixtures/Loop.vi -StartRef HEAD`. Add `-MaxPairs <n>`
+  when you intentionally need a cap.
 - `scripts/Dispatch-VIHistoryWorkflow.ps1` - wraps `gh workflow run` for
   `vi-compare-refs.yml`, echoes the latest run id/link, and records dispatch
   metadata under `tests/results/_agent/handoff/vi-history-run.json` for
