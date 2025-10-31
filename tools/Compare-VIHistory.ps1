@@ -39,6 +39,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+Set-Variable -Name repoRoot -Scope Script -Value $null
+
 try {
   $vendorModule = Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1'
   if (Test-Path -LiteralPath $vendorModule -PathType Leaf) {
@@ -256,6 +258,9 @@ function Invoke-Git {
   foreach ($arg in $Arguments) { [void]$psi.ArgumentList.Add($arg) }
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
+  if ($repoRoot) {
+    $psi.WorkingDirectory = $repoRoot
+  }
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $proc = [System.Diagnostics.Process]::Start($psi)
@@ -310,6 +315,9 @@ function Ensure-FileExistsAtRef {
   foreach ($arg in @('cat-file','-e', $expr)) { [void]$psi.ArgumentList.Add($arg) }
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
+  if ($repoRoot) {
+    $psi.WorkingDirectory = $repoRoot
+  }
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $proc = [System.Diagnostics.Process]::Start($psi)
@@ -557,7 +565,18 @@ if ($commitList.Count -eq 0) {
   throw ("No commits found for {0} reachable from {1}" -f $targetRel, $startRef)
 }
 
-$compareScript = Join-Path $repoRoot 'tools' 'Compare-RefsToTemp.ps1'
+$compareScript = $null
+$scriptsOverride = $env:COMPAREVI_SCRIPTS_ROOT
+if (-not [string]::IsNullOrWhiteSpace($scriptsOverride)) {
+  $overrideCandidate = Join-Path $scriptsOverride 'Compare-RefsToTemp.ps1'
+  if (Test-Path -LiteralPath $overrideCandidate -PathType Leaf) {
+    $compareScript = $overrideCandidate
+  }
+}
+
+if (-not $compareScript) {
+  $compareScript = Join-Path $repoRoot 'tools' 'Compare-RefsToTemp.ps1'
+}
 if (-not (Test-Path -LiteralPath $compareScript -PathType Leaf)) {
   throw ("Compare script not found: {0}" -f $compareScript)
 }
