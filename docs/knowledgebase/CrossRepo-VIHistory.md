@@ -43,9 +43,25 @@ standing issue #527).
    ```
 
    - Outputs land in `tests/results/ref-compare/history/` inside the cloned
-     repo (`history-report.md`, `history-report.html`, manifest JSON, etc.).
-   - Works for any VI path with commit history; use `-StartRef` if you need to
-     anchor to an older commit.
+ repo (`history-report.md`, `history-report.html`, manifest JSON, etc.).
+ - Works for any VI path with commit history; use `-StartRef` if you need to
+   anchor to an older commit.
+
+### Using the module wrapper
+
+Once `CompareVI.Tools` is published you can replace steps 2–3 with:
+
+```powershell
+Import-Module CompareVI.Tools
+Set-Location labview-icon-editor
+Invoke-CompareVIHistory `
+  -TargetPath "resource/plugins/NIIconEditor/Miscellaneous/Settings Init.vi" `
+  -MaxPairs 6 `
+  -RenderReport
+```
+
+The module sets up the helper path automatically; downstream repos simply need
+the module on the PowerShell module path.
 
 ## Observations / gaps
 
