@@ -55,6 +55,22 @@ function Resolve-ExistingFile {
     return $null
 }
 
+function Resolve-ExistingDirectory {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    try {
+        $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+        if (Test-Path -LiteralPath $resolved -PathType Container) {
+            return $resolved
+        }
+    } catch {
+        if (Test-Path -LiteralPath $Path -PathType Container) {
+            return $Path
+        }
+    }
+    return $null
+}
+
 function Get-RelativePath {
     param(
         [string]$BasePath,
@@ -111,6 +127,157 @@ function Parse-DiffDetails {
         if ($decoded) { $details.Add($decoded) }
     }
     return $details
+}
+
+function Find-ReportPath {
+    param(
+        [pscustomobject]$Entry,
+        [string]$CompareDir
+    )
+
+    $candidateFiles = New-Object System.Collections.Generic.List[string]
+    if ($Entry -and $Entry.PSObject.Properties['reportPath'] -and $Entry.reportPath) {
+        $candidateFiles.Add([string]$Entry.reportPath) | Out-Null
+    }
+    if ($Entry -and $Entry.PSObject.Properties['modes'] -and $Entry.modes) {
+        foreach ($mode in $Entry.modes) {
+            if (-not $mode) { continue }
+            if ($mode.PSObject.Properties['reportPath'] -and $mode.reportPath) {
+                $candidateFiles.Add([string]$mode.reportPath) | Out-Null
+            }
+        }
+    }
+
+    $directories = New-Object System.Collections.Generic.List[string]
+    if ($Entry -and $Entry.PSObject.Properties['outputDir'] -and $Entry.outputDir) {
+        $directories.Add([string]$Entry.outputDir) | Out-Null
+    }
+    if ($Entry -and $Entry.PSObject.Properties['modes'] -and $Entry.modes) {
+        foreach ($mode in $Entry.modes) {
+            if (-not $mode) { continue }
+            if ($mode.PSObject.Properties['outputDir'] -and $mode.outputDir) {
+                $directories.Add([string]$mode.outputDir) | Out-Null
+            }
+        }
+    }
+    $pairIndex = 0
+    if ($Entry -and $Entry.PSObject.Properties['index']) {
+        try { $pairIndex = [int]$Entry.index } catch { $pairIndex = 0 }
+    }
+    if ($CompareDir -and $pairIndex -gt 0) {
+        $directories.Add((Join-Path $CompareDir ("pair-{0:D2}" -f $pairIndex))) | Out-Null
+    }
+
+    foreach ($candidate in $candidateFiles) {
+        $resolved = Resolve-ExistingFile -Path $candidate
+        if ($resolved) { return $resolved }
+    }
+
+    $reportNames = @('compare-report.html','compare-report.xml','compare-report.txt')
+    foreach ($dirCandidate in $directories) {
+        $resolvedDir = Resolve-ExistingDirectory -Path $dirCandidate
+        if (-not $resolvedDir) { continue }
+        foreach ($name in $reportNames) {
+            $joined = Join-Path $resolvedDir $name
+            $resolved = Resolve-ExistingFile -Path $joined
+            if ($resolved) { return $resolved }
+        }
+        # search common mode subdirectories (mode-*)
+        try {
+            $modeDirs = Get-ChildItem -LiteralPath $resolvedDir -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -like 'mode-*' }
+            foreach ($modeDir in $modeDirs) {
+                foreach ($name in $reportNames) {
+                    $joined = Join-Path $modeDir.FullName $name
+                    $resolved = Resolve-ExistingFile -Path $joined
+                    if ($resolved) { return $resolved }
+                }
+            }
+        } catch {}
+    }
+
+    # last resort: shallow recursive search (depth 2)
+    foreach ($dirCandidate in $directories) {
+        $resolvedDir = Resolve-ExistingDirectory -Path $dirCandidate
+        if (-not $resolvedDir) { continue }
+        try {
+            $found = Get-ChildItem -LiteralPath $resolvedDir -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -in $reportNames } |
+                Select-Object -First 1
+            if ($found) { return $found.FullName }
+        } catch {}
+    }
+
+    if ($CompareDir) {
+        try {
+            $fallback = Get-ChildItem -LiteralPath $CompareDir -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -in $reportNames } |
+                Sort-Object FullName |
+                Select-Object -First 1
+            if ($fallback) { return $fallback.FullName }
+        } catch {}
+    }
+
+    return $null
+}
+
+function Find-CapturePath {
+    param(
+        [pscustomobject]$Entry,
+        [string]$CompareDir
+    )
+
+    if ($Entry -and $Entry.PSObject.Properties['capturePath'] -and $Entry.capturePath) {
+        $resolved = Resolve-ExistingFile -Path $Entry.capturePath
+        if ($resolved) { return $resolved }
+    }
+
+    $directories = New-Object System.Collections.Generic.List[string]
+    if ($Entry -and $Entry.PSObject.Properties['outputDir'] -and $Entry.outputDir) {
+        $directories.Add([string]$Entry.outputDir) | Out-Null
+    }
+    if ($Entry -and $Entry.PSObject.Properties['modes'] -and $Entry.modes) {
+        foreach ($mode in $Entry.modes) {
+            if (-not $mode) { continue }
+            if ($mode.PSObject.Properties['outputDir'] -and $mode.outputDir) {
+                $directories.Add([string]$mode.outputDir) | Out-Null
+            }
+        }
+    }
+    $pairIndex = 0
+    if ($Entry -and $Entry.PSObject.Properties['index']) {
+        try { $pairIndex = [int]$Entry.index } catch { $pairIndex = 0 }
+    }
+    if ($CompareDir -and $pairIndex -gt 0) {
+        $directories.Add((Join-Path $CompareDir ("pair-{0:D2}" -f $pairIndex))) | Out-Null
+    }
+
+    foreach ($dir in ($directories | Select-Object -Unique)) {
+        $resolvedDir = Resolve-ExistingDirectory -Path $dir
+        if (-not $resolvedDir) { continue }
+        $candidate = Join-Path $resolvedDir 'lvcompare-capture.json'
+        $resolved = Resolve-ExistingFile -Path $candidate
+        if ($resolved) { return $resolved }
+        try {
+            $modeDirs = Get-ChildItem -LiteralPath $resolvedDir -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -like 'mode-*' }
+            foreach ($modeDir in $modeDirs) {
+                $candidate = Join-Path $modeDir.FullName 'lvcompare-capture.json'
+                $resolved = Resolve-ExistingFile -Path $candidate
+                if ($resolved) { return $resolved }
+            }
+        } catch {}
+    }
+
+    if ($CompareDir) {
+        try {
+            $fallback = Get-ChildItem -LiteralPath $CompareDir -Recurse -File -Filter 'lvcompare-capture.json' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($fallback) { return $fallback.FullName }
+        } catch {}
+    }
+
+    return $null
 }
 
 function Format-ModeFlags {
@@ -441,20 +608,21 @@ foreach ($entry in $entries) {
     if ($entry.PSObject.Properties['reportPath']) {
         $reportPath = Resolve-ExistingFile -Path $entry.reportPath
     }
-    if (-not $reportPath -and $entry.PSObject.Properties['outputDir'] -and $entry.outputDir) {
-        $htmlCandidate = Join-Path $entry.outputDir 'compare-report.html'
-        if (Test-Path -LiteralPath $htmlCandidate -PathType Leaf) {
-            $reportPath = (Resolve-Path -LiteralPath $htmlCandidate).Path
+    if (-not $reportPath) {
+        $reportPath = Find-ReportPath -Entry $entry -CompareDir $compareRoot
+        if ($reportPath) {
+            try { $entry | Add-Member -NotePropertyName reportPath -NotePropertyValue $reportPath -Force } catch {}
         }
     }
+
     $capturePath = $null
     if ($entry.PSObject.Properties['capturePath']) {
         $capturePath = Resolve-ExistingFile -Path $entry.capturePath
     }
-    if (-not $capturePath -and $entry.PSObject.Properties['outputDir'] -and $entry.outputDir) {
-        $capCandidate = Join-Path $entry.outputDir 'lvcompare-capture.json'
-        if (Test-Path -LiteralPath $capCandidate -PathType Leaf) {
-            $capturePath = (Resolve-Path -LiteralPath $capCandidate).Path
+    if (-not $capturePath) {
+        $capturePath = Find-CapturePath -Entry $entry -CompareDir $compareRoot
+        if ($capturePath) {
+            try { $entry | Add-Member -NotePropertyName capturePath -NotePropertyValue $capturePath -Force } catch {}
         }
     }
 

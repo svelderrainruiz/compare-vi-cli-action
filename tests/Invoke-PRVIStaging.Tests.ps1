@@ -76,6 +76,66 @@ Describe 'Invoke-PRVIStaging.ps1' {
         $results[0].staged.Base | Should -Match '\.staged$'
     }
 
+    It 'materializes a base snapshot when BaseRef is supplied for modified pairs' {
+        $repoRoot = Join-Path $TestDrive 'repo-snapshot'
+        New-Item -ItemType Directory -Path $repoRoot | Out-Null
+
+        Push-Location $repoRoot
+        try {
+            git init --quiet | Out-Null
+            git config user.name 'Test Bot' | Out-Null
+            git config user.email 'bot@example.com' | Out-Null
+
+            Set-Content -Path 'Sample.vi' -Value 'base-contents'
+            git add . | Out-Null
+            git commit --quiet -m 'base' | Out-Null
+
+            Set-Content -Path 'Sample.vi' -Value 'head-contents'
+            git add . | Out-Null
+            git commit --quiet -m 'head' | Out-Null
+
+            $base = (git rev-parse HEAD~1).Trim()
+            $head = (git rev-parse HEAD).Trim()
+            $manifestJson = & $manifestScript -BaseRef $base -HeadRef $head
+            $manifestPath = Join-Path $repoRoot 'vi-manifest.json'
+            Set-Content -LiteralPath $manifestPath -Value $manifestJson -Encoding UTF8
+        }
+        finally {
+            Pop-Location
+        }
+
+        $invocations = New-Object System.Collections.Generic.List[object]
+        $stageInvoker = {
+            param($BaseVi, $HeadVi, $WorkingRoot, $StageScript)
+            $invocations.Add([pscustomobject]@{
+                BaseVi      = $BaseVi
+                HeadVi      = $HeadVi
+                WorkingRoot = $WorkingRoot
+            })
+            return [pscustomobject]@{
+                Base = $BaseVi
+                Head = $HeadVi
+                Root = $WorkingRoot
+            }
+        }.GetNewClosure()
+
+        Push-Location $repoRoot
+        try {
+            $workingRoot = Join-Path -Path $TestDrive -ChildPath 'snapshot-root'
+            $null = & $scriptPath -ManifestPath $manifestPath -WorkingRoot $workingRoot -StageInvoker $stageInvoker -BaseRef $base
+        }
+        finally {
+            Pop-Location
+        }
+
+        $invocations.Count | Should -Be 1
+        $call = $invocations[0]
+        $call.BaseVi | Should -Match 'base-snapshots'
+        $call.HeadVi | Should -BeLike '*Sample.vi'
+        $snapshotContent = Get-Content -LiteralPath $call.BaseVi -Raw
+        $snapshotContent.TrimEnd("`r","`n") | Should -Be 'base-contents'
+    }
+
     It 'supports dry-run mode without invoking the stage invoker' {
         $repoRoot = Join-Path $TestDrive 'repo-dryrun'
         New-Item -ItemType Directory -Path $repoRoot | Out-Null

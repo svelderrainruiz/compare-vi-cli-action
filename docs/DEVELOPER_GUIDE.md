@@ -72,6 +72,10 @@ Quick reference for building, testing, and releasing the LVCompare composite act
       for a single run when needed. Regardless of the filtered profile, the workflow
       also executes an unsuppressed `full` pass so block diagram/front panel edits
       are never hidden; both modes surface in the PR summary's **Flags** column.
+      LVCompare reports now use the multi-file HTML layout (`compare-report.html`
+      + `compare-report_files/`) so the 2025 CLI retains category headings and images.
+      Set `COMPAREVI_REPORT_FORMAT=html-single` when you explicitly need the legacy
+      single-file artifact.
     - Staged compare automation exposes runtime toggles for LVCompare execution:
       - `RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS` sets an upper bound (seconds) for each compare run.
       - `RUN_STAGED_LVCOMPARE_LEAK_CHECK` (`true`/`false`) toggles post-run leak collection.

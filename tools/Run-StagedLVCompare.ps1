@@ -301,6 +301,9 @@ foreach ($entry in $results) {
     $allowSameLeafRequested = $false
     if ($hasStaging) {
         $pairDir = Join-Path $compareRoot ("pair-{0:D2}" -f $index)
+        if (Test-Path -LiteralPath $pairDir) {
+            try { Remove-Item -LiteralPath $pairDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+        }
         New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
 
         $stagedBasePath = $entry.staged.Base
@@ -351,8 +354,11 @@ foreach ($entry in $results) {
                 $modeOutputDir = $pairDir
             } else {
                 $modeOutputDir = Join-Path $pairDir ("mode-{0}" -f $safeName)
-                New-Item -ItemType Directory -Path $modeOutputDir -Force | Out-Null
             }
+            if (Test-Path -LiteralPath $modeOutputDir) {
+                try { Remove-Item -LiteralPath $modeOutputDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+            }
+            New-Item -ItemType Directory -Path $modeOutputDir -Force | Out-Null
 
             $invokeParams = @{
                 BaseVi    = $stagedBasePath
