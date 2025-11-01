@@ -467,6 +467,154 @@ exit 0
     $manifest.comparisons.Count | Should -Be 0
   }
 
+  It 'collapses noise-only diffs by default' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+    $previousDiff = $env:STUB_COMPARE_DIFF
+    $previousFixture = $env:STUB_COMPARE_REPORT_FIXTURE
+    try {
+      $env:STUB_COMPARE_DIFF = '1'
+      $env:STUB_COMPARE_REPORT_FIXTURE = Join-Path $_repoRoot 'fixtures' 'vi-report' 'vi-attribute'
+      $pair = $_pairs[0]
+      $rd = Join-Path $TestDrive 'history-noise-collapse'
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 3
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
+
+      $suitePath = Join-Path $rd 'manifest.json'
+      Test-Path -LiteralPath $suitePath | Should -BeTrue
+      $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
+      $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'default' }
+      $modeEntry | Should -Not -BeNullOrEmpty
+
+      $modeManifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
+      $modeManifest.maxSignalPairs | Should -Be 2
+      $modeManifest.noisePolicy | Should -Be 'collapse'
+      $modeManifest.stats.signalDiffs | Should -Be 0
+      $modeManifest.stats.noiseCollapsed | Should -BeGreaterThan 0
+      @($modeManifest.comparisons).Count | Should -Be 0
+      $modeManifest.stats.collapsedNoise.count | Should -Be $modeManifest.stats.noiseCollapsed
+
+      $aggregate.maxSignalPairs | Should -Be 2
+      $aggregate.noisePolicy | Should -Be 'collapse'
+      $aggregate.stats.signalDiffs | Should -Be 0
+      $aggregate.stats.noiseCollapsed | Should -BeGreaterThan 0
+    } finally {
+      if ($null -eq $previousDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $previousDiff
+      }
+      if ($null -eq $previousFixture) {
+        Remove-Item Env:STUB_COMPARE_REPORT_FIXTURE -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_REPORT_FIXTURE = $previousFixture
+      }
+    }
+  }
+
+  It 'stops after configured signal budget' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+    $previousDiff = $env:STUB_COMPARE_DIFF
+    $previousFixture = $env:STUB_COMPARE_REPORT_FIXTURE
+    try {
+      $env:STUB_COMPARE_DIFF = '1'
+      $env:STUB_COMPARE_REPORT_FIXTURE = Join-Path $_repoRoot 'fixtures' 'vi-report' 'block-diagram'
+      $pair = $_pairs[0]
+      $rd = Join-Path $TestDrive 'history-signal-budget'
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 5
+        MaxSignalPairs   = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
+
+      $suitePath = Join-Path $rd 'manifest.json'
+      Test-Path -LiteralPath $suitePath | Should -BeTrue
+      $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
+      $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'default' }
+      $modeEntry | Should -Not -BeNullOrEmpty
+      $modeManifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
+
+      $modeManifest.maxSignalPairs | Should -Be 1
+      $modeManifest.stats.signalDiffs | Should -Be 1
+      $modeManifest.stats.noiseCollapsed | Should -Be 0
+      $modeManifest.stats.stopReason | Should -Be 'max-signal'
+      @($modeManifest.comparisons).Count | Should -Be 1
+
+      $aggregate.stats.signalDiffs | Should -Be 1
+      $aggregate.stats.noiseCollapsed | Should -Be 0
+    } finally {
+      if ($null -eq $previousDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $previousDiff
+      }
+      if ($null -eq $previousFixture) {
+        Remove-Item Env:STUB_COMPARE_REPORT_FIXTURE -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_REPORT_FIXTURE = $previousFixture
+      }
+    }
+  }
+
+  It 'includes noise diffs when noise policy set to include' {
+    if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
+    $previousDiff = $env:STUB_COMPARE_DIFF
+    $previousFixture = $env:STUB_COMPARE_REPORT_FIXTURE
+    try {
+      $env:STUB_COMPARE_DIFF = '1'
+      $env:STUB_COMPARE_REPORT_FIXTURE = Join-Path $_repoRoot 'fixtures' 'vi-report' 'vi-attribute'
+      $pair = $_pairs[0]
+      $rd = Join-Path $TestDrive 'history-noise-include'
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 2
+        NoisePolicy      = 'include'
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
+
+      $suitePath = Join-Path $rd 'manifest.json'
+      Test-Path -LiteralPath $suitePath | Should -BeTrue
+      $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
+      $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'default' }
+      $modeEntry | Should -Not -BeNullOrEmpty
+      $modeManifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
+
+      $modeManifest.noisePolicy | Should -Be 'include'
+      $modeManifest.stats.noiseCollapsed | Should -Be 0
+      @($modeManifest.comparisons).Count | Should -BeGreaterThan 0
+      $aggregate.stats.noiseCollapsed | Should -Be 0
+    } finally {
+      if ($null -eq $previousDiff) {
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_DIFF = $previousDiff
+      }
+      if ($null -eq $previousFixture) {
+        Remove-Item Env:STUB_COMPARE_REPORT_FIXTURE -ErrorAction SilentlyContinue
+      } else {
+        $env:STUB_COMPARE_REPORT_FIXTURE = $previousFixture
+      }
+    }
+  }
+
   It 'processes full history when MaxPairs is omitted' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
 

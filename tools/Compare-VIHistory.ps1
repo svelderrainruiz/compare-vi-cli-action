@@ -7,6 +7,9 @@ param(
   [string]$StartRef = 'HEAD',
   [string]$EndRef,
   [int]$MaxPairs,
+  [int]$MaxSignalPairs = 2,
+  [ValidateSet('include','collapse','skip')]
+  [string]$NoisePolicy = 'collapse',
 
   [bool]$FlagNoAttr = $true,
   [bool]$FlagNoFp = $true,
@@ -46,6 +49,13 @@ $script:CommitParentCache = @{}
 $script:MergeBaseCache = @{}
 
 $maxPairsRequested = $PSBoundParameters.ContainsKey('MaxPairs') -and $MaxPairs -gt 0
+$maxSignalBudget = if ($MaxSignalPairs -gt 0) { [int]$MaxSignalPairs } else { $null }
+$signalBudgetRequested = $maxSignalBudget -ne $null
+$noisePolicyEffective = if ($NoisePolicy) { $NoisePolicy.ToLowerInvariant() } else { 'collapse' }
+
+if ($noisePolicyEffective -notin @('include','collapse','skip')) {
+  throw ("Unsupported noise policy '{0}'." -f $NoisePolicy)
+}
 
 try {
   $vendorModule = Join-Path (Split-Path -Parent $PSCommandPath) 'VendorTools.psm1'
@@ -221,6 +231,68 @@ function Get-ComparisonCategories {
   }
 
   return @($categories.ToArray())
+}
+
+function Get-ComparisonClassification {
+  param(
+    $CategoryDetails,
+    [bool]$HasDiff
+  )
+  if (-not $HasDiff) { return 'match' }
+  if (-not $CategoryDetails) { return 'unknown' }
+
+  if ($CategoryDetails -isnot [System.Collections.IEnumerable] -or $CategoryDetails -is [string]) {
+    $CategoryDetails = @($CategoryDetails)
+  }
+
+  $hasSignal = $false
+  $hasOther  = $false
+  foreach ($detail in $CategoryDetails) {
+    if (-not $detail) { continue }
+    $classification = $null
+    if ($detail.PSObject.Properties['classification']) {
+      $classification = [string]$detail.classification
+    }
+    if ([string]::IsNullOrWhiteSpace($classification)) { continue }
+    $normalized = $classification.Trim().ToLowerInvariant()
+    if ($normalized -eq 'signal') {
+      $hasSignal = $true
+    } elseif ($normalized -eq 'noise' -or $normalized -eq 'neutral') {
+      $hasOther = $true
+    }
+  }
+  if ($hasSignal) { return 'signal' }
+  if ($hasOther)  { return 'noise' }
+  return 'unknown'
+}
+
+function Update-TallyFromDetails {
+  param(
+    [System.Collections.IDictionary]$Target,
+    $Details,
+    [System.Func[object,string]]$Selector
+  )
+  if (-not $Target -or -not $Details) { return }
+  if ($Details -isnot [System.Collections.IEnumerable] -or $Details -is [string]) {
+    $Details = @($Details)
+  }
+  foreach ($detail in $Details) {
+    if (-not $detail) { continue }
+    $key = $null
+    if ($Selector) {
+      $key = $Selector.Invoke($detail)
+    } elseif ($detail.PSObject.Properties['slug']) {
+      $key = [string]$detail.slug
+    }
+    if ([string]::IsNullOrWhiteSpace($key) -and $detail.PSObject.Properties['label']) {
+      $key = [string]$detail.label
+    }
+    if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    if (-not $Target.Contains($key)) {
+      $Target[$key] = 0
+    }
+    try { $Target[$key] = [int]$Target[$key] + 1 } catch { $Target[$key]++ }
+  }
 }
 
 function Expand-ModeTokens {
@@ -1054,6 +1126,9 @@ if ($requestedStartRef -ne $startRef) {
 if ($endRef) { $summaryLines += "- End ref: $endRef" }
 $summaryLines += "- Modes: $($modeNames -join ', ')"
 $summaryLines += "- Report format: $reportFormatEffective"
+$signalBudgetDisplay = if ($maxSignalBudget) { $maxSignalBudget } else { 'unlimited' }
+$summaryLines += "- Max signal pairs: $signalBudgetDisplay"
+$summaryLines += "- Noise policy: $noisePolicyEffective"
 
 $aggregate = [ordered]@{
   schema      = 'vi-compare/history-suite@v1'
@@ -1063,6 +1138,8 @@ $aggregate = [ordered]@{
   startRef    = $startRef
   endRef      = $endRef
   maxPairs    = if ($maxPairsRequested) { $MaxPairs } else { $null }
+  maxSignalPairs = $maxSignalBudget
+  noisePolicy = $noisePolicyEffective
   failFast    = [bool]$FailFast.IsPresent
   failOnDiff  = [bool]$FailOnDiff.IsPresent
   reportFormat = $reportFormatEffective
@@ -1072,6 +1149,8 @@ $aggregate = [ordered]@{
     modes     = $modeSpecs.Count
     processed = 0
     diffs     = 0
+    signalDiffs = 0
+    noiseCollapsed = 0
     errors    = 0
     missing   = 0
     categoryCounts = [ordered]@{}
@@ -1082,6 +1161,8 @@ $aggregate = [ordered]@{
 
 $totalProcessed = 0
 $totalDiffs = 0
+$totalSignalDiffs = 0
+$totalNoiseCollapsed = 0
 $totalErrors = 0
 $totalMissing = 0
 $modeSummaryRows = New-Object System.Collections.Generic.List[object]
@@ -1130,6 +1211,8 @@ foreach ($modeSpec in $modeSpecs) {
     startRef    = $startRef
     endRef      = $endRef
     maxPairs    = if ($maxPairsRequested) { $MaxPairs } else { $null }
+    maxSignalPairs = $maxSignalBudget
+    noisePolicy = $noisePolicyEffective
     failFast    = [bool]$FailFast.IsPresent
     failOnDiff  = [bool]$FailOnDiff.IsPresent
     mode        = $modeName
@@ -1141,6 +1224,8 @@ foreach ($modeSpec in $modeSpecs) {
     stats       = [ordered]@{
       processed      = 0
       diffs          = 0
+      signalDiffs    = 0
+      noiseCollapsed = 0
       lastDiffIndex  = $null
       lastDiffCommit = $null
       stopReason     = $null
@@ -1148,6 +1233,13 @@ foreach ($modeSpec in $modeSpecs) {
       missing        = 0
       categoryCounts = [ordered]@{}
       bucketCounts   = [ordered]@{}
+      collapsedNoise = [ordered]@{
+        count        = 0
+        indices      = @()
+        commits      = @()
+        categoryCounts = [ordered]@{}
+        bucketCounts   = [ordered]@{}
+      }
     }
     status      = 'pending'
   }
@@ -1157,11 +1249,18 @@ foreach ($modeSpec in $modeSpecs) {
 
   $processed = 0
   $diffCount = 0
+  $signalDiffCount = 0
   $missingCount = 0
   $errorCount = 0
   $lastDiffIndex = $null
   $lastDiffCommit = $null
   $stopReason = $null
+  $noiseCollapsedCount = 0
+  $collapsedNoiseStats = $modeManifest.stats.collapsedNoise
+  $collapsedCategoryCounts = $collapsedNoiseStats.categoryCounts
+  $collapsedBucketCounts = $collapsedNoiseStats.bucketCounts
+  $collapsedIndices = New-Object System.Collections.Generic.List[int]
+  $collapsedCommits = New-Object System.Collections.Generic.List[string]
 
   foreach ($planEntry in $planEntries) {
     if (-not $planEntry) { continue }
@@ -1236,6 +1335,7 @@ foreach ($modeSpec in $modeSpecs) {
       }
     }
 
+    $comparisonRecordObject = $null
     try {
       $headExists = Test-FileExistsAtRef -Ref $headCommit -Path $targetRel
       if (-not $headExists) {
@@ -1348,6 +1448,7 @@ foreach ($modeSpec in $modeSpecs) {
         Get-ComparisonCategories -Highlights $highlights -HasDiff:$diff |
           Select-Object -Unique
       )
+      $categoryInfo = $null
       if ($categories -and $categories.Count -gt 0) {
         $comparisonRecord.result.categories = $categories
         $categoryInfo = Get-VICategoryBuckets -Names $categories
@@ -1403,23 +1504,77 @@ foreach ($modeSpec in $modeSpecs) {
         $comparisonRecord.result.highlights = $summaryJson.cli.highlights
       }
 
+      $categoryDetails = $null
+      if ($comparisonRecord.result.PSObject.Properties['categoryDetails']) {
+        $categoryDetails = $comparisonRecord.result.categoryDetails
+      } elseif ($categoryInfo -and $categoryInfo.Details) {
+        $categoryDetails = $categoryInfo.Details
+      }
+
+      $classification = Get-ComparisonClassification -CategoryDetails $categoryDetails -HasDiff:$diff
+      $comparisonRecord.result.classification = $classification
+
+      $appendComparison = $true
+      $collapsedThis = $false
+      $isSignalDiff = $false
+      if ($diff) {
+        if ($classification -eq 'noise') {
+          if ($noisePolicyEffective -ne 'include') {
+            $appendComparison = $false
+            $collapsedThis = $true
+          }
+        } else {
+          # treat unknown/other as signal
+          $isSignalDiff = $true
+        }
+
+        if ($isSignalDiff) {
+          $signalDiffCount++
+        }
+
+        if ($collapsedThis) {
+          $comparisonRecord.result.collapsed = $true
+          $noiseCollapsedCount++
+          [void]$collapsedIndices.Add($index)
+          [void]$collapsedCommits.Add($headCommit)
+          if ($categoryDetails) {
+            Update-TallyFromDetails -Target $collapsedCategoryCounts -Details $categoryDetails
+          }
+          if ($categoryInfo -and $categoryInfo.BucketDetails) {
+            Update-TallyFromDetails -Target $collapsedBucketCounts -Details $categoryInfo.BucketDetails
+          }
+        }
+      }
+
+      $comparisonRecordObject = [pscustomobject]$comparisonRecord
       $processed++
       if ($diff) {
         $diffCount++
         $lastDiffIndex = $index
         $lastDiffCommit = $headCommit
         if ($FailFast.IsPresent) {
-          $modeManifest.comparisons += [pscustomobject]$comparisonRecord
+          if ($appendComparison) {
+            $modeManifest.comparisons += $comparisonRecordObject
+          }
           $stopReason = 'fail-fast-diff'
           break
         }
       }
 
-      $modeManifest.comparisons += [pscustomobject]$comparisonRecord
+      if ($appendComparison) {
+        $modeManifest.comparisons += $comparisonRecordObject
+      }
     }
     catch {
-      $comparisonRecord.error = $_.Exception.Message
-      $modeManifest.comparisons += [pscustomobject]$comparisonRecord
+      if (-not $comparisonRecordObject) {
+        $comparisonRecordObject = [pscustomobject]$comparisonRecord
+      }
+      if ($comparisonRecordObject.PSObject.Properties['error']) {
+        $comparisonRecordObject.error = $_.Exception.Message
+      } else {
+        $comparisonRecordObject | Add-Member -NotePropertyName error -NotePropertyValue $_.Exception.Message -Force
+      }
+      $modeManifest.comparisons += $comparisonRecordObject
       $errorCount++
       $stopReason = if ($stopReason) { $stopReason } else { 'error' }
       $modeManifest.status = 'failed'
@@ -1447,6 +1602,8 @@ foreach ($modeSpec in $modeSpecs) {
 
   $modeManifest.stats.processed = $processed
   $modeManifest.stats.diffs = $diffCount
+  $modeManifest.stats.signalDiffs = $signalDiffCount
+  $modeManifest.stats.noiseCollapsed = $noiseCollapsedCount
   $modeManifest.stats.lastDiffIndex = $lastDiffIndex
   $modeManifest.stats.lastDiffCommit = $lastDiffCommit
   $modeManifest.stats.stopReason = $stopReason
@@ -1468,6 +1625,20 @@ foreach ($modeSpec in $modeSpecs) {
   $modeManifest.stats.categoryCounts = $sortedModeCategories
   $modeCategoryCounts = $sortedModeCategories
 
+  $sortedCollapsedCategories = [ordered]@{}
+  foreach ($categoryName in ($collapsedCategoryCounts.Keys | Sort-Object)) {
+    $sortedCollapsedCategories[$categoryName] = [int]$collapsedCategoryCounts[$categoryName]
+  }
+  $sortedCollapsedBuckets = [ordered]@{}
+  foreach ($bucketName in ($collapsedBucketCounts.Keys | Sort-Object)) {
+    $sortedCollapsedBuckets[$bucketName] = [int]$collapsedBucketCounts[$bucketName]
+  }
+  $collapsedNoiseStats.categoryCounts = $sortedCollapsedCategories
+  $collapsedNoiseStats.bucketCounts = $sortedCollapsedBuckets
+  $collapsedNoiseStats.indices = @($collapsedIndices.ToArray())
+  $collapsedNoiseStats.commits = @($collapsedCommits.ToArray())
+  $collapsedNoiseStats.count = $noiseCollapsedCount
+
   $modeManifest | ConvertTo-Json -Depth 8 | Out-File -FilePath $modeManifestPath -Encoding utf8
   $modeManifestResolved = (Resolve-Path -LiteralPath $modeManifestPath).Path
 
@@ -1479,8 +1650,23 @@ foreach ($modeSpec in $modeSpecs) {
     $summaryLines += "- Flags: $flagsDisplay"
     $summaryLines += "- Pairs processed: $processed"
     $summaryLines += "- Diffs detected: $diffCount"
+    $summaryLines += "- Signal diffs: $signalDiffCount"
     $summaryLines += "- Missing pairs: $missingCount"
     $summaryLines += "- Stop reason: $stopReason"
+    if ($noiseCollapsedCount -gt 0 -and $noisePolicyEffective -ne 'include') {
+      $summaryLines += "- Collapsed noise diffs: $noiseCollapsedCount"
+      if ($collapsedNoiseStats.categoryCounts.Count -gt 0) {
+        $collapsedCategorySummary = ($collapsedNoiseStats.categoryCounts.Keys | ForEach-Object {
+            $k = $_
+            $v = $collapsedNoiseStats.categoryCounts[$k]
+            if ($v -isnot [int]) { $v = [int]$v }
+            "{0} ({1})" -f $k, $v
+        }) -join ', '
+        if ($collapsedCategorySummary) {
+          $summaryLines += "  - Collapsed categories: $collapsedCategorySummary"
+        }
+      }
+    }
     if ($lastDiffIndex) {
       $summaryLines += "  - Last diff index: $lastDiffIndex"
       if ($lastDiffCommit) {
@@ -1495,6 +1681,8 @@ foreach ($modeSpec in $modeSpecs) {
     Flags          = @($modeFlags)
     Processed      = $processed
     Diffs          = $diffCount
+    SignalDiffs    = $signalDiffCount
+    NoiseCollapsed = $noiseCollapsedCount
     Missing        = $missingCount
     LastDiffIndex  = $lastDiffIndex
     LastDiffCommit = $lastDiffCommit
@@ -1503,9 +1691,9 @@ foreach ($modeSpec in $modeSpecs) {
     ResultsRelative= $modeResultsRelative
   })
 
-  if ($diffCount -gt 0) {
-    $diffPlural = if ($diffCount -eq 1) { '' } else { 's' }
-    $highlight = "{0}: {1} diff{2}" -f $modeName, $diffCount, $diffPlural
+  if ($signalDiffCount -gt 0) {
+    $diffPlural = if ($signalDiffCount -eq 1) { '' } else { 's' }
+    $highlight = "{0}: {1} signal diff{2}" -f $modeName, $signalDiffCount, $diffPlural
     if ($lastDiffIndex) {
       $highlight += (" (last #{0}" -f $lastDiffIndex)
       if ($lastDiffCommit) {
@@ -1514,6 +1702,27 @@ foreach ($modeSpec in $modeSpecs) {
       $highlight += ')'
     }
     $diffHighlights.Add($highlight)
+  } elseif ($diffCount -gt 0 -and $noisePolicyEffective -eq 'include') {
+    $diffPlural = if ($diffCount -eq 1) { '' } else { 's' }
+    $diffHighlights.Add("{0}: {1} diff{2}" -f $modeName, $diffCount, $diffPlural)
+  }
+  if ($noiseCollapsedCount -gt 0 -and $noisePolicyEffective -ne 'include') {
+    $noisePlural = if ($noiseCollapsedCount -eq 1) { '' } else { 's' }
+    $action = if ($noisePolicyEffective -eq 'collapse') { 'collapsed' } else { 'skipped' }
+    $categorySummary = $null
+    if ($collapsedNoiseStats.categoryCounts.Count -gt 0) {
+      $categorySummary = ($collapsedNoiseStats.categoryCounts.Keys | ForEach-Object {
+        $slug = $_
+        $countValue = $collapsedNoiseStats.categoryCounts[$slug]
+        if ($countValue -isnot [int]) { $countValue = [int]$countValue }
+        "{0} ({1})" -f $slug, $countValue
+      }) -join ', '
+    }
+    $noiseHighlight = "{0}: {1} noise diff{2} {3}" -f $modeName, $noiseCollapsedCount, $noisePlural, $action
+    if ($categorySummary) {
+      $noiseHighlight += (" [{0}]" -f $categorySummary)
+    }
+    $diffHighlights.Add($noiseHighlight)
   }
 
   $aggregate.modes += [pscustomobject]@{
@@ -1549,6 +1758,8 @@ foreach ($modeSpec in $modeSpecs) {
 
   $totalProcessed += $processed
   $totalDiffs += $diffCount
+  $totalSignalDiffs += $signalDiffCount
+  $totalNoiseCollapsed += $noiseCollapsedCount
   $totalErrors += $errorCount
   $totalMissing += $missingCount
 }
@@ -1556,7 +1767,11 @@ foreach ($modeSpec in $modeSpecs) {
 $summaryLines += ''
 $summaryLines += "- Total processed pairs: $totalProcessed"
 $summaryLines += "- Total diffs: $totalDiffs"
+$summaryLines += "- Total signal diffs: $totalSignalDiffs"
 $summaryLines += "- Total missing pairs: $totalMissing"
+if ($totalNoiseCollapsed -gt 0 -and $noisePolicyEffective -ne 'include') {
+  $summaryLines += "- Collapsed noise diffs: $totalNoiseCollapsed"
+}
 
 $sortedAggregateCategories = [ordered]@{}
 foreach ($categoryName in ($aggregateCategoryCounts.Keys | Sort-Object)) {
@@ -1687,6 +1902,8 @@ if ($aggregate.modes.Count -eq 0) {
 
 $aggregate.stats.processed = $totalProcessed
 $aggregate.stats.diffs = $totalDiffs
+$aggregate.stats.signalDiffs = $totalSignalDiffs
+$aggregate.stats.noiseCollapsed = $totalNoiseCollapsed
 $aggregate.stats.errors = $totalErrors
 $aggregate.stats.missing = $totalMissing
 $aggregate.status = if ($aggregate.modes | Where-Object { $_.status -eq 'failed' }) { 'failed' } else { 'ok' }

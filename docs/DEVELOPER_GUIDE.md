@@ -101,12 +101,17 @@ Quick reference for building, testing, and releasing the LVCompare composite act
     - `/vi-history` PR comments (or the `pr-vi-history.yml` workflow) reuse the same pattern for history diffs:
       1. `tools/Get-PRVIDiffManifest.ps1` enumerates VI changes between the PR base/head commits.
       2. `tools/Invoke-PRVIHistory.ps1` resolves the history helper once
-         (works with repo-relative targets) and runs the compare suite per VI.
+        (works with repo-relative targets) and runs the compare suite per VI.
         The helper now walks every reachable commit pair by default; pass `-MaxPairs <n>` only when you need
         a deliberate cap (for example the history smoke script still uses `-MaxPairs 6` to keep the loop fast).
+        Use `-MaxSignalPairs <n>` (default `2`) to limit how many signal diffs surface in a run and tune
+        cosmetic churn via `-NoisePolicy include|collapse|skip` (default `collapse`).
         Artifacts land under `tests/results/pr-vi-history/` (aggregate manifest plus `history-report.{md,html}` per
         target). Enable `-Verbose` locally to see the resolved helper path and origin
          (base/head) for each target.
+        When LabVIEW/LVCompare is unavailable, run the helper with
+        `-InvokeScriptPath tests/stubs/Invoke-LVCompare.stub.ps1` to exercise the flow using the stubbed CLI.
+        `tools/Inspect-HistorySignalStats.ps1` wraps the helper + stub and prints the signal/noise counts directly.
       3. `tools/Summarize-PRVIHistory.ps1` renders the PR table with change types, comparison/diff counts, and
          relative report paths so reviewers can triage without downloading the artifact bundle.
     - Override the history depth via the workflow_dispatch input `max_pairs` when you need a longer runway; otherwise

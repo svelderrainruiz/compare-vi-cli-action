@@ -1,18 +1,19 @@
 {
-  "number": 536,
-  "title": "Revisit VI compare default flags and clarify summary",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/536",
+  "number": 544,
+  "title": "Compare-VIHistory: add noise collapse and signal budget",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/544",
   "state": "OPEN",
   "labels": [
+    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
   "commentCount": 0,
-  "lastSeenUpdatedAt": "2025-11-01T05:27:49Z",
-  "issueDigest": "c6886392c08bd086292b8eaf4852c236b626bb138daf8e7680b58c955eb27393",
-  "bodyDigest": "23678748190bb6762eda47f04df4fd80c6cbe48e6e612a5db07b13ef209bcd3d",
-  "cachedAtUtc": "2025-11-01T05:48:49.909Z",
+  "lastSeenUpdatedAt": "2025-11-01T17:29:09Z",
+  "issueDigest": "313c1b802c9153f134956ac0ba8a6a85746f501c037f4e966b3ee1d9297991c5",
+  "bodyDigest": "21794e33f61d86d88ead0fc44bab263c168b18e3f07ed8813646dea831d2ed10",
+  "cachedAtUtc": "2025-11-01T17:32:15.761Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
