@@ -113,11 +113,39 @@ pwsh -NoLogo -NoProfile -File tools/Compare-VIHistory.ps1 `
   -RenderReport
 ```
 
+If LabVIEW/LVCompare is not available locally, point the helper at the bundled stub:
+
+```powershell
+pwsh -NoLogo -NoProfile -File tools/Compare-VIHistory.ps1 `
+  -TargetPath fixtures/vi-stage/bd-cosmetic/Head.vi `
+  -StartRef develop `
+  -MaxSignalPairs 1 `
+  -NoisePolicy collapse `
+  -InvokeScriptPath tests/stubs/Invoke-LVCompare.stub.ps1 `
+  -Detailed -RenderReport -KeepArtifactsOnNoDiff
+```
+
+For a quick summary without digging through JSON, run:
+
+```powershell
+pwsh -NoLogo -NoProfile -File tools/Inspect-HistorySignalStats.ps1 -Verbose
+```
+
+Before running with the real LabVIEW CLI, verify your setup:
+
+```powershell
+pwsh -NoLogo -NoProfile -File tools/Verify-LVCompareSetup.ps1 -ProbeCli
+```
+
 The helper now processes every reachable commit pair by default. Supply
 `-MaxPairs <n>` when you need to cap the history for large or exploratory runs.
 Pass `-IncludeMergeParents` to audit merge parents alongside the mainline; the
 extra comparisons surface lineage metadata (parent index, branch head, depth)
 so reports and manifests call out where each revision originated.
+Signal-first helpers are built in: use `-MaxSignalPairs <n>` (default `2`) to
+limit the number of surfaced signal diffs and `-NoisePolicy include|collapse|skip`
+(default `collapse`) to decide whether cosmetic-only changes are emitted,
+aggregated, or skipped entirely.
 
 Artifacts are written under `tests/results/ref-compare/history/` using the same
 schema as the workflow outputs.
