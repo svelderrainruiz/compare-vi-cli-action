@@ -81,8 +81,8 @@ param(
   [switch]$AllowSameLeaf,
     [string]$OutputDir = 'tests/results/single-compare',
     [switch]$RenderReport,
-    [ValidateSet('html','xml','text')]
-    [string]$ReportFormat = 'html',
+[ValidateSet('html','html-single','xml','text')]
+[string]$ReportFormat = 'html',
   [string]$JsonLogPath,
   [switch]$Quiet,
   [switch]$LeakCheck,
@@ -95,9 +95,58 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+function Resolve-ReportFormatInfo {
+  param([string]$Format)
+
+  $normalized = if ([string]::IsNullOrWhiteSpace($Format)) { 'html' } else { $Format.Trim().ToLowerInvariant() }
+  switch ($normalized) {
+    'htmlsingle'
+    'html-singlefile'
+    'htmlsinglefile'
+    'single'
+    'singlefile' { $normalized = 'html-single' }
+  }
+
+  switch ($normalized) {
+    'html' {
+      return [pscustomobject]@{
+        normalized = 'html'
+        cliType    = 'HTML'
+        fileName   = 'compare-report.html'
+      }
+    }
+    'html-single' {
+      return [pscustomobject]@{
+        normalized = 'html-single'
+        cliType    = 'HTMLSingleFile'
+        fileName   = 'compare-report.html'
+      }
+    }
+    'xml' {
+      return [pscustomobject]@{
+        normalized = 'xml'
+        cliType    = 'XML'
+        fileName   = 'compare-report.xml'
+      }
+    }
+    'text' {
+      return [pscustomobject]@{
+        normalized = 'text'
+        cliType    = 'Text'
+        fileName   = 'compare-report.txt'
+      }
+    }
+    default {
+      throw "Unsupported report format '$Format'. Supported values: html, html-single, xml, text."
+    }
+  }
+}
+
 if (-not $PSBoundParameters.ContainsKey('ReportFormat')) {
   $envReportFormat = [System.Environment]::GetEnvironmentVariable('COMPAREVI_REPORT_FORMAT','Process')
-  if ($envReportFormat) { $ReportFormat = $envReportFormat }
+  if ($envReportFormat) {
+    $ReportFormat = (Resolve-ReportFormatInfo -Format $envReportFormat).normalized
+  }
 }
 if (-not $PSBoundParameters.ContainsKey('Flags')) {
   $envFlagsRaw = [System.Environment]::GetEnvironmentVariable('COMPAREVI_LVCOMPARE_FLAGS','Process')
@@ -339,6 +388,25 @@ function Get-CliReportArtifacts {
       } catch {
         $entry.decodeError = $_.Exception.Message
       }
+    } else {
+      $candidatePath = $null
+      try {
+        if ([System.IO.Path]::IsPathRooted($srcValue)) {
+          $candidatePath = $srcValue
+        } else {
+          $candidatePath = Join-Path (Split-Path -Parent $ReportPath) $srcValue
+        }
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+          $resolvedCandidate = (Resolve-Path -LiteralPath $candidatePath -ErrorAction Stop).Path
+          $entry.resolvedSource = $resolvedCandidate
+          $ext = [System.IO.Path]::GetExtension($resolvedCandidate)
+          if ([string]::IsNullOrWhiteSpace($ext)) { $ext = '.bin' }
+          $fileName = 'cli-image-{0:D2}{1}' -f $idx, $ext
+          $filePath = Join-Path $exportDir $fileName
+          Copy-Item -LiteralPath $resolvedCandidate -Destination $filePath -Force
+          try { $entry.savedPath = (Resolve-Path -LiteralPath $filePath -ErrorAction Stop).Path } catch { $entry.savedPath = $filePath }
+        }
+      } catch {}
     }
 
     $images += [pscustomobject]$entry
@@ -445,17 +513,10 @@ function Invoke-LabVIEWCLICompare {
 
   New-DirIfMissing -Path $OutDir
   $reportPath = $null
-  $reportFormatEffective = if ($ReportFormat) { $ReportFormat.ToLowerInvariant() } else { 'html' }
-  $reportType = switch ($reportFormatEffective) {
-    'xml'  { 'XML' }
-    'text' { 'Text' }
-    default { 'HTMLSingleFile' }
-  }
-  $reportFileName = switch ($reportFormatEffective) {
-    'xml'  { 'compare-report.xml' }
-    'text' { 'compare-report.txt' }
-    default { 'compare-report.html' }
-  }
+  $reportInfo = Resolve-ReportFormatInfo -Format $ReportFormat
+  $reportFormatEffective = $reportInfo.normalized
+  $reportType = $reportInfo.cliType
+  $reportFileName = $reportInfo.fileName
   $shouldGenerateReport = $RenderReport.IsPresent -or ($reportFormatEffective -ne 'html')
   if ($shouldGenerateReport) {
     $reportPath = Join-Path $OutDir $reportFileName
@@ -680,12 +741,9 @@ $baseName = Split-Path -Path $BaseVi -Leaf
 $headName = Split-Path -Path $HeadVi -Leaf
 $sameName = [string]::Equals($baseName, $headName, [System.StringComparison]::OrdinalIgnoreCase)
 
-$reportFormatEffective = if ($ReportFormat) { $ReportFormat.ToLowerInvariant() } else { 'html' }
-$reportFileName = switch ($reportFormatEffective) {
-  'xml'  { 'compare-report.xml' }
-  'text' { 'compare-report.txt' }
-  default { 'compare-report.html' }
-}
+$reportInfo = Resolve-ReportFormatInfo -Format $ReportFormat
+$reportFormatEffective = $reportInfo.normalized
+$reportFileName = $reportInfo.fileName
 
  $policy = $env:LVCI_COMPARE_POLICY
  if ([string]::IsNullOrWhiteSpace($policy)) { $policy = 'cli-only' }
