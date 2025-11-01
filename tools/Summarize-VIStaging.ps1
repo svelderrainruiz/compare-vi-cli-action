@@ -600,9 +600,6 @@ foreach ($entry in $entries) {
 
 foreach ($entry in $entries) {
     $status = $entry.status
-    if ($totals.Contains($status)) {
-        $totals[$status]++
-    }
 
     $reportPath = $null
     if ($entry.PSObject.Properties['reportPath']) {
@@ -720,6 +717,17 @@ foreach ($entry in $entries) {
             value = [bool]$included[$key]
         })
     }
+    $diffDetected = $false
+    if ($entry.PSObject.Properties['diffDetected'] -and $entry.diffDetected) {
+        $diffDetected = $true
+    }
+    if (-not $diffDetected -and $categoryDetails -and $categoryDetails.Count -gt 0) {
+        $diffDetected = $true
+    }
+    if ($diffDetected -and $status -ne 'diff') {
+        $status = 'diff'
+    }
+
     $detailPreviewList = Get-DiffDetailPreview -Details $details -Headings $headings -Status $status
 
     $reportRelative = $null
@@ -799,6 +807,10 @@ foreach ($entry in $entries) {
         leakPath          = $leakPath
     }
 
+    if ($diffDetected) {
+        try { $pairInfo | Add-Member -NotePropertyName diffDetected -NotePropertyValue $true -Force } catch {}
+    }
+
     $modeSummaries = New-Object System.Collections.Generic.List[pscustomobject]
     if ($entry.PSObject.Properties['modes'] -and $entry.modes) {
         foreach ($modeEntry in $entry.modes) {
@@ -806,6 +818,13 @@ foreach ($entry in $entries) {
             $modeName = if ($modeEntry.PSObject.Properties['name']) { [string]$modeEntry.name } else { $null }
             if ([string]::IsNullOrWhiteSpace($modeName)) { $modeName = 'mode' }
             $modeStatus = if ($modeEntry.PSObject.Properties['status']) { [string]$modeEntry.status } else { $null }
+            $modeDiffDetected = $false
+            if ($modeEntry.PSObject.Properties['diffDetected'] -and $modeEntry.diffDetected) {
+                $modeDiffDetected = $true
+            }
+            if ($modeDiffDetected -and $modeStatus -ne 'diff') {
+                $modeStatus = 'diff'
+            }
             $modeFlags = @()
             if ($modeEntry.PSObject.Properties['flags'] -and $modeEntry.flags) {
                 $modeFlags = @($modeEntry.flags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -814,6 +833,9 @@ foreach ($entry in $entries) {
                 name   = $modeName
                 status = $modeStatus
                 flags  = $modeFlags
+            }
+            if ($modeDiffDetected) {
+                try { $modeSummary | Add-Member -NotePropertyName diffDetected -NotePropertyValue $true -Force } catch {}
             }
             if ($modeEntry.PSObject.Properties['replace']) {
                 try { $modeSummary | Add-Member -NotePropertyName replace -NotePropertyValue ([bool]$modeEntry.replace) -Force } catch {}
@@ -843,6 +865,10 @@ foreach ($entry in $entries) {
     }
 
     $pairs.Add($pairInfo)
+
+    if ($totals.Contains($status)) {
+        $totals[$status]++
+    }
 }
 
 $sortedCategoryTotals = [ordered]@{}

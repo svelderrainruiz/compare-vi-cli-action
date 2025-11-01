@@ -106,6 +106,84 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $jsonPayload.pairs[0].flagSummary | Should -Be '_none_'
     }
 
+    It 'promotes diffDetected match entries to diff' {
+        $compareRoot = Join-Path $TestDrive 'compare-detected'
+        $pairDir = Join-Path $compareRoot 'pair-01'
+        New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
+
+        $html = @'
+<!DOCTYPE html>
+<html>
+<body>
+<details open class="difference">
+  <summary class="difference-heading">1. Block Diagram Cosmetic - Wires</summary>
+  <ul>
+    <li class="diff-detail">Wire repositioned</li>
+  </ul>
+</details>
+</body>
+</html>
+'@
+        $reportPath = Join-Path $pairDir 'compare-report.html'
+        $html | Set-Content -LiteralPath $reportPath -Encoding utf8
+
+        $compareEntry = @(
+            [ordered]@{
+                index        = 1
+                changeType   = 'modify'
+                basePath     = 'VI1.vi'
+                headPath     = 'VI1.vi'
+                status       = 'match'
+                diffDetected = $true
+                exitCode     = 0
+                outputDir    = $pairDir
+                reportPath   = $reportPath
+                primaryMode  = 'full'
+                modes        = @(
+                    [ordered]@{
+                        name         = 'full'
+                        status       = 'match'
+                        diffDetected = $true
+                        exitCode     = 0
+                        reportPath   = $reportPath
+                        flags        = @()
+                        replace      = $true
+                    }
+                )
+            }
+        )
+
+        $compareJson = Join-Path $TestDrive 'vi-staging-compare-diffdetected.json'
+        $compareEntry | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $compareJson -Encoding utf8
+
+        $jsonPath = Join-Path $TestDrive 'summary-detected.json'
+        $markdownPath = Join-Path $TestDrive 'summary-detected.md'
+
+        $result = & $script:scriptPath -CompareJson $compareJson -SummaryJsonPath $jsonPath -MarkdownPath $markdownPath
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.pairs.Count | Should -Be 1
+        $result.pairs[0].status | Should -Be 'diff'
+        $result.pairs[0].diffDetected | Should -BeTrue
+        $result.pairs[0].modeSummaries | Should -Not -Be $null
+        $result.pairs[0].modeSummaries.Count | Should -Be 1
+        $result.pairs[0].modeSummaries[0].status | Should -Be 'diff'
+        $result.pairs[0].modeSummaries[0].diffDetected | Should -BeTrue
+
+        Test-Path -LiteralPath $jsonPath | Should -BeTrue
+        $jsonPayload = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -Depth 6
+        $jsonPayload.totals.diff | Should -Be 1
+        $jsonPayload.totals.match | Should -Be 0
+        $jsonPayload.pairs[0].status | Should -Be 'diff'
+        $jsonPayload.pairs[0].diffDetected | Should -BeTrue
+        $jsonPayload.pairs[0].modeSummaries[0].status | Should -Be 'diff'
+        $jsonPayload.pairs[0].modeSummaries[0].diffDetected | Should -BeTrue
+
+        Test-Path -LiteralPath $markdownPath | Should -BeTrue
+        $markdown = Get-Content -LiteralPath $markdownPath -Raw
+        $markdown | Should -Match '\| Pair 1 \(modif(?:y|ied)\) \| .*diff \|'
+    }
+
     It 'resolves report path when compare summary omits metadata' {
         $compareRoot = Join-Path $TestDrive 'compare'
         $pairDir = Join-Path $compareRoot 'pair-01'

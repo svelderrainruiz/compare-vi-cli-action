@@ -162,6 +162,89 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $outputMap['skip_count'] | Should -Be '0'
     }
 
+    It 'treats exit 0 with diff headings as diff' {
+        $resultsPath = Join-Path $TestDrive 'vi-staging-results-diff.json'
+        $artifactsDir = Join-Path $TestDrive 'artifacts-diff'
+        New-Item -ItemType Directory -Path (Split-Path $resultsPath -Parent) -Force | Out-Null
+        New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+        $stagedBase = Join-Path $TestDrive 'staged-diff\Base.vi'
+        $stagedHead = Join-Path $TestDrive 'staged-diff\Head.vi'
+        New-Item -ItemType Directory -Path (Split-Path $stagedBase -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $stagedBase -Value 'base'
+        Set-Content -LiteralPath $stagedHead -Value 'head'
+
+        @(
+            [ordered]@{
+                changeType = 'modify'
+                basePath   = 'VI2.vi'
+                headPath   = 'VI2.vi'
+                staged     = [ordered]@{
+                    Base         = $stagedBase
+                    Head         = $stagedHead
+                    AllowSameLeaf= $false
+                }
+            }
+        ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+        $invoke = {
+            param(
+                [string]$BaseVi,
+                [string]$HeadVi,
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags,
+                [switch]$LeakCheck,
+                [Nullable[int]]$TimeoutSeconds,
+                [Nullable[double]]$LeakGraceSeconds
+            )
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            $capturePath = Join-Path $OutputDir 'lvcompare-capture.json'
+            $reportPath  = Join-Path $OutputDir 'compare-report.html'
+            '{"capture":true}' | Set-Content -LiteralPath $capturePath -Encoding utf8
+            @'
+<!doctype html>
+<html>
+  <body>
+    <details class="difference">
+      <summary class="difference-heading">Block Diagram objects</summary>
+      <ul>
+        <li class="diff-detail">Probe - added</li>
+      </ul>
+    </details>
+  </body>
+</html>
+'@ | Set-Content -LiteralPath $reportPath -Encoding utf8
+            return [pscustomobject]@{
+                ExitCode    = 0
+                CapturePath = $capturePath
+                ReportPath  = $reportPath
+            }
+        }.GetNewClosure()
+
+        $outputFile = Join-Path $TestDrive 'outputs-diff.txt'
+        $env:GITHUB_OUTPUT = $outputFile
+
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -RenderReport -InvokeLVCompare $invoke
+
+        $compareSummary = Get-Content -LiteralPath (Join-Path $artifactsDir 'vi-staging-compare.json') -Raw | ConvertFrom-Json
+        $compareSummary[0].status | Should -Be 'diff'
+        $compareSummary[0].PSObject.Properties['diffDetected'] | Should -Not -Be $null
+        $compareSummary[0].diffDetected | Should -BeTrue
+
+        $outputMap = @{ }
+        foreach ($line in Get-Content -LiteralPath $outputFile) {
+            if ($line -match '=') {
+                $k, $v = $line.Split('=', 2)
+                $outputMap[$k] = $v
+            }
+        }
+        $outputMap['diff_count'] | Should -Be '1'
+        $outputMap['match_count'] | Should -Be '0'
+    }
+
     It 'fails when staged filenames are identical' {
         $resultsPath = Join-Path $TestDrive 'vi-sameleaf-results.json'
         $artifactsDir = Join-Path $TestDrive 'artifacts'

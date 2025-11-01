@@ -68,6 +68,25 @@ function Get-EnvBoolean {
     return $null
 }
 
+function Test-ReportHasDiff {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    try {
+        $content = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    } catch {
+        return $false
+    }
+    if (-not $content) { return $false }
+    if ([System.Text.RegularExpressions.Regex]::IsMatch($content, 'class="difference-heading"', 'IgnoreCase')) {
+        return $true
+    }
+    if ([System.Text.RegularExpressions.Regex]::IsMatch($content, 'class="diff-detail"', 'IgnoreCase')) {
+        return $true
+    }
+    return $false
+}
+
 if (-not $flagsProvided) {
     $effectiveFlags = $null
     $envFlagCandidates = @(
@@ -392,6 +411,8 @@ foreach ($entry in $results) {
                 replace   = [bool]$profile.replace
                 exitCode  = $exitCode
                 outputDir = $modeOutputDir
+                capturePath = $null
+                reportPath  = $null
             }
             if ($profile.flags) { $modeInfo.flags = @($profile.flags) }
             if ($allowSameLeafRequested) { $modeInfo.allowSameLeaf = $true }
@@ -417,13 +438,21 @@ foreach ($entry in $results) {
                 $modeInfo.reportPath = $invokeResult.ReportPath
             }
 
+            $diffDetected = Test-ReportHasDiff -Path $modeInfo.reportPath
+
             $modeStatus = 'match'
             switch ($exitCode) {
                 0 { $modeStatus = 'match' }
                 1 { $modeStatus = 'diff' }
                 default { $modeStatus = 'error' }
             }
+            if ($diffDetected -and $modeStatus -ne 'diff') {
+                $modeStatus = 'diff'
+            }
             $modeInfo.status = $modeStatus
+            if ($diffDetected) {
+                $modeInfo['diffDetected'] = $true
+            }
 
             if ($leakCheckEnabled) {
                 $leakPath = Join-Path $modeOutputDir 'compare-leak.json'
@@ -480,8 +509,11 @@ foreach ($entry in $results) {
             $hasDiff = $false
             $hasError = $false
             foreach ($mode in $profileResults) {
-                if ($mode.status -eq 'diff') { $hasDiff = $true }
-                elseif ($mode.status -eq 'error') { $hasError = $true }
+                if ($mode.status -eq 'diff' -or ($mode.PSObject.Properties['diffDetected'] -and $mode.diffDetected)) {
+                    $hasDiff = $true
+                } elseif ($mode.status -eq 'error') {
+                    $hasError = $true
+                }
             }
             if ($hasDiff) {
                 $overallStatus = 'diff'
@@ -496,6 +528,9 @@ foreach ($entry in $results) {
                 $failureMessages.Add("pair ${index}: {0}" -f ($pairErrorMessages -join '; '))
             }
             $compareInfo.status = $overallStatus
+            if ($hasDiff) {
+                $compareInfo['diffDetected'] = $true
+            }
 
             if (-not $primaryProfile) {
                 $primaryProfile = $profileResults[0]
@@ -537,14 +572,21 @@ foreach ($entry in $results) {
 
     $compareLeakWarning = $false
     $leakRecord = $null
+    $pairDiffDetected = $false
     if ($compareInfo -is [System.Collections.IDictionary]) {
         if ($compareInfo.Contains('leakWarning')) { $compareLeakWarning = [bool]$compareInfo['leakWarning'] }
         if ($compareInfo.Contains('leak')) { $leakRecord = $compareInfo['leak'] }
+        if ($compareInfo.Contains('diffDetected')) {
+            try { $pairDiffDetected = [bool]$compareInfo['diffDetected'] } catch { $pairDiffDetected = $compareInfo['diffDetected'] }
+        }
     } elseif ($compareInfo.PSObject) {
         if ($compareInfo.PSObject.Properties['leakWarning']) {
             try { $compareLeakWarning = [bool]$compareInfo.leakWarning } catch { $compareLeakWarning = $compareInfo.leakWarning }
         }
         if ($compareInfo.PSObject.Properties['leak']) { $leakRecord = $compareInfo.leak }
+        if ($compareInfo.PSObject.Properties['diffDetected']) {
+            try { $pairDiffDetected = [bool]$compareInfo.diffDetected } catch { $pairDiffDetected = $compareInfo.diffDetected }
+        }
     }
 
     $leakLvValue = $null
@@ -590,6 +632,7 @@ foreach ($entry in $results) {
         leakPath      = $leakPathValue
         primaryMode   = $compareInfo.primaryMode
         modes         = $compareInfo.modes
+        diffDetected  = $pairDiffDetected
     })
 
     $index++
