@@ -69,6 +69,37 @@ Set `fail-on-diff: false` to treat code 1 as notice-only.
 - Use `tools/Dev-Dashboard.ps1` for a quick telemetry snapshot (locks, queue waits).
 - Hand-offs: `tools/Print-AgentHandoff.ps1 -AutoTrim` surfaces watcher state and trims logs.
 
+## Git difftool overlap (duplicate CLI invocations)
+
+Symptoms: LabVIEWCLI.exe appears to launch twice during a manual diff, or CLI capture runs unexpectedly when using a Git difftool/IDE diff.
+
+Why it happens:
+- Git difftool/mergetool may be configured to invoke LabVIEWCLI, while the compare helper also uses the CLI (CreateComparisonReport) to generate HTML artifacts. Both can fire for the same intent.
+
+Mitigations:
+- Suppress CLI capture during Git difftool sessions:
+
+```powershell
+$env:COMPAREVI_SUPPRESS_CLI_IN_GIT = '1'   # skip CLI when a Git context is detected
+$env:COMPAREVI_WARN_CLI_IN_GIT     = '1'   # optional: emit a warning when in Git context
+```
+
+- Short‑TTL duplicate suppression for repeated compare of the same pair:
+
+```powershell
+$env:COMPAREVI_CLI_SENTINEL_TTL = '60'     # seconds; suppress duplicate CLI for (vi1,vi2[,reportPath]) within TTL
+```
+
+- Hard opt‑out (no CLI capture at all in the current process):
+
+```powershell
+$env:COMPAREVI_NO_CLI_CAPTURE = '1'
+```
+
+Notes:
+- These toggles are process‑scoped. Set them in the same shell/terminal that runs the compare.
+- When suppression is active, the capture JSON records `environment.cli.skipped=true` with a `skipReason` (e.g., `git-context`).
+
 ## Further reading
 
 - [`README.md`](../README.md)
