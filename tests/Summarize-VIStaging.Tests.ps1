@@ -184,6 +184,62 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $markdown | Should -Match '\| Pair 1 \(modif(?:y|ied)\) \| .*diff \|'
     }
 
+    It 'classifies image-only report by diff details' {
+        $compareRoot = Join-Path $TestDrive 'compare-image-only'
+        $pairDir = Join-Path $compareRoot 'pair-01'
+        New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
+
+        $fixturePath = Join-Path $script:repoRoot 'tests' 'fixtures' 'vi-report' 'image-only' 'compare-report.html'
+        Copy-Item -LiteralPath $fixturePath -Destination (Join-Path $pairDir 'compare-report.html')
+
+        $compareEntry = @(
+            [ordered]@{
+                index        = 1
+                changeType   = 'modified'
+                basePath     = 'fixtures/vi-stage/bd-cosmetic/Base.vi'
+                headPath     = 'fixtures/vi-stage/bd-cosmetic/Head.vi'
+                outputDir    = $pairDir
+                status       = 'diff'
+                exitCode     = 1
+                reportPath   = (Join-Path $pairDir 'compare-report.html')
+                reportRelative = 'pair-01/compare-report.html'
+            }
+        )
+        $compareJson = Join-Path $TestDrive 'vi-staging-compare-image.json'
+        $compareEntry | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $compareJson -Encoding utf8
+
+        $jsonPath = Join-Path $TestDrive 'summary-image.json'
+        $markdownPath = Join-Path $TestDrive 'summary-image.md'
+
+        $result = & $script:scriptPath -CompareJson $compareJson -SummaryJsonPath $jsonPath -MarkdownPath $markdownPath
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.pairs.Count | Should -Be 1
+        $pair = $result.pairs[0]
+        $pair.diffDetected | Should -BeTrue
+        $pair.diffCategoryDetails | Should -Not -BeNullOrEmpty
+        ($pair.diffCategoryDetails | Where-Object { $_.slug -eq 'block-diagram-cosmetic' }).Count | Should -Be 1
+        ($pair.diffCategoryDetails | Where-Object { $_.slug -eq 'front-panel' }).Count | Should -Be 1
+        ($pair.diffCategoryDetails | Where-Object { $_.slug -eq 'vi-attribute' }).Count | Should -Be 1
+        ($pair.diffCategoryDetails | Where-Object { $_.slug -eq 'icon' }).Count | Should -Be 1
+        $pair.diffBucketDetails | Should -Not -BeNullOrEmpty
+        ($pair.diffBucketDetails | Where-Object { $_.slug -eq 'ui-visual' }).Count | Should -BeGreaterThan 0
+        ($pair.diffBucketDetails | Where-Object { $_.slug -eq 'metadata' }).Count | Should -BeGreaterThan 0
+
+        $jsonPayload = Get-Content -LiteralPath $jsonPath -Raw | ConvertFrom-Json -Depth 6
+        $jsonPayload.totals.categoryCounts.'block-diagram-cosmetic' | Should -Be 1
+        $jsonPayload.totals.categoryCounts.'front-panel' | Should -Be 1
+        $jsonPayload.totals.categoryCounts.'vi-attribute' | Should -Be 1
+        $jsonPayload.totals.categoryCounts.'icon' | Should -Be 1
+        $jsonPayload.totals.bucketCounts.'ui-visual' | Should -BeGreaterThan 0
+        $jsonPayload.totals.bucketCounts.'metadata' | Should -BeGreaterThan 0
+
+        $markdown = Get-Content -LiteralPath $markdownPath -Raw
+        $markdown | Should -Match 'Block diagram \(cosmetic\)'
+        $markdown | Should -Match 'Front panel'
+        $markdown | Should -Match 'VI attribute'
+    }
+
     It 'resolves report path when compare summary omits metadata' {
         $compareRoot = Join-Path $TestDrive 'compare'
         $pairDir = Join-Path $compareRoot 'pair-01'

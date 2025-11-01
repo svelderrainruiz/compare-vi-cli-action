@@ -103,15 +103,31 @@ function Parse-DiffHeadings {
     param([string]$Html)
     $headings = New-Object System.Collections.Generic.List[string]
     if ([string]::IsNullOrWhiteSpace($Html)) { return $headings }
-    $pattern = '<summary\s+class="difference-heading">\s*(?<text>.*?)\s*</summary>'
-    foreach ($match in [System.Text.RegularExpressions.Regex]::Matches($Html, $pattern, 'IgnoreCase')) {
-        $raw = $match.Groups['text'].Value
-        if ([string]::IsNullOrWhiteSpace($raw)) { continue }
-        $decoded = [System.Net.WebUtility]::HtmlDecode($raw.Trim())
-        $decoded = ($decoded -replace '^\s*\d+\.\s*', '')
-        if (-not $decoded) { continue }
-        $headings.Add($decoded)
+
+    $regexOptions = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor `
+                    [System.Text.RegularExpressions.RegexOptions]::Singleline
+
+    $patterns = @(
+        '<summary\b[^>]*class="[^"]*\bdifference-heading\b[^"]*"[^>]*>\s*(?<text>.*?)\s*</summary>',
+        '<summary\b[^>]*class="[^"]*\bvi-difference-heading\b[^"]*"[^>]*>\s*(?<text>.*?)\s*</summary>',
+        '<summary\b[^>]*class="[^"]*\bdifference-cosmetic-heading\b[^"]*"[^>]*>\s*(?<text>.*?)\s*</summary>',
+        '<h[1-6]\b[^>]*class="[^"]*\bdifference-heading\b[^"]*"[^>]*>\s*(?<text>.*?)\s*</h[1-6]>',
+        '<details\b[^>]*data-diff-(?:category|heading)="(?<text>[^"]+)"[^>]*>'
+    )
+
+    foreach ($pattern in $patterns) {
+        foreach ($match in [System.Text.RegularExpressions.Regex]::Matches($Html, $pattern, $regexOptions)) {
+            $raw = $match.Groups['text'].Value
+            if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+            $decoded = [System.Net.WebUtility]::HtmlDecode($raw.Trim())
+            $decoded = ($decoded -replace '^\s*\d+[\.\)]\s*', '')
+            if (-not $decoded) { continue }
+            if (-not $headings.Contains($decoded)) {
+                $headings.Add($decoded) | Out-Null
+            }
+        }
     }
+
     return $headings
 }
 
@@ -119,7 +135,7 @@ function Parse-DiffDetails {
     param([string]$Html)
     $details = New-Object System.Collections.Generic.List[string]
     if ([string]::IsNullOrWhiteSpace($Html)) { return $details }
-    $pattern = '<li\s+class="diff-detail">\s*(?<text>.*?)\s*</li>'
+    $pattern = '<li\s+class="diff-detail(?:-cosmetic)?">\s*(?<text>.*?)\s*</li>'
     foreach ($match in [System.Text.RegularExpressions.Regex]::Matches($Html, $pattern, 'IgnoreCase')) {
         $raw = $match.Groups['text'].Value
         if ([string]::IsNullOrWhiteSpace($raw)) { continue }
@@ -127,6 +143,65 @@ function Parse-DiffDetails {
         if ($decoded) { $details.Add($decoded) }
     }
     return $details
+}
+
+function Infer-DiffCategoriesFromDetails {
+    param([System.Collections.IEnumerable]$Details)
+
+    $inferred = New-Object System.Collections.Generic.List[string]
+    if (-not $Details) { return $inferred }
+
+    $append = {
+        param($name)
+        if ([string]::IsNullOrWhiteSpace($name)) { return }
+        if (-not $inferred.Contains($name)) {
+            $inferred.Add($name) | Out-Null
+        }
+    }
+
+    foreach ($detail in $Details) {
+        if ([string]::IsNullOrWhiteSpace($detail)) { continue }
+        $token = $detail.ToLowerInvariant()
+
+        $hasBlockDiagram = $token -match 'block diagram'
+        $hasFrontPanel   = $token -match 'front panel'
+        $hasConnector    = $token -match 'connector pane'
+        $hasWindow       = $token -match 'window'
+        $hasIcon         = $token -match 'icon'
+        $hasAttribute    = $token -match 'vi attribute' -or $token -match 'attributes'
+        $hasCosmetic     = $token -match 'cosmetic'
+
+        if ($hasBlockDiagram) {
+            if ($hasCosmetic) {
+                &$append 'Block Diagram Cosmetic'
+            } elseif ($token -match 'functional') {
+                &$append 'Block Diagram Functional'
+            } else {
+                &$append 'Block Diagram'
+            }
+        } elseif ($hasCosmetic) {
+            &$append 'Cosmetic'
+        }
+
+        if ($hasConnector) {
+            &$append 'Connector Pane'
+        }
+
+        if ($hasFrontPanel -or $token -match 'control' -or $token -match 'indicator') {
+            &$append 'Front Panel'
+        }
+
+        if ($hasWindow -or $token -match 'position/size' -or $token -match 'window size' -or $token -match 'panel position') {
+            &$append 'Front Panel Position/Size'
+        }
+
+        if ($hasIcon -or $hasAttribute -or $token -match 'documentation' -or $token -match 'execution') {
+            if ($hasIcon) { &$append 'Icon' }
+            &$append 'VI Attribute'
+        }
+    }
+
+    return $inferred
 }
 
 function Find-ReportPath {
@@ -665,6 +740,15 @@ foreach ($entry in $entries) {
     }
     if ($hasBlockDiagramCosmetic -and -not $categories.Contains('Block Diagram Cosmetic')) {
         $categories.Add('Block Diagram Cosmetic')
+    }
+
+    if ($categories.Count -eq 0 -and ($details -and $details.Count -gt 0)) {
+        $fallbackCategories = Infer-DiffCategoriesFromDetails -Details $details
+        foreach ($name in $fallbackCategories) {
+            if (-not [string]::IsNullOrWhiteSpace($name) -and -not $categories.Contains($name)) {
+                $categories.Add($name) | Out-Null
+            }
+        }
     }
 
     $categoryDetails = Get-CategoryDetailsFromNames -Names $categories
