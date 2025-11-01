@@ -113,7 +113,9 @@
   - `attributes` - apply `-noattr` to suppress attribute-only differences when you want a quieter run.
   - `front-panel` - apply `-nofp`/`-nofppos` to suppress front panel layout changes.
   - `block-diagram` - apply `-nobdcosm` to suppress block diagram cosmetic tweaks.
-  - `all` - synonym for `default` (retained for backwards compatibility).
+- `full` - run LVCompare with no ignore flags (`-nobd`, `-noattr`, `-nofp`, `-nofppos`,
+  `-nobdcosm` all disabled). Use when you need every cosmetic and functional change.
+- `all` - alias for `full` (deprecated; the helper rewrites to `full` and emits a warning).
   - `custom` - honour the ignore list supplied via `compare_ignore_flags` exactly as provided.
 - Multiple modes can be supplied (e.g. `default,attributes`); the workflow loops over each and emits a manifest/artifact
   set per mode.
@@ -141,6 +143,23 @@
   ```powershell
   pwsh -File scripts/Dispatch-VIHistoryWorkflow.ps1 -ViPath Fixtures/Loop.vi -CompareRef develop -NotifyIssue 316
   ```
+- When you just need the HTML comparison report for a pair of VIs, you can bypass the helper and call the LabVIEW CLI
+  directly (from Fork's external diff tools or a standalone terminal). The command below mirrors the setup used in the
+  community discussion on HTMLSingleFile output:
+  ```powershell
+  "C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe" `
+    -OperationName CreateComparisonReport `
+    -vi1 "C:\repo\icon-editor\resource\plugins\NIIconEditor\Legacy\Settings Init.vi" `
+    -vi2 "C:\repo\icon-editor\resource\plugins\NIIconEditor\Miscellaneous\Settings Init.vi" `
+    -reportType HTMLSingleFile `
+    -o -nobdcosm `
+    -reportPath "C:\temp\VI_Comparison.html"
+  ```
+  - Ensure the LabVIEW instance backing the CLI has VI Server enabled on port **3363** (Tools → Options → VI Server).
+    The CLI fails silently when the port does not match.
+  - CLI logs live under `%LOCALAPPDATA%\Temp` (the command output prints the exact path).
+  - Adjust the ignore flags to match the mode you are reproducing (`-nobdcosm` in the example mirrors the historical
+    `default` suppression bundle; omit the flag for the new `full` mode).
 
 Example CLI dispatch (requires `gh workflow run` permissions):
 
@@ -200,7 +219,7 @@ gh workflow run vi-compare-refs.yml `
 - The helper writes the suite manifest plus per-mode directories under `tests/results/ref-compare/history/` by default;
   override via `-ResultsDir`.
 - Set `-AdditionalFlags` when you need extra LVCompare switches (for example `-AdditionalFlags '-noconpane -noselect'`).
-- Pass `-Mode attributes` / `-Mode 'front-panel'` / `-Mode 'block-diagram'` / `-Mode all` to mirror the workflow modes locally.
+- Pass `-Mode attributes` / `-Mode 'front-panel'` / `-Mode 'block-diagram'` / `-Mode full` to mirror the workflow modes locally.
 - Use `-Mode full` for a single pass with *no* suppression flags (all of the `-nobd`, `-noattr`, `-nofp`, `-nofppos`, `-nobdcosm` ignores removed). The production workflow now runs `full` alongside `default`, so local runs should include both when you want parity (`-Mode 'default,full'`).
 
 ### Source control settings

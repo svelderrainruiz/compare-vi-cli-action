@@ -212,7 +212,9 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
   verifies the target VI exists at the selected ref, and prints the Markdown
   summary (attribute coverage included) for issue comments. You can also call it
   via `npm run history:run -- -ViPath Fixtures/Loop.vi -StartRef HEAD`. Add `-MaxPairs <n>`
-  when you intentionally need a cap.
+  when you intentionally need a cap. Use `-IncludeMergeParents` to traverse merge
+  parents as well as the first-parent chain so local artifacts include the same
+  lineage metadata the audit automation expects.
 - `scripts/Dispatch-VIHistoryWorkflow.ps1` - wraps `gh workflow run` for
   `vi-compare-refs.yml`, echoes the latest run id/link, and records dispatch
   metadata under `tests/results/_agent/handoff/vi-history-run.json` for

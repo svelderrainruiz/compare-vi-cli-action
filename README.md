@@ -112,6 +112,9 @@ pwsh -NoLogo -NoProfile -File tools/Compare-VIHistory.ps1 `
 
 The helper now processes every reachable commit pair by default. Supply
 `-MaxPairs <n>` when you need to cap the history for large or exploratory runs.
+Pass `-IncludeMergeParents` to audit merge parents alongside the mainline; the
+extra comparisons surface lineage metadata (parent index, branch head, depth)
+so reports and manifests call out where each revision originated.
 
 Artifacts are written under `tests/results/ref-compare/history/` using the same
 schema as the workflow outputs.
