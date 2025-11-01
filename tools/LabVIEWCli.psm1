@@ -193,6 +193,78 @@ function Resolve-LVNormalizedParams {
   return $normalized
 }
 
+function Get-CompareCliSentinelPath {
+  param(
+    [Parameter(Mandatory)][string]$Vi1,
+    [Parameter(Mandatory)][string]$Vi2,
+    [string]$ReportPath
+  )
+  try {
+    $root = [System.IO.Path]::GetTempPath()
+  } catch { $root = $env:TEMP }
+  if (-not $root) { $root = '.' }
+  $dir = Join-Path $root 'comparevi-cli-sentinel'
+  try { if (-not (Test-Path -LiteralPath $dir -PathType Container)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null } } catch {}
+  $key = ($Vi1.Trim().ToLowerInvariant()) + '|' + ($Vi2.Trim().ToLowerInvariant()) + '|' + ([string]($ReportPath ?? '')).Trim().ToLowerInvariant()
+  $sha1 = [System.Security.Cryptography.SHA1]::Create()
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($key)
+  $hash  = ($sha1.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+  return (Join-Path $dir ($hash + '.sentinel'))
+}
+
+function Test-ShouldSuppressCliCompare {
+  param(
+    [Parameter(Mandatory)][string]$Operation,
+    [Parameter(Mandatory)][hashtable]$Normalized,
+    [ref]$Reason
+  )
+  $Reason.Value = $null
+  if ($Operation -ne 'CreateComparisonReport') { return $false }
+  $noCapture = [System.Environment]::GetEnvironmentVariable('COMPAREVI_NO_CLI_CAPTURE','Process')
+  if ($noCapture -and $noCapture.Trim() -in @('1','true','yes','on')) {
+    $Reason.Value = 'COMPAREVI_NO_CLI_CAPTURE'
+    return $true
+  }
+  $ttlRaw = [System.Environment]::GetEnvironmentVariable('COMPAREVI_CLI_SENTINEL_TTL','Process')
+  $ttl = 0
+  if ($ttlRaw) { try { $ttl = [int]$ttlRaw } catch { $ttl = 0 } }
+  if ($ttl -le 0) { return $false }
+  $vi1 = [string]$Normalized.vi1
+  $vi2 = [string]$Normalized.vi2
+  $reportPath = $null
+  if ($Normalized.ContainsKey('reportPath')) { $reportPath = [string]$Normalized.reportPath }
+  if ([string]::IsNullOrWhiteSpace($vi1) -or [string]::IsNullOrWhiteSpace($vi2)) { return $false }
+  try { $vi1 = (Resolve-Path -LiteralPath $vi1).Path } catch {}
+  try { $vi2 = (Resolve-Path -LiteralPath $vi2).Path } catch {}
+  $sentinel = Get-CompareCliSentinelPath -Vi1 $vi1 -Vi2 $vi2 -ReportPath $reportPath
+  if (Test-Path -LiteralPath $sentinel -PathType Leaf) {
+    try {
+      $item = Get-Item -LiteralPath $sentinel -ErrorAction Stop
+      $age = (New-TimeSpan -Start $item.LastWriteTimeUtc -End ([DateTime]::UtcNow)).TotalSeconds
+      if ($age -lt $ttl) {
+        $Reason.Value = ('sentinel:{0}s' -f [int]$ttl)
+        return $true
+      }
+    } catch {}
+  }
+  return $false
+}
+
+function Touch-CompareCliSentinel {
+  param(
+    [Parameter(Mandatory)][string]$Vi1,
+    [Parameter(Mandatory)][string]$Vi2,
+    [string]$ReportPath
+  )
+  try {
+    $path = Get-CompareCliSentinelPath -Vi1 $Vi1 -Vi2 $Vi2 -ReportPath $ReportPath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      New-Item -ItemType File -Path $path -Force | Out-Null
+    }
+    (Get-Item -LiteralPath $path).LastWriteTimeUtc = [DateTime]::UtcNow
+  } catch {}
+}
+
 function Select-LVProvider {
   param(
     [Parameter(Mandatory)][string]$Operation,
@@ -658,6 +730,20 @@ function Invoke-LVOperation {
   }
   if ($Preview) { return [pscustomobject]$result }
 
+  # Optional suppression: env guard or short-TTL sentinel (only for CreateComparisonReport)
+  $suppressReason = $null
+  if (Test-ShouldSuppressCliCompare -Operation $Operation -Normalized $normalized -Reason ([ref]$suppressReason)) {
+    Write-Verbose ("LabVIEW CLI: suppressed '{0}' (reason={1})." -f $Operation, ($suppressReason ?? 'n/a'))
+    $result.exitCode = 0
+    $result.elapsedSeconds = 0
+    $result.stdout = ''
+    $result.stderr = ''
+    $result.ok = $true
+    $result.skipped = $true
+    $result.skipReason = $suppressReason
+    return [pscustomobject]$result
+  }
+
   Initialize-LabVIEWCliPidTracker
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -754,6 +840,11 @@ function Invoke-LVOperation {
   $result.stdout = $stdout
   $result.stderr = $stderr
   $result.ok = (-not $timedOut -and $exitCode -eq 0)
+
+  # Update sentinel timestamp after a successful run (for duplicate suppression windows)
+  if ($Operation -eq 'CreateComparisonReport' -and $normalized -and $normalized.ContainsKey('vi1') -and $normalized.ContainsKey('vi2')) {
+    try { Touch-CompareCliSentinel -Vi1 ([string]$normalized.vi1) -Vi2 ([string]$normalized.vi2) -ReportPath ([string]($normalized.reportPath ?? '')) } catch {}
+  }
 
   Write-LVOperationEvent -EventData @{
     provider = $result.provider
