@@ -302,6 +302,9 @@ foreach ($entry in $results) {
     if ($hasStaging) {
         $pairDir = Join-Path $compareRoot ("pair-{0:D2}" -f $index)
         New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
+        try {
+            Get-ChildItem -LiteralPath $pairDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        } catch {}
 
         $stagedBasePath = $entry.staged.Base
         $stagedHeadPath = $entry.staged.Head
@@ -352,6 +355,13 @@ foreach ($entry in $results) {
             } else {
                 $modeOutputDir = Join-Path $pairDir ("mode-{0}" -f $safeName)
                 New-Item -ItemType Directory -Path $modeOutputDir -Force | Out-Null
+            }
+            if (Test-Path -LiteralPath $modeOutputDir -PathType Container) {
+                try {
+                    Get-ChildItem -LiteralPath $modeOutputDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                } catch {}
+            } else {
+                try { New-Item -ItemType Directory -Path $modeOutputDir -Force | Out-Null } catch {}
             }
 
             $invokeParams = @{
