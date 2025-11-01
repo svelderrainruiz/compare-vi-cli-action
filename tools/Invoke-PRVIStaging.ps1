@@ -58,6 +58,14 @@ if ($manifest.schema -ne 'vi-diff-manifest@v1') {
     throw "Unexpected manifest schema '$($manifest.schema)'. Expected 'vi-diff-manifest@v1'."
 }
 
+$manifestBaseRef = $null
+if ($manifest.PSObject.Properties['baseRef'] -and $manifest.baseRef) {
+    $manifestBaseRef = [string]$manifest.baseRef
+}
+if (-not $BaseRef -and $manifestBaseRef) {
+    $BaseRef = $manifestBaseRef
+}
+
 function Convert-ToRepoRelativePath {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
