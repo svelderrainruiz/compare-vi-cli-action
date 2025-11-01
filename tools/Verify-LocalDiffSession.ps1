@@ -1,8 +1,8 @@
 #Requires -Version 7.0
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][string]$BaseVi,
-  [Parameter(Mandatory)][string]$HeadVi,
+  [Parameter(Mandatory = $true)][string]$BaseVi,
+  [Parameter(Mandatory = $true)][string]$HeadVi,
   [ValidateSet('normal','cli-suppressed','git-context','duplicate-window')]
   [string]$Mode = 'normal',
   [int]$SentinelTtlSeconds = 60,
@@ -17,6 +17,108 @@ $ErrorActionPreference = 'Stop'
 
 function Resolve-RepoRoot {
   try { return (git -C (Get-Location).Path rev-parse --show-toplevel 2>$null).Trim() } catch { return (Get-Location).Path }
+}
+
+function Get-TempSentinelRoot {
+  try { return Join-Path ([System.IO.Path]::GetTempPath()) 'comparevi-cli-sentinel' } catch { return Join-Path $env:TEMP 'comparevi-cli-sentinel' }
+}
+
+function Ensure-Directory {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+  }
+}
+
+function Get-CompareCliSentinelPath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Vi1,
+    [Parameter(Mandatory = $true)][string]$Vi2,
+    [string]$ReportPath
+  )
+
+  $root = Get-TempSentinelRoot
+  Ensure-Directory -Path $root
+
+  $key = ($Vi1.Trim().ToLowerInvariant()) + '|' + ($Vi2.Trim().ToLowerInvariant()) + '|' + ([string]($ReportPath ?? '')).Trim().ToLowerInvariant()
+  $sha1 = [System.Security.Cryptography.SHA1]::Create()
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($key)
+  $hash = ($sha1.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+  return Join-Path $root ($hash + '.sentinel')
+}
+
+function Touch-CompareCliSentinel {
+  param(
+    [Parameter(Mandatory = $true)][string]$Vi1,
+    [Parameter(Mandatory = $true)][string]$Vi2,
+    [string]$ReportPath
+  )
+
+  try {
+    $path = Get-CompareCliSentinelPath -Vi1 $Vi1 -Vi2 $Vi2 -ReportPath $ReportPath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+      New-Item -ItemType File -Path $path -Force | Out-Null
+    }
+    (Get-Item -LiteralPath $path).LastWriteTimeUtc = [DateTime]::UtcNow
+    return $path
+  } catch {
+    return $null
+  }
+}
+
+function Get-SentinelSkipStatus {
+  param(
+    [Parameter(Mandatory = $true)][string]$Vi1,
+    [Parameter(Mandatory = $true)][string]$Vi2,
+    [string]$ReportPath,
+    [int]$TtlSeconds
+  )
+
+  $path = Get-CompareCliSentinelPath -Vi1 $Vi1 -Vi2 $Vi2 -ReportPath $ReportPath
+  if ($TtlSeconds -le 0 -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    return [pscustomobject]@{ skipped = $false; reason = $null; path = $path }
+  }
+
+  try {
+    $item = Get-Item -LiteralPath $path -ErrorAction Stop
+    $age = [Math]::Abs((New-TimeSpan -Start $item.LastWriteTimeUtc -End ([DateTime]::UtcNow)).TotalSeconds)
+    if ($age -le $TtlSeconds) {
+      return [pscustomobject]@{ skipped = $true; reason = "sentinel:$TtlSeconds"; path = $path }
+    }
+  } catch {}
+
+  return [pscustomobject]@{ skipped = $false; reason = $null; path = $path }
+}
+
+function Get-LocalDiffProcessSnapshot {
+  $names = @('LabVIEW','LVCompare','LabVIEWCLI','g-cli')
+  $snapshot = New-Object System.Collections.Generic.List[object]
+  foreach ($name in $names) {
+    try {
+      $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
+      foreach ($proc in $procs) {
+        $info = [ordered]@{ name = $proc.ProcessName; id = $proc.Id }
+        try { $info.startTime = $proc.StartTime } catch {}
+        $snapshot.Add([pscustomobject]$info)
+      }
+    } catch {}
+  }
+  return $snapshot.ToArray()
+}
+
+function Read-FileSnippet {
+  param(
+    [string]$Path,
+    [int]$MaxLength = 200
+  )
+
+  if (-not $Path) { return $null }
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+  try {
+    $content = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    if ($content.Length -le $MaxLength) { return $content }
+    return $content.Substring(0, $MaxLength)
+  } catch { return $null }
 }
 
 $repoRoot = Resolve-RepoRoot
@@ -48,33 +150,49 @@ New-Item -ItemType Directory -Path $resultsRootResolved -Force | Out-Null
 
 function Invoke-CompareRun {
   param(
-    [Parameter(Mandatory)][string]$RunDir,
-    [string]$Mode,
+    [Parameter(Mandatory = $true)][string]$RunDir,
+    [Parameter(Mandatory = $true)][string]$Mode,
     [switch]$RenderReport,
-    [switch]$UseStub
+    [switch]$UseStub,
+    [int]$SentinelTtlSeconds = 0
   )
 
   New-Item -ItemType Directory -Path $RunDir -Force | Out-Null
 
   $prev = @{
-    COMPAREVI_NO_CLI_CAPTURE   = $env:COMPAREVI_NO_CLI_CAPTURE
+    COMPAREVI_NO_CLI_CAPTURE    = $env:COMPAREVI_NO_CLI_CAPTURE
     COMPAREVI_SUPPRESS_CLI_IN_GIT = $env:COMPAREVI_SUPPRESS_CLI_IN_GIT
-    COMPAREVI_WARN_CLI_IN_GIT  = $env:COMPAREVI_WARN_CLI_IN_GIT
-    COMPAREVI_CLI_SENTINEL_TTL = $env:COMPAREVI_CLI_SENTINEL_TTL
-    GIT_DIR = $env:GIT_DIR
+    COMPAREVI_WARN_CLI_IN_GIT   = $env:COMPAREVI_WARN_CLI_IN_GIT
+    COMPAREVI_CLI_SENTINEL_TTL  = $env:COMPAREVI_CLI_SENTINEL_TTL
+    GIT_DIR  = $env:GIT_DIR
     GIT_PREFIX = $env:GIT_PREFIX
   }
 
-  try {
-    switch ($Mode) {
-      'cli-suppressed' { $env:COMPAREVI_NO_CLI_CAPTURE = '1' }
-      'git-context'    { $env:COMPAREVI_SUPPRESS_CLI_IN_GIT = '1'; $env:COMPAREVI_WARN_CLI_IN_GIT = '1'; if (-not $env:GIT_DIR) { $env:GIT_DIR = '.' } }
-      default { }
-    }
+  $baseResolved = (Resolve-Path -LiteralPath $BaseVi).Path
+  $headResolved = (Resolve-Path -LiteralPath $HeadVi).Path
 
+  switch ($Mode) {
+    'cli-suppressed' { $env:COMPAREVI_NO_CLI_CAPTURE = '1' }
+    'git-context'    { $env:COMPAREVI_SUPPRESS_CLI_IN_GIT = '1'; $env:COMPAREVI_WARN_CLI_IN_GIT = '1'; if (-not $env:GIT_DIR) { $env:GIT_DIR = '.' } }
+    default { }
+  }
+
+  $forcedTtl = if ($SentinelTtlSeconds -gt 0) { $SentinelTtlSeconds } else { 0 }
+  $effectiveTtlUsed = 0
+  if ($forcedTtl -gt 0) {
+    $env:COMPAREVI_CLI_SENTINEL_TTL = [string]$forcedTtl
+    $effectiveTtlUsed = $forcedTtl
+  } elseif ($env:COMPAREVI_CLI_SENTINEL_TTL) {
+    $tmp = 0
+    if ([int]::TryParse($env:COMPAREVI_CLI_SENTINEL_TTL, [ref]$tmp)) { $effectiveTtlUsed = $tmp }
+  }
+
+  $preSnapshot = Get-LocalDiffProcessSnapshot
+
+  try {
     $params = @{
-      BaseVi    = (Resolve-Path -LiteralPath $BaseVi).Path
-      HeadVi    = (Resolve-Path -LiteralPath $HeadVi).Path
+      BaseVi    = $baseResolved
+      HeadVi    = $headResolved
       OutputDir = $RunDir
       Quiet     = $true
     }
@@ -86,30 +204,59 @@ function Invoke-CompareRun {
     }
 
     & $driverPath @params *> $null
-
-    $capPath = Join-Path $RunDir 'lvcompare-capture.json'
-    if (-not (Test-Path -LiteralPath $capPath -PathType Leaf)) { throw "Capture JSON not found at $capPath" }
-    $cap = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json -Depth 8
-
-    $envCli = $null
-    if ($cap -and $cap.PSObject.Properties['environment'] -and $cap.environment -and $cap.environment.PSObject.Properties['cli']) {
-      $envCli = $cap.environment.cli
-    }
-
-    return [pscustomobject]@{
-      outputDir  = $RunDir
-      capture    = $capPath
-      exitCode   = $cap.exitCode
-      seconds    = $cap.seconds
-      cliSkipped = if ($envCli -and $envCli.PSObject.Properties['skipped']) { [bool]$envCli.skipped } else { $false }
-      skipReason = if ($envCli -and $envCli.PSObject.Properties['skipReason']) { [string]$envCli.skipReason } else { $null }
-    }
   } finally {
     foreach ($k in $prev.Keys) {
       $v = $prev[$k]
       if ($null -eq $v) { Remove-Item -ErrorAction SilentlyContinue -LiteralPath "Env:$k" } else { [Environment]::SetEnvironmentVariable($k, $v, 'Process') }
     }
   }
+
+  $postSnapshot = Get-LocalDiffProcessSnapshot
+
+  $capPath = Join-Path $RunDir 'lvcompare-capture.json'
+  if (-not (Test-Path -LiteralPath $capPath -PathType Leaf)) { throw "Capture JSON not found at $capPath" }
+  $cap = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json -Depth 8
+
+  $envCli = if ($cap -and $cap.PSObject.Properties['environment'] -and $cap.environment -and $cap.environment.PSObject.Properties['cli']) { $cap.environment.cli } else { $null }
+
+  $stdoutPath = Join-Path $RunDir 'lvcli-stdout.txt'
+  $stderrPath = Join-Path $RunDir 'lvcli-stderr.txt'
+  $stdoutSnippet = Read-FileSnippet -Path $stdoutPath
+  $stderrSnippet = Read-FileSnippet -Path $stderrPath
+  $stdoutPathResolved = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $stdoutPath } else { $null }
+  $stderrPathResolved = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $stderrPath } else { $null }
+
+  $cliSkipped = if ($envCli -and $envCli.PSObject.Properties['skipped']) { [bool]$envCli.skipped } else { $false }
+  $skipReason = if ($envCli -and $envCli.PSObject.Properties['skipReason']) { [string]$envCli.skipReason } else { $null }
+
+  $reportPath = if ($envCli -and $envCli.PSObject.Properties['reportPath'] -and $envCli.reportPath) { [string]$envCli.reportPath } else { $null }
+
+  $sentinelInfo = Get-SentinelSkipStatus -Vi1 $baseResolved -Vi2 $headResolved -ReportPath $reportPath -TtlSeconds $effectiveTtlUsed
+  if ($sentinelInfo.skipped -and -not $cliSkipped) {
+    $cliSkipped = $true
+    $skipReason = $sentinelInfo.reason
+  }
+
+  $runInfo = [ordered]@{
+    outputDir     = $RunDir
+    capture       = $capPath
+    stdoutPath    = $stdoutPathResolved
+    stderrPath    = $stderrPathResolved
+    stdoutSnippet = $stdoutSnippet
+    stderrSnippet = $stderrSnippet
+    exitCode      = $cap.exitCode
+    seconds       = $cap.seconds
+    cliSkipped    = $cliSkipped
+    skipReason    = $skipReason
+    base          = $baseResolved
+    head          = $headResolved
+    reportPath    = $reportPath
+    sentinelPath  = $sentinelInfo.path
+    preProcesses  = $preSnapshot
+    postProcesses = $postSnapshot
+  }
+
+  return [pscustomobject]$runInfo
 }
 
 $summary = [ordered]@{
@@ -121,17 +268,22 @@ $summary = [ordered]@{
   runs       = @()
 }
 
-# Run 1 (always)
 $run1Dir = Join-Path $resultsRootResolved 'run-01'
-$r1 = Invoke-CompareRun -RunDir $run1Dir -Mode $Mode -RenderReport:$RenderReport -UseStub:$UseStub
+$r1 = Invoke-CompareRun -RunDir $run1Dir -Mode $Mode -RenderReport:$RenderReport -UseStub:$UseStub -SentinelTtlSeconds 0
 $summary.runs += $r1
+
+if ($Mode -eq 'duplicate-window' -and $UseStub.IsPresent) {
+  $touchPath = Touch-CompareCliSentinel -Vi1 $r1.base -Vi2 $r1.head -ReportPath $r1.reportPath
+  if ($touchPath) { $r1.sentinelPath = $touchPath }
+}
 
 if ($Mode -eq 'duplicate-window') {
   $prevTtl = $env:COMPAREVI_CLI_SENTINEL_TTL
   try {
-    $env:COMPAREVI_CLI_SENTINEL_TTL = [string][Math]::Max(1, $SentinelTtlSeconds)
+    $ttl = [Math]::Max(1, $SentinelTtlSeconds)
+    $env:COMPAREVI_CLI_SENTINEL_TTL = [string]$ttl
     $run2Dir = Join-Path $resultsRootResolved 'run-02'
-    $r2 = Invoke-CompareRun -RunDir $run2Dir -Mode 'normal' -RenderReport:$RenderReport -UseStub:$UseStub
+    $r2 = Invoke-CompareRun -RunDir $run2Dir -Mode 'normal' -RenderReport:$RenderReport -UseStub:$UseStub -SentinelTtlSeconds $ttl
     $summary.runs += $r2
   } finally {
     if ($null -eq $prevTtl) { Remove-Item Env:COMPAREVI_CLI_SENTINEL_TTL -ErrorAction SilentlyContinue } else { $env:COMPAREVI_CLI_SENTINEL_TTL = $prevTtl }
@@ -149,7 +301,7 @@ Write-Host ("Head     : {0}" -f $summary.head)
 Write-Host ("Results  : {0}" -f $summary.resultsDir)
 for ($i = 0; $i -lt $summary.runs.Count; $i++) {
   $r = $summary.runs[$i]
-  Write-Host ("Run {0}: exit={1}, skipped={2}, reason={3}, outDir={4}" -f ($i+1), $r.exitCode, ([bool]$r.cliSkipped), ($r.skipReason ?? '-'), $r.outputDir)
+  Write-Host ("Run {0}: exit={1}, skipped={2}, reason={3}, outDir={4}" -f ($i + 1), $r.exitCode, ([bool]$r.cliSkipped), ($r.skipReason ?? '-'), $r.outputDir)
 }
 
 return [pscustomobject]@{
@@ -157,4 +309,3 @@ return [pscustomobject]@{
   summary    = $summaryPath
   runs       = @($summary.runs)
 }
-

@@ -55,7 +55,7 @@ Describe 'Verify-LocalDiffSession.ps1' -Tag 'Unit' {
     $summary = Get-Content -LiteralPath $result.summary -Raw | ConvertFrom-Json
     $summary.runs.Count | Should -Be 2
     $summary.runs[0].cliSkipped | Should -BeFalse
-    $summary.runs[1].cliSkipped | Should -BeFalse
-    ($summary.runs[1].skipReason -eq $null -or [string]::IsNullOrWhiteSpace($summary.runs[1].skipReason)) | Should -BeTrue
+    $summary.runs[1].cliSkipped | Should -BeTrue
+    $summary.runs[1].skipReason | Should -Match '^sentinel:'
   }
 }
