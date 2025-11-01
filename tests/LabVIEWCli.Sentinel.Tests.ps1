@@ -17,12 +17,13 @@ Describe 'LabVIEW CLI duplicate suppression' -Tag 'Unit' {
       $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Value '' -Encoding ascii
       $outDir = Join-Path $work 'out'
 
-      $driverQuoted = $script:driverPath.Replace("'", "''")
-      $baseQuoted = $base.Replace("'", "''")
-      $headQuoted = $head.Replace("'", "''")
-      $outQuoted = $outDir.Replace("'", "''")
-      $command = "& { \$env:COMPAREVI_NO_CLI_CAPTURE='1'; & '$driverQuoted' -BaseVi '$baseQuoted' -HeadVi '$headQuoted' -OutputDir '$outQuoted' -Quiet; exit `$LASTEXITCODE }"
-      & pwsh -NoLogo -NoProfile -Command $command *> $null
+      $prevNoCli = $env:COMPAREVI_NO_CLI_CAPTURE
+      try {
+        $env:COMPAREVI_NO_CLI_CAPTURE = '1'
+        & $script:driverPath -BaseVi $base -HeadVi $head -OutputDir $outDir -Quiet *> $null
+      } finally {
+        if ($null -eq $prevNoCli) { Remove-Item Env:COMPAREVI_NO_CLI_CAPTURE -ErrorAction SilentlyContinue } else { $env:COMPAREVI_NO_CLI_CAPTURE = $prevNoCli }
+      }
 
       $capPath = Join-Path $outDir 'lvcompare-capture.json'
       Test-Path -LiteralPath $capPath | Should -BeTrue
@@ -44,12 +45,16 @@ Describe 'LabVIEW CLI duplicate suppression' -Tag 'Unit' {
       $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Value '' -Encoding ascii
       $outDir = Join-Path $work 'out'
 
-      $driverQuoted = $script:driverPath.Replace("'", "''")
-      $baseQuoted = $base.Replace("'", "''")
-      $headQuoted = $head.Replace("'", "''")
-      $outQuoted = $outDir.Replace("'", "''")
-      $command = "& { \$env:COMPAREVI_SUPPRESS_CLI_IN_GIT='1'; \$env:GIT_DIR='.'; & '$driverQuoted' -BaseVi '$baseQuoted' -HeadVi '$headQuoted' -OutputDir '$outQuoted' -Quiet; exit `$LASTEXITCODE }"
-      & pwsh -NoLogo -NoProfile -Command $command *> $null
+      $prevSuppress = $env:COMPAREVI_SUPPRESS_CLI_IN_GIT
+      $prevGitDir   = $env:GIT_DIR
+      try {
+        $env:COMPAREVI_SUPPRESS_CLI_IN_GIT = '1'
+        $env:GIT_DIR = '.'
+        & $script:driverPath -BaseVi $base -HeadVi $head -OutputDir $outDir -Quiet *> $null
+      } finally {
+        if ($null -eq $prevSuppress) { Remove-Item Env:COMPAREVI_SUPPRESS_CLI_IN_GIT -ErrorAction SilentlyContinue } else { $env:COMPAREVI_SUPPRESS_CLI_IN_GIT = $prevSuppress }
+        if ($null -eq $prevGitDir) { Remove-Item Env:GIT_DIR -ErrorAction SilentlyContinue } else { $env:GIT_DIR = $prevGitDir }
+      }
 
       $capPath = Join-Path $outDir 'lvcompare-capture.json'
       Test-Path -LiteralPath $capPath | Should -BeTrue
@@ -62,4 +67,3 @@ Describe 'LabVIEW CLI duplicate suppression' -Tag 'Unit' {
     finally { Pop-Location }
   }
 }
-
