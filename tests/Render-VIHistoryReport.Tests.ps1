@@ -99,6 +99,15 @@ Describe 'Render-VIHistoryReport.ps1' -Tag 'Unit' {
                         short  = 'def9876'
                         subject= 'Head commit'
                     }
+                    lineage = [ordered]@{
+                        type        = 'merge-parent'
+                        parentIndex = 2
+                        parentCount = 2
+                        mergeCommit = 'feedfacefeed'
+                        branchHead  = 'cafebabecafe'
+                        depth       = 0
+                    }
+                    lineageLabel = 'Merge parent #2 @cafebabecafe'
                     result = [ordered]@{
                         diff                   = $true
                         duration_s             = 1.23
@@ -146,9 +155,10 @@ Describe 'Render-VIHistoryReport.ps1' -Tag 'Unit' {
         $markdown | Should -Match '\| Buckets \|'
         $markdown | Should -Match 'Functional behavior'
         $markdown | Should -Match 'Metadata'
-        $markdown | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
+        $markdown | Should -Match '\| Mode \| Pair \| Lineage \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
 
         $html = Get-Content -LiteralPath $htmlPath -Raw
+        $html | Should -Match '<th>Lineage</th>'
         $html | Should -Match '<th>Categories</th>'
         $html | Should -Match '<th>Buckets</th>'
         $html | Should -Match 'data-buckets='

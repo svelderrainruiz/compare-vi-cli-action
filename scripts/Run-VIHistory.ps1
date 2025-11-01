@@ -3,7 +3,8 @@ param(
   [string]$ViPath,
   [string]$StartRef = 'HEAD',
   [Nullable[int]]$MaxPairs,
-  [switch]$HtmlReport = $true
+  [switch]$HtmlReport = $true,
+  [switch]$IncludeMergeParents
 )
 
 Set-StrictMode -Version Latest
@@ -179,6 +180,9 @@ try {
   }
   if ($PSBoundParameters.ContainsKey('MaxPairs') -and $MaxPairs -and $MaxPairs -gt 0) {
     $compareArgs['MaxPairs'] = $MaxPairs
+  }
+  if ($IncludeMergeParents.IsPresent) {
+    $compareArgs['IncludeMergeParents'] = $true
   }
 
   try {

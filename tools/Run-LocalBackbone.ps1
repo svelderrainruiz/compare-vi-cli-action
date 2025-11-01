@@ -3,6 +3,7 @@ param(
   [string[]]$CompareViName,
   [string]$CompareBranch = 'HEAD',
   [Nullable[int]]$CompareMaxPairs,
+  [switch]$CompareIncludeMergeParents,
   [switch]$CompareIncludeIdenticalPairs,
   [switch]$CompareFailOnDiff,
   [string]$CompareLvCompareArgs,
@@ -158,6 +159,7 @@ try {
         if ($CompareMaxPairs -and $CompareMaxPairs -gt 0) {
           $args += @('-MaxPairs', $CompareMaxPairs)
         }
+        if ($CompareIncludeMergeParents) { $args += '-IncludeMergeParents' }
         if ($CompareIncludeIdenticalPairs) { $args += '-IncludeIdenticalPairs' }
         if ($CompareFailOnDiff) { $args += '-FailOnDiff' }
         if ($CompareLvCompareArgs) {

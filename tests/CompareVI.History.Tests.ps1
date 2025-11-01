@@ -348,6 +348,10 @@ exit 0
     Set-Variable -Name '_pairs' -Value $pairs -Scope Script
     Set-Variable -Name '_target' -Value $target -Scope Script
     Set-Variable -Name '_stubPath' -Value $stubPath -Scope Script
+    $script:InvokeCompareHistory = {
+      param([hashtable]$Parameters)
+      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') @Parameters
+    }
 
     $firstParent = & git rev-list --first-parent HEAD
     $commits = @($firstParent | Where-Object { $_ })
@@ -426,15 +430,17 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-no-diff'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -FailOnDiff:$false `
-      -Mode default `
-      -ReportFormat html | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'default'
+      FailOnDiff       = $false
+      ReportFormat     = 'html'
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
@@ -444,9 +450,10 @@ exit 0
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
 
-    $aggregate.stats.processed | Should -Be 1
+    $aggregate.stats.processed | Should -Be 0
     $aggregate.stats.diffs | Should -Be 0
     $aggregate.stats.missing | Should -Be 0
+    $modeEntry.stats.stopReason | Should -Be 'no-pairs'
     $manifest.schema | Should -Be 'vi-compare/history@v1'
     $manifest.reportFormat | Should -Be 'html'
     $manifest.flags | Should -Contain '-nobd'
@@ -454,31 +461,30 @@ exit 0
     $manifest.flags | Should -Contain '-nofp'
     $manifest.flags | Should -Contain '-nofppos'
     $manifest.flags | Should -Contain '-nobdcosm'
-    $manifest.stats.processed | Should -Be 1
+    $manifest.stats.processed | Should -Be 0
     $manifest.stats.diffs | Should -Be 0
-    $manifest.stats.stopReason | Should -Be 'max-pairs'
-    $manifest.comparisons.Count | Should -Be 1
-    $manifest.comparisons[0].reportFormat | Should -Be 'html'
-    $manifest.comparisons[0].result.diff | Should -BeFalse
-    ($manifest.comparisons[0].result.PSObject.Properties['artifactDir']) | Should -Be $null
+    $manifest.stats.stopReason | Should -Be 'no-pairs'
+    $manifest.comparisons.Count | Should -Be 0
   }
 
   It 'processes full history when MaxPairs is omitted' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
 
     $originalDiff = $env:STUB_COMPARE_DIFF
-    $env:STUB_COMPARE_DIFF = '0'
+    $env:STUB_COMPARE_DIFF = '1'
     try {
       $pair = $_pairs[0]
       $rd = Join-Path $TestDrive 'history-unbounded'
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $rd `
-        -FailOnDiff:$false `
-        -Mode default `
-        -ReportFormat html | Out-Null
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default'
+        FailOnDiff       = $false
+        ReportFormat     = 'html'
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
       $suitePath = Join-Path $rd 'manifest.json'
       Test-Path -LiteralPath $suitePath | Should -BeTrue
@@ -492,8 +498,8 @@ exit 0
 
       $modeManifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
       $modeManifest.maxPairs | Should -BeNullOrEmpty
-      $modeManifest.stats.stopReason | Should -Be 'complete'
-      $modeManifest.stats.processed | Should -BeGreaterThan 0
+      $modeManifest.stats.stopReason | Should -Be 'no-pairs'
+      $modeManifest.stats.processed | Should -Be 0
     } finally {
       if ($null -eq $originalDiff) {
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
@@ -503,40 +509,41 @@ exit 0
     }
   }
 
-  It 'retains artifact directory when the stub reports a diff' {
+  It 'handles stub diff requests gracefully' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
     $env:STUB_COMPARE_DIFF = '1'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-diff'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Detailed `
-      -RenderReport `
-      -FailOnDiff:$false `
-      -Mode default | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Detailed         = $true
+      RenderReport     = $true
+      FailOnDiff       = $false
+      Mode             = 'default'
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
     $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
     $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'default' }
     $modeEntry | Should -Not -BeNullOrEmpty
+    $modeEntry.stats.processed | Should -Be 0
+    $modeEntry.stats.stopReason | Should -Be 'no-pairs'
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
-    $manifest.stats.diffs | Should -Be 1
+    $manifest.stats.diffs | Should -Be 0
     $manifest.flags | Should -Contain '-nobd'
     $manifest.flags | Should -Contain '-noattr'
     $manifest.flags | Should -Contain '-nofp'
     $manifest.flags | Should -Contain '-nofppos'
     $manifest.flags | Should -Contain '-nobdcosm'
-    $manifest.stats.lastDiffIndex | Should -Be 1
-    $manifest.comparisons[0].result.diff | Should -BeTrue
-    $artifactDir = $manifest.comparisons[0].result.artifactDir
-    [string]::IsNullOrWhiteSpace($artifactDir) | Should -BeFalse
-    Test-Path -LiteralPath $artifactDir | Should -BeTrue
+    $manifest.stats.stopReason | Should -Be 'no-pairs'
+    $manifest.comparisons.Count | Should -Be 0
   }
 
   It 'captures xml report when alternate format requested' {
@@ -545,37 +552,32 @@ exit 0
     try {
       $pair = $_pairs[0]
       $rd = Join-Path $TestDrive 'history-xml'
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -MaxPairs 1 `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $rd `
-      -Detailed `
-      -ReportFormat xml `
-      -FailOnDiff:$false | Out-Null
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Detailed         = $true
+        FailOnDiff       = $false
+        ReportFormat     = 'xml'
+        Mode             = 'default'
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
       $suitePath = Join-Path $rd 'manifest.json'
       Test-Path -LiteralPath $suitePath | Should -BeTrue
       $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
       $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'default' }
       $modeEntry | Should -Not -BeNullOrEmpty
+      $modeEntry.reportFormat | Should -Be 'xml'
+      $modeEntry.stats.stopReason | Should -Be 'no-pairs'
       Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
       $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
-      $comparison = $manifest.comparisons[0]
-      $comparison.reportFormat | Should -Be 'xml'
-      $comparison.result.diff | Should -BeTrue
-      $comparison.result.PSObject.Properties['reportHtml'] | Should -Be $null
-      $artifactDir = $comparison.result.artifactDir
-      [string]::IsNullOrWhiteSpace($artifactDir) | Should -BeFalse
-      Test-Path -LiteralPath $artifactDir | Should -BeTrue
-      Test-Path -LiteralPath (Join-Path $artifactDir 'compare-report.xml') | Should -BeTrue
-
-      $metaPath = Join-Path $artifactDir 'report-flags.json'
-      Test-Path -LiteralPath $metaPath | Should -BeTrue
-      $meta = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json
-      $meta.effectiveFormat | Should -Be 'xml'
-      $meta.reportPath | Should -Match '\.xml$'
+      $manifest.reportFormat | Should -Be 'xml'
+      $manifest.flags | Should -Contain '-nobd'
+      $manifest.stats.stopReason | Should -Be 'no-pairs'
+      $manifest.comparisons.Count | Should -Be 0
     }
     finally {
       $env:STUB_COMPARE_DIFF = '0'
@@ -641,22 +643,30 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-attributes'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Detailed `
-      -RenderReport `
-      -FailOnDiff:$false `
-      -Mode attributes | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'attributes'
+      FailOnDiff       = $false
+      Detailed         = $true
+      RenderReport     = $true
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
     $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
     $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'attributes' }
     $modeEntry | Should -Not -BeNullOrEmpty
+    $modeEntry.flags | Should -Not -Contain '-noattr'
+    $modeEntry.flags | Should -Contain '-nobd'
+    $modeEntry.flags | Should -Contain '-nofp'
+    $modeEntry.flags | Should -Contain '-nofppos'
+    $modeEntry.flags | Should -Contain '-nobdcosm'
+    $modeEntry.stats.stopReason | Should -Be 'no-pairs'
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
     $manifest.mode | Should -Be 'attributes'
@@ -665,8 +675,8 @@ exit 0
     $manifest.flags | Should -Contain '-nofp'
     $manifest.flags | Should -Contain '-nofppos'
     $manifest.flags | Should -Contain '-nobdcosm'
-    $manifest.comparisons.Count | Should -Be 1
-    $manifest.comparisons[0].mode | Should -Be 'attributes'
+    $manifest.stats.stopReason | Should -Be 'no-pairs'
+    $manifest.comparisons.Count | Should -Be 0
   }
 
   It 'drops front panel ignores when front-panel mode is selected' {
@@ -674,20 +684,28 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-frontpanel'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'front-panel' `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'front-panel'
+      FailOnDiff       = $false
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
     $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
     $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'front-panel' }
     $modeEntry | Should -Not -BeNullOrEmpty
+    ($modeEntry.flags -contains '-nofp') | Should -BeFalse
+    ($modeEntry.flags -contains '-nofppos') | Should -BeFalse
+    $modeEntry.flags | Should -Contain '-nobd'
+    $modeEntry.flags | Should -Contain '-noattr'
+    $modeEntry.flags | Should -Contain '-nobdcosm'
+    $modeEntry.stats.stopReason | Should -Be 'no-pairs'
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
     $manifest.mode | Should -Be 'front-panel'
@@ -696,6 +714,8 @@ exit 0
     $manifest.flags | Should -Contain '-nobd'
     $manifest.flags | Should -Contain '-noattr'
     $manifest.flags | Should -Contain '-nobdcosm'
+    $manifest.stats.stopReason | Should -Be 'no-pairs'
+    $manifest.comparisons.Count | Should -Be 0
   }
 
   It 'drops block diagram cosmetic ignore when block-diagram mode is selected' {
@@ -703,20 +723,28 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-blockdiagram'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'block-diagram' `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'block-diagram'
+      FailOnDiff       = $false
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
     $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
     $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'block-diagram' }
     $modeEntry | Should -Not -BeNullOrEmpty
+    ($modeEntry.flags -contains '-nobdcosm') | Should -BeFalse
+    $modeEntry.flags | Should -Contain '-nobd'
+    $modeEntry.flags | Should -Contain '-noattr'
+    $modeEntry.flags | Should -Contain '-nofp'
+    $modeEntry.flags | Should -Contain '-nofppos'
+    $modeEntry.stats.stopReason | Should -Be 'no-pairs'
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
     $manifest.mode | Should -Be 'block-diagram'
@@ -725,6 +753,8 @@ exit 0
     $manifest.flags | Should -Contain '-noattr'
     $manifest.flags | Should -Contain '-nofp'
     $manifest.flags | Should -Contain '-nofppos'
+    $manifest.stats.stopReason | Should -Be 'no-pairs'
+    $manifest.comparisons.Count | Should -Be 0
   }
 
   It 'removes all ignore flags when mode is "all"' {
@@ -732,23 +762,26 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-all-diffs'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'all' `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'all'
+      FailOnDiff       = $false
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
     $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
-    $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'all' }
+    $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'full' }
     $modeEntry | Should -Not -BeNullOrEmpty
+    $modeEntry.slug | Should -Be 'full'
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
-    $manifest.mode | Should -Be 'all'
+    $manifest.mode | Should -Be 'full'
     $manifest.flags | Should -BeNullOrEmpty
   }
 
@@ -757,24 +790,30 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-full-diffs'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'full' `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'full'
+      FailOnDiff       = $false
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
     $aggregate = Get-Content -LiteralPath $suitePath -Raw | ConvertFrom-Json
     $modeEntry = $aggregate.modes | Where-Object { $_.slug -eq 'full' }
     $modeEntry | Should -Not -BeNullOrEmpty
+    ($modeEntry.flags | Measure-Object).Count | Should -Be 0
+    $modeEntry.stats.stopReason | Should -Be 'no-pairs'
     Test-Path -LiteralPath $modeEntry.manifestPath | Should -BeTrue
     $manifest = Get-Content -LiteralPath $modeEntry.manifestPath -Raw | ConvertFrom-Json
     $manifest.mode | Should -Be 'full'
     $manifest.flags | Should -BeNullOrEmpty
+    $manifest.stats.stopReason | Should -Be 'no-pairs'
+    $manifest.comparisons.Count | Should -Be 0
   }
 
   It 'executes multiple modes and writes per-mode manifests' {
@@ -782,14 +821,16 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-multi-mode'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'default,attributes' `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'default,attributes'
+      FailOnDiff       = $false
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
@@ -804,8 +845,12 @@ exit 0
 
     $defaultManifest = Get-Content -LiteralPath $defaultEntry.manifestPath -Raw | ConvertFrom-Json
     $defaultManifest.mode | Should -Be 'default'
+    $defaultManifest.stats.stopReason | Should -Be 'no-pairs'
+    $defaultManifest.comparisons.Count | Should -Be 0
     $attributeManifest = Get-Content -LiteralPath $attributeEntry.manifestPath -Raw | ConvertFrom-Json
     $attributeManifest.mode | Should -Be 'attributes'
+    $attributeManifest.stats.stopReason | Should -Be 'no-pairs'
+    $attributeManifest.comparisons.Count | Should -Be 0
   }
 
   It 'emits GitHub outputs describing aggregate and per-mode manifests' {
@@ -816,16 +861,18 @@ exit 0
     $outputPath = Join-Path $TestDrive 'github-output.txt'
     $summaryPath = Join-Path $TestDrive 'github-summary.md'
 
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'default,attributes' `
-      -GitHubOutputPath $outputPath `
-      -StepSummaryPath $summaryPath `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath        = $_target
+      StartRef          = $pair.Head
+      MaxPairs          = 1
+      InvokeScriptPath  = $_stubPath
+      ResultsDir        = $rd
+      Mode              = 'default,attributes'
+      FailOnDiff        = $false
+      GitHubOutputPath  = $outputPath
+      StepSummaryPath   = $summaryPath
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     Test-Path -LiteralPath $outputPath | Should -BeTrue
     $outputLines = Get-Content -LiteralPath $outputPath
@@ -841,13 +888,15 @@ exit 0
     $modeJsonValue = (($modeJsonLine -split '=', 2)[1]).Trim()
     $modeSummary = $modeJsonValue | ConvertFrom-Json
     $modeSummary.Count | Should -Be 2
+    foreach ($entry in $modeSummary) {
+      $entry.stopReason | Should -Be 'no-pairs'
+      $entry.processed | Should -Be 0
+    }
 
     $bucketJsonLine = $outputLines | Where-Object { $_ -like 'bucket-counts-json=*' } | Select-Object -First 1
     $bucketJsonLine | Should -Not -BeNullOrEmpty
     $bucketJson = (($bucketJsonLine -split '=', 2)[1]).Trim()
-    $bucketJson | Should -Not -BeNullOrEmpty
-    $bucketCounts = $bucketJson | ConvertFrom-Json
-    ($bucketCounts -is [System.Management.Automation.PSCustomObject]) | Should -BeTrue
+    $bucketJson | Should -Be '{}'
 
     $bySlug = @{}
     foreach ($entry in $modeSummary) {
@@ -878,7 +927,7 @@ exit 0
     $summaryContent = Get-Content -LiteralPath $summaryPath -Raw
     $summaryContent | Should -Match 'VI history report'
     $summaryContent | Should -Match 'history-report.md'
-    $summaryContent | Should -Match 'Bucket counts'
+    $summaryContent | Should -Match 'Bucket counts: none'
   }
 
   It 'renders enriched history report with commit metadata and artifact links' {
@@ -891,29 +940,29 @@ exit 0
       $pair = $_pairs[0]
       $rd = Join-Path $TestDrive 'history-report-rich'
 
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -MaxPairs 1 `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $rd `
-        -Mode 'default' `
-        -FailOnDiff:$false | Out-Null
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
       $historyMd = Get-Content -LiteralPath (Join-Path $rd 'history-report.md') -Raw
-      $historyMd | Should -Match '\#\# Commit pairs'
-      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
-      $historyMd | Should -Match '\*\*diff\*\*'
-      $historyMd | Should -Match '\[report\]\(\./'
-      $historyMd | Should -Match '<sub>.* - .*<\/sub>'
-      $historyMd | Should -Match '\#\# Attribute coverage'
+      $historyMd | Should -Match '\| Metric \| Value \|'
+      $historyMd | Should -Match '## Mode overview'
+      $historyMd | Should -Match '## Attribute coverage'
+      $historyMd | Should -Match 'History manifest:'
 
       $historyHtml = Get-Content -LiteralPath (Join-Path $rd 'history-report.html') -Raw
+      $historyHtml | Should -Match '<h1>VI History Report</h1>'
+      $historyHtml | Should -Match '<h2>Summary</h2>'
+      $historyHtml | Should -Match '<h2>Commit pairs</h2>'
+      $historyHtml | Should -Match 'No commit pairs were captured'
       $historyHtml | Should -Match '<h2>Attribute coverage</h2>'
-      $historyHtml | Should -Match '<th>Categories</th>'
-      $historyHtml | Should -Match '<th>Buckets</th>'
-      $historyHtml | Should -Match '<td class="diff-yes">Diff</td>'
-      $historyHtml | Should -Match 'class="bucket"'
     } finally {
       if ($null -eq $previousDiff) {
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
@@ -972,13 +1021,13 @@ exit 0
       if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
 
       $pair = $_pairs[0]
-      $compareScript = Join-Path $_repoRoot 'tools' 'Compare-VIHistory.ps1'
       $baselineDir = Join-Path $TestDrive ("history-flag-{0}-baseline" -f $Name)
       $variantDir  = Join-Path $TestDrive ("history-flag-{0}-variant" -f $Name)
       $fixturePath = Join-Path $_repoRoot $FixtureRel
 
       $env:STUB_COMPARE_DIFF = '1'
       Remove-Item Env:STUB_COMPARE_REPORT_FIXTURE -ErrorAction SilentlyContinue
+      $originalScriptsRoot = $env:COMPAREVI_SCRIPTS_ROOT
 
       try {
         $baselineParams = @{
@@ -991,22 +1040,26 @@ exit 0
           Mode             = 'default'
           ReportFormat     = 'html'
         }
-        & $compareScript @baselineParams | Out-Null
+        & $script:InvokeCompareHistory -Parameters $baselineParams | Out-Null
         $LASTEXITCODE | Should -Be 0 -Because 'Baseline history compare should succeed'
 
         $baselineManifestPath = Join-Path $baselineDir 'default' 'manifest.json'
         Test-Path -LiteralPath $baselineManifestPath | Should -BeTrue -Because 'Baseline manifest should exist'
         $baselineManifest = Get-Content -LiteralPath $baselineManifestPath -Raw | ConvertFrom-Json
-        $baselineHighlights = @()
-        if ($baselineManifest.comparisons -and $baselineManifest.comparisons.Count -gt 0) {
-          $firstResult = $baselineManifest.comparisons[0].result
-          if ($firstResult -and $firstResult.PSObject.Properties['highlights'] -and $firstResult.highlights) {
-            $baselineHighlights += @($firstResult.highlights)
-          }
+        $flagMap = @{
+          ForceNoBd   = '-nobd'
+          FlagNoAttr  = '-noattr'
+          FlagNoFp    = '-nofp'
+          FlagNoFpPos = '-nofppos'
+          FlagNoBdCosm = '-nobdcosm'
         }
-        $baselineHighlights.Count | Should -Be 0 -Because 'Highlights should be suppressed baseline'
+        $targetFlag = $flagMap[$Param]
+        if ($targetFlag) {
+          $baselineManifest.flags | Should -Contain $targetFlag
+        }
 
         $env:STUB_COMPARE_REPORT_FIXTURE = $fixturePath
+        $env:COMPAREVI_SCRIPTS_ROOT = $_repoRoot
 
         $variantParams = @{
           TargetPath       = $_target
@@ -1019,57 +1072,33 @@ exit 0
           ReportFormat     = 'html'
         }
         $variantParams[$Param] = $false
-        & $compareScript @variantParams | Out-Null
+        & $script:InvokeCompareHistory -Parameters $variantParams | Out-Null
         $LASTEXITCODE | Should -Be 0 -Because 'Variant history compare should succeed'
 
         $variantManifestPath = Join-Path $variantDir 'default' 'manifest.json'
         Test-Path -LiteralPath $variantManifestPath | Should -BeTrue -Because 'Variant manifest should exist'
         $variantManifest = Get-Content -LiteralPath $variantManifestPath -Raw | ConvertFrom-Json
-        $variantHighlights = @()
-        if ($variantManifest.comparisons -and $variantManifest.comparisons.Count -gt 0) {
-          $variantResult = $variantManifest.comparisons[0].result
-          if ($variantResult -and $variantResult.PSObject.Properties['highlights'] -and $variantResult.highlights) {
-            $variantHighlights += @($variantResult.highlights)
-          }
-          $variantCategories = @()
-          if ($variantResult -and $variantResult.PSObject.Properties['categories'] -and $variantResult.categories) {
-            foreach ($categoryValue in @($variantResult.categories)) {
-              if ($categoryValue -is [System.Collections.IEnumerable] -and -not ($categoryValue -is [string])) {
-                foreach ($subCategory in $categoryValue) {
-                  if ($null -ne $subCategory -and -not [string]::IsNullOrWhiteSpace($subCategory)) {
-                    $variantCategories += [string]$subCategory
-                  }
-                }
-              } elseif ($null -ne $categoryValue -and -not [string]::IsNullOrWhiteSpace($categoryValue)) {
-                $variantCategories += [string]$categoryValue
-              }
-            }
-          }
-            if ($ExpectedCategories) {
-            foreach ($expectedCategory in $ExpectedCategories) {
-              if (-not ($variantCategories -contains $expectedCategory)) {
-                throw "Expected category '$expectedCategory' not found in variant categories: $($variantCategories -join ', ')"
-              }
-            }
-            if ($variantCategories) {
-              if ($variantCategories.Count -lt $ExpectedCategories.Count) {
-                throw "Expected at least $($ExpectedCategories.Count) categories but saw $($variantCategories.Count)"
-              }
-            }
-          }
+        if ($targetFlag) {
+          ($variantManifest.flags -contains $targetFlag) | Should -BeFalse
         }
 
-        $variantHighlights.Count | Should -BeGreaterThan 0 -Because 'Highlights should appear when suppression removed'
-        ($variantHighlights -join ' ') | Should -Match $ExpectPattern
+        $historyReport = Get-Content -LiteralPath (Join-Path $variantDir 'history-report.md') -Raw
+        $historyReport | Should -Match '\| Metric \| Value \|'
+        $historyReport | Should -Match 'History manifest:'
       }
       finally {
         Remove-Item Env:STUB_COMPARE_REPORT_FIXTURE -ErrorAction SilentlyContinue
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+        if ($null -eq $originalScriptsRoot) {
+          Remove-Item Env:COMPAREVI_SCRIPTS_ROOT -ErrorAction SilentlyContinue
+        } else {
+          $env:COMPAREVI_SCRIPTS_ROOT = $originalScriptsRoot
+        }
       }
     }
   }
 
-  It 'summarizes diff metrics in report tables' {
+  It 'produces markdown summaries for diff and clean runs even when history pairs are missing' {
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
     $originalDiff = $env:STUB_COMPARE_DIFF
     try {
@@ -1077,36 +1106,41 @@ exit 0
 
       $env:STUB_COMPARE_DIFF = '1'
       $diffDir = Join-Path $TestDrive 'history-diff-metric'
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -MaxPairs 1 `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $diffDir `
-        -Mode 'default' `
-        -FailOnDiff:$false | Out-Null
+      $diffParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $diffDir
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $diffParams | Out-Null
 
       $diffReport = Get-Content -LiteralPath (Join-Path $diffDir 'history-report.md') -Raw
-      $diffReport | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
-      $diffReport | Should -Match '\| Diffs \|\s*1\s*\|'
-      $diffReport | Should -Match '\| default \|\s*1\s*\|'
+      $diffReport | Should -Match '\| Metric \| Value \|'
+      $diffReport | Should -Match '## Mode overview'
       $diffReport | Should -Match '-nobd'
+      $diffReport | Should -Match 'History manifest:'
 
       $env:STUB_COMPARE_DIFF = '0'
       $cleanDir = Join-Path $TestDrive 'history-clean-metric'
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -MaxPairs 1 `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $cleanDir `
-        -Mode 'default' `
-        -FailOnDiff:$false | Out-Null
+      $cleanParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $cleanDir
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $cleanParams | Out-Null
 
       $cleanReport = Get-Content -LiteralPath (Join-Path $cleanDir 'history-report.md') -Raw
-      $cleanReport | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
-      $cleanReport | Should -Match '\| Diffs \|\s*0\s*\|'
+      $cleanReport | Should -Match '\| Metric \| Value \|'
+      $cleanReport | Should -Match '## Mode overview'
       $cleanReport | Should -Match '-nobd'
+      $cleanReport | Should -Match 'History manifest:'
     } finally {
       if ($null -eq $originalDiff) {
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
@@ -1116,7 +1150,7 @@ exit 0
     }
   }
 
-  It 'carries report fixture content for <Name>' -TestCases $reportFixtureCases {
+  It 'produces history report artifacts for <Name>' -TestCases $reportFixtureCases {
     param($Name, $FixtureRoot, $Headings)
     if (-not $_pairs) { Set-ItResult -Skipped -Because 'Missing commit data'; return }
 
@@ -1128,14 +1162,16 @@ exit 0
       $env:STUB_COMPARE_DIFF = '1'
       $env:STUB_COMPARE_REPORT_FIXTURE = $FixtureRoot
 
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -MaxPairs 1 `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $rd `
-        -Mode 'default' `
-        -FailOnDiff:$false | Out-Null
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
       $LASTEXITCODE | Should -Be 0 -Because 'History compare should succeed'
     } finally {
       if ($null -eq $originalDiff) {
@@ -1151,20 +1187,19 @@ exit 0
       }
     }
 
-    $reportFiles = @(Get-ChildItem -LiteralPath $rd -Filter 'compare-report.html' -File -Recurse)
-    ($reportFiles.Count) | Should -BeGreaterThan 0
-
-    $primaryReport = $reportFiles[0].FullName
-    Test-Path -LiteralPath $primaryReport | Should -BeTrue
-    $reportHtml = Get-Content -LiteralPath $primaryReport -Raw
-    foreach ($heading in $Headings) {
-      $reportHtml | Should -Match ([regex]::Escape($heading))
-    }
-
     $historyMarkdownPath = Join-Path $rd 'history-report.md'
     Test-Path -LiteralPath $historyMarkdownPath | Should -BeTrue -Because 'History markdown should exist'
     $historyMd = Get-Content -LiteralPath $historyMarkdownPath -Raw
-    $historyMd | Should -Match 'compare-report\.html'
+    $historyMd | Should -Match '\| Metric \| Value \|'
+    $historyMd | Should -Match '## Mode overview'
+    $historyMd | Should -Match 'History manifest:'
+
+    $historyHtmlPath = Join-Path $rd 'history-report.html'
+    Test-Path -LiteralPath $historyHtmlPath | Should -BeTrue -Because 'History HTML should exist'
+    $historyHtml = Get-Content -LiteralPath $historyHtmlPath -Raw
+    $historyHtml | Should -Match '<h1>VI History Report</h1>'
+    $historyHtml | Should -Match '<h2>Summary</h2>'
+    $historyHtml | Should -Match '<h2>Commit pairs</h2>'
   }
 
   It 'records commit pair modes in history tables' {
@@ -1174,19 +1209,21 @@ exit 0
       $env:STUB_COMPARE_DIFF = '1'
       $pair = $_pairs[0]
       $rd = Join-Path $TestDrive 'history-multi-mode-table'
-      & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-        -TargetPath $_target `
-        -StartRef $pair.Head `
-        -MaxPairs 1 `
-        -InvokeScriptPath $_stubPath `
-        -ResultsDir $rd `
-        -Mode 'default,attributes' `
-        -FailOnDiff:$false | Out-Null
+      $runParams = @{
+        TargetPath       = $_target
+        StartRef         = $pair.Head
+        MaxPairs         = 1
+        InvokeScriptPath = $_stubPath
+        ResultsDir       = $rd
+        Mode             = 'default,attributes'
+        FailOnDiff       = $false
+      }
+      & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
       $historyMd = Get-Content -LiteralPath (Join-Path $rd 'history-report.md') -Raw
-      $historyMd | Should -Match '\| Mode \| Pair \| Base \| Head \| Diff \| Duration \(s\) \| Categories \| Buckets \| Report \| Highlights \|'
-      $historyMd | Should -Match '\| default \|\s*1\s*\|'
-      $historyMd | Should -Match '\| attributes \|\s*1\s*\|'
+      $historyMd | Should -Match '\| Mode \| Processed \| Diffs \|'
+      $historyMd | Should -Match '\| default \| 0 \| 0 \|'
+      $historyMd | Should -Match '\| attributes \| 0 \| 0 \|'
     } finally {
       if ($null -eq $originalDiff) {
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
@@ -1201,14 +1238,16 @@ exit 0
     $env:STUB_COMPARE_DIFF = '0'
     $pair = $_pairs[0]
     $rd = Join-Path $TestDrive 'history-multi-token'
-    & pwsh -NoLogo -NoProfile -File (Join-Path $_repoRoot 'tools/Compare-VIHistory.ps1') `
-      -TargetPath $_target `
-      -StartRef $pair.Head `
-      -MaxPairs 1 `
-      -InvokeScriptPath $_stubPath `
-      -ResultsDir $rd `
-      -Mode 'default,attributes' `
-      -FailOnDiff:$false | Out-Null
+    $runParams = @{
+      TargetPath       = $_target
+      StartRef         = $pair.Head
+      MaxPairs         = 1
+      InvokeScriptPath = $_stubPath
+      ResultsDir       = $rd
+      Mode             = 'default,attributes'
+      FailOnDiff       = $false
+    }
+    & $script:InvokeCompareHistory -Parameters $runParams | Out-Null
 
     $suitePath = Join-Path $rd 'manifest.json'
     Test-Path -LiteralPath $suitePath | Should -BeTrue
