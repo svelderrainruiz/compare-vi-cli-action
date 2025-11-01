@@ -33,13 +33,17 @@ param(
   [string]$InvokeScriptPath,
 
   [string]$GitHubOutputPath,
-  [string]$StepSummaryPath
+  [string]$StepSummaryPath,
+
+  [switch]$IncludeMergeParents
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 Set-Variable -Name repoRoot -Scope Script -Value $null
+$script:CommitParentCache = @{}
+$script:MergeBaseCache = @{}
 
 $maxPairsRequested = $PSBoundParameters.ContainsKey('MaxPairs') -and $MaxPairs -gt 0
 
@@ -77,28 +81,78 @@ function Split-ArgString {
 }
 
 $modeDefinitions = @{
-  'default'       = @{ slug = 'default'; flags = $null }
-  'attributes'    = @{ slug = 'attributes'; flags = $null }
-  'front-panel'   = @{ slug = 'front-panel'; flags = $null }
-  'block-diagram' = @{ slug = 'block-diagram'; flags = $null }
-  'all'           = @{ slug = 'all'; flags = $null }
-  'full'          = @{ slug = 'full'; flags = $null }
-  'custom'        = @{ slug = 'custom'; flags = $null }
+  'default' = @{
+    slug         = 'default'
+    presetFlags  = $null
+    adjustments  = @{}
+  }
+  'attributes' = @{
+    slug         = 'attributes'
+    presetFlags  = $null
+    adjustments  = @{
+      FlagNoAttr = $false
+    }
+  }
+  'front-panel' = @{
+    slug         = 'front-panel'
+    presetFlags  = $null
+    adjustments  = @{
+      FlagNoFp    = $false
+      FlagNoFpPos = $false
+    }
+  }
+  'block-diagram' = @{
+    slug         = 'block-diagram'
+    presetFlags  = $null
+    adjustments  = @{
+      FlagNoBdCosm = $false
+    }
+  }
+  'full' = @{
+    slug         = 'full'
+    presetFlags  = $null
+    adjustments  = @{
+      ForceNoBd    = $false
+      FlagNoAttr   = $false
+      FlagNoFp     = $false
+      FlagNoFpPos  = $false
+      FlagNoBdCosm = $false
+    }
+  }
+  'custom' = @{
+    slug         = 'custom'
+    presetFlags  = $null
+    adjustments  = @{}
+  }
+}
+
+$modeAliases = @{
+  'all' = 'full'
 }
 
 function Resolve-ModeSpec {
   param([string]$Value)
   if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
-  $token = $Value.Trim().ToLowerInvariant()
+  $tokenOriginal = $Value.Trim()
+  $token = $tokenOriginal.ToLowerInvariant()
+  $usedAlias = $false
+  if ($modeAliases.ContainsKey($token)) {
+    $token = $modeAliases[$token]
+    $usedAlias = $true
+  }
   if (-not $modeDefinitions.ContainsKey($token)) {
     $allowed = [string]::Join(', ', $modeDefinitions.Keys)
     throw ("Unknown mode '{0}'. Allowed modes: {1}" -f $Value, $allowed)
   }
   $def = $modeDefinitions[$token]
+  if ($usedAlias) {
+    Write-Warning ("Mode '{0}' is deprecated; using '{1}' instead." -f $tokenOriginal, $token)
+  }
   return [pscustomobject]@{
     Name = $token
     Slug = $def.slug
-    PresetFlags = if ($def.flags -ne $null) { @($def.flags) } else { $null }
+    PresetFlags = if ($def.presetFlags -ne $null) { @($def.presetFlags) } else { $null }
+    Adjustments = if ($def.adjustments) { $def.adjustments } else { @{} }
   }
 }
 
@@ -213,7 +267,7 @@ function Build-FlagBundle {
       }
     }
   }
-  if ($ModeSpec.Name -in @('all','full')) {
+  if ($ModeSpec.Name -eq 'full') {
     $flags.Clear()
   }
 
@@ -357,6 +411,303 @@ function Test-CommitTouchesPath {
   )
   $result = Invoke-Git -Arguments @('diff-tree','--no-commit-id','--name-only','-r',$Commit,'--',$Path) -Quiet
   return -not [string]::IsNullOrWhiteSpace($result)
+}
+
+function Get-CommitParents {
+  param(
+    [Parameter(Mandatory = $true)][string]$Commit
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Commit)) { return @() }
+
+  if ($script:CommitParentCache.ContainsKey($Commit)) {
+    return $script:CommitParentCache[$Commit]
+  }
+
+  $parents = @()
+  try {
+    $raw = Invoke-Git -Arguments @('cat-file','commit',$Commit) -Quiet
+  } catch {
+    $script:CommitParentCache[$Commit] = $parents
+    return $parents
+  }
+
+  foreach ($rawLine in ($raw -split "`n")) {
+    $line = $rawLine.Trim()
+    if (-not $line) { break }
+    if ($line.StartsWith('parent ')) {
+      $parentSha = $line.Substring(7).Trim()
+      if (-not [string]::IsNullOrWhiteSpace($parentSha)) {
+        $parents += $parentSha
+      }
+    }
+  }
+
+  $script:CommitParentCache[$Commit] = $parents
+  return $parents
+}
+
+function Get-MergeBase {
+  param(
+    [Parameter(Mandatory = $true)][string]$CommitA,
+    [Parameter(Mandatory = $true)][string]$CommitB
+  )
+
+  if ([string]::IsNullOrWhiteSpace($CommitA) -or [string]::IsNullOrWhiteSpace($CommitB)) {
+    return $null
+  }
+
+  $key = "{0}::{1}" -f $CommitA, $CommitB
+  if ($script:MergeBaseCache.ContainsKey($key)) {
+    return $script:MergeBaseCache[$key]
+  }
+
+  $reverseKey = "{0}::{1}" -f $CommitB, $CommitA
+  if ($script:MergeBaseCache.ContainsKey($reverseKey)) {
+    return $script:MergeBaseCache[$reverseKey]
+  }
+
+  try {
+    $raw = Invoke-Git -Arguments @('merge-base','--',$CommitA,$CommitB) -Quiet
+    $value = ($raw -split "`n")[0].Trim()
+  } catch {
+    $value = $null
+  }
+
+  $script:MergeBaseCache[$key] = $value
+  $script:MergeBaseCache[$reverseKey] = $value
+  return $value
+}
+
+function Get-BranchCommitSequence {
+  param(
+    [Parameter(Mandatory = $true)][string]$BranchHead,
+    [string]$ExcludeRef,
+    [Parameter(Mandatory = $true)][string]$Path
+  )
+
+  if ([string]::IsNullOrWhiteSpace($BranchHead)) { return @() }
+
+  $args = @('rev-list',$BranchHead)
+  if ($ExcludeRef) {
+    $args += ('^{0}' -f $ExcludeRef)
+  }
+  $args += '--'
+  $args += $Path
+
+  try {
+    $raw = Invoke-Git -Arguments $args -Quiet
+  } catch {
+    return @()
+  }
+
+  return @($raw -split "`n" | Where-Object { $_ })
+}
+
+function Get-MergeParentPlan {
+  param(
+    [Parameter(Mandatory = $true)][string]$MergeCommit,
+    [Parameter(Mandatory = $true)][string]$FirstParent,
+    [Parameter(Mandatory = $true)][string]$BranchParent,
+    [Parameter(Mandatory = $true)][int]$ParentIndex,
+    [Parameter(Mandatory = $true)][int]$ParentCount,
+    [Parameter(Mandatory = $true)][string]$TargetRel,
+    [string]$EndRef,
+    [switch]$IncludeMergeParents,
+    [string]$RootMerge,
+    [System.Collections.Generic.HashSet[string]]$SeenBranches
+  )
+
+  if (-not $SeenBranches) {
+    $SeenBranches = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  }
+  if (-not $RootMerge) { $RootMerge = $MergeCommit }
+
+  $branchKey = "{0}|{1}|{2}" -f $MergeCommit, $BranchParent, $ParentIndex
+  if (-not $SeenBranches.Add($branchKey)) {
+    return @()
+  }
+
+  $plan = New-Object System.Collections.Generic.List[object]
+
+  $mergeBase = Get-MergeBase -CommitA $BranchParent -CommitB $FirstParent
+
+  $branchCommitsRaw = Get-BranchCommitSequence -BranchHead $BranchParent -ExcludeRef $mergeBase -Path $TargetRel
+  $branchList = New-Object System.Collections.Generic.List[string]
+  foreach ($commit in $branchCommitsRaw) {
+    $trimmed = $commit.Trim()
+    if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+      [void]$branchList.Add($trimmed)
+    }
+  }
+  if ($branchList.Count -gt 1) {
+    $branchList.Reverse()
+  }
+
+  for ($i = 0; $i -lt $branchList.Count; $i++) {
+    $commit = $branchList[$i]
+    $parents = @(Get-CommitParents -Commit $commit)
+    $baseCommit = if ($parents.Count -gt 0) { $parents[0] } else { $mergeBase }
+    if ([string]::IsNullOrWhiteSpace($baseCommit)) { continue }
+
+    $depth = $branchList.Count - $i
+    $lineage = [ordered]@{
+      type        = 'merge-branch'
+      parentIndex = $ParentIndex
+      parentCount = $ParentCount
+      mergeCommit = $MergeCommit
+      rootMerge   = $RootMerge
+      branchHead  = $BranchParent
+      depth       = $depth
+    }
+
+    $stopAfter = $EndRef -and [string]::Equals($baseCommit, $EndRef, [System.StringComparison]::OrdinalIgnoreCase)
+    $plan.Add([ordered]@{
+      Head            = $commit
+      Base            = $baseCommit
+      Lineage         = $lineage
+      StopAfter       = [bool]$stopAfter
+      StopAfterReason = if ($stopAfter) { 'reached-end-ref' } else { $null }
+    }) | Out-Null
+
+    if ($IncludeMergeParents.IsPresent -and $parents.Count -gt 1) {
+      for ($sub = 1; $sub -lt $parents.Count; $sub++) {
+        $altParent = $parents[$sub]
+        if ([string]::IsNullOrWhiteSpace($altParent)) { continue }
+        $nested = Get-MergeParentPlan -MergeCommit $commit -FirstParent $baseCommit -BranchParent $altParent -ParentIndex ($sub + 1) -ParentCount $parents.Count -TargetRel $TargetRel -EndRef $EndRef -IncludeMergeParents:$IncludeMergeParents.IsPresent -RootMerge $RootMerge -SeenBranches $SeenBranches
+        foreach ($subSpec in $nested) {
+          $plan.Add($subSpec) | Out-Null
+        }
+      }
+    }
+  }
+
+  $mergeStopAfter = $EndRef -and [string]::Equals($BranchParent, $EndRef, [System.StringComparison]::OrdinalIgnoreCase)
+  $plan.Add([ordered]@{
+    Head            = $MergeCommit
+    Base            = $BranchParent
+    Lineage         = [ordered]@{
+      type        = 'merge-parent'
+      parentIndex = $ParentIndex
+      parentCount = $ParentCount
+      mergeCommit = $MergeCommit
+      rootMerge   = $RootMerge
+      branchHead  = $BranchParent
+      depth       = 0
+    }
+    StopAfter       = [bool]$mergeStopAfter
+    StopAfterReason = if ($mergeStopAfter) { 'reached-end-ref' } else { $null }
+  }) | Out-Null
+
+  return $plan.ToArray()
+}
+
+function Build-ComparisonPlan {
+  param(
+    [Parameter(Mandatory = $true)][string[]]$MainlineCommits,
+    [Parameter(Mandatory = $true)][string]$TargetRel,
+    [string]$EndRef,
+    [switch]$IncludeMergeParents
+  )
+
+  $mainlineSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  $mainlineList = New-Object System.Collections.Generic.List[string]
+  foreach ($entry in $MainlineCommits) {
+    if ([string]::IsNullOrWhiteSpace($entry)) { continue }
+    $trimmed = $entry.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+    if ($mainlineSet.Add($trimmed)) {
+      $mainlineList.Add($trimmed)
+    }
+  }
+
+  for ($index = 0; $index -lt $mainlineList.Count; $index++) {
+    $currentCommit = $mainlineList[$index]
+    $parentsForCurrent = @(Get-CommitParents -Commit $currentCommit)
+    if (-not $parentsForCurrent -or $parentsForCurrent.Count -eq 0) { continue }
+    $firstParentForCurrent = $parentsForCurrent[0]
+    if ([string]::IsNullOrWhiteSpace($firstParentForCurrent)) { continue }
+    if ($mainlineSet.Add($firstParentForCurrent)) {
+      $mainlineList.Add($firstParentForCurrent)
+    }
+    if ($EndRef -and [string]::Equals($firstParentForCurrent, $EndRef, [System.StringComparison]::OrdinalIgnoreCase)) {
+      break
+    }
+  }
+
+  $plan = New-Object System.Collections.Generic.List[object]
+  $addedKeys = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  $seenBranches = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+
+  $terminalHint = $null
+
+  function Add-Spec {
+    param([object]$Spec, [System.Collections.Generic.HashSet[string]]$KeySet, [System.Collections.Generic.List[object]]$PlanList)
+    if (-not $Spec) { return }
+    if ([string]::IsNullOrWhiteSpace($Spec.Head) -or [string]::IsNullOrWhiteSpace($Spec.Base)) { return }
+
+    $lineage = $Spec.Lineage
+    $parentIndexKey = if ($lineage -and $lineage.PSObject.Properties['parentIndex']) { [int]$lineage.parentIndex } else { 0 }
+    $mergeCommitKey = if ($lineage -and $lineage.PSObject.Properties['mergeCommit']) { [string]$lineage.mergeCommit } else { '' }
+    $depthKey = if ($lineage -and $lineage.PSObject.Properties['depth']) { [int]$lineage.depth } else { 0 }
+    $key = "{0}|{1}|{2}|{3}|{4}" -f $Spec.Head, $Spec.Base, $parentIndexKey, $mergeCommitKey, $depthKey
+    if (-not $KeySet.Add($key)) { return }
+    $PlanList.Add([pscustomobject]$Spec) | Out-Null
+  }
+
+  foreach ($rawHead in $mainlineList) {
+    $head = $rawHead.Trim()
+    if (-not $head) { continue }
+
+    if ($EndRef -and [string]::Equals($head, $EndRef, [System.StringComparison]::OrdinalIgnoreCase)) {
+      $terminalHint = 'reached-end-ref'
+      break
+    }
+
+    $parents = @(Get-CommitParents -Commit $head)
+    if ($parents.Count -eq 0) {
+      $terminalHint = 'reached-root'
+      break
+    }
+
+    $parentCount = $parents.Count
+    $firstParent = $parents[0]
+
+    $stopAfter = $EndRef -and [string]::Equals($firstParent, $EndRef, [System.StringComparison]::OrdinalIgnoreCase)
+    $spec = [ordered]@{
+      Head            = $head
+      Base            = $firstParent
+      Lineage         = [ordered]@{
+        type        = 'mainline'
+        parentIndex = 1
+        parentCount = $parentCount
+        mergeCommit = $head
+        rootMerge   = $head
+        depth       = 0
+      }
+      StopAfter       = [bool]$stopAfter
+      StopAfterReason = if ($stopAfter) { 'reached-end-ref' } else { $null }
+    }
+    Add-Spec -Spec $spec -KeySet $addedKeys -PlanList $plan
+
+    if ($IncludeMergeParents.IsPresent -and $parents.Count -gt 1) {
+      for ($pi = 1; $pi -lt $parents.Count; $pi++) {
+        $branchParent = $parents[$pi]
+        if ([string]::IsNullOrWhiteSpace($branchParent)) { continue }
+        $branchSpecs = Get-MergeParentPlan -MergeCommit $head -FirstParent $firstParent -BranchParent $branchParent -ParentIndex ($pi + 1) -ParentCount $parentCount -TargetRel $TargetRel -EndRef $EndRef -IncludeMergeParents:$IncludeMergeParents.IsPresent -RootMerge $head -SeenBranches $seenBranches
+        foreach ($branchSpec in $branchSpecs) {
+          Add-Spec -Spec $branchSpec -KeySet $addedKeys -PlanList $plan
+        }
+      }
+    }
+
+    if ($stopAfter) { break }
+  }
+
+  return [ordered]@{
+    Plan         = $plan.ToArray()
+    TerminalHint = $terminalHint
+  }
 }
 
 function Test-IsAncestor {
@@ -566,9 +917,77 @@ $revArgs += '--'
 $revArgs += $targetRel
 $revListRaw = Invoke-Git -Arguments $revArgs -Quiet
 $commitList = @($revListRaw -split "`n" | Where-Object { $_ })
+Write-Verbose ("Commit list count: {0}" -f $commitList.Count)
+$planResult = Build-ComparisonPlan -MainlineCommits $commitList -TargetRel $targetRel -EndRef $endRef -IncludeMergeParents:$IncludeMergeParents.IsPresent
+$comparisonPlan = @()
+$planTerminalHint = $null
+if ($planResult) {
+  if ($planResult.PSObject.Properties['Plan'] -and $planResult.Plan) {
+    $comparisonPlan = [object[]]$planResult.Plan
+  }
+  if ($planResult.PSObject.Properties['TerminalHint'] -and $planResult.TerminalHint) {
+    $planTerminalHint = $planResult.TerminalHint
+  }
+}
+
 if ($commitList.Count -eq 0) {
   throw ("No commits found for {0} reachable from {1}" -f $targetRel, $startRef)
 }
+
+$planEntries = @()
+if ($null -ne $comparisonPlan) {
+  if ($comparisonPlan -is [System.Array]) {
+    if ($comparisonPlan.Length -gt 0) {
+      $planEntries = [object[]]$comparisonPlan
+    }
+  } else {
+    $planEntries = @($comparisonPlan)
+  }
+}
+$planEntriesCount = ($planEntries | Measure-Object).Count
+if ($planEntriesCount -eq 0) {
+  $fallbackPlan = New-Object System.Collections.Generic.List[object]
+  foreach ($rawHead in $commitList) {
+    $head = $rawHead.Trim()
+    if (-not $head) { continue }
+
+    if ($endRef -and [string]::Equals($head, $endRef, [System.StringComparison]::OrdinalIgnoreCase)) {
+      if (-not $planTerminalHint) { $planTerminalHint = 'reached-end-ref' }
+      break
+    }
+
+    $parentExpr = ('{0}^' -f $head)
+    $parentRaw = $null
+    try { $parentRaw = Invoke-Git -Arguments @('rev-parse', $parentExpr) -Quiet } catch { $parentRaw = $null }
+    $baseCommit = ($parentRaw -split "`n")[0].Trim()
+    if (-not $baseCommit) {
+      if (-not $planTerminalHint) { $planTerminalHint = 'reached-root' }
+      break
+    }
+
+    $stopAfter = $endRef -and [string]::Equals($baseCommit, $endRef, [System.StringComparison]::OrdinalIgnoreCase)
+    $fallbackPlan.Add([pscustomobject]@{
+      Head            = $head
+      Base            = $baseCommit
+      Lineage         = [ordered]@{
+        type        = 'mainline'
+        parentIndex = 1
+        parentCount = 1
+        mergeCommit = $head
+        rootMerge   = $head
+        depth       = 0
+      }
+      StopAfter       = [bool]$stopAfter
+      StopAfterReason = if ($stopAfter) { 'reached-end-ref' } else { $null }
+    }) | Out-Null
+
+    if ($stopAfter) { break }
+  }
+  Write-Verbose ("Fallback plan entries: {0}" -f $fallbackPlan.Count)
+  $planEntries = $fallbackPlan.ToArray()
+  $planEntriesCount = ($planEntries | Measure-Object).Count
+}
+Write-Verbose ("Comparison plan entries: {0}" -f $planEntriesCount)
 
 $compareScript = $null
 $scriptsOverride = $env:COMPAREVI_SCRIPTS_ROOT
@@ -591,6 +1010,22 @@ if (-not [string]::IsNullOrWhiteSpace($scriptsOverride)) {
 
 if (-not $compareScript) {
   $compareScript = Join-Path $repoRoot 'tools' 'Compare-RefsToTemp.ps1'
+}
+if (-not (Test-Path -LiteralPath $compareScript -PathType Leaf)) {
+  $envScriptsRoot = $env:COMPAREVI_SCRIPTS_ROOT
+  if ($envScriptsRoot) {
+    try {
+      $envScriptsRoot = [System.IO.Path]::GetFullPath($envScriptsRoot)
+    } catch {
+      $envScriptsRoot = $null
+    }
+  }
+  if ($envScriptsRoot) {
+    $candidate = Join-Path $envScriptsRoot 'Compare-RefsToTemp.ps1'
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+      $compareScript = $candidate
+    }
+  }
 }
 if (-not (Test-Path -LiteralPath $compareScript -PathType Leaf)) {
   throw ("Compare script not found: {0}" -f $compareScript)
@@ -662,33 +1097,12 @@ foreach ($modeSpec in $modeSpecs) {
   $modeFlagNoFp = $FlagNoFp
   $modeFlagNoFpPos = $FlagNoFpPos
   $modeFlagNoBdCosm = $FlagNoBdCosm
-
-  switch ($modeName) {
-    'attributes' {
-      $modeFlagNoAttr = $false
-    }
-    'front-panel' {
-      $modeFlagNoFp = $false
-      $modeFlagNoFpPos = $false
-    }
-    'block-diagram' {
-      $modeFlagNoBdCosm = $false
-    }
-    'all' {
-      $modeForceNoBd = $false
-      $modeFlagNoAttr = $false
-      $modeFlagNoFp = $false
-      $modeFlagNoFpPos = $false
-      $modeFlagNoBdCosm = $false
-    }
-    'full' {
-      $modeForceNoBd = $false
-      $modeFlagNoAttr = $false
-      $modeFlagNoFp = $false
-      $modeFlagNoFpPos = $false
-      $modeFlagNoBdCosm = $false
-    }
-  }
+  $modeAdjustments = if ($modeSpec.PSObject.Properties['Adjustments']) { $modeSpec.Adjustments } else { @{} }
+  if ($modeAdjustments.ContainsKey('ForceNoBd'))    { $modeForceNoBd    = [bool]$modeAdjustments['ForceNoBd'] }
+  if ($modeAdjustments.ContainsKey('FlagNoAttr'))   { $modeFlagNoAttr   = [bool]$modeAdjustments['FlagNoAttr'] }
+  if ($modeAdjustments.ContainsKey('FlagNoFp'))     { $modeFlagNoFp     = [bool]$modeAdjustments['FlagNoFp'] }
+  if ($modeAdjustments.ContainsKey('FlagNoFpPos'))  { $modeFlagNoFpPos  = [bool]$modeAdjustments['FlagNoFpPos'] }
+  if ($modeAdjustments.ContainsKey('FlagNoBdCosm')) { $modeFlagNoBdCosm = [bool]$modeAdjustments['FlagNoBdCosm'] }
 
   $modeFlagsRaw = Build-FlagBundle -ModeSpec $modeSpec -ReplaceFlags:$ReplaceFlags.IsPresent -AdditionalFlags $AdditionalFlags -LvCompareArgs $LvCompareArgs -ForceNoBd:$modeForceNoBd -FlagNoAttr:$modeFlagNoAttr -FlagNoFp:$modeFlagNoFp -FlagNoFpPos:$modeFlagNoFpPos -FlagNoBdCosm:$modeFlagNoBdCosm
   $modeFlags = @($modeFlagsRaw | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
@@ -749,27 +1163,36 @@ foreach ($modeSpec in $modeSpecs) {
   $lastDiffCommit = $null
   $stopReason = $null
 
-  for ($i = 0; $i -lt $commitList.Count; $i++) {
-    $headCommit = $commitList[$i].Trim()
-    if (-not $headCommit) { continue }
-    if ($endRef -and [string]::Equals($headCommit, $endRef, [System.StringComparison]::OrdinalIgnoreCase)) {
-      $stopReason = 'reached-end-ref'
-      break
+  foreach ($planEntry in $planEntries) {
+    if (-not $planEntry) { continue }
+
+    $headCommit = $null
+    if ($planEntry.PSObject.Properties['Head'] -and $planEntry.Head) {
+      $headCommit = [string]$planEntry.Head
+    }
+    $baseCommit = $null
+    if ($planEntry.PSObject.Properties['Base'] -and $planEntry.Base) {
+      $baseCommit = [string]$planEntry.Base
     }
 
-    $parentExpr = ('{0}^' -f $headCommit)
-    $parentRaw = $null
-    try { $parentRaw = Invoke-Git -Arguments @('rev-parse', $parentExpr) -Quiet } catch { $parentRaw = $null }
-    $parentCommit = ($parentRaw -split "`n")[0].Trim()
-    if (-not $parentCommit) {
-      $stopReason = 'reached-root'
-      break
-    }
+    if ([string]::IsNullOrWhiteSpace($headCommit) -or [string]::IsNullOrWhiteSpace($baseCommit)) { continue }
+    $headCommit = $headCommit.Trim()
+    $baseCommit = $baseCommit.Trim()
+    if (-not $headCommit -or -not $baseCommit) { continue }
 
-    if ($endRef -and [string]::Equals($parentCommit, $endRef, [System.StringComparison]::OrdinalIgnoreCase)) {
-      $terminateAfter = $true
-    } else {
-      $terminateAfter = $false
+    $lineageNode = $null
+    if ($planEntry.PSObject.Properties['Lineage'] -and $planEntry.Lineage) {
+      $lineageNode = $planEntry.Lineage
+    }
+    $lineageType = if ($lineageNode -and $lineageNode.PSObject.Properties['type']) { [string]$lineageNode.type } else { 'mainline' }
+
+    $planStopAfter = $false
+    if ($planEntry.PSObject.Properties['StopAfter']) {
+      $planStopAfter = [bool]$planEntry.StopAfter
+    }
+    $planStopReason = $null
+    if ($planEntry.PSObject.Properties['StopAfterReason'] -and $planEntry.StopAfterReason) {
+      $planStopReason = [string]$planEntry.StopAfterReason
     }
 
     $index = $processed + 1
@@ -778,7 +1201,7 @@ foreach ($modeSpec in $modeSpecs) {
       break
     }
 
-    Write-Verbose ("[{0}] Comparing {1} -> {2} (mode: {3})" -f $index, (Get-ShortSha $parentCommit 7), (Get-ShortSha $headCommit 7), $modeName)
+    Write-Verbose ("[{0}] Comparing {1} -> {2} (mode: {3}, lineage: {4})" -f $index, (Get-ShortSha -Value $baseCommit -Length 7), (Get-ShortSha -Value $headCommit -Length 7), $modeName, $lineageType)
 
     $comparisonRecord = [ordered]@{
       index   = $index
@@ -787,13 +1210,16 @@ foreach ($modeSpec in $modeSpecs) {
         short = Get-ShortSha -Value $headCommit -Length 12
       }
       base    = @{
-        ref   = $parentCommit
-        short = Get-ShortSha -Value $parentCommit -Length 12
+        ref   = $baseCommit
+        short = Get-ShortSha -Value $baseCommit -Length 12
       }
       outName      = "{0}-{1}" -f $outPrefixToken, $index.ToString('D3')
       mode         = $modeName
       slug         = $modeSlug
       reportFormat = $reportFormatEffective
+    }
+    if ($lineageNode) {
+      $comparisonRecord.lineage = [pscustomobject]$lineageNode
     }
 
     $summaryPath = Join-Path $modeResultsResolved ("{0}-summary.json" -f $comparisonRecord.outName)
@@ -823,47 +1249,46 @@ foreach ($modeSpec in $modeSpecs) {
         break
       }
 
-      $baseExists = Test-FileExistsAtRef -Ref $parentCommit -Path $targetRel
+      $baseExists = Test-FileExistsAtRef -Ref $baseCommit -Path $targetRel
       if (-not $baseExists) {
         $missingCount++
         $comparisonRecord.result = [ordered]@{
           status  = 'missing-base'
-          message = ("Target '{0}' not present at {1}" -f $targetRel, $parentCommit)
+          message = ("Target '{0}' not present at {1}" -f $targetRel, $baseCommit)
         }
         $processed++
         $modeManifest.comparisons += [pscustomobject]$comparisonRecord
-        if ($terminateAfter) {
-          $stopReason = 'reached-end-ref'
+        if ($planStopAfter) {
+          $stopReason = if ($planStopReason) { $planStopReason } else { 'reached-end-ref' }
           break
         }
         continue
       }
 
       if (-not $summaryPreExisting) {
-        $compareArgs = @(
-          '-NoLogo','-NoProfile','-File', $compareScript,
-          '-Path', $targetRel,
-          '-RefA', $parentCommit,
-          '-RefB', $headCommit,
-          '-ResultsDir', $modeResultsResolved,
-          '-OutName', $comparisonRecord.outName,
-          '-ReportFormat', $reportFormatEffective,
-          '-Quiet'
+        $compareArgs = @("-NoLogo","-NoProfile","-File", $compareScript,
+          "-Path", $targetRel,
+          "-RefA", $baseCommit,
+          "-RefB", $headCommit,
+          "-ResultsDir", $modeResultsResolved,
+          "-OutName", $comparisonRecord.outName,
+          "-ReportFormat", $reportFormatEffective,
+          "-Quiet"
         )
-        $compareArgs += '-ReplaceFlags'
-        if ($Detailed.IsPresent) { $compareArgs += '-Detailed' }
-        if ($RenderReport.IsPresent -or $reportFormatEffective -eq 'html') { $compareArgs += '-RenderReport' }
-        if ($FailOnDiff.IsPresent) { $compareArgs += '-FailOnDiff' }
+        $compareArgs += "-ReplaceFlags"
+        if ($Detailed.IsPresent) { $compareArgs += "-Detailed" }
+        if ($RenderReport.IsPresent -or $reportFormatEffective -eq 'html') { $compareArgs += "-RenderReport" }
+        if ($FailOnDiff.IsPresent) { $compareArgs += "-FailOnDiff" }
         if ($modeFlags -and $modeFlags.Count -gt 0) {
-          $compareArgs += '-LvCompareArgs'
+          $compareArgs += "-LvCompareArgs"
           $compareArgs += ($modeFlags -join ' ')
         }
         if (-not [string]::IsNullOrWhiteSpace($InvokeScriptPath)) {
-          $compareArgs += '-InvokeScriptPath'
+          $compareArgs += "-InvokeScriptPath"
           $compareArgs += $InvokeScriptPath
         }
         if ($KeepArtifactsOnNoDiff.IsPresent) {
-          $compareArgs += '-KeepArtifactsOnNoDiff'
+          $compareArgs += "-KeepArtifactsOnNoDiff"
         }
         $pwshResult = Invoke-Pwsh -Arguments $compareArgs
         if ($pwshResult.ExitCode -ne 0) {
@@ -984,8 +1409,8 @@ foreach ($modeSpec in $modeSpecs) {
         $lastDiffIndex = $index
         $lastDiffCommit = $headCommit
         if ($FailFast.IsPresent) {
-          $stopReason = 'fail-fast-diff'
           $modeManifest.comparisons += [pscustomobject]$comparisonRecord
+          $stopReason = 'fail-fast-diff'
           break
         }
       }
@@ -1002,17 +1427,19 @@ foreach ($modeSpec in $modeSpecs) {
       throw
     }
 
-    if ($terminateAfter) {
-      $stopReason = 'reached-end-ref'
+    if ($stopReason -eq 'fail-fast-diff') { break }
+    if (-not $stopReason -and $planStopAfter) {
+      $stopReason = if ($planStopReason) { $planStopReason } else { 'reached-end-ref' }
       break
     }
   }
-
   if (-not $stopReason) {
     if ($processed -eq 0) {
       $stopReason = 'no-pairs'
     } elseif ($errorCount -gt 0) {
       $stopReason = 'error'
+    } elseif ($planTerminalHint) {
+      $stopReason = $planTerminalHint
     } else {
       $stopReason = 'complete'
     }
@@ -1441,4 +1868,3 @@ if ($hasStepSummary -and $totalDiffs -gt 0) {
 if ($FailOnDiff.IsPresent -and $totalDiffs -gt 0) {
   throw ("Differences detected across {0} comparison(s)" -f $totalDiffs)
 }
-

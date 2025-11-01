@@ -54,7 +54,9 @@ function Invoke-CompareVIHistory {
     [string]$InvokeScriptPath,
 
     [string]$GitHubOutputPath,
-    [string]$StepSummaryPath
+    [string]$StepSummaryPath,
+
+    [switch]$IncludeMergeParents
   )
 
   $compareScript = Get-CompareVIScriptPath -Name 'Compare-VIHistory.ps1'

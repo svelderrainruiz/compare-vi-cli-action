@@ -66,7 +66,9 @@ param(
 
     [string]$StartRef,
 
-    [string]$EndRef
+    [string]$EndRef,
+
+    [switch]$IncludeMergeParents
 )
 
 Set-StrictMode -Version Latest
@@ -447,6 +449,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
     if (-not [string]::IsNullOrWhiteSpace($StartRef)) { $compareArgs.StartRef = $StartRef }
     if (-not [string]::IsNullOrWhiteSpace($EndRef)) { $compareArgs.EndRef = $EndRef }
     if (-not $SkipRenderReport.IsPresent) { $compareArgs.RenderReport = $true }
+    if ($IncludeMergeParents.IsPresent) { $compareArgs.IncludeMergeParents = $true }
 
     $compareArgs.FlagNoAttr = $false
     $compareArgs.FlagNoFp = $false

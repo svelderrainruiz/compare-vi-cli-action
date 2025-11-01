@@ -93,6 +93,72 @@ function Get-CommitMetadata {
   return $meta
 }
 
+function Get-ShortSha {
+  param(
+    [string]$Value,
+    [int]$Length = 12
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $Value }
+  if ($Value.Length -le $Length) { return $Value }
+  return $Value.Substring(0, $Length)
+}
+
+function Get-LineageLabel {
+  param(
+    [object]$Lineage,
+    [string]$HeadRef,
+    [string]$BaseRef
+  )
+
+  if (-not $Lineage) {
+    return 'Mainline'
+  }
+
+  $type = if ($Lineage.PSObject.Properties['type']) { [string]$Lineage.type } else { 'mainline' }
+  $parentIndex = if ($Lineage.PSObject.Properties['parentIndex']) { [int]$Lineage.parentIndex } else { $null }
+  $parentCount = if ($Lineage.PSObject.Properties['parentCount']) { [int]$Lineage.parentCount } else { $null }
+  $depth = if ($Lineage.PSObject.Properties['depth']) { [int]$Lineage.depth } else { $null }
+  $mergeCommit = if ($Lineage.PSObject.Properties['mergeCommit']) { [string]$Lineage.mergeCommit } else { $null }
+  $branchHead = if ($Lineage.PSObject.Properties['branchHead']) { [string]$Lineage.branchHead } else { $null }
+  $rootMerge = if ($Lineage.PSObject.Properties['rootMerge']) { [string]$Lineage.rootMerge } else { $mergeCommit }
+
+  switch ($type.ToLowerInvariant()) {
+    'merge-parent' {
+      $label = if ($parentIndex -and $parentIndex -gt 0) { "Merge parent #$parentIndex" } else { 'Merge parent' }
+      if ($depth -and $depth -gt 0) {
+        $label = '{0} depth {1}' -f $label, $depth
+      }
+      if ($branchHead) {
+        $label = '{0} @ {1}' -f $label, (Get-ShortSha -Value $branchHead -Length 8)
+      }
+      if ($rootMerge) {
+        $label = '{0} (merge {1})' -f $label, (Get-ShortSha -Value $rootMerge -Length 8)
+      }
+      return $label
+    }
+    'merge-branch' {
+      $label = if ($parentIndex -and $parentIndex -gt 0) { "Branch parent #$parentIndex" } else { 'Branch parent' }
+      if ($depth -and $depth -gt 0) {
+        $label = '{0} depth {1}' -f $label, $depth
+      }
+      if ($branchHead) {
+        $label = '{0} @ {1}' -f $label, (Get-ShortSha -Value $branchHead -Length 8)
+      }
+      if ($rootMerge) {
+        $label = '{0} (merge {1})' -f $label, (Get-ShortSha -Value $rootMerge -Length 8)
+      }
+      return $label
+    }
+    default {
+      if ($parentCount -and $parentCount -gt 1) {
+        return "Mainline (parent 1 of $parentCount)"
+      }
+      return 'Mainline'
+    }
+  }
+}
+
 function Write-GitHubOutput {
   param(
     [string]$Key,
@@ -436,6 +502,11 @@ function Build-FallbackHistoryContext {
         }
       }
 
+      $lineageNode = $null
+      if ($comparison.PSObject.Properties['lineage']) {
+        $lineageNode = $comparison.lineage
+      }
+
       $comparisons.Add([pscustomobject]@{
         mode  = [string](Coalesce $modeName 'unknown')
         index = $comparison.index
@@ -458,6 +529,8 @@ function Build-FallbackHistoryContext {
         }
         result = [pscustomobject]$resultPayload
         highlights = if ($resultPayload.Contains('highlights') -and $resultPayload.highlights) { @($resultPayload.highlights) } else { @() }
+        lineage = if ($lineageNode) { [pscustomobject]$lineageNode } else { $null }
+        lineageLabel = Get-LineageLabel -Lineage $lineageNode -HeadRef $headNode.ref -BaseRef $baseNode.ref
       })
     }
   }
@@ -593,10 +666,21 @@ if ($comparisons.Count -gt 0) {
   $summaryLines.Add('')
   $summaryLines.Add('## Commit pairs')
   $summaryLines.Add('')
-  $summaryLines.Add('| Mode | Pair | Base | Head | Diff | Duration (s) | Categories | Buckets | Report | Highlights |')
-  $summaryLines.Add('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+  $summaryLines.Add('| Mode | Pair | Lineage | Base | Head | Diff | Duration (s) | Categories | Buckets | Report | Highlights |')
+  $summaryLines.Add('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |')
   $comparisonSubLines = New-Object System.Collections.Generic.List[string]
   foreach ($entry in $comparisons) {
+    $lineageNode = if ($entry.PSObject.Properties['lineage']) { $entry.lineage } else { $null }
+    $lineageLabel = $null
+    if ($entry.PSObject.Properties['lineageLabel'] -and -not [string]::IsNullOrWhiteSpace($entry.lineageLabel)) {
+      $lineageLabel = [string]$entry.lineageLabel
+    } else {
+      $headFullRef = if ($entry.head -and $entry.head.PSObject.Properties['full']) { $entry.head.full } else { $null }
+      $baseFullRef = if ($entry.base -and $entry.base.PSObject.Properties['full']) { $entry.base.full } else { $null }
+      $lineageLabel = Get-LineageLabel -Lineage $lineageNode -HeadRef $headFullRef -BaseRef $baseFullRef
+    }
+    if ([string]::IsNullOrWhiteSpace($lineageLabel)) { $lineageLabel = 'Mainline' }
+
     $baseRef = Coalesce $entry.base.short $entry.base.full
     if ($entry.base.subject) { $baseRef = '{0} ({1})' -f $baseRef, $entry.base.subject }
     $headRef = Coalesce $entry.head.short $entry.head.full
@@ -688,13 +772,16 @@ if ($comparisons.Count -gt 0) {
         $bucketText = $bucketParts -join '<br />'
       }
     }
-    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} |' -f (Coalesce $entry.mode 'n/a'), (Coalesce $entry.index 'n/a'), $baseRef, $headRef, $diffCell, $duration, $categoryText, $bucketText, $reportCell, $highlightText))
+    $summaryLines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9} | {10} |' -f (Coalesce $entry.mode 'n/a'), (Coalesce $entry.index 'n/a'), $lineageLabel, $baseRef, $headRef, $diffCell, $duration, $categoryText, $bucketText, $reportCell, $highlightText))
     $comparisonSubLines.Add(('<sub>{0} - {1}</sub>' -f $baseRef, $headRef))
     $comparisonHtmlRows.Add([pscustomobject]@{
       Mode       = Coalesce $entry.mode 'n/a'
       Index      = Coalesce $entry.index 'n/a'
       BaseLabel  = $baseRef
       HeadLabel  = $headRef
+      Lineage    = if ($lineageNode) { [pscustomobject]$lineageNode } else { $null }
+      LineageLabel = $lineageLabel
+      LineageType  = if ($lineageNode -and $lineageNode.PSObject.Properties['type']) { [string]$lineageNode.type } else { 'mainline' }
       Diff       = [bool]$diffValue
       HasDiff    = $hasDiffValue
       Status     = $statusValue
@@ -846,7 +933,7 @@ if ($emitHtml -and $HtmlPath) {
   [void]$htmlBuilder.AppendLine('  <h2>Commit pairs</h2>')
   if ($comparisonHtmlRows.Count -gt 0) {
     [void]$htmlBuilder.AppendLine('  <table>')
-    [void]$htmlBuilder.AppendLine('    <thead><tr><th>Mode</th><th>Pair</th><th>Base</th><th>Head</th><th>Diff</th><th>Duration (s)</th><th>Categories</th><th>Buckets</th><th>Report</th><th>Highlights</th></tr></thead>')
+    [void]$htmlBuilder.AppendLine('    <thead><tr><th>Mode</th><th>Pair</th><th>Lineage</th><th>Base</th><th>Head</th><th>Diff</th><th>Duration (s)</th><th>Categories</th><th>Buckets</th><th>Report</th><th>Highlights</th></tr></thead>')
     [void]$htmlBuilder.AppendLine('    <tbody>')
     foreach ($row in $comparisonHtmlRows) {
       $diffClass = if ($row.Diff) { 'diff-yes' } elseif ($row.Status) { 'diff-status' } else { 'diff-no' }
@@ -979,12 +1066,38 @@ if ($emitHtml -and $HtmlPath) {
         $highlightHtml = [string]::Join('<br />', ($highlightItems | ForEach-Object { ConvertTo-HtmlSafe $_ }))
       }
 
+      $lineageLabelHtml = if ($row.LineageLabel) { ConvertTo-HtmlSafe $row.LineageLabel } else { 'Mainline' }
+      $lineageAttrList = New-Object System.Collections.Generic.List[string]
+      $lineageTypeValue = if ($row.LineageType) { [string]$row.LineageType } else { 'mainline' }
+      if (-not [string]::IsNullOrWhiteSpace($lineageTypeValue)) {
+        $lineageAttrList.Add(('data-lineage-type="{0}"' -f (ConvertTo-HtmlSafe $lineageTypeValue))) | Out-Null
+      }
+      if ($row.Lineage) {
+        if ($row.Lineage.PSObject.Properties['parentIndex'] -and $row.Lineage.parentIndex -ne $null) {
+          $lineageAttrList.Add(('data-lineage-parent-index="{0}"' -f (ConvertTo-HtmlSafe $row.Lineage.parentIndex))) | Out-Null
+        }
+        if ($row.Lineage.PSObject.Properties['parentCount'] -and $row.Lineage.parentCount -ne $null) {
+          $lineageAttrList.Add(('data-lineage-parent-count="{0}"' -f (ConvertTo-HtmlSafe $row.Lineage.parentCount))) | Out-Null
+        }
+        if ($row.Lineage.PSObject.Properties['depth'] -and $row.Lineage.depth -ne $null) {
+          $lineageAttrList.Add(('data-lineage-depth="{0}"' -f (ConvertTo-HtmlSafe $row.Lineage.depth))) | Out-Null
+        }
+        if ($row.Lineage.PSObject.Properties['mergeCommit'] -and -not [string]::IsNullOrWhiteSpace($row.Lineage.mergeCommit)) {
+          $lineageAttrList.Add(('data-lineage-merge="{0}"' -f (ConvertTo-HtmlSafe $row.Lineage.mergeCommit))) | Out-Null
+        }
+        if ($row.Lineage.PSObject.Properties['branchHead'] -and -not [string]::IsNullOrWhiteSpace($row.Lineage.branchHead)) {
+          $lineageAttrList.Add(('data-lineage-branch="{0}"' -f (ConvertTo-HtmlSafe $row.Lineage.branchHead))) | Out-Null
+        }
+      }
+      $lineageAttr = if ($lineageAttrList.Count -gt 0) { ' ' + ([string]::Join(' ', $lineageAttrList)) } else { '' }
+      $lineageHtml = "<span$lineageAttr>$lineageLabelHtml</span>"
+
       $rowAttr = "$categoryAttr$bucketAttr"
       $modeCell = ConvertTo-HtmlSafe (Coalesce $row.Mode 'n/a')
       $indexCell = ConvertTo-HtmlSafe (Coalesce $row.Index 'n/a')
       $baseCell = ConvertTo-HtmlSafe $row.BaseLabel
       $headCell = ConvertTo-HtmlSafe $row.HeadLabel
-      $line = "      <tr$rowAttr><td>$modeCell</td><td>$indexCell</td><td>$baseCell</td><td>$headCell</td><td class=""$diffClass"">$diffLabel</td><td>$durationDisplay</td><td>$categoryHtml</td><td>$bucketHtml</td><td class=""report-path"">$reportHtml</td><td>$highlightHtml</td></tr>"
+      $line = "      <tr$rowAttr><td>$modeCell</td><td>$indexCell</td><td>$lineageHtml</td><td>$baseCell</td><td>$headCell</td><td class=""$diffClass"">$diffLabel</td><td>$durationDisplay</td><td>$categoryHtml</td><td>$bucketHtml</td><td class=""report-path"">$reportHtml</td><td>$highlightHtml</td></tr>"
       [void]$htmlBuilder.AppendLine($line)
     }
     [void]$htmlBuilder.AppendLine('    </tbody>')
