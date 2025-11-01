@@ -588,6 +588,13 @@ function Invoke-LabVIEWCLICompare {
     }
   }
 
+  if ($cliResult -and $cliResult.PSObject.Properties['skipped'] -and $cliResult.skipped) {
+    $cliInfoOrdered.skipped = $true
+    if ($cliResult.PSObject.Properties['skipReason'] -and $cliResult.skipReason) {
+      $cliInfoOrdered.skipReason = [string]$cliResult.skipReason
+    }
+  }
+
   $artifactPath = $null
   if ($cliInfoOrdered.Contains('reportPath') -and $cliInfoOrdered['reportPath']) {
     $artifactPath = $cliInfoOrdered['reportPath']

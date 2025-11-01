@@ -225,6 +225,30 @@ function Test-ShouldSuppressCliCompare {
     $Reason.Value = 'COMPAREVI_NO_CLI_CAPTURE'
     return $true
   }
+  # Optional Git difftool context suppression
+  $suppressInGit = [System.Environment]::GetEnvironmentVariable('COMPAREVI_SUPPRESS_CLI_IN_GIT','Process')
+  $warnInGit     = [System.Environment]::GetEnvironmentVariable('COMPAREVI_WARN_CLI_IN_GIT','Process')
+  $isGit = $false
+  try {
+    if ([System.Environment]::GetEnvironmentVariable('GIT_DIR')) { $isGit = $true }
+    elseif ([System.Environment]::GetEnvironmentVariable('GIT_PREFIX')) { $isGit = $true }
+    if (-not $isGit) {
+      $current = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $PID) -ErrorAction SilentlyContinue
+      $hops = 0
+      while ($current -and $current.ParentProcessId -gt 0 -and $hops -lt 4) {
+        $parent = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $current.ParentProcessId) -ErrorAction SilentlyContinue
+        if ($parent -and $parent.Name -match '^git(\.exe)?$') { $isGit = $true; break }
+        $current = $parent; $hops++
+      }
+    }
+  } catch {}
+  if ($isGit -and $warnInGit -and $warnInGit.Trim() -in @('1','true','yes','on')) {
+    Write-Warning "LabVIEW CLI: invocation detected in Git context (possible difftool)."
+  }
+  if ($isGit -and $suppressInGit -and $suppressInGit.Trim() -in @('1','true','yes','on')) {
+    $Reason.Value = 'git-context'
+    return $true
+  }
   $ttlRaw = [System.Environment]::GetEnvironmentVariable('COMPAREVI_CLI_SENTINEL_TTL','Process')
   $ttl = 0
   if ($ttlRaw) { try { $ttl = [int]$ttlRaw } catch { $ttl = 0 } }
