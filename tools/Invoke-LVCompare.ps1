@@ -100,11 +100,11 @@ function Resolve-ReportFormatInfo {
 
   $normalized = if ([string]::IsNullOrWhiteSpace($Format)) { 'html' } else { $Format.Trim().ToLowerInvariant() }
   switch ($normalized) {
-    'htmlsingle'
-    'html-singlefile'
-    'htmlsinglefile'
-    'single'
-    'singlefile' { $normalized = 'html-single' }
+    'htmlsingle' { $normalized = 'html-single'; break }
+    'html-singlefile' { $normalized = 'html-single'; break }
+    'htmlsinglefile' { $normalized = 'html-single'; break }
+    'single' { $normalized = 'html-single'; break }
+    'singlefile' { $normalized = 'html-single'; break }
   }
 
   switch ($normalized) {

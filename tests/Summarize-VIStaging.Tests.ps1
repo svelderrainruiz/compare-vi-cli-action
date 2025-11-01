@@ -106,6 +106,56 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $jsonPayload.pairs[0].flagSummary | Should -Be '_none_'
     }
 
+    It 'resolves report path when compare summary omits metadata' {
+        $compareRoot = Join-Path $TestDrive 'compare'
+        $pairDir = Join-Path $compareRoot 'pair-01'
+        New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
+
+        $html = @'
+<!DOCTYPE html>
+<html>
+<body>
+<details open>
+  <summary class="difference-heading">1. Block Diagram Functional - Nodes</summary>
+  <ol class="detailed-description-list">
+    <li class="diff-detail">Node changed</li>
+  </ol>
+</details>
+</body>
+</html>
+'@
+        $reportPath = Join-Path $pairDir 'compare-report.html'
+        $html | Set-Content -LiteralPath $reportPath -Encoding utf8
+
+        $capturePayload = @{ exitCode = 1 } | ConvertTo-Json
+        $capturePayload | Set-Content -LiteralPath (Join-Path $pairDir 'lvcompare-capture.json') -Encoding utf8
+
+        $compareEntry = @(
+            [ordered]@{
+                index      = 1
+                changeType = 'modify'
+                basePath   = 'VI1.vi'
+                headPath   = 'VI1.vi'
+                outputDir  = $pairDir
+                status     = 'diff'
+                exitCode   = 1
+                reportPath = $null
+                capturePath= $null
+            }
+        )
+
+        $compareJson = Join-Path $TestDrive 'vi-staging-compare-missing.json'
+        $compareEntry | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $compareJson -Encoding utf8
+
+        $result = & $script:scriptPath -CompareJson $compareJson
+
+        $result | Should -Not -BeNullOrEmpty
+        $result.pairs.Count | Should -Be 1
+        ($result.pairs[0].reportRelative.Replace('\','/')) | Should -Be 'pair-01/compare-report.html'
+        $result.pairs[0].diffCategories | Should -Contain 'Block Diagram Functional'
+        $result.pairs[0].diffCategoryDetails[0].slug | Should -Be 'block-diagram-functional'
+    }
+
     It 'handles missing report gracefully' {
         $compareEntry = @(
             [ordered]@{
