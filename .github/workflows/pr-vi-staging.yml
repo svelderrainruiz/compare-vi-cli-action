@@ -157,6 +157,7 @@ jobs:
         env:
           MANIFEST_PATH: ${{ steps.manifest.outputs.manifest_path }}
           ARTIFACTS_DIR: ${{ steps.manifest.outputs.artifacts_dir }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -174,7 +175,15 @@ jobs:
 
           Write-Host "[stage] Manifest path: $env:MANIFEST_PATH"
           Write-Host "[stage] Staging work root: $stagingWorkRoot"
-          $results = & "$repoRoot\tools\Invoke-PRVIStaging.ps1" -ManifestPath $env:MANIFEST_PATH -WorkingRoot $stagingWorkRoot
+          Write-Host ("[stage] Base SHA env: '{0}'" -f ($env:BASE_SHA ?? ''))
+          $invokeArgs = @{
+            ManifestPath = $env:MANIFEST_PATH
+            WorkingRoot  = $stagingWorkRoot
+          }
+          if ($env:BASE_SHA) {
+            $invokeArgs.BaseRef = $env:BASE_SHA
+          }
+          $results = & "$repoRoot\tools\Invoke-PRVIStaging.ps1" @invokeArgs
           if (-not $results) {
             $results = @()
           }
