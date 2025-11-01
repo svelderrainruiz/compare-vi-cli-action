@@ -68,6 +68,8 @@ Set `fail-on-diff: false` to treat code 1 as notice-only.
 - Run `./Invoke-PesterTests.ps1 -IntegrationMode include` to repro CI suites.
 - Use `tools/Dev-Dashboard.ps1` for a quick telemetry snapshot (locks, queue waits).
 - Hand-offs: `tools/Print-AgentHandoff.ps1 -AutoTrim` surfaces watcher state and trims logs.
+- Spot-check LVCompare/LabVIEWCLI behaviour locally with
+  `tools/Verify-LocalDiffSession.ps1` (supports stub mode via `-UseStub` when LabVIEW isn't installed).
 
 ## Git difftool overlap (duplicate CLI invocations)
 
