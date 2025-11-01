@@ -113,6 +113,26 @@ function Parse-DiffDetails {
     return $details
 }
 
+function Format-ModeFlags {
+    param([System.Collections.IEnumerable]$Modes)
+    if (-not $Modes) { return '_none_' }
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($mode in $Modes) {
+        if (-not $mode) { continue }
+        $modeName = if ($mode.PSObject.Properties['name']) { [string]$mode.name } else { $null }
+        if ([string]::IsNullOrWhiteSpace($modeName)) { $modeName = 'mode' }
+        $statusText = if ($mode.PSObject.Properties['status'] -and $mode.status) { [string]$mode.status } else { 'unknown' }
+        $modeFlags = @()
+        if ($mode.PSObject.Properties['flags'] -and $mode.flags) {
+            $modeFlags = @($mode.flags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+        $flagText = if ($modeFlags.Count -gt 0) { ('`{0}`' -f ($modeFlags -join ' ')) } else { '_none_' }
+        $parts.Add("$($modeName): $flagText ($statusText)") | Out-Null
+    }
+    if ($parts.Count -eq 0) { return '_none_' }
+    return ($parts -join '<br>')
+}
+
 function Get-DiffDetailPreview {
     param(
         [System.Collections.IEnumerable]$Details,
@@ -171,8 +191,8 @@ function Build-MarkdownTable {
     }
 
     $rows = @()
-    $rows += '| Pair | Status | Diff Categories | Included | Report | Leak |'
-    $rows += '| --- | --- | --- | --- | --- | --- |'
+    $rows += '| Pair | Status | Diff Categories | Included | Report | Flags | Leak |'
+    $rows += '| --- | --- | --- | --- | --- | --- | --- |'
 
     foreach ($pair in $Pairs) {
         $statusIcon = switch ($pair.status) {
@@ -300,6 +320,13 @@ function Build-MarkdownTable {
             '-'
         }
 
+        $flagsCell = '_none_'
+        if ($pair.PSObject.Properties['flagSummary'] -and $pair.flagSummary) {
+            $flagsCell = $pair.flagSummary
+        } elseif ($pair.PSObject.Properties['modeSummaries'] -and $pair.modeSummaries) {
+            $flagsCell = Format-ModeFlags $pair.modeSummaries
+        }
+
         $leakCell = '-'
         $leakCountsKnown = $false
         $lvLeak = $null
@@ -323,7 +350,7 @@ function Build-MarkdownTable {
         }
 
         $pairLabel = ('Pair {0} ({1})' -f $pair.index, $pair.changeType)
-        $rows += ('| {0} | {1} | {2} | {3} | {4} | {5} |' -f $pairLabel, $statusIcon, $categories, $included, $reportLink, $leakCell)
+        $rows += ('| {0} | {1} | {2} | {3} | {4} | {5} | {6} |' -f $pairLabel, $statusIcon, $categories, $included, $reportLink, $flagsCell, $leakCell)
     }
 
     $summaryLines = @()
@@ -602,6 +629,49 @@ foreach ($entry in $entries) {
         leakLvcompare     = $lvLeakInt
         leakLabVIEW       = $labLeakInt
         leakPath          = $leakPath
+    }
+
+    $modeSummaries = New-Object System.Collections.Generic.List[pscustomobject]
+    if ($entry.PSObject.Properties['modes'] -and $entry.modes) {
+        foreach ($modeEntry in $entry.modes) {
+            if (-not $modeEntry) { continue }
+            $modeName = if ($modeEntry.PSObject.Properties['name']) { [string]$modeEntry.name } else { $null }
+            if ([string]::IsNullOrWhiteSpace($modeName)) { $modeName = 'mode' }
+            $modeStatus = if ($modeEntry.PSObject.Properties['status']) { [string]$modeEntry.status } else { $null }
+            $modeFlags = @()
+            if ($modeEntry.PSObject.Properties['flags'] -and $modeEntry.flags) {
+                $modeFlags = @($modeEntry.flags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            }
+            $modeSummary = [pscustomobject]@{
+                name   = $modeName
+                status = $modeStatus
+                flags  = $modeFlags
+            }
+            if ($modeEntry.PSObject.Properties['replace']) {
+                try { $modeSummary | Add-Member -NotePropertyName replace -NotePropertyValue ([bool]$modeEntry.replace) -Force } catch {}
+            }
+            $modeSummaries.Add($modeSummary) | Out-Null
+        }
+    }
+    if ($modeSummaries.Count -gt 0) {
+        if ($entry.PSObject.Properties['primaryMode']) {
+            $pairInfo | Add-Member -NotePropertyName primaryMode -NotePropertyValue $entry.primaryMode -Force
+        }
+        $pairInfo | Add-Member -NotePropertyName modeSummaries -NotePropertyValue @($modeSummaries.ToArray()) -Force
+        $pairInfo | Add-Member -NotePropertyName flagSummary -NotePropertyValue (Format-ModeFlags @($modeSummaries.ToArray())) -Force
+    } elseif ($entry.PSObject.Properties['flags']) {
+        $fallbackFlags = @()
+        if ($entry.flags) {
+            $fallbackFlags = @($entry.flags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+        $fallbackSummary = @([pscustomobject]@{
+            name   = if ($entry.PSObject.Properties['primaryMode']) { [string]$entry.primaryMode } else { 'primary' }
+            status = $status
+            flags  = $fallbackFlags
+        })
+        $pairInfo | Add-Member -NotePropertyName flagSummary -NotePropertyValue (Format-ModeFlags $fallbackSummary) -Force
+    } else {
+        $pairInfo | Add-Member -NotePropertyName flagSummary -NotePropertyValue '_none_' -Force
     }
 
     $pairs.Add($pairInfo)

@@ -83,9 +83,11 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         (@($result.pairs[0].diffDetailPreview | Where-Object { $_ -match 'Difference Type: VI icon' })).Count | Should -BeGreaterThan 0
         $result.pairs[0].stagedBase | Should -Be 'staged\Base.vi'
         $result.pairs[0].stagedHead | Should -Be 'staged\Head.vi'
+        $result.pairs[0].flagSummary | Should -Be '_none_'
 
         Test-Path -LiteralPath $mdPath | Should -BeTrue
         $markdown = Get-Content -LiteralPath $mdPath -Raw
+        $markdown | Should -Match '\| Pair \| Status \| Diff Categories \| Included \| Report \| Flags \| Leak \|'
         $markdown | Should -Match 'VI Attribute'
         $markdown | Should -Match 'Difference Type: VI icon'
         $markdown | Should -Match 'Buckets:'
@@ -101,6 +103,7 @@ Describe 'Summarize-VIStaging.ps1' -Tag 'Unit' {
         $jsonPayload.totals.categoryCounts.'block-diagram-functional' | Should -Be 1
         $jsonPayload.totals.bucketCounts.'metadata' | Should -Be 1
         $jsonPayload.totals.bucketCounts.'functional-behavior' | Should -Be 1
+        $jsonPayload.pairs[0].flagSummary | Should -Be '_none_'
     }
 
     It 'handles missing report gracefully' {
