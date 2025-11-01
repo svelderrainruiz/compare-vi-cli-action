@@ -1,20 +1,18 @@
 {
-  "number": 493,
-  "title": "Automate VI compare for fork pull requests",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/493",
+  "number": 536,
+  "title": "Revisit VI compare default flags and clarify summary",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/536",
   "state": "OPEN",
   "labels": [
-    "ci",
-    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
   "commentCount": 0,
-  "lastSeenUpdatedAt": "2025-10-30T17:34:21Z",
-  "issueDigest": "70cb5e8ad5882cee4ca5dc8bb669226c68095bc9281a76a1f98fcc23eec3b7ab",
-  "bodyDigest": "532de4f29ebaa77afc536fb246b4ecbc2b0c679bd5b86e8333b1ebbb526c9926",
-  "cachedAtUtc": "2025-10-30T17:34:35.876Z",
+  "lastSeenUpdatedAt": "2025-11-01T05:27:49Z",
+  "issueDigest": "c6886392c08bd086292b8eaf4852c236b626bb138daf8e7680b58c955eb27393",
+  "bodyDigest": "23678748190bb6762eda47f04df4fd80c6cbe48e6e612a5db07b13ef209bcd3d",
+  "cachedAtUtc": "2025-11-01T05:48:49.909Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }

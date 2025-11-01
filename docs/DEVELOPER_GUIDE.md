@@ -69,7 +69,9 @@ Quick reference for building, testing, and releasing the LVCompare composite act
       and provide newline-separated entries in `VI_STAGE_COMPARE_FLAGS` (for
       example `-nobd`) when you want to add explicit flags.
       `VI_STAGE_COMPARE_REPLACE_FLAGS` accepts `true`/`false` to override the mode
-      for a single run when needed.
+      for a single run when needed. Regardless of the filtered profile, the workflow
+      also executes an unsuppressed `full` pass so block diagram/front panel edits
+      are never hidden; both modes surface in the PR summary's **Flags** column.
     - Staged compare automation exposes runtime toggles for LVCompare execution:
       - `RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS` sets an upper bound (seconds) for each compare run.
       - `RUN_STAGED_LVCOMPARE_LEAK_CHECK` (`true`/`false`) toggles post-run leak collection.

@@ -131,6 +131,11 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $entry.compare.exitCode | Should -Be 0
         $entry.compare.capturePath | Should -Not -BeNullOrEmpty
         $entry.compare.reportPath | Should -Match 'compare-report\.html$'
+        $entry.compare.primaryMode | Should -Be 'full'
+        $entry.compare.modes | Should -Not -BeNullOrEmpty
+        $entry.compare.modes.Count | Should -Be 1
+        $entry.compare.modes[0].name | Should -Be 'full'
+        @($entry.compare.modes[0].flags).Count | Should -Be 0
 
         $invokeCalls.Count | Should -Be 1
         $invokeCalls[0].AllowSameLeaf | Should -BeFalse
@@ -141,6 +146,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $compareSummary[0].status | Should -Be 'match'
         $compareSummary[0].stagedBase | Should -Be $stagedBase
         $compareSummary[0].stagedHead | Should -Be $stagedHead
+        $compareSummary[0].primaryMode | Should -Be 'full'
+        $compareSummary[0].modes.Count | Should -Be 1
 
         $outputMap = @{}
         foreach ($line in Get-Content -LiteralPath $outputFile) {
@@ -232,8 +239,12 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
 
         $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
-        $updated[0].compare.status | Should -Be 'diff'
-        $updated[0].compare.exitCode | Should -Be 1
+        $entry = $updated[0].compare
+        $entry.status | Should -Be 'diff'
+        $entry.exitCode | Should -Be 1
+        $entry.primaryMode | Should -Be 'full'
+        $entry.modes | Should -Not -BeNullOrEmpty
+        $entry.modes.Count | Should -Be 1
 
         $outputMap = @{}
         foreach ($line in Get-Content -LiteralPath $outputFile) {
@@ -349,9 +360,11 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
 
         & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -ReplaceFlags -Flags @('-nobd','-nobdcosm') -InvokeLVCompare $invoke
 
-        $invokeCalls.Count | Should -Be 1
+        $invokeCalls.Count | Should -Be 2
         $invokeCalls[0].ReplaceFlags | Should -BeTrue
         $invokeCalls[0].Flags | Should -Be @('-nobd','-nobdcosm')
+        $invokeCalls[1].ReplaceFlags | Should -BeTrue
+        (@($invokeCalls[1].Flags | Where-Object { $_ })).Count | Should -Be 0
     }
 
     It 'honors environment flag configuration when parameters omitted' {
@@ -409,9 +422,11 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
 
         & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
 
-        $invokeCalls.Count | Should -Be 1
+        $invokeCalls.Count | Should -Be 2
         $invokeCalls[0].ReplaceFlags | Should -BeTrue
         $invokeCalls[0].Flags | Should -Be @('-nobd','-nobdcosm')
+        $invokeCalls[1].ReplaceFlags | Should -BeTrue
+        (@($invokeCalls[1].Flags | Where-Object { $_ })).Count | Should -Be 0
     }
 
     It 'honors replace mode without explicit flags' {
@@ -530,9 +545,120 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
 
         & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
 
-        $invokeCalls.Count | Should -Be 1
+        $invokeCalls.Count | Should -Be 2
         $invokeCalls[0].ReplaceFlags | Should -BeFalse
         @($invokeCalls[0].Flags) | Should -Contain '-nobd'
+        $invokeCalls[1].ReplaceFlags | Should -BeTrue
+        (@($invokeCalls[1].Flags | Where-Object { $_ })).Count | Should -Be 0
+    }
+
+    It 'detects diffs via full profile when filtered flags suppress changes' {
+        $resultsPath = Join-Path $TestDrive 'dual-mode.json'
+        $artifactsDir = Join-Path $TestDrive 'artifacts'
+        New-Item -ItemType Directory -Path $artifactsDir -Force | Out-Null
+
+        $stagedRoot = Join-Path $TestDrive 'dual-mode-staged'
+        $stagedBase = Join-Path $stagedRoot 'Base.vi'
+        $stagedHead = Join-Path $stagedRoot 'Head.vi'
+        New-Item -ItemType Directory -Path $stagedRoot -Force | Out-Null
+        Set-Content -LiteralPath $stagedBase -Value 'base contents'
+        Set-Content -LiteralPath $stagedHead -Value 'head contents'
+
+        @(
+            [ordered]@{
+                changeType = 'modify'
+                basePath   = 'fixtures/vi-stage/bd-cosmetic/Base.vi'
+                headPath   = 'fixtures/vi-stage/bd-cosmetic/Head.vi'
+                staged     = [ordered]@{
+                    Base = $stagedBase
+                    Head = $stagedHead
+                }
+            }
+        ) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $resultsPath -Encoding utf8
+
+        $env:VI_STAGE_COMPARE_FLAGS_MODE = 'replace'
+        $env:VI_STAGE_COMPARE_FLAGS = '-nobdcosm'
+
+        $diffHtml = @'
+<!DOCTYPE html>
+<html>
+  <body>
+    <details open>
+      <summary class="difference-heading">1. Block Diagram Cosmetic - Wiring</summary>
+      <ol class="detailed-description-list">
+        <li class="diff-detail">Wire adjusted</li>
+      </ol>
+    </details>
+  </body>
+</html>
+'@
+
+        $invokeCalls = New-Object System.Collections.Generic.List[object]
+        $invoke = {
+            param(
+                [string]$BaseVi,
+                [string]$HeadVi,
+                [string]$OutputDir,
+                [switch]$AllowSameLeaf,
+                [switch]$RenderReport,
+                [string[]]$Flags,
+                [switch]$ReplaceFlags,
+                [switch]$LeakCheck,
+                [Nullable[int]]$TimeoutSeconds,
+                [Nullable[double]]$LeakGraceSeconds
+            )
+            $flagList = @($Flags | Where-Object { $_ })
+            $invokeCalls.Add([pscustomobject]@{
+                Flags        = $flagList
+                ReplaceFlags = $ReplaceFlags.IsPresent
+            }) | Out-Null
+
+            New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+            $capturePath = Join-Path $OutputDir 'lvcompare-capture.json'
+            '{"capture":true}' | Set-Content -LiteralPath $capturePath -Encoding utf8
+            $reportPath = Join-Path $OutputDir 'compare-report.html'
+
+            if ($flagList -and $flagList -contains '-nobdcosm') {
+                '<html />' | Set-Content -LiteralPath $reportPath -Encoding utf8
+                return [pscustomobject]@{
+                    ExitCode    = 0
+                    CapturePath = $capturePath
+                    ReportPath  = $reportPath
+                }
+            } else {
+                $diffHtml | Set-Content -LiteralPath $reportPath -Encoding utf8
+                return [pscustomobject]@{
+                    ExitCode    = 1
+                    CapturePath = $capturePath
+                    ReportPath  = $reportPath
+                }
+            }
+        }.GetNewClosure()
+
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -RenderReport -InvokeLVCompare $invoke
+
+        $invokeCalls.Count | Should -Be 2
+        @($invokeCalls[0].Flags) | Should -Contain '-nobdcosm'
+        @($invokeCalls[1].Flags).Count | Should -Be 0
+
+        $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
+        $compareInfo = $updated[0].compare
+        $compareInfo.status | Should -Be 'diff'
+        $compareInfo.primaryMode | Should -Be 'full'
+        $compareInfo.modes.Count | Should -Be 2
+        ($compareInfo.modes | Where-Object { $_.name -eq 'filtered' }).status | Should -Be 'match'
+        ($compareInfo.modes | Where-Object { $_.name -eq 'full' }).status | Should -Be 'diff'
+
+        $summaryPath = Join-Path $artifactsDir 'vi-staging-compare.json'
+        $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+        $summary[0].status | Should -Be 'diff'
+        $summary[0].primaryMode | Should -Be 'full'
+        $summary[0].modes.Count | Should -Be 2
+
+        $summarizeScript = Join-Path $script:repoRoot 'tools' 'Summarize-VIStaging.ps1'
+        $summaryResult = & $summarizeScript -CompareJson $summaryPath
+        $summaryResult.pairs[0].flagSummary | Should -Match 'filtered'
+        $summaryResult.pairs[0].flagSummary | Should -Match 'full'
     }
 
     It 'records leak warnings when leak summary present' {

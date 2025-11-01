@@ -125,6 +125,41 @@ if (-not $effectiveReplace) {
     }
 }
 
+$profiles = New-Object System.Collections.Generic.List[pscustomobject]
+if ($effectiveFlags -and $effectiveFlags.Count -gt 0) {
+    $profiles.Add([pscustomobject]@{
+        name    = 'filtered'
+        flags   = @($effectiveFlags)
+        replace = [bool]$effectiveReplace
+    }) | Out-Null
+}
+# Always include an unsuppressed pass so cosmetic/front panel edits are detected.
+$profiles.Add([pscustomobject]@{
+    name    = 'full'
+    flags   = @()
+    replace = $true
+}) | Out-Null
+
+# Deduplicate profiles based on replace mode + flag list
+$seenProfiles = New-Object System.Collections.Generic.HashSet[string]
+$uniqueProfiles = New-Object System.Collections.Generic.List[pscustomobject]
+foreach ($profile in $profiles) {
+    if (-not $profile) { continue }
+    $flagKey = if ($profile.flags) { [string]::Join('|', $profile.flags) } else { '' }
+    $key = ('{0}:{1}' -f ([bool]$profile.replace), $flagKey)
+    if ($seenProfiles.Add($key)) {
+        $uniqueProfiles.Add($profile) | Out-Null
+    }
+}
+$profiles = $uniqueProfiles
+if ($profiles.Count -eq 0) {
+    $profiles.Add([pscustomobject]@{
+        name    = 'full'
+        flags   = @()
+        replace = $true
+    }) | Out-Null
+}
+
 $timeoutSeconds = $null
 $timeoutRaw = [System.Environment]::GetEnvironmentVariable('RUN_STAGED_LVCOMPARE_TIMEOUT_SECONDS', 'Process')
 if (-not [string]::IsNullOrWhiteSpace($timeoutRaw)) {
@@ -263,6 +298,7 @@ foreach ($entry in $results) {
     $stagedHeadPath = $null
     $pairDir = $null
 
+    $allowSameLeafRequested = $false
     if ($hasStaging) {
         $pairDir = Join-Path $compareRoot ("pair-{0:D2}" -f $index)
         New-Item -ItemType Directory -Path $pairDir -Force | Out-Null
@@ -285,26 +321,9 @@ foreach ($entry in $results) {
             throw "Staged pair $index produced identical Base/Head filenames (`$stagedBaseLeaf`)."
         }
 
-        $invokeParams = @{
-            BaseVi      = $stagedBasePath
-            HeadVi      = $stagedHeadPath
-            OutputDir   = $pairDir
-        }
-
-        if ($RenderReport.IsPresent) { $invokeParams.RenderReport = $true }
-        if ($effectiveFlags) { $invokeParams.Flags = $effectiveFlags }
-        if ($effectiveReplace) { $invokeParams.ReplaceFlags = $true }
-        if ($timeoutSeconds) { $invokeParams.TimeoutSeconds = $timeoutSeconds }
-        if ($leakCheckEnabled) {
-            $invokeParams.LeakCheck = $true
-            if ($leakGraceSecondsOverride -ne $null) { $invokeParams.LeakGraceSeconds = [double]$leakGraceSecondsOverride }
-        }
-
-        $allowSameLeafRequested = $false
         if ($entry.staged.PSObject.Properties['AllowSameLeaf']) {
             try {
                 if ([bool]$entry.staged.AllowSameLeaf) {
-                    $invokeParams.AllowSameLeaf = $true
                     $allowSameLeafRequested = $true
                 }
             } catch {}
@@ -313,90 +332,199 @@ foreach ($entry in $results) {
             $compareInfo.allowSameLeaf = $true
         }
 
-        Write-Host ("[compare] Running LVCompare for pair {0}: Base={1} -> {2} Head={3} -> {4}" -f `
-            $index, $entry.basePath, $stagedBasePath, $entry.headPath, $stagedHeadPath)
-        $invokeResult = & $InvokeLVCompare @invokeParams
+        $profileResults = New-Object System.Collections.Generic.List[pscustomobject]
+        $pairErrorMessages = New-Object System.Collections.Generic.List[string]
+        $pairLeakWarning = $false
+        $pairLeakRecord = $null
+        $primaryProfile = $null
+        $modeIndex = 0
 
-        $exitCode = $LASTEXITCODE
-        if ($invokeResult -is [int]) {
-            $exitCode = [int]$invokeResult
-        } elseif ($invokeResult -and $invokeResult.PSObject.Properties['ExitCode']) {
-            try { $exitCode = [int]$invokeResult.ExitCode } catch { $exitCode = $LASTEXITCODE }
-        }
+        foreach ($profile in $profiles) {
+            if (-not $profile) { continue }
+            $modeIndex++
+            $modeName = [string]$profile.name
+            if ([string]::IsNullOrWhiteSpace($modeName)) { $modeName = "mode-$modeIndex" }
+            $safeName = ($modeName -replace '[^A-Za-z0-9\-]+','-').ToLowerInvariant()
+            if ([string]::IsNullOrWhiteSpace($safeName)) { $safeName = "mode-$modeIndex" }
 
-        $compareInfo.exitCode = $exitCode
-        $compareInfo.outputDir = $pairDir
+            if ($profileResults.Count -eq 0) {
+                $modeOutputDir = $pairDir
+            } else {
+                $modeOutputDir = Join-Path $pairDir ("mode-{0}" -f $safeName)
+                New-Item -ItemType Directory -Path $modeOutputDir -Force | Out-Null
+            }
 
-        $capturePath = Join-Path $pairDir 'lvcompare-capture.json'
-        if (Test-Path -LiteralPath $capturePath -PathType Leaf) {
-            $compareInfo.capturePath = $capturePath
-        }
+            $invokeParams = @{
+                BaseVi    = $stagedBasePath
+                HeadVi    = $stagedHeadPath
+                OutputDir = $modeOutputDir
+            }
+            if ($RenderReport.IsPresent) { $invokeParams.RenderReport = $true }
+            if ($profile.flags -and $profile.flags.Count -gt 0) { $invokeParams.Flags = $profile.flags }
+            if ($profile.replace) { $invokeParams.ReplaceFlags = $true }
+            if ($timeoutSeconds) { $invokeParams.TimeoutSeconds = $timeoutSeconds }
+            if ($leakCheckEnabled) {
+                $invokeParams.LeakCheck = $true
+                if ($leakGraceSecondsOverride -ne $null) { $invokeParams.LeakGraceSeconds = [double]$leakGraceSecondsOverride }
+            }
+            if ($allowSameLeafRequested) { $invokeParams.AllowSameLeaf = $true }
 
-        $reportCandidates = @('compare-report.html', 'compare-report.xml', 'compare-report.txt')
-        foreach ($candidate in $reportCandidates) {
-            $candidatePath = Join-Path $pairDir $candidate
-            if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
-                $compareInfo.reportPath = $candidatePath
-                break
+            Write-Host ("[compare] Running LVCompare (mode={0}) for pair {1}: Base={2} -> {3} Head={4} -> {5}" -f `
+                $modeName, $index, $entry.basePath, $stagedBasePath, $entry.headPath, $stagedHeadPath)
+            $invokeResult = & $InvokeLVCompare @invokeParams
+
+            $exitCode = $LASTEXITCODE
+            if ($invokeResult -is [int]) {
+                $exitCode = [int]$invokeResult
+            } elseif ($invokeResult -and $invokeResult.PSObject.Properties['ExitCode']) {
+                try { $exitCode = [int]$invokeResult.ExitCode } catch {}
+            }
+
+            $modeInfo = [ordered]@{
+                name      = $modeName
+                flags     = @()
+                replace   = [bool]$profile.replace
+                exitCode  = $exitCode
+                outputDir = $modeOutputDir
+            }
+            if ($profile.flags) { $modeInfo.flags = @($profile.flags) }
+            if ($allowSameLeafRequested) { $modeInfo.allowSameLeaf = $true }
+
+            $reportCandidates = @('compare-report.html', 'compare-report.xml', 'compare-report.txt')
+            foreach ($candidate in $reportCandidates) {
+                $candidatePath = Join-Path $modeOutputDir $candidate
+                if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+                    $modeInfo.reportPath = $candidatePath
+                    break
+                }
+            }
+
+            if ($invokeResult -and $invokeResult.PSObject.Properties['CapturePath'] -and $invokeResult.CapturePath) {
+                $modeInfo.capturePath = $invokeResult.CapturePath
+            } else {
+                $candidateCapture = Join-Path $modeOutputDir 'lvcompare-capture.json'
+                if (Test-Path -LiteralPath $candidateCapture -PathType Leaf) {
+                    $modeInfo.capturePath = $candidateCapture
+                }
+            }
+            if ($invokeResult -and $invokeResult.PSObject.Properties['ReportPath'] -and $invokeResult.ReportPath) {
+                $modeInfo.reportPath = $invokeResult.ReportPath
+            }
+
+            $modeStatus = 'match'
+            switch ($exitCode) {
+                0 { $modeStatus = 'match' }
+                1 { $modeStatus = 'diff' }
+                default { $modeStatus = 'error' }
+            }
+            $modeInfo.status = $modeStatus
+
+            if ($leakCheckEnabled) {
+                $leakPath = Join-Path $modeOutputDir 'compare-leak.json'
+                if (Test-Path -LiteralPath $leakPath -PathType Leaf) {
+                    $modeLeak = $null
+                    try {
+                        $modeLeak = Get-Content -LiteralPath $leakPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 4
+                    } catch {
+                        Write-Warning ("[compare] Failed to parse leak summary for pair {0} (mode={1}): {2}" -f $index, $modeName, $_.Exception.Message)
+                    }
+                    if ($modeLeak) {
+                        $lvLeak = 0
+                        $labLeak = 0
+                        if ($modeLeak.PSObject.Properties['lvcompare'] -and $modeLeak.lvcompare.PSObject.Properties['count']) {
+                            try { $lvLeak = [int]$modeLeak.lvcompare.count } catch { $lvLeak = 0 }
+                        }
+                        if ($modeLeak.PSObject.Properties['labview'] -and $modeLeak.labview.PSObject.Properties['count']) {
+                            try { $labLeak = [int]$modeLeak.labview.count } catch { $labLeak = 0 }
+                        }
+                        $modeInfo.leak = [pscustomobject]@{
+                            path      = $leakPath
+                            lvcompare = $lvLeak
+                            labview   = $labLeak
+                        }
+                        if ($lvLeak -gt 0 -or $labLeak -gt 0) {
+                            $modeInfo.leakWarning = $true
+                            $pairLeakWarning = $true
+                            if (-not $pairLeakRecord) {
+                                $pairLeakRecord = $modeInfo.leak
+                            }
+                        }
+                    }
+                }
+            }
+
+            $profileResults.Add([pscustomobject]$modeInfo) | Out-Null
+            $currentProfile = $profileResults[$profileResults.Count - 1]
+            if (-not $primaryProfile) {
+                $primaryProfile = $currentProfile
+            } elseif ($currentProfile.status -eq 'diff' -and $primaryProfile.status -ne 'diff') {
+                $primaryProfile = $currentProfile
+            }
+
+            if ($modeStatus -eq 'error') {
+                $pairErrorMessages.Add("mode $modeName exit $exitCode") | Out-Null
             }
         }
 
-        if ($invokeResult -and $invokeResult.PSObject.Properties['CapturePath'] -and $invokeResult.CapturePath) {
-            $compareInfo.capturePath = $invokeResult.CapturePath
-        }
-        if ($invokeResult -and $invokeResult.PSObject.Properties['ReportPath'] -and $invokeResult.ReportPath) {
-            $compareInfo.reportPath = $invokeResult.ReportPath
-        }
-
-        if ($leakCheckEnabled) {
-            $leakPath = Join-Path $pairDir 'compare-leak.json'
-            if (Test-Path -LiteralPath $leakPath -PathType Leaf) {
-                $leakData = $null
-                try {
-                    $leakData = Get-Content -LiteralPath $leakPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 4
-                } catch {
-                    Write-Warning ("[compare] Failed to parse leak summary for pair {0}: {1}" -f $index, $_.Exception.Message)
-                }
-                if ($leakData) {
-                    $lvLeak = 0
-                    $labLeak = 0
-                    if ($leakData.PSObject.Properties['lvcompare'] -and $leakData.lvcompare.PSObject.Properties['count']) {
-                        try { $lvLeak = [int]$leakData.lvcompare.count } catch { $lvLeak = 0 }
-                    }
-                    if ($leakData.PSObject.Properties['labview'] -and $leakData.labview.PSObject.Properties['count']) {
-                        try { $labLeak = [int]$leakData.labview.count } catch { $labLeak = 0 }
-                    }
-                    $compareInfo.leak = [pscustomobject]@{
-                        path      = $leakPath
-                        lvcompare = $lvLeak
-                        labview   = $labLeak
-                    }
-                    if ($lvLeak -gt 0 -or $labLeak -gt 0) {
-                        $compareInfo.leakWarning = $true
-                        $leakWarningCount++
-                        Write-Warning ("[compare] Leak warning for pair {0}: LVCompare={1}, LabVIEW={2}. Details: {3}" -f $index, $lvLeak, $labLeak, $leakPath)
-                    }
-                }
+        if ($profileResults.Count -eq 0) {
+            $compareInfo.status = 'skipped'
+            $skipCount++
+        } else {
+            $overallStatus = 'match'
+            $hasDiff = $false
+            $hasError = $false
+            foreach ($mode in $profileResults) {
+                if ($mode.status -eq 'diff') { $hasDiff = $true }
+                elseif ($mode.status -eq 'error') { $hasError = $true }
             }
-        }
-
-        switch ($exitCode) {
-            0 {
-                $compareInfo.status = 'match'
+            if ($hasDiff) {
+                $overallStatus = 'diff'
+                $diffCount++
+            } elseif ($hasError) {
+                $overallStatus = 'error'
+                $errorCount++
+            } else {
                 $matchCount++
             }
-            1 {
-                $compareInfo.status = 'diff'
-                $diffCount++
+            if ($hasError -and $pairErrorMessages.Count -gt 0) {
+                $failureMessages.Add("pair ${index}: {0}" -f ($pairErrorMessages -join '; '))
             }
-            default {
-                $compareInfo.status = 'error'
-                $errorCount++
-                $failureMessages.Add("pair $index exit $exitCode")
+            $compareInfo.status = $overallStatus
+
+            if (-not $primaryProfile) {
+                $primaryProfile = $profileResults[0]
             }
+            $compareInfo.primaryMode = $primaryProfile.name
+            $compareInfo.exitCode = $primaryProfile.exitCode
+            $compareInfo.outputDir = $primaryProfile.outputDir
+            if ($primaryProfile.PSObject.Properties['capturePath'] -and $primaryProfile.capturePath) {
+                $compareInfo.capturePath = $primaryProfile.capturePath
+            }
+            if ($primaryProfile.PSObject.Properties['reportPath'] -and $primaryProfile.reportPath) {
+                $compareInfo.reportPath = $primaryProfile.reportPath
+            }
+            if ($primaryProfile.PSObject.Properties['flags'] -and $primaryProfile.flags) {
+                $compareInfo.flags = @($primaryProfile.flags | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            } else {
+                $compareInfo.flags = @()
+            }
+        }
+
+        $compareInfo.modes = @($profileResults.ToArray())
+        if ($pairLeakWarning) {
+            $compareInfo.leakWarning = $true
+            $leakWarningCount++
+        }
+        if ($pairLeakRecord) {
+            $compareInfo.leak = $pairLeakRecord
+            if ($pairLeakRecord.PSObject.Properties['lvcompare']) { $compareInfo.leakLvcompare = $pairLeakRecord.lvcompare }
+            if ($pairLeakRecord.PSObject.Properties['labview']) { $compareInfo.leakLabVIEW = $pairLeakRecord.labview }
+            if ($pairLeakRecord.PSObject.Properties['path']) { $compareInfo.leakPath = $pairLeakRecord.path }
         }
     } else {
         $skipCount++
+        $compareInfo.status = 'skipped'
+        $compareInfo.modes = @()
     }
 
     $entry | Add-Member -NotePropertyName compare -NotePropertyValue ([pscustomobject]$compareInfo) -Force
@@ -454,6 +582,8 @@ foreach ($entry in $results) {
         leakLvcompare = $leakLvInt
         leakLabVIEW   = $leakLabInt
         leakPath      = $leakPathValue
+        primaryMode   = $compareInfo.primaryMode
+        modes         = $compareInfo.modes
     })
 
     $index++
