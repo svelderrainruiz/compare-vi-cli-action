@@ -181,6 +181,32 @@
       },
       "group": "test",
       "problemMatcher": []
+    },
+    {
+      "label": "Local: Verify diff session (real)",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Verify-LocalDiffSession.ps1",
+        "-BaseVi",
+        "${input:localDiffBase}",
+        "-HeadVi",
+        "${input:localDiffHead}",
+        "-Mode",
+        "${input:localDiffMode}",
+        "-ResultsRoot",
+        "${input:localDiffResultsReal}",
+        "-ProbeSetup",
+        "-RenderReport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": []
     }
   ],
   "inputs": [
@@ -218,13 +244,13 @@
       "id": "localDiffBase",
       "type": "promptString",
       "description": "Base VI path (relative or absolute)",
-      "default": "tests/fixtures/vi-stage/bd-cosmetic/Base.vi"
+      "default": "fixtures/vi-stage/bd-cosmetic/Base.vi"
     },
     {
       "id": "localDiffHead",
       "type": "promptString",
       "description": "Head VI path (relative or absolute)",
-      "default": "tests/fixtures/vi-stage/bd-cosmetic/Head.vi"
+      "default": "fixtures/vi-stage/bd-cosmetic/Head.vi"
     },
     {
       "id": "localDiffMode",
@@ -254,7 +280,13 @@
       "id": "localDiffResults",
       "type": "promptString",
       "description": "Results directory (relative or absolute)",
-      "default": "tests/results/_agent/local-diff/manual"
+      "default": "tests/results/_agent/local-diff/stub"
+    },
+    {
+      "id": "localDiffResultsReal",
+      "type": "promptString",
+      "description": "Results directory for real CLI session (relative or absolute)",
+      "default": "tests/results/_agent/local-diff/real"
     }
   ]
 }

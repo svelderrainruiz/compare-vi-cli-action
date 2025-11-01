@@ -170,16 +170,21 @@ Need a quick, local verification of LVCompare/LabVIEWCLI behaviour? Use
 ```powershell
 # Stubbed run (no LabVIEW required)
 pwsh -NoLogo -NoProfile -File tools/Verify-LocalDiffSession.ps1 `
-  -BaseVi tests/fixtures/vi-stage/bd-cosmetic/Base.vi `
-  -HeadVi tests/fixtures/vi-stage/bd-cosmetic/Head.vi `
+  -BaseVi fixtures/vi-stage/bd-cosmetic/Base.vi `
+  -HeadVi fixtures/vi-stage/bd-cosmetic/Head.vi `
   -UseStub -Mode duplicate-window -SentinelTtlSeconds 10
 ```
 
 The helper writes summary JSON under `tests/results/_agent/local-diff/<timestamp>/`
 and prints a one-line overview for each run (exit code, whether CLI was skipped,
-and any suppression reason). Modes include `normal`, `cli-suppressed`,
-`git-context`, and `duplicate-window` so you can validate the environment and
-sentinel guards without waiting for CI.
+suppression reason, and output directory). The summary JSON includes the captured
+stdout/stderr snippets, sentinel path (when applicable), and snapshots of
+LabVIEW/LVCompare/LabVIEWCLI processes before/after each invocation.
+
+- Modes include `normal`, `cli-suppressed`, `git-context`, and `duplicate-window`
+  so you can validate the environment and sentinel guards without waiting for CI.
+- For quick iterations open the VS Code Tasks palette and run either
+  **Local: Verify diff session (stub)** or **Local: Verify diff session (real)**.
 
 Need to point the tools at non-default LabVIEW/LVCompare installs? Copy
 `configs/labview-paths.sample.json` to `configs/labview-paths.json` and list any

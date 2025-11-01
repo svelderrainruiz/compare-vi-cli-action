@@ -69,7 +69,8 @@ Set `fail-on-diff: false` to treat code 1 as notice-only.
 - Use `tools/Dev-Dashboard.ps1` for a quick telemetry snapshot (locks, queue waits).
 - Hand-offs: `tools/Print-AgentHandoff.ps1 -AutoTrim` surfaces watcher state and trims logs.
 - Spot-check LVCompare/LabVIEWCLI behaviour locally with
-  `tools/Verify-LocalDiffSession.ps1` (supports stub mode via `-UseStub` when LabVIEW isn't installed).
+  `tools/Verify-LocalDiffSession.ps1`; VS Code tasks **Local: Verify diff session (stub)**
+  and **Local: Verify diff session (real)** wire in the common parameters.
 
 ## Git difftool overlap (duplicate CLI invocations)
 

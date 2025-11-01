@@ -129,13 +129,49 @@ if (-not (Test-Path -LiteralPath $driverPath -PathType Leaf)) {
   throw "Invoke-LVCompare.ps1 not found at $driverPath"
 }
 
-if (-not (Test-Path -LiteralPath $BaseVi -PathType Leaf)) { throw "Base VI not found: $BaseVi" }
-if (-not (Test-Path -LiteralPath $HeadVi -PathType Leaf)) { throw "Head VI not found: $HeadVi" }
+function Resolve-ViPath {
+  param([Parameter(Mandatory = $true)][string]$Path)
 
-if ($ProbeSetup.IsPresent -and -not $UseStub.IsPresent) {
+  $candidates = New-Object System.Collections.Generic.List[string]
+  if ([System.IO.Path]::IsPathRooted($Path)) {
+    $candidates.Add($Path)
+  } else {
+    $candidates.Add((Join-Path $repoRoot $Path))
+  }
+
+  if ($Path -match '^tests[\\/](.+)$') {
+    $relative = $Matches[1]
+    $candidates.Add((Join-Path $repoRoot $relative))
+  }
+
+  foreach ($candidate in $candidates) {
+    try {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $candidate).Path
+      }
+    } catch {}
+  }
+
+  throw ("VI not found. Tried: {0}" -f ($candidates -join '; '))
+}
+
+$BaseVi = Resolve-ViPath -Path $BaseVi
+$HeadVi = Resolve-ViPath -Path $HeadVi
+
+$setupStatus = [ordered]@{
+  ok = $true
+  message = 'ready'
+}
+
+if ($ProbeSetup.IsPresent) {
   $setupScript = Join-Path $repoRoot 'tools' 'Verify-LVCompareSetup.ps1'
   if (Test-Path -LiteralPath $setupScript -PathType Leaf) {
-    try { & $setupScript -ProbeCli -Search | Out-Null } catch { throw "LVCompare setup probe failed: $($_.Exception.Message)" }
+    try {
+      & $setupScript -ProbeCli -Search | Out-Null
+    } catch {
+      $setupStatus.ok = $false
+      $setupStatus.message = $_.Exception.Message
+    }
   }
 }
 
@@ -217,42 +253,48 @@ function Invoke-CompareRun {
   if (-not (Test-Path -LiteralPath $capPath -PathType Leaf)) { throw "Capture JSON not found at $capPath" }
   $cap = Get-Content -LiteralPath $capPath -Raw | ConvertFrom-Json -Depth 8
 
-  $envCli = if ($cap -and $cap.PSObject.Properties['environment'] -and $cap.environment -and $cap.environment.PSObject.Properties['cli']) { $cap.environment.cli } else { $null }
+$envCli = if ($cap -and $cap.PSObject.Properties['environment'] -and $cap.environment -and $cap.environment.PSObject.Properties['cli']) { $cap.environment.cli } else { $null }
 
-  $stdoutPath = Join-Path $RunDir 'lvcli-stdout.txt'
-  $stderrPath = Join-Path $RunDir 'lvcli-stderr.txt'
-  $stdoutSnippet = Read-FileSnippet -Path $stdoutPath
-  $stderrSnippet = Read-FileSnippet -Path $stderrPath
-  $stdoutPathResolved = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $stdoutPath } else { $null }
-  $stderrPathResolved = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $stderrPath } else { $null }
+$stdoutPath = Join-Path $RunDir 'lvcli-stdout.txt'
+$stderrPath = Join-Path $RunDir 'lvcli-stderr.txt'
+$stdoutSnippet = Read-FileSnippet -Path $stdoutPath
+$stderrSnippet = Read-FileSnippet -Path $stderrPath
+$stdoutPathResolved = if (Test-Path -LiteralPath $stdoutPath -PathType Leaf) { $stdoutPath } else { $null }
+$stderrPathResolved = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { $stderrPath } else { $null }
 
-  $cliSkipped = if ($envCli -and $envCli.PSObject.Properties['skipped']) { [bool]$envCli.skipped } else { $false }
-  $skipReason = if ($envCli -and $envCli.PSObject.Properties['skipReason']) { [string]$envCli.skipReason } else { $null }
+$cliSkipped = if ($envCli -and $envCli.PSObject.Properties['skipped']) { [bool]$envCli.skipped } else { $false }
+$skipReason = if ($envCli -and $envCli.PSObject.Properties['skipReason']) { [string]$envCli.skipReason } else { $null }
 
   $reportPath = if ($envCli -and $envCli.PSObject.Properties['reportPath'] -and $envCli.reportPath) { [string]$envCli.reportPath } else { $null }
 
-  $sentinelInfo = Get-SentinelSkipStatus -Vi1 $baseResolved -Vi2 $headResolved -ReportPath $reportPath -TtlSeconds $effectiveTtlUsed
-  if ($sentinelInfo.skipped -and -not $cliSkipped) {
-    $cliSkipped = $true
-    $skipReason = $sentinelInfo.reason
-  }
+$sentinelInfo = Get-SentinelSkipStatus -Vi1 $baseResolved -Vi2 $headResolved -ReportPath $reportPath -TtlSeconds $effectiveTtlUsed
+if ($sentinelInfo.skipped -and -not $cliSkipped) {
+  $cliSkipped = $true
+  $skipReason = $sentinelInfo.reason
+}
 
-  $runInfo = [ordered]@{
-    outputDir     = $RunDir
-    capture       = $capPath
-    stdoutPath    = $stdoutPathResolved
-    stderrPath    = $stderrPathResolved
-    stdoutSnippet = $stdoutSnippet
-    stderrSnippet = $stderrSnippet
-    exitCode      = $cap.exitCode
-    seconds       = $cap.seconds
-    cliSkipped    = $cliSkipped
-    skipReason    = $skipReason
-    base          = $baseResolved
-    head          = $headResolved
-    reportPath    = $reportPath
-    sentinelPath  = $sentinelInfo.path
-    preProcesses  = $preSnapshot
+if ($Mode -eq 'git-context' -and -not $cliSkipped) {
+  $cliSkipped = $true
+  $skipReason = 'git-context'
+}
+
+$runInfo = [ordered]@{
+  outputDir     = $RunDir
+  capture       = $capPath
+  stdoutPath    = $stdoutPathResolved
+  stderrPath    = $stderrPathResolved
+  stdoutSnippet = $stdoutSnippet
+  stderrSnippet = $stderrSnippet
+  exitCode      = $cap.exitCode
+  seconds       = $cap.seconds
+  cliSkipped    = $cliSkipped
+  skipReason    = $skipReason
+  mode          = $Mode
+  base          = $baseResolved
+  head          = $headResolved
+  reportPath    = $reportPath
+  sentinelPath  = $sentinelInfo.path
+  preProcesses  = $preSnapshot
     postProcesses = $postSnapshot
   }
 
@@ -266,6 +308,26 @@ $summary = [ordered]@{
   head       = (Resolve-Path -LiteralPath $HeadVi).Path
   resultsDir = $resultsRootResolved
   runs       = @()
+  setupStatus = [pscustomobject]$setupStatus
+}
+
+if (-not $setupStatus.ok) {
+  Write-Warning ("LVCompare setup probe failed: {0}" -f $setupStatus.message)
+  $summaryPath = Join-Path $resultsRootResolved 'local-diff-summary.json'
+  $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding utf8
+  Write-Host ''
+  Write-Host '=== Local Diff Session Summary ===' -ForegroundColor Cyan
+  Write-Host ("Mode     : {0}" -f $summary.mode)
+  Write-Host ("Base     : {0}" -f $summary.base)
+  Write-Host ("Head     : {0}" -f $summary.head)
+  Write-Host ("Results  : {0}" -f $summary.resultsDir)
+  Write-Host ("Setup    : {0}" -f $summary.setupStatus.message)
+  return [pscustomobject]@{
+    resultsDir   = $resultsRootResolved
+    summary      = $summaryPath
+    runs         = @()
+    setupStatus  = [pscustomobject]$setupStatus
+  }
 }
 
 $run1Dir = Join-Path $resultsRootResolved 'run-01'
@@ -308,4 +370,5 @@ return [pscustomobject]@{
   resultsDir = $resultsRootResolved
   summary    = $summaryPath
   runs       = @($summary.runs)
+  setupStatus= [pscustomobject]$setupStatus
 }

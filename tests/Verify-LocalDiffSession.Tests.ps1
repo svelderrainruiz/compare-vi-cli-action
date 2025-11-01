@@ -26,6 +26,10 @@ Describe 'Verify-LocalDiffSession.ps1' -Tag 'Unit' {
     $summary.runs.Count | Should -Be 1
     $summary.runs[0].cliSkipped | Should -BeFalse
     ($summary.runs[0].skipReason -eq $null -or [string]::IsNullOrWhiteSpace($summary.runs[0].skipReason)) | Should -BeTrue
+    if ($summary.runs[0].stdoutPath) {
+      Test-Path -LiteralPath $summary.runs[0].stdoutPath -PathType Leaf | Should -BeTrue
+      (Get-Content -LiteralPath $summary.runs[0].stdoutPath -Raw) | Should -Match 'Stub LVCompare run'
+    }
   }
 
   It 'suppresses CLI in cli-suppressed mode' {
@@ -57,5 +61,34 @@ Describe 'Verify-LocalDiffSession.ps1' -Tag 'Unit' {
     $summary.runs[0].cliSkipped | Should -BeFalse
     $summary.runs[1].cliSkipped | Should -BeTrue
     $summary.runs[1].skipReason | Should -Match '^sentinel:'
+  }
+
+  It 'suppresses CLI in git-context mode' {
+    $work = Join-Path $TestDrive 'lds-git-context'
+    New-Item -ItemType Directory -Path $work | Out-Null
+    $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Value '' -Encoding ascii
+    $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Value '' -Encoding ascii
+    $resultsDir = Join-Path $work 'results'
+
+    $result = & $script:toolPath -BaseVi $base -HeadVi $head -UseStub -ResultsRoot $resultsDir -Mode 'git-context'
+
+    $summary = Get-Content -LiteralPath $result.summary -Raw | ConvertFrom-Json
+    $summary.runs.Count | Should -Be 1
+    $summary.runs[0].cliSkipped | Should -BeTrue
+    $summary.runs[0].skipReason | Should -Be 'git-context'
+  }
+
+  It 'reports setup status when LVCompare probe fails' {
+    $work = Join-Path $TestDrive 'lds-setup'
+    New-Item -ItemType Directory -Path $work | Out-Null
+    $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Value '' -Encoding ascii
+    $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Value '' -Encoding ascii
+    $resultsDir = Join-Path $work 'results'
+
+    $result = & $script:toolPath -BaseVi $base -HeadVi $head -ResultsRoot $resultsDir -Mode 'normal' -ProbeSetup
+
+    $result.runs.Count | Should -Be 0
+    $result.setupStatus.ok | Should -BeFalse
+    $result.setupStatus.message | Should -Match 'Failed to parse labview-paths.json'
   }
 }
