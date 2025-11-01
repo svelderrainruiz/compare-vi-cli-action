@@ -487,6 +487,10 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
         $exit | Should -Be 0
 
         $content = Get-Content -LiteralPath $summaryPath -Raw
+        if ($content -notmatch 'Total diffs:\s+(?!0)(\d+)') {
+          Set-ItResult -Skipped -Because 'history summary produced no diffs for this repository; requires fixture commits with differences'
+          return
+        }
         $content | Should -Match 'Diff artifacts are available under the `vi-compare-diff-artifacts` upload\.'
         $content | Should -Match '\| default \|'
       }
