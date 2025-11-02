@@ -86,12 +86,14 @@ function Get-StubBool([string]$value) {
 
 $diffFlag     = Get-StubBool $env:STUB_COMPARE_DIFF
 $renameReport = Get-StubBool $env:STUB_COMPARE_RENAME_REPORT
+$skipSummary  = Get-StubBool $env:STUB_COMPARE_SKIP_SUMMARY
 
 $stdoutPath = Join-Path $OutputDir 'lvcompare-stdout.txt'
 $stderrPath = Join-Path $OutputDir 'lvcompare-stderr.txt'
 $exitPath   = Join-Path $OutputDir 'lvcompare-exitcode.txt'
 $reportPath = Join-Path $OutputDir 'compare-report.html'
 $cliReport  = Join-Path $OutputDir 'cli-report.html'
+$execPath   = Join-Path $OutputDir 'lvcompare-exec.json'
 $capPath    = Join-Path $OutputDir 'lvcompare-capture.json'
 
 "Stub compare for $BaseVi -> $HeadVi (flags: $($Flags -join ' '))" | Out-File -LiteralPath $stdoutPath -Encoding utf8
@@ -106,6 +108,39 @@ if ($renameReport) {
 } else {
   Copy-Item -LiteralPath $reportPath -Destination $cliReport -Force
 }
+$reportTarget = if ($renameReport) { $cliReport } else { $reportPath }
+
+$summaryPath = Join-Path $OutputDir 'summary.json'
+$summary = [ordered]@{
+  schema = 'compare-cli-summary/v1'
+  cli    = [ordered]@{
+    exitCode    = $exitCodeValue
+    diff        = $diffFlag
+    duration_s  = 0.02
+    command     = 'stub'
+  }
+  out = [ordered]@{
+    reportPath = $reportTarget
+  }
+}
+if ($skipSummary) {
+  if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+    Remove-Item -LiteralPath $summaryPath -Force
+  }
+} else {
+  $summary | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $summaryPath -Encoding utf8
+}
+
+$exec = [ordered]@{
+  exitCode   = $exitCodeValue
+  diff       = $diffFlag
+  duration_s = 0.02
+  command    = 'stub'
+  cliPath    = 'stub'
+  args       = $Flags
+  reportPath = $reportTarget
+}
+$exec | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $execPath -Encoding utf8
 
 $cap = [ordered]@{
   schema   = 'lvcompare-capture-v1'
@@ -232,6 +267,7 @@ $stderrPath = Join-Path $OutputDir 'lvcompare-stderr.txt'
 $exitPath   = Join-Path $OutputDir 'lvcompare-exitcode.txt'
 $reportPath = Join-Path $OutputDir 'compare-report.html'
 $cliReport  = Join-Path $OutputDir 'cli-report.html'
+$execPath   = Join-Path $OutputDir 'lvcompare-exec.json'
 $capPath    = Join-Path $OutputDir 'lvcompare-capture.json'
 
 "Stub compare for $BaseVi -> $HeadVi (flags: $($Flags -join ' '))" | Out-File -LiteralPath $stdoutPath -Encoding utf8
@@ -349,6 +385,7 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
       }
     }
+
   }
 
   Context 'step summary reporting' {
@@ -381,12 +418,14 @@ function Get-StubBool([string]$value) {
 }
 
 $diffFlag = Get-StubBool $env:STUB_COMPARE_DIFF
+$skipSummary = Get-StubBool $env:STUB_COMPARE_SKIP_SUMMARY
 
 $stdoutPath = Join-Path $OutputDir 'lvcompare-stdout.txt'
 $stderrPath = Join-Path $OutputDir 'lvcompare-stderr.txt'
 $exitPath   = Join-Path $OutputDir 'lvcompare-exitcode.txt'
 $reportPath = Join-Path $OutputDir 'compare-report.html'
 $cliReport  = Join-Path $OutputDir 'cli-report.html'
+$execPath   = Join-Path $OutputDir 'lvcompare-exec.json'
 $capPath    = Join-Path $OutputDir 'lvcompare-capture.json'
 
 "Stub compare for $BaseVi -> $HeadVi (flags: $($Flags -join ' '))" | Out-File -LiteralPath $stdoutPath -Encoding utf8
@@ -410,7 +449,24 @@ $summary = [ordered]@{
     reportPath = $reportPath
   }
 }
-$summary | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $summaryPath -Encoding utf8
+if ($skipSummary) {
+  if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+    Remove-Item -LiteralPath $summaryPath -Force
+  }
+} else {
+  $summary | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $summaryPath -Encoding utf8
+}
+
+$exec = [ordered]@{
+  exitCode   = $exitCodeValue
+  diff       = $diffFlag
+  duration_s = 0.05
+  command    = 'stub'
+  cliPath    = 'stub'
+  args       = $Flags
+  reportPath = $reportPath
+}
+$exec | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $execPath -Encoding utf8
 
 $cap = [ordered]@{
   schema   = 'lvcompare-capture-v1'
@@ -495,6 +551,46 @@ $cap | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $capPath -Encoding utf8
         $content | Should -Match '\| default \|'
       }
       finally {
+        Remove-Item Env:STUB_COMPARE_EXITCODE -ErrorAction SilentlyContinue
+        Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
+      }
+    }
+
+    It 'generates a fallback per-pair summary when the CLI summary is missing' {
+      if ($script:SkipDueToLabVIEW) {
+        Set-ItResult -Skipped -Because 'LabVIEW/LVCompare processes already running on runner'
+        return
+      }
+
+      $resultsDir = Join-Path $TestDrive 'summary-fallback-nosummary'
+      $summaryPath = Join-Path $TestDrive 'step-summary-fallback.md'
+      $env:STUB_COMPARE_SKIP_SUMMARY = '1'
+      $env:STUB_COMPARE_EXITCODE = '1'
+      $env:STUB_COMPARE_DIFF = '1'
+      try {
+        $exit = Invoke-HistorySummary -ResultsDir $resultsDir -SummaryPath $summaryPath -ExtraArgs @()
+        $exit | Should -Be 0
+
+        $pairSummary = Get-ChildItem -LiteralPath $resultsDir -Recurse -File |
+          Where-Object { $_.Name -like '*-summary.json' -and $_.Name -ne 'history-summary.json' } |
+          Select-Object -First 1
+        if (-not $pairSummary) {
+          Set-ItResult -Skipped -Because 'pair summary was not generated for VI1.vi (history window may be empty)'
+          return
+        }
+
+        $summaryJson = Get-Content -LiteralPath $pairSummary.FullName -Raw | ConvertFrom-Json -Depth 10
+        $summaryJson.schema | Should -Be 'ref-compare-summary/v1'
+        [bool]$summaryJson.cli.diff | Should -BeTrue
+        $summaryJson.cli.exitCode | Should -Be 1
+        $summaryJson.cli.reportFormat | Should -Be 'html'
+        $summaryJson.out.execJson | Should -Not -BeNullOrEmpty
+        if ($summaryJson.out.execJson) {
+          Test-Path -LiteralPath $summaryJson.out.execJson -PathType Leaf | Should -BeTrue
+        }
+      }
+      finally {
+        Remove-Item Env:STUB_COMPARE_SKIP_SUMMARY -ErrorAction SilentlyContinue
         Remove-Item Env:STUB_COMPARE_EXITCODE -ErrorAction SilentlyContinue
         Remove-Item Env:STUB_COMPARE_DIFF -ErrorAction SilentlyContinue
       }

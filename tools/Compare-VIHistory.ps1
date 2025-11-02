@@ -1426,9 +1426,55 @@ foreach ($modeSpec in $modeSpecs) {
           }
         }
         if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
-          throw ("Summary not found at {0}" -f $summaryPath)
+          Write-Warning ("Summary not found at {0}; generating fallback summary from exec data." -f $summaryPath)
+          $fallbackOut = [ordered]@{
+            execJson = if (Test-Path -LiteralPath $execPath -PathType Leaf) { (Resolve-Path -LiteralPath $execPath).Path } else { $null }
+          }
+          $fallbackCli = [ordered]@{
+            exitCode    = $null
+            diff        = $null
+            duration_s  = $null
+            command     = $null
+            cliPath     = $null
+            reportFormat = $reportFormatEffective
+          }
+          if (Test-Path -LiteralPath $execPath -PathType Leaf) {
+            try {
+              $execData = Get-Content -LiteralPath $execPath -Raw | ConvertFrom-Json -Depth 6
+              if ($execData) {
+                if ($execData.PSObject.Properties['exitCode']) { $fallbackCli.exitCode = [int]$execData.exitCode }
+                if ($execData.PSObject.Properties['diff']) { $fallbackCli.diff = [bool]$execData.diff }
+                if ($execData.PSObject.Properties['duration_s']) { $fallbackCli.duration_s = [double]$execData.duration_s }
+                if ($execData.PSObject.Properties['command']) { $fallbackCli.command = [string]$execData.command }
+                if ($execData.PSObject.Properties['cliPath']) { $fallbackCli.cliPath = [string]$execData.cliPath }
+                if ($execData.PSObject.Properties['args'] -and $execData.args) { $fallbackCli.args = @($execData.args) }
+              }
+            } catch {}
+          }
+          $fallback = [ordered]@{
+            schema       = 'ref-compare-summary/v1'
+            generatedAt  = (Get-Date).ToString('o')
+            name         = $targetLeaf
+            path         = $targetRel
+            refA         = $baseCommit
+            refB         = $headCommit
+            temp         = $null
+            reportFormat = $reportFormatEffective
+            out          = [pscustomobject]$fallbackOut
+            computed     = [ordered]@{
+              baseBytes  = $null
+              headBytes  = $null
+              baseSha    = $null
+              headSha    = $null
+              expectDiff = $null
+            }
+            cli          = [pscustomobject]$fallbackCli
+          }
+          $fallback | ConvertTo-Json -Depth 8 | Out-File -FilePath $summaryPath -Encoding utf8
+          $summaryJson = [pscustomobject]$fallback
+        } else {
+          $summaryJson = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -Depth 8
         }
-        $summaryJson = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json -Depth 8
       }
 
       $diff = [bool]$summaryJson.cli.diff
