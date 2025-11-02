@@ -1390,6 +1390,7 @@ foreach ($modeSpec in $modeSpecs) {
         if ($KeepArtifactsOnNoDiff.IsPresent) {
           $compareArgs += "-KeepArtifactsOnNoDiff"
         }
+        $compareArgsOriginal = @($compareArgs)
         $pwshResult = Invoke-Pwsh -Arguments $compareArgs
         if ($pwshResult.ExitCode -ne 0) {
           if ($pwshResult.ExitCode -eq 1) {
@@ -1404,6 +1405,26 @@ foreach ($modeSpec in $modeSpecs) {
       }
 
       if (-not $summaryJson) {
+        if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+          Write-Warning ("Summary not found at {0}; retrying compare with detailed capture." -f $summaryPath)
+          $retryArgsList = New-Object System.Collections.Generic.List[string]
+          foreach ($arg in $compareArgsOriginal) { $retryArgsList.Add($arg) | Out-Null }
+          if (-not ($retryArgsList.Contains("-Detailed"))) { $retryArgsList.Add("-Detailed") | Out-Null }
+          if (-not ($retryArgsList.Contains("-RenderReport"))) { $retryArgsList.Add("-RenderReport") | Out-Null }
+          [void]$retryArgsList.Remove("-Quiet")
+          $retryArgs = $retryArgsList.ToArray()
+          $retryResult = Invoke-Pwsh -Arguments $retryArgs
+          if ($retryResult.ExitCode -ne 0) {
+            if ($retryResult.ExitCode -eq 1) {
+              Write-Verbose 'Retry Compare-RefsToTemp reported exit code 1 (diff detected); continuing.'
+            } else {
+              $msg = "Retry Compare-RefsToTemp.ps1 exited with code {0}" -f $retryResult.ExitCode
+              if ($retryResult.StdErr) { $msg = "$msg`n$($retryResult.StdErr.Trim())" }
+              if ($retryResult.StdOut) { $msg = "$msg`n$($retryResult.StdOut.Trim())" }
+              throw $msg
+            }
+          }
+        }
         if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
           throw ("Summary not found at {0}" -f $summaryPath)
         }
