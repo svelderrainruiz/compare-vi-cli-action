@@ -17,11 +17,36 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Updated README, developer guide, and workflow notes to describe the optional `-MaxPairs` cap and refreshed examples to
   highlight the new default behaviour.
 
+## [v0.6.0] - 2025-11-02
+
+### Added
+
+- `tools/New-LVCompareConfig.ps1` auto-discovers LabVIEW/LVCompare/LabVIEWCLI installations, scaffolds
+  `configs/labview-paths.local.json`, and optionally verifies the setup so local diff sessions can run without manual
+  edits. `tools/Run-LocalDiffSession.ps1` wraps the flow, archives artifacts (`latest/`, `latest.zip`), and surfaces the
+  helper through new VS Code tasks.
+- `Verify-LocalDiffSession.ps1` gained `-AutoConfig` and `-Stateless` switches, refreshed warnings, and dedicated unit
+  coverage (`tests/New-LVCompareConfig.Tests.ps1`, `tests/Run-LocalDiffSession.Tests.ps1`,
+  `tests/Verify-LocalDiffSession.Tests.ps1`) to guard the auto-config pipeline end-to-end.
+
+### Changed
+
+- Compare drivers (`tools/Run-HeadlessCompare.ps1`, `tools/Run-DX.ps1`, `tools/TestStand-CompareHarness.ps1`,
+  `tools/Run-StagedLVCompare.ps1`, `module/CompareLoop/CompareLoop.psm1`) now default to the full-detail noise profile
+  so LabVIEW diffs capture unsuppressed signal; callers can still request the historical filters via `-NoiseProfile legacy`.
+- VS Code tasks for local diff sessions now prompt for LabVIEW version/bitness, expose stateless mode, and archive stub
+  and real artifacts automatically.
+
+### Documentation
+
+- Updated README, Usage Guide, troubleshooting notes, and investigation docs to cover the new auto-config helper,
+  stateless workflow, and full-detail compare defaults.
+
 ## [v0.5.4] - 2025-10-31
 
 ### Added
 
-- Bucket-aware VI compare summaries – `tools/VICategoryBuckets.psm1`, `tools/Summarize-VIStaging.ps1`,
+- Bucket-aware VI compare summaries - `tools/VICategoryBuckets.psm1`, `tools/Summarize-VIStaging.ps1`,
   `tools/Compare-VIHistory.ps1`, and `tools/Render-VIHistoryReport.ps1` now surface business buckets (Functional
   behavior, UI / visual, Metadata) in Markdown/HTML reports, CLI outputs, and GitHub telemetry so reviewers and
   automation can triage diffs without downloading artifacts.
