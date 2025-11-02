@@ -17,6 +17,13 @@ Quick reference for building, testing, and releasing the LVCompare composite act
 - **Icon Editor build pipeline**
   - `node tools/npm/run-script.mjs icon-editor:build` - runs the vendored LabVIEW Icon Editor build using the upstream PowerShell actions.
   - Requires LabVIEW 2021 SP1 (32-bit and 64-bit) and LabVIEW 2023 (64-bit). `Invoke-IconEditorBuild.ps1` now validates those installs via `Find-LabVIEWVersionExePath` and fails fast with a remediation hint when any executable is missing.
+  - Need quick feedback without LabVIEW? Set `ICON_EDITOR_BUILD_MODE=simulate`
+    (optionally `ICON_EDITOR_SIMULATION_FIXTURE` to override the default VIP)
+    before invoking the workflow or `priority:validate`. The run will call
+    `tools/icon-editor/Simulate-IconEditorBuild.ps1`, copy the committed fixture,
+    and emit the same manifest + package-smoke summary expected from a full build.
+    Clear the variable or set it back to `build` before release/sign-off runs so
+    the real pipeline executes.
   - `npm run icon-editor:dev:on` / `npm run icon-editor:dev:off` toggle LabVIEW development mode using the vendored helpers (`Set_Development_Mode.ps1` / `RevertDevelopmentMode.ps1`) and persist the current state.
   - `npm run icon-editor:dev:assert:on` / `npm run icon-editor:dev:assert:off` validate the LabVIEW `LocalHost.LibraryPaths` token so you can confirm dev mode is actually enabled or disabled before continuing.
   - Multi-lane tooling:

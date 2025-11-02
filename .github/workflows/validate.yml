@@ -822,6 +822,9 @@ jobs:
     environment:
       name: validation
     runs-on: [self-hosted, Windows, X64]
+    env:
+      ICON_EDITOR_BUILD_MODE: ${{ vars.ICON_EDITOR_BUILD_MODE || 'build' }}
+      ICON_EDITOR_SIMULATION_FIXTURE: ${{ vars.ICON_EDITOR_SIMULATION_FIXTURE || '' }}
     defaults:
       run:
         shell: pwsh
@@ -883,33 +886,96 @@ jobs:
           if (-not $metadata.ref) { $metadata.ref = 'unknown' }
           if (-not $metadata.commit) { $metadata.commit = 'unknown' }
 
+          $expectedVersion = [ordered]@{
+            major  = $major
+            minor  = $minor
+            patch  = $patch
+            build  = $build
+            commit = $metadata.commit
+          }
+
+          $modeRaw = $env:ICON_EDITOR_BUILD_MODE
+          if ([string]::IsNullOrWhiteSpace($modeRaw)) {
+            $modeRaw = 'build'
+          }
+          $mode = $modeRaw.ToLowerInvariant()
+          $metadata.mode = $mode
+
+          $fixturePath = $null
+          if ($mode -eq 'simulate') {
+            $fixtureCandidate = $env:ICON_EDITOR_SIMULATION_FIXTURE
+            if ([string]::IsNullOrWhiteSpace($fixtureCandidate)) {
+              $fixtureCandidate = Join-Path (Get-Location).Path 'tests' 'fixtures' 'icon-editor' 'ni_icon_editor-1.4.1.948.vip'
+            } elseif (-not (Test-Path -LiteralPath $fixtureCandidate -PathType Leaf)) {
+              $candidateRelative = Join-Path (Get-Location).Path $fixtureCandidate
+              if (Test-Path -LiteralPath $candidateRelative -PathType Leaf) {
+                $fixtureCandidate = $candidateRelative
+              }
+            }
+
+            if (-not (Test-Path -LiteralPath $fixtureCandidate -PathType Leaf)) {
+              throw "Simulation requested but fixture not found at '$fixtureCandidate'."
+            }
+
+            $fixturePath = (Resolve-Path -LiteralPath $fixtureCandidate).Path
+            $metadata.simulationFixture = $fixturePath
+          }
+
           $metadataPath = Join-Path $results 'metadata.json'
           $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
-          pwsh -NoLogo -NoProfile -File tools/icon-editor/Invoke-IconEditorBuild.ps1 `
-            -Major $major `
-            -Minor $minor `
-            -Patch $patch `
-            -Build $build `
-            -ResultsRoot $results `
-            -RunUnitTests
+          if ($mode -eq 'simulate') {
+            pwsh -NoLogo -NoProfile -File tools/icon-editor/Simulate-IconEditorBuild.ps1 `
+              -FixturePath $fixturePath `
+              -ResultsRoot $results `
+              -ExpectedVersion $expectedVersion | Out-Null
+          } else {
+            pwsh -NoLogo -NoProfile -File tools/icon-editor/Invoke-IconEditorBuild.ps1 `
+              -Major $major `
+              -Minor $minor `
+              -Patch $patch `
+              -Build $build `
+              -ResultsRoot $results `
+              -RunUnitTests
+          }
 
           $manifestPath = Join-Path $results 'manifest.json'
           if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
             $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
             $artifactCount = ($manifest.artifacts | Measure-Object).Count
-            $packageVersion = $metadata.version.raw
+            $packageVersion = $null
+            if ($manifest.version -and $manifest.version.fixture -and $manifest.version.fixture.raw) {
+              $packageVersion = $manifest.version.fixture.raw
+            }
+            if (-not $packageVersion) {
+              $packageVersion = $metadata.version.raw
+            }
+
             if ($env:GITHUB_OUTPUT) {
               "package_version=$packageVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               "manifest_path=$manifestPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               "metadata_path=$metadataPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              "build_mode=$mode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             }
             $summary = @(
               '### Icon Editor Build',
               '',
+              ("- Mode: {0}" -f $mode)
+            )
+            if ($mode -eq 'simulate' -and $manifest.simulation -and $manifest.simulation.fixturePath) {
+              $summary += ("- Fixture path: {0}" -f $manifest.simulation.fixturePath)
+            }
+            $summary += @(
               ("- Issue: #{0}" -f $metadata.issue),
               ("- Run: {0} (attempt {1})" -f $metadata.runId, $metadata.runAttempt),
-              ("- Version: {0} (source {1}, build {2})" -f $packageVersion, $packageJson.version, $build),
+              ("- Package version: {0}" -f $packageVersion)
+            )
+            if ($manifest.version -and $manifest.version.expected -and $manifest.version.expected.raw) {
+              $summary += ("- Expected version: {0}" -f $manifest.version.expected.raw)
+            }
+            $summary += @(
+              ("- Source version: {0}" -f $packageJson.version),
+              ("- Build number: {0}" -f $build),
               ("- Commit: {0}" -f $metadata.commit),
               ("- Packaging requested: {0}" -f $manifest.packagingRequested),
               ("- Dependencies toggled: {0}" -f $manifest.dependenciesApplied),
@@ -919,6 +985,7 @@ jobs:
               ("- Manifest: {0}" -f $manifestPath),
               ''
             )
+
             if ($env:GITHUB_STEP_SUMMARY) {
               $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
             }
