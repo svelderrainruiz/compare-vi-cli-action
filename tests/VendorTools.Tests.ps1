@@ -81,4 +81,46 @@ Describe 'VendorTools LabVIEW helpers' {
     $resolvedVersionExe = (Resolve-Path -LiteralPath $versionExe).Path
     $candidates | Should -Contain $resolvedVersionExe
   }
+
+  It 'resolves g-cli path from config overrides' {
+    if (-not $IsWindows) {
+      Set-ItResult -Skipped -Because 'g-cli resolution only applies on Windows'
+      return
+    }
+
+    $tempRoot = Join-Path $TestDrive 'gcli-config'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+    $fakeGCli = Join-Path $tempRoot 'g-cli.exe'
+    Set-Content -LiteralPath $fakeGCli -Value '' -Encoding ascii
+
+    @{
+      GCliExePath = $fakeGCli
+    } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $script:localConfigPath -Encoding utf8
+
+    $resolved = Resolve-GCliPath
+    $resolved | Should -Be (Resolve-Path -LiteralPath $fakeGCli).Path
+  }
+
+  It 'prefers g-cli path from environment variables when present' {
+    if (-not $IsWindows) {
+      Set-ItResult -Skipped -Because 'g-cli resolution only applies on Windows'
+      return
+    }
+
+    $previous = $env:GCLI_EXE_PATH
+    try {
+      $tempRoot = Join-Path $TestDrive 'gcli-env'
+      New-Item -ItemType Directory -Path $tempRoot | Out-Null
+      $envGCli = Join-Path $tempRoot 'bin\g-cli.exe'
+      New-Item -ItemType Directory -Path (Split-Path -Parent $envGCli) -Force | Out-Null
+      Set-Content -LiteralPath $envGCli -Value '' -Encoding ascii
+      $env:GCLI_EXE_PATH = (Resolve-Path -LiteralPath $envGCli).Path
+
+      $resolved = Resolve-GCliPath
+      $resolved | Should -Be (Resolve-Path -LiteralPath $envGCli).Path
+    }
+    finally {
+      $env:GCLI_EXE_PATH = $previous
+    }
+  }
 }

@@ -217,6 +217,92 @@ function Resolve-LabVIEWCliPath {
   return $null
 }
 
+function Get-GCliCandidateExePaths {
+  param([string]$GCliExePath)
+
+  if (-not $IsWindows) { return @() }
+
+  $candidates = New-Object System.Collections.Generic.List[string]
+
+  if (-not [string]::IsNullOrWhiteSpace($GCliExePath)) {
+    foreach ($entry in ($GCliExePath -split ';')) {
+      if (-not [string]::IsNullOrWhiteSpace($entry)) {
+        $candidates.Add($entry.Trim())
+      }
+    }
+  }
+
+  foreach ($envName in @('GCLI_EXE_PATH','GCLI_PATH')) {
+    $value = [Environment]::GetEnvironmentVariable($envName, 'Process')
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = [Environment]::GetEnvironmentVariable($envName, 'Machine') }
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = [Environment]::GetEnvironmentVariable($envName, 'User') }
+    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+    foreach ($entry in ($value -split ';')) {
+      if (-not [string]::IsNullOrWhiteSpace($entry)) {
+        $candidates.Add($entry.Trim())
+      }
+    }
+  }
+
+  $root = Resolve-RepoRoot
+  foreach ($configName in @('labview-paths.local.json','labview-paths.json')) {
+    $configPath = Join-Path $root "configs/$configName"
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { continue }
+    try {
+      $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 4
+      if ($config) {
+        foreach ($propName in @('GCliExePath','GCliPath','gcli','gcliExePath')) {
+          if ($config.PSObject.Properties[$propName] -and $config.$propName) {
+            $value = $config.$propName
+            if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
+              foreach ($entry in $value) {
+                if ($entry) { $candidates.Add([string]$entry) }
+              }
+            } else {
+              $candidates.Add([string]$value)
+            }
+          }
+        }
+      }
+      foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'GCliExePath')) {
+        if ($value) { $candidates.Add([string]$value) }
+      }
+      foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'gcliExePath')) {
+        if ($value) { $candidates.Add([string]$value) }
+      }
+    } catch {}
+  }
+
+  $defaultGCliPath = 'C:\Program Files\G-CLI\bin\g-cli.exe'
+  $candidates.Add($defaultGCliPath)
+
+  $resolved = New-Object System.Collections.Generic.List[string]
+  foreach ($candidate in $candidates) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    try {
+      $pathCandidate = $candidate
+      if (Test-Path -LiteralPath $pathCandidate -PathType Container) {
+        $pathCandidate = Join-Path $pathCandidate 'g-cli.exe'
+      }
+      if (Test-Path -LiteralPath $pathCandidate -PathType Leaf) {
+        $resolvedPath = (Resolve-Path -LiteralPath $pathCandidate).Path
+        if (-not $resolved.Contains($resolvedPath)) {
+          $resolved.Add($resolvedPath)
+        }
+      }
+    } catch {}
+  }
+
+  return $resolved.ToArray()
+}
+
+function Resolve-GCliPath {
+  if (-not $IsWindows) { return $null }
+  $paths = @(Get-GCliCandidateExePaths -GCliExePath $null)
+  if ($paths.Count -gt 0) { return $paths[0] }
+  return $null
+}
+
 function Get-LabVIEWCandidateExePaths {
   param([string]$LabVIEWExePath)
 

@@ -14,6 +14,10 @@ Quick reference for building, testing, and releasing the LVCompare composite act
   - `./Invoke-PesterTests.ps1 -IntegrationMode include`
 - **Helpers**
   - `tools/Dev-Dashboard.ps1`
+- **Icon Editor build pipeline**
+  - `node tools/npm/run-script.mjs icon-editor:build` — runs the vendored LabVIEW Icon Editor build using the upstream PowerShell actions.
+  - `g-cli.exe` is expected at `C:\Program Files\G-CLI\bin\g-cli.exe`. Use `configs/labview-paths.local.json` (`GCliExePath`) or set `GCLI_EXE_PATH` only when you need to override the default.
+  - Artifacts land in `tests/results/_agent/icon-editor/` (manifest + packaged outputs). Add `-InstallDependencies` to apply `runner_dependencies.vipc` and `-RunUnitTests` to execute the icon editor unit suite.
 - **Smoke tests**
   - `pwsh -File tools/Test-PRVIStagingSmoke.ps1 -DryRun`
     (planning pass; prints the branch/PR that would be created)
