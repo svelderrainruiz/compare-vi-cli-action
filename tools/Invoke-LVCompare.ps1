@@ -25,11 +25,16 @@
   Optional explicit LVCompare.exe path. Defaults to canonical install or LVCOMPARE_PATH when omitted.
 
 .PARAMETER Flags
-  Additional LVCompare flags. Defaults to -noattr -nofp -nofppos -nobd -nobdcosm unless
-  -ReplaceFlags is used.
+  Additional LVCompare flags. When -ReplaceFlags is omitted, the helper also applies
+  the bundle defined by -NoiseProfile (default: none, legacy: -noattr -nofp -nofppos -nobd -nobdcosm).
 
 .PARAMETER ReplaceFlags
   Replace default flags entirely with the provided -Flags.
+
+.PARAMETER NoiseProfile
+  Chooses which canned LVCompare ignore bundle to apply when -ReplaceFlags is not set.
+  Default 'full' adds no suppression; 'legacy' restores the historical ignores
+  (-noattr -nofp -nofppos -nobd -nobdcosm).
 
 .PARAMETER OutputDir
   Target directory for artifacts (default: tests/results/single-compare).
@@ -79,6 +84,8 @@ param(
   [string[]]$Flags,
   [switch]$ReplaceFlags,
   [switch]$AllowSameLeaf,
+  [ValidateSet('full','legacy')]
+  [string]$NoiseProfile = 'full',
     [string]$OutputDir = 'tests/results/single-compare',
     [switch]$RenderReport,
 [ValidateSet('html','html-single','xml','text')]
@@ -700,7 +707,10 @@ if ($labviewSccEnabled) {
 }
 
   # Compose flags list: -lvpath then normalization flags
-$defaultFlags = @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm')
+$defaultFlags = switch ($NoiseProfile) {
+  'legacy' { @('-noattr','-nofp','-nofppos','-nobd','-nobdcosm') }
+  default  { @() }
+}
 $effectiveFlags = @()
 if ($LabVIEWExePath) { $effectiveFlags += @('-lvpath', $LabVIEWExePath) }
 if ($ReplaceFlags.IsPresent) {

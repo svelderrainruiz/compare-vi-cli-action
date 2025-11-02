@@ -16,14 +16,71 @@ if (-not $scriptDir) { throw 'Unable to determine script directory.' }
 $repoRoot = Split-Path -Parent $scriptDir
 if (-not $repoRoot) { throw 'Unable to determine repository root.' }
 
-$configPath = Join-Path $repoRoot 'configs\labview-paths.json'
 $config = $null
-if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+$configPath = $null
+$configCandidates = @(
+    (Join-Path $repoRoot 'configs\labview-paths.local.json')
+    (Join-Path $repoRoot 'configs\labview-paths.json')
+)
+foreach ($candidate in $configCandidates) {
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
     try {
-        $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        $config = Get-Content -LiteralPath $candidate -Raw | ConvertFrom-Json -Depth 8
+        $configPath = $candidate
+        break
     } catch {
-        throw "Failed to parse labview-paths.json at $configPath: $($_.Exception.Message)"
+        $message = "Failed to parse labview-paths config at {0}: {1}" -f $candidate, $_.Exception.Message
+        throw $message
     }
+}
+
+function Get-VersionedConfigValue {
+    param(
+        $Config,
+        [string]$PropertyName
+    )
+
+    if (-not $Config) { return $null }
+    $versionsProp = $Config.PSObject.Properties['versions']
+    if (-not $versionsProp) { return $null }
+    $versionsNode = $versionsProp.Value
+    if (-not $versionsNode) { return $null }
+
+    $enumerate = @()
+    if ($versionsNode -is [System.Collections.IDictionary]) {
+        foreach ($key in $versionsNode.Keys) {
+            $enumerate += [pscustomobject]@{ Name = $key; Value = $versionsNode[$key] }
+        }
+    } else {
+        $enumerate = $versionsNode.PSObject.Properties
+    }
+
+    foreach ($versionEntry in $enumerate) {
+        $bitnessNode = $versionEntry.Value
+        if (-not $bitnessNode) { continue }
+
+        $bitnessEntries = @()
+        if ($bitnessNode -is [System.Collections.IDictionary]) {
+            foreach ($key in $bitnessNode.Keys) {
+                $bitnessEntries += [pscustomobject]@{ Name = $key; Value = $bitnessNode[$key] }
+            }
+        } else {
+            $bitnessEntries = $bitnessNode.PSObject.Properties
+        }
+
+        foreach ($bitnessEntry in $bitnessEntries) {
+            $valueNode = $bitnessEntry.Value
+            if (-not $valueNode) { continue }
+            if ($valueNode -is [System.Collections.IDictionary]) {
+                if ($valueNode.Contains($PropertyName)) { return $valueNode[$PropertyName] }
+            } else {
+                $valueProp = $valueNode.PSObject.Properties[$PropertyName]
+                if ($valueProp -and $valueProp.Value) { return $valueProp.Value }
+            }
+        }
+    }
+
+    return $null
 }
 
 function Resolve-CandidatePath {
@@ -51,6 +108,19 @@ if ($config) {
     if ($config.PSObject.Properties['LabVIEWExePath'])  { $paths.LabVIEWExePath = Resolve-CandidatePath $config.LabVIEWExePath }
     if ($config.PSObject.Properties['LVComparePath'])   { $paths.LVComparePath  = Resolve-CandidatePath $config.LVComparePath }
     if ($config.PSObject.Properties['LabVIEWCLIPath'])  { $paths.LabVIEWCLIPath = Resolve-CandidatePath $config.LabVIEWCLIPath }
+
+    if (-not $paths.LabVIEWExePath) {
+        $versionValue = Get-VersionedConfigValue -Config $config -PropertyName 'LabVIEWExePath'
+        if ($versionValue) { $paths.LabVIEWExePath = Resolve-CandidatePath $versionValue }
+    }
+    if (-not $paths.LVComparePath) {
+        $versionValue = Get-VersionedConfigValue -Config $config -PropertyName 'LVComparePath'
+        if ($versionValue) { $paths.LVComparePath = Resolve-CandidatePath $versionValue }
+    }
+    if (-not $paths.LabVIEWCLIPath) {
+        $versionValue = Get-VersionedConfigValue -Config $config -PropertyName 'LabVIEWCLIPath'
+        if ($versionValue) { $paths.LabVIEWCLIPath = Resolve-CandidatePath $versionValue }
+    }
 }
 
 $defaultRoots = @(
@@ -101,7 +171,7 @@ if ($missing.Count -gt 0) {
     foreach ($key in $missing) {
         Write-Warning ("  {0}: {1}" -f $key, ($paths[$key] ?? '(not set)'))
     }
-    Write-Warning "Update configs\labview-paths.json or install the LabVIEW CLI components, then re-run this check."
+    Write-Warning "Update configs\labview-paths.local.json (or configs\labview-paths.json) or install the LabVIEW CLI components, then re-run this check."
     exit 1
 }
 

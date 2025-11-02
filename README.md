@@ -184,7 +184,39 @@ LabVIEW/LVCompare/LabVIEWCLI processes before/after each invocation.
 - Modes include `normal`, `cli-suppressed`, `git-context`, and `duplicate-window`
   so you can validate the environment and sentinel guards without waiting for CI.
 - For quick iterations open the VS Code Tasks palette and run either
-  **Local: Verify diff session (stub)** or **Local: Verify diff session (real)**.
+  **Local: Verify diff session (stub)** or **Local: Verify diff session (real)**. The
+  real task will probe LVCompare/LabVIEWCLI and can be combined with the helper’s
+  `-AutoConfig` switch (or run `tools/New-LVCompareConfig.ps1`) to scaffold a
+  local `configs/labview-paths.local.json` automatically when the setup isn’t ready.
+
+To bootstrap LVCompare/LabVIEWCLI paths, run:
+
+```powershell
+pwsh -NoLogo -NoProfile -File tools/New-LVCompareConfig.ps1 -Probe
+```
+
+The command discovers installed binaries, prompts for overrides (or pass
+`-NonInteractive` to accept defaults), writes `configs/labview-paths.local.json`,
+and optionally verifies the configuration with `Verify-LVCompareSetup.ps1 -ProbeCli`.
+Verify-LocalDiffSession's `-AutoConfig` parameter uses the same helper when
+`-ProbeSetup` fails.
+
+The helper also maintains a `versions` map keyed by LabVIEW release and bitness.
+Detection is automatic when the LabVIEW path resembles `LabVIEW 2024 (32-bit)`,
+and you can override it with `-Version <year>` / `-Bitness 32|64` to register
+multiple installs. Re-running with `-Force` merges additional version entries
+instead of discarding existing ones, so the config can track several LabVIEW
+installations side by side. Pass `-LabVIEWVersion` / `-LabVIEWBitness` to
+`Verify-LocalDiffSession.ps1` (or select the new VS Code task prompts) if you
+need the auto-config step to target a specific installation explicitly. The
+helper always resolves the 64-bit shared LVCompare path
+(`C:\Program Files\National Instruments\Shared\LabVIEW Compare\LVCompare.exe`)
+so diff capture consistently uses the supported engine even when 32-bit
+components are installed.
+Pass `-Stateless` when calling `Verify-LocalDiffSession.ps1` if you want each
+run to re-discover LVCompare/LabVIEWCLI and remove the auto-generated
+`configs/labview-paths.local.json` afterwards (a VS Code task entry is available
+for this mode as well).
 
 Need to point the tools at non-default LabVIEW/LVCompare installs? Copy
 `configs/labview-paths.sample.json` to `configs/labview-paths.json` and list any
@@ -192,6 +224,17 @@ custom paths under the `lvcompare` and `labview` arrays; the resolvers consult
 those entries before falling back to environment variables and canonical Program
 Files locations. Run commands with `-Verbose` if you need to inspect the
 candidate list while debugging.
+
+For quick iteration, call `tools/Run-LocalDiffSession.ps1` (or use the updated
+VS Code tasks). The wrapper delegates to `Verify-LocalDiffSession.ps1`, then
+copies the run output to `tests/results/_agent/local-diff/latest/` and zips the
+same payload to `tests/results/_agent/local-diff/latest.zip` so reports,
+captures, and CLI logs are immediately available after each run (the stub task
+archives to `latest-stub/` / `latest-stub.zip`).
+The helper now runs LVCompare with no ignore filters by default so the full
+signal is captured; pass `-NoiseProfile legacy` (or use the “legacy noise” VS
+Code task) to restore the previous suppression bundle
+(`-noattr -nofp -nofppos -nobd -nobdcosm`) when you need a quieter diff.
 
 ## Release and compatibility
 

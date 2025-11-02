@@ -18,6 +18,38 @@
       "problemMatcher": []
     },
     {
+      "label": "Local: Verify diff session (real, stateless)",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-LocalDiffSession.ps1",
+        "-BaseVi",
+        "${input:localDiffBase}",
+        "-HeadVi",
+        "${input:localDiffHead}",
+        "-Mode",
+        "${input:localDiffMode}",
+        "-ResultsRoot",
+        "${input:localDiffResultsReal}",
+        "-ProbeSetup",
+        "-AutoConfig",
+        "-Stateless",
+        "-RenderReport",
+        "-ArchiveDir",
+        "tests/results/_agent/local-diff/latest",
+        "-ArchiveZip",
+        "tests/results/_agent/local-diff/latest.zip"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
       "label": "Smoke: VI staging label",
       "type": "process",
       "command": "pwsh",
@@ -165,7 +197,7 @@
         "-NoLogo",
         "-NoProfile",
         "-File",
-        "tools/Verify-LocalDiffSession.ps1",
+        "tools/Run-LocalDiffSession.ps1",
         "-BaseVi",
         "${input:localDiffBase}",
         "-HeadVi",
@@ -174,7 +206,11 @@
         "${input:localDiffMode}",
         "-ResultsRoot",
         "${input:localDiffResults}",
-        "-UseStub"
+        "-UseStub",
+        "-ArchiveDir",
+        "tests/results/_agent/local-diff/latest-stub",
+        "-ArchiveZip",
+        "tests/results/_agent/local-diff/latest-stub.zip"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -184,6 +220,71 @@
     },
     {
       "label": "Local: Verify diff session (real)",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-LocalDiffSession.ps1",
+        "-BaseVi",
+        "${input:localDiffBase}",
+        "-HeadVi",
+        "${input:localDiffHead}",
+        "-Mode",
+        "${input:localDiffMode}",
+        "-ResultsRoot",
+        "${input:localDiffResultsReal}",
+        "-ProbeSetup",
+        "-AutoConfig",
+        "-LabVIEWVersion",
+        "${input:localDiffVersion}",
+        "-LabVIEWBitness",
+        "${input:localDiffBitness}",
+        "-Stateless",
+        "-RenderReport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Local: Verify diff session (legacy noise)",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        "tools/Run-LocalDiffSession.ps1",
+        "-BaseVi",
+        "${input:localDiffBase}",
+        "-HeadVi",
+        "${input:localDiffHead}",
+        "-Mode",
+        "${input:localDiffMode}",
+        "-ResultsRoot",
+        "${input:localDiffResultsReal}",
+        "-ProbeSetup",
+        "-AutoConfig",
+        "-LabVIEWVersion",
+        "${input:localDiffVersion}",
+        "-LabVIEWBitness",
+        "${input:localDiffBitness}",
+        "-NoiseProfile",
+        "legacy",
+        "-RenderReport"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Local: Verify diff session (real, stateless)",
       "type": "process",
       "command": "pwsh",
       "args": [
@@ -200,6 +301,12 @@
         "-ResultsRoot",
         "${input:localDiffResultsReal}",
         "-ProbeSetup",
+        "-AutoConfig",
+        "-LabVIEWVersion",
+        "${input:localDiffVersion}",
+        "-LabVIEWBitness",
+        "${input:localDiffBitness}",
+        "-Stateless",
         "-RenderReport"
       ],
       "options": {
@@ -287,6 +394,28 @@
       "type": "promptString",
       "description": "Results directory for real CLI session (relative or absolute)",
       "default": "tests/results/_agent/local-diff/real"
+    },
+    {
+      "id": "localDiffVersion",
+      "type": "promptString",
+      "description": "LabVIEW version to prefer during auto-config (leave blank for auto-detect)",
+      "default": "2025"
+    },
+    {
+      "id": "localDiffBitness",
+      "type": "pickString",
+      "description": "LabVIEW bitness for auto-config",
+      "options": [
+        {
+          "label": "64-bit",
+          "value": "64"
+        },
+        {
+          "label": "32-bit",
+          "value": "32"
+        }
+      ],
+      "default": "64"
     }
   ]
 }

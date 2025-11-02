@@ -6,7 +6,8 @@ Configuration patterns for the LVCompare GitHub Action.
 ## lvCompareArgs
 
 The `lvCompareArgs` input accepts a raw string or array of flags passed directly to LVCompare.
-Quotes and spaces are preserved.
+Quotes and spaces are preserved. The action now defaults to full-detail compares; provide
+`lvCompareArgs` only when you need to reapply noise filters.
 
 Common noise filters:
 

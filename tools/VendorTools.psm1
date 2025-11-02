@@ -29,6 +29,60 @@ function Resolve-BinPath {
   return $null
 }
 
+function Get-VersionedConfigValues {
+  param(
+    $Config,
+    [string]$PropertyName
+  )
+
+  $values = New-Object System.Collections.Generic.List[string]
+  if (-not $Config) { return $values.ToArray() }
+  $versionsProp = $Config.PSObject.Properties['versions']
+  if (-not $versionsProp) { return $values.ToArray() }
+  $versionsNode = $versionsProp.Value
+  if (-not $versionsNode) { return $values.ToArray() }
+
+  $versionEntries = @()
+  if ($versionsNode -is [System.Collections.IDictionary]) {
+    foreach ($key in $versionsNode.Keys) {
+      $versionEntries += [pscustomobject]@{ Name = $key; Value = $versionsNode[$key] }
+    }
+  } else {
+    $versionEntries = $versionsNode.PSObject.Properties
+  }
+
+  foreach ($versionEntry in $versionEntries) {
+    $bitnessNode = $versionEntry.Value
+    if (-not $bitnessNode) { continue }
+
+    $bitnessEntries = @()
+    if ($bitnessNode -is [System.Collections.IDictionary]) {
+      foreach ($key in $bitnessNode.Keys) {
+        $bitnessEntries += [pscustomobject]@{ Name = $key; Value = $bitnessNode[$key] }
+      }
+    } else {
+      $bitnessEntries = $bitnessNode.PSObject.Properties
+    }
+
+    foreach ($bitnessEntry in $bitnessEntries) {
+      $valueNode = $bitnessEntry.Value
+      if (-not $valueNode) { continue }
+      if ($valueNode -is [System.Collections.IDictionary]) {
+        if ($valueNode.Contains($PropertyName) -and $valueNode[$PropertyName]) {
+          $values.Add([string]$valueNode[$PropertyName])
+        }
+      } else {
+        $valueProp = $valueNode.PSObject.Properties[$PropertyName]
+        if ($valueProp -and $valueProp.Value) {
+          $values.Add([string]$valueProp.Value)
+        }
+      }
+    }
+  }
+
+  return $values.ToArray()
+}
+
 function Resolve-ActionlintPath {
   $p = Resolve-BinPath -Name 'actionlint'
   if ($IsWindows -and $p -and (Split-Path -Leaf $p) -eq 'actionlint') {
@@ -82,6 +136,12 @@ function Resolve-LVComparePath {
     if ($values -is [string]) { $jsonCandidates += $values }
     if ($values -is [System.Collections.IEnumerable]) { $jsonCandidates += $values }
   }
+  if ($config -and $config.PSObject.Properties['LVComparePath'] -and $config.LVComparePath) {
+    $jsonCandidates += [string]$config.LVComparePath
+  }
+  foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'LVComparePath')) {
+    if ($value) { $jsonCandidates += [string]$value }
+  }
 
   $envCandidates = @(
     $env:LVCOMPARE_PATH,
@@ -89,8 +149,7 @@ function Resolve-LVComparePath {
   ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
   $canonicalCandidates = @(
-    (Join-Path $env:ProgramFiles 'National Instruments\Shared\LabVIEW Compare\LVCompare.exe'),
-    (Join-Path ${env:ProgramFiles(x86)} 'National Instruments\Shared\LabVIEW Compare\LVCompare.exe')
+    (Join-Path $env:ProgramFiles 'National Instruments\Shared\LabVIEW Compare\LVCompare.exe')
   )
 
   $allCandidates = @($jsonCandidates + $envCandidates + $canonicalCandidates) | Where-Object { $_ }
@@ -108,6 +167,37 @@ function Resolve-LVComparePath {
 
 function Resolve-LabVIEWCliPath {
   if (-not $IsWindows) { return $null }
+  $root = Resolve-RepoRoot
+  $configPath = Join-Path $root 'configs/labview-paths.json'
+  $config = $null
+  if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+    try { $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 4 } catch {}
+  }
+
+  if ($config) {
+    $configCandidates = @()
+    if ($config.PSObject.Properties['labviewcli']) {
+      $entries = $config.labviewcli
+      if ($entries -is [string]) { $configCandidates += $entries }
+      elseif ($entries -is [System.Collections.IEnumerable]) {
+        foreach ($entry in $entries) { if ($entry) { $configCandidates += [string]$entry } }
+      }
+    }
+    if ($config.PSObject.Properties['LabVIEWCLIPath'] -and $config.LabVIEWCLIPath) {
+      $configCandidates += [string]$config.LabVIEWCLIPath
+    }
+    foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'LabVIEWCLIPath')) {
+      if ($value) { $configCandidates += [string]$value }
+    }
+    foreach ($candidate in $configCandidates) {
+      try {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+          return (Resolve-Path -LiteralPath $candidate).Path
+        }
+      } catch {}
+    }
+  }
+
   $envCandidates = @(
     $env:LABVIEWCLI_PATH,
     $env:LABVIEW_CLI_PATH
@@ -161,6 +251,12 @@ function Get-LabVIEWCandidateExePaths {
             if ($item) { $candidates.Add([string]$item) }
           }
         }
+      }
+      if ($config -and $config.PSObject.Properties['LabVIEWExePath'] -and $config.LabVIEWExePath) {
+        $candidates.Add([string]$config.LabVIEWExePath)
+      }
+      foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'LabVIEWExePath')) {
+        if ($value) { $candidates.Add([string]$value) }
       }
     } catch {}
   }

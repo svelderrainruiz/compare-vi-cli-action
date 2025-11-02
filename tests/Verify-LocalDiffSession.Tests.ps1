@@ -85,10 +85,62 @@ Describe 'Verify-LocalDiffSession.ps1' -Tag 'Unit' {
     $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Value '' -Encoding ascii
     $resultsDir = Join-Path $work 'results'
 
-    $result = & $script:toolPath -BaseVi $base -HeadVi $head -ResultsRoot $resultsDir -Mode 'normal' -ProbeSetup
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $localConfigPath = Join-Path $repoRoot 'configs/labview-paths.local.json'
+    $primaryConfigPath = Join-Path $repoRoot 'configs/labview-paths.json'
+    $localBackup = Join-Path $TestDrive 'labview-paths.local.json.bak'
+    $primaryBackup = Join-Path $TestDrive 'labview-paths.json.bak'
 
-    $result.runs.Count | Should -Be 0
-    $result.setupStatus.ok | Should -BeFalse
-    $result.setupStatus.message | Should -Match 'Failed to parse labview-paths.json'
+    if (Test-Path -LiteralPath $localConfigPath -PathType Leaf) {
+      Move-Item -LiteralPath $localConfigPath -Destination $localBackup -Force
+    }
+    if (Test-Path -LiteralPath $primaryConfigPath -PathType Leaf) {
+      Move-Item -LiteralPath $primaryConfigPath -Destination $primaryBackup -Force
+    }
+
+    try {
+      $result = & $script:toolPath -BaseVi $base -HeadVi $head -ResultsRoot $resultsDir -Mode 'normal' -ProbeSetup
+
+      $result.runs.Count | Should -Be 0
+      $result.setupStatus.ok | Should -BeFalse
+      $result.setupStatus.message | Should -Match 'exited with code'
+    } finally {
+      if (Test-Path -LiteralPath $localBackup -PathType Leaf) {
+        Move-Item -LiteralPath $localBackup -Destination $localConfigPath -Force
+      }
+      if (Test-Path -LiteralPath $primaryBackup -PathType Leaf) {
+        Move-Item -LiteralPath $primaryBackup -Destination $primaryConfigPath -Force
+      }
+    }
+
+  }
+
+  It 'removes generated config when -Stateless' {
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $localConfigPath = Join-Path $repoRoot 'configs/labview-paths.local.json'
+    $backupPath = Join-Path $TestDrive 'labview-paths.local.json.bak'
+    if (Test-Path -LiteralPath $localConfigPath -PathType Leaf) {
+      Move-Item -LiteralPath $localConfigPath -Destination $backupPath -Force
+    }
+
+    try {
+      Set-Content -LiteralPath $localConfigPath -Value '{}' -Encoding utf8
+
+      $work = Join-Path $TestDrive 'lds-stateless'
+      New-Item -ItemType Directory -Path $work | Out-Null
+      $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Value '' -Encoding ascii
+      $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Value '' -Encoding ascii
+      $resultsDir = Join-Path $work 'results'
+
+      & $script:toolPath -BaseVi $base -HeadVi $head -ResultsRoot $resultsDir -Mode 'normal' -UseStub -Stateless -LabVIEWVersion '2025' -LabVIEWBitness '64' | Out-Null
+
+      Test-Path -LiteralPath $localConfigPath -PathType Leaf | Should -BeFalse
+    } finally {
+      if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
+        Move-Item -LiteralPath $backupPath -Destination $localConfigPath -Force
+      } elseif (Test-Path -LiteralPath $localConfigPath -PathType Leaf) {
+        Remove-Item -LiteralPath $localConfigPath -Force
+      }
+    }
   }
 }
