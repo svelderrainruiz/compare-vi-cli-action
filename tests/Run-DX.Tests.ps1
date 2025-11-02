@@ -18,7 +18,7 @@ Describe 'Run-DX.ps1 (TestStand staging)' -Tag 'Unit' {
       New-Item -ItemType Directory -Path 'tools' | Out-Null
       Copy-Item -LiteralPath $script:RunDxPath -Destination 'tools/Run-DX.ps1'
       Copy-Item -LiteralPath $script:StageScriptPath -Destination 'tools/Stage-CompareInputs.ps1'
-      $harnessStub = @'
+$harnessStub = @'
 param(
   [string]$BaseVi,
   [string]$HeadVi,
@@ -26,6 +26,7 @@ param(
   [string]$StagingRoot,
   [switch]$SameNameHint,
   [switch]$AllowSameLeaf,
+  [string]$NoiseProfile,
   [string]$Warmup
 )
 if (-not (Test-Path -LiteralPath $OutputRoot)) { New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null }
@@ -35,6 +36,7 @@ $log = [ordered]@{
   stagingRoot   = $StagingRoot
   sameNameHint  = $SameNameHint.IsPresent
   allowSameLeaf = $AllowSameLeaf.IsPresent
+  noiseProfile  = $NoiseProfile
   warmup        = $Warmup
 }
 $log | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputRoot 'harness-log.json') -Encoding utf8
@@ -94,6 +96,7 @@ exit 0
       $log.sameNameHint | Should -BeTrue
       $log.allowSameLeaf | Should -BeFalse
       $log.stagingRoot | Should -Not -BeNullOrEmpty
+      $log.noiseProfile | Should -Be 'full'
       Test-Path -LiteralPath $log.stagingRoot | Should -BeFalse
 
       $sessionPath = Join-Path $outputRoot 'session-index.json'
@@ -113,7 +116,7 @@ exit 0
       New-Item -ItemType Directory -Path 'tools' | Out-Null
       Copy-Item -LiteralPath $script:RunDxPath -Destination 'tools/Run-DX.ps1'
       Copy-Item -LiteralPath $script:StageScriptPath -Destination 'tools/Stage-CompareInputs.ps1'
-      $harnessStub = @'
+$harnessStub = @'
 param(
   [string]$BaseVi,
   [string]$HeadVi,
@@ -121,6 +124,7 @@ param(
   [string]$StagingRoot,
   [switch]$SameNameHint,
   [switch]$AllowSameLeaf,
+  [string]$NoiseProfile,
   [string]$Warmup
 )
 if (-not (Test-Path -LiteralPath $OutputRoot)) { New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null }
@@ -130,6 +134,7 @@ $log = [ordered]@{
   stagingRoot   = $StagingRoot
   sameNameHint  = $SameNameHint.IsPresent
   allowSameLeaf = $AllowSameLeaf.IsPresent
+  noiseProfile  = $NoiseProfile
   warmup        = $Warmup
 }
 $log | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputRoot 'harness-log.json') -Encoding utf8
@@ -175,7 +180,8 @@ exit 0
         -HeadVi $headVi `
         -OutputRoot $outputRoot `
         -Warmup detect `
-        -UseRawPaths *> $null
+        -UseRawPaths `
+        -NoiseProfile legacy *> $null
       $LASTEXITCODE | Should -Be 0
 
       $logPath = Join-Path $outputRoot 'harness-log.json'
@@ -186,6 +192,7 @@ exit 0
       $log.stagingRoot | Should -BeNullOrEmpty
       $log.sameNameHint | Should -BeFalse
       $log.allowSameLeaf | Should -BeFalse
+      $log.noiseProfile | Should -Be 'legacy'
 
       $sessionPath = Join-Path $outputRoot 'session-index.json'
       $session = Get-Content -LiteralPath $sessionPath -Raw | ConvertFrom-Json
@@ -196,3 +203,4 @@ exit 0
     finally { Pop-Location }
   }
 }
+

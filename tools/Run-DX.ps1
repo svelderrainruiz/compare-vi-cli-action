@@ -19,6 +19,8 @@ param(
   [string]$OutputRoot = 'tests/results/teststand-session',
   [string[]]$Flags,
   [switch]$ReplaceFlags,
+  [ValidateSet('full','legacy')]
+  [string]$NoiseProfile = 'full',
   [ValidateSet('detect','spawn','skip')]
   [string]$Warmup = 'detect',
   [switch]$RenderReport,
@@ -113,7 +115,7 @@ $harness = Join-Path $repoRoot 'tools/TestStand-CompareHarness.ps1'
 
   $stageCleanupPath = $null
   $stageScript = Join-Path $repoRoot 'tools' 'Stage-CompareInputs.ps1'
-  $hParams = @{ BaseVi = $baseResolved; HeadVi = $headResolved; OutputRoot = $OutputRoot; Warmup = $Warmup }
+  $hParams = @{ BaseVi = $baseResolved; HeadVi = $headResolved; OutputRoot = $OutputRoot; Warmup = $Warmup; NoiseProfile = $NoiseProfile }
 
   if (-not $UseRawPaths) {
     if (-not (Test-Path -LiteralPath $stageScript -PathType Leaf)) {

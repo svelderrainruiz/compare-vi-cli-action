@@ -321,7 +321,7 @@ $detailPaths = [ordered]@{}
 $includedAttributes = @()
 
 if ($detailRequested) {
-  $invokeArgs = @('-NoLogo','-NoProfile','-File', $invokeScriptResolved, '-BaseVi', $base, '-HeadVi', $head, '-OutputDir', $artifactDir, '-Quiet')
+  $invokeArgs = @('-NoLogo','-NoProfile','-File', $invokeScriptResolved, '-BaseVi', $base, '-HeadVi', $head, '-OutputDir', $artifactDir, '-NoiseProfile', 'full', '-Quiet')
   if ($renderReportRequested) { $invokeArgs += '-RenderReport' }
   if ($lvComparePathResolved) { $invokeArgs += '-LVComparePath'; $invokeArgs += $lvComparePathResolved }
   if ($labviewExeResolved) { $invokeArgs += '-LabVIEWExePath'; $invokeArgs += $labviewExeResolved }

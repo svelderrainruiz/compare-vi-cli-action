@@ -3,13 +3,20 @@
 param(
   [Parameter(Mandatory = $true)][string]$BaseVi,
   [Parameter(Mandatory = $true)][string]$HeadVi,
-  [ValidateSet('normal','cli-suppressed','git-context','duplicate-window')]
-  [string]$Mode = 'normal',
-  [int]$SentinelTtlSeconds = 60,
-  [switch]$RenderReport,
-  [switch]$UseStub,
-  [switch]$ProbeSetup,
-  [string]$ResultsRoot
+[ValidateSet('normal','cli-suppressed','git-context','duplicate-window')]
+[string]$Mode = 'normal',
+[int]$SentinelTtlSeconds = 60,
+[switch]$RenderReport,
+[switch]$UseStub,
+[switch]$ProbeSetup,
+[switch]$AutoConfig,
+[switch]$Stateless,
+[string]$LabVIEWVersion,
+[ValidateSet('32','64')]
+[string]$LabVIEWBitness,
+[ValidateSet('full','legacy')]
+[string]$NoiseProfile = 'full',
+[string]$ResultsRoot
 )
 
 Set-StrictMode -Version Latest
@@ -27,6 +34,15 @@ function Ensure-Directory {
   param([Parameter(Mandatory = $true)][string]$Path)
   if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
     New-Item -ItemType Directory -Path $Path -Force | Out-Null
+  }
+}
+
+function Remove-LocalConfig {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+  $localConfig = Join-Path $RepoRoot 'configs' 'labview-paths.local.json'
+  if (Test-Path -LiteralPath $localConfig -PathType Leaf) {
+    Remove-Item -LiteralPath $localConfig -Force -ErrorAction SilentlyContinue
   }
 }
 
@@ -124,6 +140,12 @@ function Read-FileSnippet {
 $repoRoot = Resolve-RepoRoot
 if (-not $repoRoot) { throw 'Unable to determine repository root.' }
 
+if ($Stateless.IsPresent) {
+  Remove-LocalConfig -RepoRoot $repoRoot
+}
+
+$localConfigPath = Join-Path $repoRoot 'configs' 'labview-paths.local.json'
+
 $driverPath = Join-Path $repoRoot 'tools' 'Invoke-LVCompare.ps1'
 if (-not (Test-Path -LiteralPath $driverPath -PathType Leaf)) {
   throw "Invoke-LVCompare.ps1 not found at $driverPath"
@@ -163,17 +185,43 @@ $setupStatus = [ordered]@{
   message = 'ready'
 }
 
-if ($ProbeSetup.IsPresent) {
-  $setupScript = Join-Path $repoRoot 'tools' 'Verify-LVCompareSetup.ps1'
-  if (Test-Path -LiteralPath $setupScript -PathType Leaf) {
-    try {
-      & $setupScript -ProbeCli -Search | Out-Null
-    } catch {
-      $setupStatus.ok = $false
-      $setupStatus.message = $_.Exception.Message
-    }
+function Invoke-SetupProbe {
+  param([switch]$SuppressWarning)
+
+  $status = [ordered]@{
+    ok = $true
+    message = 'ready'
   }
+
+  $setupScript = Join-Path $repoRoot 'tools' 'Verify-LVCompareSetup.ps1'
+  if (-not (Test-Path -LiteralPath $setupScript -PathType Leaf)) {
+    $status.ok = $false
+    $status.message = 'Verify-LVCompareSetup.ps1 not found'
+    return [pscustomobject]$status
+  }
+
+  try {
+    & $setupScript -ProbeCli | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      $status.ok = $false
+      $status.message = "LVCompare setup probe exited with code $LASTEXITCODE"
+    }
+  } catch {
+    $status.ok = $false
+    $status.message = $_.Exception.Message
+  }
+  if (-not $status.ok -and -not $SuppressWarning) {
+    Write-Warning ("LVCompare setup probe failed: {0}" -f $status.message)
+  }
+  return [pscustomobject]$status
 }
+
+if ($ProbeSetup.IsPresent) {
+  $setupStatus = Invoke-SetupProbe
+}
+
+Write-Verbose ("Requested LabVIEW version: {0}" -f ($LabVIEWVersion ?? '(none)'))
+Write-Verbose ("Requested LabVIEW bitness: {0}" -f ($LabVIEWBitness ?? '(none)'))
 
 $timestamp = (Get-Date -Format 'yyyyMMddTHHmmss')
 $resultsRootResolved = if ($ResultsRoot) {
@@ -190,7 +238,9 @@ function Invoke-CompareRun {
     [Parameter(Mandatory = $true)][string]$Mode,
     [switch]$RenderReport,
     [switch]$UseStub,
-    [int]$SentinelTtlSeconds = 0
+    [int]$SentinelTtlSeconds = 0,
+    [ValidateSet('full','legacy')]
+    [string]$NoiseProfile = 'full'
   )
 
   New-Item -ItemType Directory -Path $RunDir -Force | Out-Null
@@ -231,6 +281,7 @@ function Invoke-CompareRun {
       HeadVi    = $headResolved
       OutputDir = $RunDir
       Quiet     = $true
+      NoiseProfile = $NoiseProfile
     }
     if ($RenderReport.IsPresent) { $params.RenderReport = $true }
     if ($UseStub.IsPresent) {
@@ -311,9 +362,50 @@ $summary = [ordered]@{
   setupStatus = [pscustomobject]$setupStatus
 }
 
+if (-not $setupStatus.ok -and $AutoConfig.IsPresent) {
+  $configScript = Join-Path $repoRoot 'tools' 'New-LVCompareConfig.ps1'
+  if (Test-Path -LiteralPath $configScript -PathType Leaf) {
+    Write-Host ''
+    Write-Host 'Attempting to scaffold LVCompare config automatically...' -ForegroundColor Cyan
+    try {
+      $configParams = [ordered]@{
+        OutputPath      = $localConfigPath
+        NonInteractive  = $true
+        Probe           = $true
+      }
+      if ($LabVIEWVersion) { $configParams['Version'] = $LabVIEWVersion }
+      if ($LabVIEWBitness) { $configParams['Bitness'] = $LabVIEWBitness }
+      if (Test-Path -LiteralPath $localConfigPath -PathType Leaf -ErrorAction SilentlyContinue) {
+        $configParams['Force'] = $true
+      }
+      $paramPreview = $configParams.GetEnumerator() | ForEach-Object {
+        if ($_.Value -is [bool]) {
+          if ($_.Value) { "-$($_.Key)" } else { '' }
+        } else {
+          "-$($_.Key) $($_.Value)"
+        }
+      } | Where-Object { $_ }
+      Write-Verbose ("Auto-config params: {0}" -f ($paramPreview -join ' '))
+      & $configScript @configParams | Out-Null
+      $setupStatus = Invoke-SetupProbe -SuppressWarning
+      if ($setupStatus.ok) {
+        Write-Host 'LVCompare config auto-generated successfully.' -ForegroundColor Green
+      } else {
+        Write-Warning ("Auto-config completed but probe still failing: {0}" -f $setupStatus.message)
+      }
+    } catch {
+      $setupStatus.ok = $false
+      $setupStatus.message = $_.Exception.Message
+      Write-Warning ("LVCompare auto-config failed: {0}" -f $setupStatus.message)
+    }
+  } else {
+    Write-Warning ("New-LVCompareConfig.ps1 not found at {0}" -f $configScript)
+  }
+}
+
 if (-not $setupStatus.ok) {
-  Write-Warning ("LVCompare setup probe failed: {0}" -f $setupStatus.message)
   $summaryPath = Join-Path $resultsRootResolved 'local-diff-summary.json'
+  $summary.setupStatus = [pscustomobject]$setupStatus
   $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding utf8
   Write-Host ''
   Write-Host '=== Local Diff Session Summary ===' -ForegroundColor Cyan
@@ -322,16 +414,20 @@ if (-not $setupStatus.ok) {
   Write-Host ("Head     : {0}" -f $summary.head)
   Write-Host ("Results  : {0}" -f $summary.resultsDir)
   Write-Host ("Setup    : {0}" -f $summary.setupStatus.message)
+  Write-Host ("Hint     : run tools/New-LVCompareConfig.ps1") -ForegroundColor Yellow
+  if ($Stateless.IsPresent) {
+    Remove-LocalConfig -RepoRoot $repoRoot
+  }
   return [pscustomobject]@{
     resultsDir   = $resultsRootResolved
     summary      = $summaryPath
     runs         = @()
-    setupStatus  = [pscustomobject]$setupStatus
+    setupStatus  = [pscustomobject]$summary.setupStatus
   }
 }
 
 $run1Dir = Join-Path $resultsRootResolved 'run-01'
-$r1 = Invoke-CompareRun -RunDir $run1Dir -Mode $Mode -RenderReport:$RenderReport -UseStub:$UseStub -SentinelTtlSeconds 0
+$r1 = Invoke-CompareRun -RunDir $run1Dir -Mode $Mode -RenderReport:$RenderReport -UseStub:$UseStub -SentinelTtlSeconds 0 -NoiseProfile $NoiseProfile
 $summary.runs += $r1
 
 if ($Mode -eq 'duplicate-window' -and $UseStub.IsPresent) {
@@ -345,7 +441,7 @@ if ($Mode -eq 'duplicate-window') {
     $ttl = [Math]::Max(1, $SentinelTtlSeconds)
     $env:COMPAREVI_CLI_SENTINEL_TTL = [string]$ttl
     $run2Dir = Join-Path $resultsRootResolved 'run-02'
-    $r2 = Invoke-CompareRun -RunDir $run2Dir -Mode 'normal' -RenderReport:$RenderReport -UseStub:$UseStub -SentinelTtlSeconds $ttl
+    $r2 = Invoke-CompareRun -RunDir $run2Dir -Mode 'normal' -RenderReport:$RenderReport -UseStub:$UseStub -SentinelTtlSeconds $ttl -NoiseProfile $NoiseProfile
     $summary.runs += $r2
   } finally {
     if ($null -eq $prevTtl) { Remove-Item Env:COMPAREVI_CLI_SENTINEL_TTL -ErrorAction SilentlyContinue } else { $env:COMPAREVI_CLI_SENTINEL_TTL = $prevTtl }
@@ -364,6 +460,10 @@ Write-Host ("Results  : {0}" -f $summary.resultsDir)
 for ($i = 0; $i -lt $summary.runs.Count; $i++) {
   $r = $summary.runs[$i]
   Write-Host ("Run {0}: exit={1}, skipped={2}, reason={3}, outDir={4}" -f ($i + 1), $r.exitCode, ([bool]$r.cliSkipped), ($r.skipReason ?? '-'), $r.outputDir)
+}
+
+if ($Stateless.IsPresent) {
+  Remove-LocalConfig -RepoRoot $repoRoot
 }
 
 return [pscustomobject]@{

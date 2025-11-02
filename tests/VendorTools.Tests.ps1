@@ -57,4 +57,28 @@ Describe 'VendorTools LabVIEW helpers' {
     $sccValue = Get-LabVIEWIniValue -LabVIEWExePath $fakeExe -Key 'SCCUseInLabVIEW'
     $sccValue | Should -Be 'True'
   }
+
+  It 'includes version-scoped executables when present' {
+    $tempRoot = Join-Path $TestDrive 'labview-version'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+
+    $versionExe = Join-Path $tempRoot 'Program Files\NI\LabVIEW 2025\LabVIEW.exe'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $versionExe) -Force | Out-Null
+    Set-Content -LiteralPath $versionExe -Value '' -Encoding ascii
+
+    $configJson = @{
+      versions = @{
+        '2025' = @{
+          '64' = @{
+            LabVIEWExePath = $versionExe
+          }
+        }
+      }
+    } | ConvertTo-Json -Depth 6
+    Set-Content -LiteralPath $script:localConfigPath -Value $configJson -Encoding utf8
+
+    $candidates = Get-LabVIEWCandidateExePaths
+    $resolvedVersionExe = (Resolve-Path -LiteralPath $versionExe).Path
+    $candidates | Should -Contain $resolvedVersionExe
+  }
 }

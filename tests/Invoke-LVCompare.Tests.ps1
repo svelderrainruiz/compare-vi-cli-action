@@ -8,7 +8,7 @@ Describe 'Invoke-LVCompare.ps1' -Tag 'Unit' {
     Test-Path -LiteralPath $script:driverPath | Should -BeTrue
   }
 
-  It 'writes capture and includes default flags with leak summary' {
+  It 'writes capture without suppression flags and records leak summary' {
     $work = Join-Path $TestDrive 'driver-default'
     New-Item -ItemType Directory -Path $work | Out-Null
     Push-Location $work
@@ -52,9 +52,11 @@ exit 1
       $capturePath = Join-Path $outDir 'lvcompare-capture.json'
       Test-Path -LiteralPath $capturePath | Should -BeTrue
       $cap = Get-Content -LiteralPath $capturePath -Raw | ConvertFrom-Json
-      $cap.args | Should -Contain '-nobdcosm'
-      $cap.args | Should -Contain '-nofppos'
-      $cap.args | Should -Contain '-noattr'
+      $cap.args | Should -Not -Contain '-noattr'
+      $cap.args | Should -Not -Contain '-nofp'
+      $cap.args | Should -Not -Contain '-nofppos'
+      $cap.args | Should -Not -Contain '-nobd'
+      $cap.args | Should -Not -Contain '-nobdcosm'
 
       $trackerPath = Join-Path $outDir '_agent' 'labview-pid.json'
       Test-Path -LiteralPath $trackerPath | Should -BeTrue
@@ -63,6 +65,56 @@ exit 1
       $tracker.context.status | Should -Be 'diff'
       $tracker.context.compareExitCode | Should -Be 1
       $tracker.context.reportGenerated | Should -BeFalse
+    }
+    finally { Pop-Location }
+  }
+
+  It 'applies the legacy noise profile when requested' {
+    $work = Join-Path $TestDrive 'driver-legacy'
+    New-Item -ItemType Directory -Path $work | Out-Null
+    Push-Location $work
+    try {
+      $captureStub = Join-Path $work 'CaptureStub.ps1'
+      $stub = @'
+param(
+  [string]$Base,
+  [string]$Head,
+  [object]$LvArgs,
+  [string]$LvComparePath,
+  [switch]$RenderReport,
+  [string]$OutputDir,
+  [switch]$Quiet
+)
+if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null }
+if ($LvArgs -is [System.Array]) { $args = @($LvArgs) } elseif ($LvArgs) { $args = @([string]$LvArgs) } else { $args = @() }
+$cap = [ordered]@{ schema='lvcompare-capture-v1'; exitCode=0; seconds=0.4; command='stub'; args=$args }
+$cap | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDir 'lvcompare-capture.json') -Encoding utf8
+exit 0
+'@
+      Set-Content -LiteralPath $captureStub -Value $stub -Encoding UTF8
+
+      $labviewExe = Join-Path $work 'LabVIEW.exe'; Set-Content -LiteralPath $labviewExe -Encoding ascii -Value ''
+      $base = Join-Path $work 'Base.vi'; Set-Content -LiteralPath $base -Encoding ascii -Value ''
+      $head = Join-Path $work 'Head.vi'; Set-Content -LiteralPath $head -Encoding ascii -Value ''
+      $outDir = Join-Path $work 'out'
+
+      $driverQuoted = $script:driverPath.Replace("'", "''")
+      $baseQuoted = $base.Replace("'", "''")
+      $headQuoted = $head.Replace("'", "''")
+      $labviewQuoted = $labviewExe.Replace("'", "''")
+      $outQuoted = $outDir.Replace("'", "''")
+      $stubQuoted = $captureStub.Replace("'", "''")
+      $command = "& { & '$driverQuoted' -BaseVi '$baseQuoted' -HeadVi '$headQuoted' -LabVIEWExePath '$labviewQuoted' -OutputDir '$outQuoted' -NoiseProfile legacy -CaptureScriptPath '$stubQuoted'; exit `$LASTEXITCODE }"
+      & pwsh -NoLogo -NoProfile -Command $command *> $null
+
+      $LASTEXITCODE | Should -Be 0
+      $capturePath = Join-Path $outDir 'lvcompare-capture.json'
+      $cap = Get-Content -LiteralPath $capturePath -Raw | ConvertFrom-Json
+      $cap.args | Should -Contain '-noattr'
+      $cap.args | Should -Contain '-nofp'
+      $cap.args | Should -Contain '-nofppos'
+      $cap.args | Should -Contain '-nobd'
+      $cap.args | Should -Contain '-nobdcosm'
     }
     finally { Pop-Location }
   }
@@ -301,3 +353,4 @@ exit 0
   }
 
 }
+
