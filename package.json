@@ -67,11 +67,21 @@
     "ext:install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -Install",
     "ext:bump-package": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch",
     "ext:bump-install": "pwsh -NoLogo -NoProfile -File tools/Build-VSCExtension.ps1 -BumpPatch -Install",
+    "icon-editor:dev:on": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Enable-DevMode.ps1",
+    "icon-editor:dev:off": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Disable-DevMode.ps1",
+    "icon-editor:dev:assert:on": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Assert-DevModeState.ps1 -ExpectedActive:$true",
+    "icon-editor:dev:assert:off": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Assert-DevModeState.ps1 -ExpectedActive:$false",
     "icon-editor:build": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Invoke-IconEditorBuild.ps1",
+    "tests:comparevi": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns CompareVI*",
+    "tests:comparevi:int": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns CompareVI* -IntegrationMode include",
+    "tests:icon-editor": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns IconEditor*",
+    "tests:icon-editor:int": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns IconEditor* -IntegrationMode include",
     "history:run": "pwsh -NoLogo -NoProfile -File scripts/Run-VIHistory.ps1",
     "history:dispatch": "pwsh -NoLogo -NoProfile -File scripts/Dispatch-VIHistoryWorkflow.ps1",
     "smoke:vi-stage": "pwsh -NoLogo -NoProfile -File tools/Test-PRVIStagingSmoke.ps1",
-    "smoke:vi-history": "pwsh -NoLogo -NoProfile -File tools/Test-PRVIHistorySmoke.ps1"
+    "smoke:vi-history": "pwsh -NoLogo -NoProfile -File tools/Test-PRVIHistorySmoke.ps1",
+    "env:labview:check": "pwsh -NoLogo -NoProfile -File tools/Diagnose-LabVIEWSetup.ps1",
+    "tests:comparevi:single-int": "pwsh -NoLogo -NoProfile -Command \"$env:LV_BASE_VI=(Resolve-Path 'VI1.vi').Path; $env:LV_HEAD_VI=(Resolve-Path 'VI2.vi').Path; pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -TestsPath tests/CompareVI.RealCli.SingleRun.Integration.Tests.ps1 -IntegrationMode include\""
   },
   "devDependencies": {
     "@types/argparse": "^2.0.16",

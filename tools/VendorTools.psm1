@@ -14,6 +14,84 @@ function Resolve-RepoRoot {
   try { return (git -C $StartPath rev-parse --show-toplevel 2>$null).Trim() } catch { return $StartPath }
 }
 
+function Get-LabVIEWConfigObjects {
+  $configs = New-Object System.Collections.Generic.List[object]
+  $root = Resolve-RepoRoot
+  foreach ($name in @('labview-paths.local.json', 'labview-paths.json')) {
+    $path = Join-Path $root 'configs' $name
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+    try {
+      $config = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -Depth 6
+      if ($config) { $configs.Add($config) | Out-Null }
+    } catch {}
+  }
+  return $configs.ToArray()
+}
+
+function Get-VersionedConfigValue {
+  param(
+    $Config,
+    [string]$PropertyName,
+    [int]$Version,
+    [int]$Bitness
+  )
+
+  if (-not $Config) { return $null }
+  if (-not $Version) { return $null }
+
+  $versionsProp = $Config.PSObject.Properties['versions']
+  if (-not $versionsProp -or -not $versionsProp.Value) { return $null }
+  $versionsNode = $versionsProp.Value
+
+  $versionKey = $Version.ToString()
+  if ($versionsNode -is [System.Collections.IDictionary]) {
+    if (-not $versionsNode.Contains($versionKey)) { return $null }
+    $versionNode = $versionsNode[$versionKey]
+  } else {
+    $versionEntry = $versionsNode.PSObject.Properties[$versionKey]
+    if (-not $versionEntry) { return $null }
+    $versionNode = $versionEntry.Value
+  }
+  if (-not $versionNode) { return $null }
+
+  $bitnessNode = $null
+  if ($Bitness) {
+    $bitKey = $Bitness.ToString()
+    if ($versionNode -is [System.Collections.IDictionary]) {
+      if ($versionNode.Contains($bitKey)) { $bitnessNode = $versionNode[$bitKey] }
+    } else {
+      $bitProp = $versionNode.PSObject.Properties[$bitKey]
+      if ($bitProp) { $bitnessNode = $bitProp.Value }
+    }
+  } else {
+    $bitnessNode = $versionNode
+  }
+
+  if (-not $bitnessNode) { return $null }
+
+  if ($bitnessNode -is [string]) {
+    return $bitnessNode
+  }
+
+  $propertyProp = $bitnessNode.PSObject.Properties[$PropertyName]
+  if ($propertyProp -and $propertyProp.Value) {
+    return [string]$propertyProp.Value
+  }
+
+  # Accept lowercase camel variations for convenience
+  $altName = $PropertyName
+  if ($PropertyName -cmatch '([A-Z])') {
+    $altName = ([regex]::Replace($PropertyName, '([a-z0-9])([A-Z])', '$1$2')).ToLower()
+  }
+  foreach ($prop in $bitnessNode.PSObject.Properties) {
+    if ($prop.Name -ieq $PropertyName -or $prop.Name -ieq $altName) {
+      if ($prop.Value) { return [string]$prop.Value }
+    }
+  }
+
+  return $null
+}
+
 function Resolve-BinPath {
   param(
     [Parameter(Mandatory)] [string]$Name
@@ -508,6 +586,133 @@ function Get-LabVIEWIniValue {
       }
     }
   } catch {}
+
+  return $null
+}
+
+function Resolve-LabVIEWCLIPath {
+  param(
+    [int]$Version,
+    [int]$Bitness = 64,
+    [string]$LabVIEWCLIPath
+  )
+
+  if (-not $IsWindows) { return $null }
+
+  $candidates = New-Object System.Collections.ArrayList
+  $addCandidate = {
+    param([System.Collections.ArrayList]$list, [string]$value)
+    if ([string]::IsNullOrWhiteSpace($value)) { return }
+    if (-not $list.Contains($value)) { [void]$list.Add($value) }
+  }
+
+  & $addCandidate $candidates $LabVIEWCLIPath
+
+  foreach ($config in (Get-LabVIEWConfigObjects)) {
+    foreach ($propName in @('labviewCli', 'LabVIEWCli', 'LabVIEWCLIPath', 'LabVIEWCliPath', 'labviewCliPath')) {
+      $prop = $config.PSObject.Properties[$propName]
+      if (-not $prop) { continue }
+      $value = $prop.Value
+      if ($value -is [string]) {
+        & $addCandidate $candidates $value
+      } elseif ($value -is [System.Collections.IEnumerable]) {
+        foreach ($item in $value) { & $addCandidate $candidates $item }
+      }
+    }
+
+    if ($Version) {
+      foreach ($name in @('LabVIEWCliPath','LabVIEWCLIPath')) {
+        $versionValue = Get-VersionedConfigValue -Config $config -PropertyName $name -Version $Version -Bitness $Bitness
+        if ($versionValue) { & $addCandidate $candidates $versionValue }
+      }
+    }
+  }
+
+  foreach ($envKey in @('LABVIEWCLI_PATH', 'LABVIEWCLI_EXE_PATH')) {
+    $envValue = [System.Environment]::GetEnvironmentVariable($envKey)
+    if ([string]::IsNullOrWhiteSpace($envValue)) { continue }
+    foreach ($entry in ($envValue -split ';')) {
+      & $addCandidate $candidates ($entry.Trim())
+    }
+  }
+
+  if ($Version) {
+    $programRoots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($rootPath in $programRoots) {
+      $candidate = Join-Path $rootPath ("National Instruments\LabVIEW {0}\Shared\LabVIEW CLI\LabVIEWCLI.exe" -f $Version)
+      & $addCandidate $candidates $candidate
+    }
+  }
+
+  & $addCandidate $candidates 'C:\Program Files\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
+  & $addCandidate $candidates 'C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe'
+
+  foreach ($candidate in $candidates) {
+    try {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $candidate).Path
+      }
+    } catch {}
+  }
+
+  return $null
+}
+
+function Resolve-VIPMPath {
+  param([string]$VipmPath)
+
+  if (-not $IsWindows) { return $null }
+
+  $candidates = New-Object System.Collections.ArrayList
+  $addCandidate = {
+    param([System.Collections.ArrayList]$list, [string]$value)
+    if ([string]::IsNullOrWhiteSpace($value)) { return }
+    if (-not $list.Contains($value)) { [void]$list.Add($value) }
+  }
+
+  & $addCandidate $candidates $VipmPath
+
+  foreach ($envKey in @('VIPM_PATH','VIPM_EXE_PATH')) {
+    $envValue = [System.Environment]::GetEnvironmentVariable($envKey)
+    if ([string]::IsNullOrWhiteSpace($envValue)) { continue }
+    foreach ($entry in ($envValue -split ';')) {
+      & $addCandidate $candidates ($entry.Trim())
+    }
+  }
+
+  foreach ($config in (Get-LabVIEWConfigObjects)) {
+    foreach ($propName in @('vipm', 'VIPMPath', 'VipmPath')) {
+      $prop = $config.PSObject.Properties[$propName]
+      if (-not $prop) { continue }
+      $value = $prop.Value
+      if ($value -is [string]) {
+        & $addCandidate $candidates $value
+      } elseif ($value -is [System.Collections.IEnumerable]) {
+        foreach ($item in $value) { & $addCandidate $candidates $item }
+      }
+    }
+    foreach ($name in @('VIPMPath','VipmPath')) {
+      $versionValue = Get-VersionedConfigValue -Config $config -PropertyName $name -Version 2021 -Bitness 32
+      if ($versionValue) { & $addCandidate $candidates $versionValue }
+    }
+  }
+
+  foreach ($path in @(
+      'C:\Program Files\JKI\VI Package Manager\VIPM.exe',
+      'C:\Program Files (x86)\JKI\VI Package Manager\VIPM.exe',
+      'C:\Program Files\JKI\VI Package Manager\VI Package Manager.exe',
+      'C:\Program Files (x86)\JKI\VI Package Manager\VI Package Manager.exe'
+    )) {
+    & $addCandidate $candidates $path
+  }
+
+  foreach ($candidate in $candidates) {
+    try {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $candidate).Path
+      }
+    } catch {}
+  }
 
   return $null
 }
