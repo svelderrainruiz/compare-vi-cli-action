@@ -217,6 +217,180 @@ function Resolve-LabVIEWCliPath {
   return $null
 }
 
+function Get-GCliCandidateExePaths {
+  param([string]$GCliExePath)
+
+  if (-not $IsWindows) { return @() }
+
+  $candidates = New-Object System.Collections.Generic.List[string]
+
+  if (-not [string]::IsNullOrWhiteSpace($GCliExePath)) {
+    foreach ($entry in ($GCliExePath -split ';')) {
+      if (-not [string]::IsNullOrWhiteSpace($entry)) {
+        $candidates.Add($entry.Trim())
+      }
+    }
+  }
+
+  foreach ($envName in @('GCLI_EXE_PATH','GCLI_PATH')) {
+    $value = [Environment]::GetEnvironmentVariable($envName, 'Process')
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = [Environment]::GetEnvironmentVariable($envName, 'Machine') }
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = [Environment]::GetEnvironmentVariable($envName, 'User') }
+    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+    foreach ($entry in ($value -split ';')) {
+      if (-not [string]::IsNullOrWhiteSpace($entry)) {
+        $candidates.Add($entry.Trim())
+      }
+    }
+  }
+
+  $root = Resolve-RepoRoot
+  foreach ($configName in @('labview-paths.local.json','labview-paths.json')) {
+    $configPath = Join-Path $root "configs/$configName"
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { continue }
+    try {
+      $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 4
+      if ($config) {
+        foreach ($propName in @('GCliExePath','GCliPath','gcli','gcliExePath')) {
+          if ($config.PSObject.Properties[$propName] -and $config.$propName) {
+            $value = $config.$propName
+            if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
+              foreach ($entry in $value) {
+                if ($entry) { $candidates.Add([string]$entry) }
+              }
+            } else {
+              $candidates.Add([string]$value)
+            }
+          }
+        }
+      }
+      foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'GCliExePath')) {
+        if ($value) { $candidates.Add([string]$value) }
+      }
+      foreach ($value in (Get-VersionedConfigValues -Config $config -PropertyName 'gcliExePath')) {
+        if ($value) { $candidates.Add([string]$value) }
+      }
+    } catch {}
+  }
+
+  $defaultGCliPath = 'C:\Program Files\G-CLI\bin\g-cli.exe'
+  $candidates.Add($defaultGCliPath)
+
+  $resolved = New-Object System.Collections.Generic.List[string]
+  foreach ($candidate in $candidates) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    try {
+      $pathCandidate = $candidate
+      if (Test-Path -LiteralPath $pathCandidate -PathType Container) {
+        $pathCandidate = Join-Path $pathCandidate 'g-cli.exe'
+      }
+      if (Test-Path -LiteralPath $pathCandidate -PathType Leaf) {
+        $resolvedPath = (Resolve-Path -LiteralPath $pathCandidate).Path
+        if (-not $resolved.Contains($resolvedPath)) {
+          $resolved.Add($resolvedPath)
+        }
+      }
+    } catch {}
+  }
+
+  return $resolved.ToArray()
+}
+
+function Resolve-GCliPath {
+  if (-not $IsWindows) { return $null }
+  $paths = @(Get-GCliCandidateExePaths -GCliExePath $null)
+  if ($paths.Count -gt 0) { return $paths[0] }
+  return $null
+}
+
+function Get-LabVIEWConfig {
+  $root = Resolve-RepoRoot
+  foreach ($configName in @('labview-paths.local.json','labview-paths.json')) {
+    $configPath = Join-Path $root "configs/$configName"
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { continue }
+    try {
+      $json = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 6
+      if ($json) { return $json }
+    } catch {}
+  }
+  return $null
+}
+
+function Get-LabVIEWConfigEntries {
+  param($Config)
+
+  $entries = New-Object System.Collections.Generic.List[object]
+  if (-not $Config) { return $entries.ToArray() }
+
+  $versionsNode = $Config.PSObject.Properties['versions']
+  if ($versionsNode -and $Config.versions) {
+    foreach ($versionProp in $Config.versions.PSObject.Properties) {
+      $versionName = $versionProp.Name
+      $versionValue = $versionProp.Value
+      if (-not $versionValue) { continue }
+      foreach ($bitnessProp in $versionValue.PSObject.Properties) {
+        $bitnessName = $bitnessProp.Name
+        $bitnessValue = $bitnessProp.Value
+        if (-not $bitnessValue) { continue }
+        $path = $null
+        if ($bitnessValue -is [string]) {
+          $path = $bitnessValue
+        } elseif ($bitnessValue.PSObject.Properties['LabVIEWExePath']) {
+          $path = $bitnessValue.LabVIEWExePath
+        }
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        try {
+          if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $resolved = (Resolve-Path -LiteralPath $path).Path
+            $entries.Add([pscustomobject]@{
+              Version = $versionName
+              Bitness = $bitnessName
+              Path    = $resolved
+            }) | Out-Null
+          }
+        } catch {}
+      }
+    }
+  }
+
+  return $entries.ToArray()
+}
+
+function Find-LabVIEWVersionExePath {
+  param(
+    [Parameter(Mandatory)][int]$Version,
+    [Parameter(Mandatory)][ValidateSet(32,64)][int]$Bitness,
+    $Config = (Get-LabVIEWConfig)
+  )
+
+  $versionString = $Version.ToString()
+  $bitnessString = $Bitness.ToString()
+
+  if ($Config) {
+    foreach ($entry in (Get-LabVIEWConfigEntries -Config $Config)) {
+      if (($entry.Version -eq $versionString) -and ($entry.Bitness -eq $bitnessString)) {
+        return $entry.Path
+      }
+    }
+  }
+
+  foreach ($candidate in (Get-LabVIEWCandidateExePaths)) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    $matchesVersion = $candidate -match ("LabVIEW\s*$versionString")
+    if (-not $matchesVersion) { continue }
+    $is32BitPath = $candidate -match '(?i)Program Files \(x86\)'
+    $candidateBitness = if ($is32BitPath) { 32 } else { 64 }
+    if ($candidateBitness -ne $Bitness) { continue }
+    try {
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $candidate).Path
+      }
+    } catch {}
+  }
+
+  return $null
+}
+
 function Get-LabVIEWCandidateExePaths {
   param([string]$LabVIEWExePath)
 
