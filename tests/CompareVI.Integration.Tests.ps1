@@ -84,7 +84,7 @@ BeforeAll {
   }
 }
 
-Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
+Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag 'CompareVI','Integration' {
   It 'prerequisites available (skip remaining if not)' {
     try {
       $prereq = $false
@@ -223,7 +223,7 @@ Describe 'Invoke-CompareVI (real CLI on self-hosted)' -Tag Integration {
   }
 }
 
-Describe 'LabVIEWCLI HTML Comparison Report Generation' -Tag Integration {
+Describe 'LabVIEWCLI HTML Comparison Report Generation' -Tag 'CompareVI','Integration' {
   BeforeAll {
     # Common paths for LabVIEW 2025
     $LabVIEWCLI64 = 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEWCLI.exe'

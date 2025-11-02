@@ -72,6 +72,8 @@
     "icon-editor:dev:assert:on": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Assert-DevModeState.ps1 -ExpectedActive:$true",
     "icon-editor:dev:assert:off": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Assert-DevModeState.ps1 -ExpectedActive:$false",
     "icon-editor:build": "pwsh -NoLogo -NoProfile -File tools/icon-editor/Invoke-IconEditorBuild.ps1",
+    "tests:comparevi": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns CompareVI*",
+    "tests:comparevi:int": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns CompareVI* -IntegrationMode include",
     "tests:icon-editor": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns IconEditor*",
     "tests:icon-editor:int": "pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 -IncludePatterns IconEditor* -IntegrationMode include",
     "history:run": "pwsh -NoLogo -NoProfile -File scripts/Run-VIHistory.ps1",
