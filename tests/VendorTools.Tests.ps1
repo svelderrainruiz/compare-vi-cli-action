@@ -162,12 +162,13 @@ Describe 'VendorTools LabVIEW helpers' {
     New-Item -ItemType Directory -Path $tempRoot | Out-Null
     $cliPath = Join-Path $tempRoot 'LabVIEWCLI.exe'
     Set-Content -LiteralPath $cliPath -Value '' -Encoding ascii
+    $cliResolved = (Resolve-Path -LiteralPath $cliPath).Path
 
     $config = @{
       versions = @{
         '2025' = @{
           '64' = @{
-            LabVIEWCliPath = $cliPath
+            LabVIEWCliPath = $cliResolved
           }
         }
       }
@@ -175,7 +176,7 @@ Describe 'VendorTools LabVIEW helpers' {
     Set-Content -LiteralPath $script:localConfigPath -Value $config -Encoding utf8
 
     $resolved = Resolve-LabVIEWCLIPath -Version 2025 -Bitness 64
-    $resolved | Should -Be (Resolve-Path -LiteralPath $cliPath).Path
+    $resolved | Should -Be $cliResolved
   }
 
   It 'resolves VIPM path from config overrides' {

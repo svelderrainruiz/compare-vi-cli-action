@@ -18,72 +18,72 @@
 			<Item Name="NIIconEditor" Type="Folder">
 				<Item Name="Class" Type="Folder">
 					<Item Name="Ants" Type="Folder">
-						<Item Name="Ants.lvclass" Type="LVClass" URL="/&lt;resource&gt;/plugins/NIIconEditor/Class/Ants/Ants.lvclass"/>
+						<Item Name="Ants.lvclass" Type="LVClass" URL="../resource/plugins/NIIconEditor/Class/Ants/Ants.lvclass"/>
 					</Item>
 					<Item Name="FakedArray" Type="Folder">
 						<Item Name="Misc" Type="Folder">
 							<Item Name="Set active Layer programmatically.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Class/FakedArray/Misc/Set active Layer programmatically.vi"/>
 						</Item>
-						<Item Name="FakedArray.lvclass" Type="LVClass" URL="/&lt;resource&gt;/plugins/NIIconEditor/Class/FakedArray/FakedArray.lvclass"/>
+						<Item Name="FakedArray.lvclass" Type="LVClass" URL="../resource/plugins/NIIconEditor/Class/FakedArray/FakedArray.lvclass"/>
 					</Item>
 					<Item Name="Icon Library" Type="Folder">
-						<Item Name="Glyph.lvclass" Type="LVClass" URL="/&lt;resource&gt;/plugins/NIIconEditor/Class/Icon Library/Glyph.lvclass"/>
+						<Item Name="Glyph.lvclass" Type="LVClass" URL="../resource/plugins/NIIconEditor/Class/Icon Library/Glyph.lvclass"/>
 					</Item>
 					<Item Name="Settings" Type="Folder">
-						<Item Name="Settings.lvclass" Type="LVClass" URL="/&lt;resource&gt;/plugins/NIIconEditor/Class/Settings/Settings.lvclass"/>
+						<Item Name="Settings.lvclass" Type="LVClass" URL="../resource/plugins/NIIconEditor/Class/Settings/Settings.lvclass"/>
 					</Item>
 					<Item Name="Tools" Type="Folder">
-						<Item Name="Tools Paint.lvclass" Type="LVClass" URL="/&lt;resource&gt;/plugins/NIIconEditor/Class/Tools/Tools Paint.lvclass"/>
+						<Item Name="Tools Paint.lvclass" Type="LVClass" URL="../resource/plugins/NIIconEditor/Class/Tools/Tools Paint.lvclass"/>
 					</Item>
 				</Item>
 				<Item Name="Controls" Type="Folder">
-					<Item Name="Arrow Down.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Arrow Down.ctl"/>
+					<Item Name="Arrow Down.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Arrow Down.ctl"/>
 					<Item Name="Arrow Up.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Arrow Up.ctl"/>
 					<Item Name="Cancel.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Cancel.ctl"/>
-					<Item Name="Circle.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Circle.ctl"/>
+					<Item Name="Circle.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Circle.ctl"/>
 					<Item Name="Class Pool.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Class Pool.ctl"/>
 					<Item Name="ColorChange.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/ColorChange.ctl"/>
 					<Item Name="DeleteLayer.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/DeleteLayer.ctl"/>
 					<Item Name="DownloadFileType.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/DownloadFileType.ctl"/>
 					<Item Name="Draw.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Draw.ctl"/>
 					<Item Name="DrawAction.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/DrawAction.ctl"/>
-					<Item Name="Dropper.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Dropper.ctl"/>
-					<Item Name="FCircle.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/FCircle.ctl"/>
+					<Item Name="Dropper.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Dropper.ctl"/>
+					<Item Name="FCircle.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/FCircle.ctl"/>
 					<Item Name="FGV Action.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/FGV Action.ctl"/>
-					<Item Name="Fill.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Fill.ctl"/>
+					<Item Name="Fill.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Fill.ctl"/>
 					<Item Name="Flip.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Flip.ctl"/>
-					<Item Name="Font Size.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Font Size.ctl"/>
+					<Item Name="Font Size.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Font Size.ctl"/>
 					<Item Name="Framework Templates.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Framework Templates.ctl"/>
-					<Item Name="FRect.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/FRect.ctl"/>
-					<Item Name="IconFilename.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/IconFilename.ctl"/>
+					<Item Name="FRect.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/FRect.ctl"/>
+					<Item Name="IconFilename.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/IconFilename.ctl"/>
 					<Item Name="IconLibraryList.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/IconLibraryList.ctl"/>
-					<Item Name="IE Classes.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/IE Classes.ctl"/>
+					<Item Name="IE Classes.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/IE Classes.ctl"/>
 					<Item Name="IE Symbols.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/IE Symbols.ctl"/>
-					<Item Name="IERect.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/IERect.ctl"/>
+					<Item Name="IERect.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/IERect.ctl"/>
 					<Item Name="LayerList.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/LayerList.ctl"/>
-					<Item Name="Line.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Line.ctl"/>
-					<Item Name="Move.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Move.ctl"/>
+					<Item Name="Line.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Line.ctl"/>
+					<Item Name="Move.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Move.ctl"/>
 					<Item Name="NewLayer.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/NewLayer.ctl"/>
 					<Item Name="OK.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/OK.ctl"/>
 					<Item Name="OpenLayer.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/OpenLayer.ctl"/>
-					<Item Name="Path&amp;Icon.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Path&amp;Icon.ctl"/>
-					<Item Name="Pen.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Pen.ctl"/>
+					<Item Name="Path&amp;Icon.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Path&amp;Icon.ctl"/>
+					<Item Name="Pen.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Pen.ctl"/>
 					<Item Name="References.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/References.ctl"/>
 					<Item Name="Refresh.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Refresh.ctl"/>
 					<Item Name="Rotate.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Rotate.ctl"/>
 					<Item Name="Rotate_Flip.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Rotate_Flip.ctl"/>
-					<Item Name="Rubber.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Rubber.ctl"/>
+					<Item Name="Rubber.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Rubber.ctl"/>
 					<Item Name="SaveLayer.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/SaveLayer.ctl"/>
-					<Item Name="Selection.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Selection.ctl"/>
+					<Item Name="Selection.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Selection.ctl"/>
 					<Item Name="Settings.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Settings.ctl"/>
-					<Item Name="SupportClass.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/SupportClass.ctl"/>
-					<Item Name="SupportClass_Action.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/SupportClass_Action.ctl"/>
-					<Item Name="Text.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Text.ctl"/>
+					<Item Name="SupportClass.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/SupportClass.ctl"/>
+					<Item Name="SupportClass_Action.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/SupportClass_Action.ctl"/>
+					<Item Name="Text.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Text.ctl"/>
 					<Item Name="Text_Specification.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Text_Specification.ctl"/>
 					<Item Name="TextMarker.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/TextMarker.ctl"/>
-					<Item Name="ToMoreSpecific_Faked2DArray.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/ToMoreSpecific_Faked2DArray.ctl"/>
-					<Item Name="Tools.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Tools.ctl"/>
-					<Item Name="Undo Redo Action.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Undo Redo Action.ctl"/>
+					<Item Name="ToMoreSpecific_Faked2DArray.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/ToMoreSpecific_Faked2DArray.ctl"/>
+					<Item Name="Tools.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Tools.ctl"/>
+					<Item Name="Undo Redo Action.ctl" Type="VI" URL="../resource/plugins/NIIconEditor/Controls/Undo Redo Action.ctl"/>
 					<Item Name="Undo Redo Type.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Undo Redo Type.ctl"/>
 					<Item Name="Undo.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/Undo.ctl"/>
 					<Item Name="User Event Communication Enum.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/User Event Communication Enum.ctl"/>
@@ -91,7 +91,7 @@
 					<Item Name="XMLDataStructureIconLibrary.ctl" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Controls/XMLDataStructureIconLibrary.ctl"/>
 				</Item>
 				<Item Name="Global Variables" Type="Folder">
-					<Item Name="Data.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Global Variables/Data.vi"/>
+					<Item Name="Data.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Global Variables/Data.vi"/>
 				</Item>
 				<Item Name="Miscellaneous" Type="Folder">
 					<Item Name="Clipboard" Type="Folder">
@@ -99,40 +99,40 @@
 						<Item Name="IE Write to Clipboard.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Clipboard/IE Write to Clipboard.vi"/>
 					</Item>
 					<Item Name="Def FP Updates" Type="Folder">
-						<Item Name="Defer_FP_Updates.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Def FP Updates/Defer_FP_Updates.vi"/>
+						<Item Name="Defer_FP_Updates.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Def FP Updates/Defer_FP_Updates.vi"/>
 					</Item>
 					<Item Name="Draw" Type="Folder">
-						<Item Name="Const Temp Coordinate 2 points.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Draw/Const Temp Coordinate 2 points.vi"/>
+						<Item Name="Const Temp Coordinate 2 points.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Draw/Const Temp Coordinate 2 points.vi"/>
 						<Item Name="Const Temp Coordinate 4 points.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Draw/Const Temp Coordinate 4 points.vi"/>
 						<Item Name="DrawIcon.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Draw/DrawIcon.vi"/>
 						<Item Name="IsCoordinateConstant.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Draw/IsCoordinateConstant.vi"/>
 						<Item Name="Origin_or_TempCoordinate.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Draw/Origin_or_TempCoordinate.vi"/>
-						<Item Name="PixelValue.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Draw/PixelValue.vi"/>
+						<Item Name="PixelValue.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Draw/PixelValue.vi"/>
 					</Item>
 					<Item Name="Font" Type="Folder">
-						<Item Name="Linux.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Font/Linux.vi"/>
-						<Item Name="Mac.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Font/Mac.vi"/>
-						<Item Name="Windows.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Font/Windows.vi"/>
-						<Item Name="Populate Font ComboBox.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Font/Populate Font ComboBox.vi"/>
+						<Item Name="Linux.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Font/Linux.vi"/>
+						<Item Name="Mac.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Font/Mac.vi"/>
+						<Item Name="Windows.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Font/Windows.vi"/>
+						<Item Name="Populate Font ComboBox.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Font/Populate Font ComboBox.vi"/>
 					</Item>
 					<Item Name="Glyphs" Type="Folder">
 						<Item Name="Glyph_MouseDown.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Glyphs/Glyph_MouseDown.vi"/>
 						<Item Name="Populate Graphics.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Glyphs/Populate Graphics.vi"/>
-						<Item Name="Prepare Glyphs for Display.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Glyphs/Prepare Glyphs for Display.vi"/>
+						<Item Name="Prepare Glyphs for Display.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Glyphs/Prepare Glyphs for Display.vi"/>
 						<Item Name="SET_Glyph.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Glyphs/SET_Glyph.vi"/>
 						<Item Name="SET_ToolGraphic.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Glyphs/SET_ToolGraphic.vi"/>
 						<Item Name="TemporaryGlyphView.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Glyphs/TemporaryGlyphView.vi"/>
 					</Item>
 					<Item Name="Graphics" Type="Folder">
-						<Item Name="BuildCategories.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/BuildCategories.vi"/>
-						<Item Name="ChangeRefreshGraphicsState.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/ChangeRefreshGraphicsState.vi"/>
-						<Item Name="CorruptIconErrorMessage.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/CorruptIconErrorMessage.vi"/>
-						<Item Name="Filter Graphics by File Name.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/Filter Graphics by File Name.vi"/>
-						<Item Name="Launch Dynamically Load Graphics.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/Launch Dynamically Load Graphics.vi"/>
-						<Item Name="LoadGraphics.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/LoadGraphics.vi"/>
-						<Item Name="LoadTemplates.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/LoadTemplates.vi"/>
-						<Item Name="Populate Tree with Categories.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/Populate Tree with Categories.vi"/>
-						<Item Name="Pull data from disc.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/Pull data from disc.vi"/>
+						<Item Name="BuildCategories.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/BuildCategories.vi"/>
+						<Item Name="ChangeRefreshGraphicsState.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/ChangeRefreshGraphicsState.vi"/>
+						<Item Name="CorruptIconErrorMessage.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/CorruptIconErrorMessage.vi"/>
+						<Item Name="Filter Graphics by File Name.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/Filter Graphics by File Name.vi"/>
+						<Item Name="Launch Dynamically Load Graphics.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/Launch Dynamically Load Graphics.vi"/>
+						<Item Name="LoadGraphics.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/LoadGraphics.vi"/>
+						<Item Name="LoadTemplates.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/LoadTemplates.vi"/>
+						<Item Name="Populate Tree with Categories.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/Populate Tree with Categories.vi"/>
+						<Item Name="Pull data from disc.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Graphics/Pull data from disc.vi"/>
 						<Item Name="RefreshAnimation.mng" Type="Document" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/RefreshAnimation.mng"/>
 						<Item Name="RefreshAnimation.xcf" Type="Document" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Graphics/RefreshAnimation.xcf"/>
 					</Item>
@@ -145,7 +145,7 @@
 						<Item Name="Clear User Layers.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Clear User Layers.vi"/>
 						<Item Name="Delete Selected Layers.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Delete Selected Layers.vi"/>
 						<Item Name="Escape.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Escape.vi"/>
-						<Item Name="Fire Body Text Change event.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Fire Body Text Change event.vi"/>
+						<Item Name="Fire Body Text Change event.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Icon Editor/Fire Body Text Change event.vi"/>
 						<Item Name="Icon Editor Help.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Icon Editor Help.vi"/>
 						<Item Name="Icon Editor Init Refs.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Icon Editor Init Refs.vi"/>
 						<Item Name="Icon Editor Properties Help.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Icon Editor Properties Help.vi"/>
@@ -193,15 +193,15 @@
 						<Item Name="Flatten Layers.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Flatten Layers.vi"/>
 						<Item Name="Get Color Icon from Caller.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Get Color Icon from Caller.vi"/>
 						<Item Name="Import_Clipboard.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Import_Clipboard.vi"/>
-						<Item Name="Load.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Load.vi"/>
-						<Item Name="Read Data from Caller.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Read Data from Caller.vi"/>
-						<Item Name="Read Glyphs from  File.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Read Glyphs from  File.vi"/>
+						<Item Name="Load.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Load Unload/Load.vi"/>
+						<Item Name="Read Data from Caller.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Load Unload/Read Data from Caller.vi"/>
+						<Item Name="Read Glyphs from  File.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Load Unload/Read Glyphs from  File.vi"/>
 						<Item Name="Reset Layer VI.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Reset Layer VI.vi"/>
 						<Item Name="Return MutationCode Folder.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Return MutationCode Folder.vi"/>
 						<Item Name="Unflatten Icon.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Unflatten Icon.vi"/>
 						<Item Name="Unflatten Layers.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Unflatten Layers.vi"/>
 						<Item Name="Write Data to Caller.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Write Data to Caller.vi"/>
-						<Item Name="Write Glyphs to  File.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Write Glyphs to  File.vi"/>
+						<Item Name="Write Glyphs to  File.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Load Unload/Write Glyphs to  File.vi"/>
 						<Item Name="Write INI Tokens and VI Tags.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Unload/Write INI Tokens and VI Tags.vi"/>
 					</Item>
 					<Item Name="Menubar" Type="Folder">
@@ -230,7 +230,7 @@
 					</Item>
 					<Item Name="Undo Redo" Type="Folder">
 						<Item Name="Add Data to History.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Undo Redo/Add Data to History.vi"/>
-						<Item Name="FGV_Undo Redo.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Undo Redo/FGV_Undo Redo.vi"/>
+						<Item Name="FGV_Undo Redo.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Undo Redo/FGV_Undo Redo.vi"/>
 						<Item Name="Replay Data from History.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Undo Redo/Replay Data from History.vi"/>
 					</Item>
 					<Item Name="User Events" Type="Folder">
@@ -244,14 +244,14 @@
 					<Item Name="CoordinatesCorrection.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/CoordinatesCorrection.vi"/>
 					<Item Name="Create new class icon user layers.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Create new class icon user layers.vi"/>
 					<Item Name="Create new layer_LayerName_Picture.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Create new layer_LayerName_Picture.vi"/>
-					<Item Name="DealWithScrollbars.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/DealWithScrollbars.vi"/>
+					<Item Name="DealWithScrollbars.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/DealWithScrollbars.vi"/>
 					<Item Name="Extract LV Icon Data.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Extract LV Icon Data.vi"/>
 					<Item Name="Finalize Movement.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Finalize Movement.vi"/>
 					<Item Name="Finalize Text.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Finalize Text.vi"/>
 					<Item Name="Flip color refs.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Flip color refs.vi"/>
 					<Item Name="Get Icon Editor Context.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Icon Editor/Get Icon Editor Context.vi"/>
 					<Item Name="Get Monochrome Icon from Caller.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Get Monochrome Icon from Caller.vi"/>
-					<Item Name="GetComparisonResult4Graphis.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/GetComparisonResult4Graphis.vi"/>
+					<Item Name="GetComparisonResult4Graphis.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/GetComparisonResult4Graphis.vi"/>
 					<Item Name="IEGlyphFolderConstant.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/IEGlyphFolderConstant.vi"/>
 					<Item Name="IETemplateLibraryFolderConstant.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/IETemplateLibraryFolderConstant.vi"/>
 					<Item Name="IETemplateVIFolderConstant.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/IETemplateVIFolderConstant.vi"/>
@@ -260,7 +260,7 @@
 					<Item Name="Launch_VI_Asynchronously.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Launch_VI_Asynchronously.vi"/>
 					<Item Name="ListGlyphsAndTemplates.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/ListGlyphsAndTemplates.vi"/>
 					<Item Name="Load Glyph from File.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Load Glyph from File.vi"/>
-					<Item Name="Magic Active Layer Constant.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Magic Active Layer Constant.vi"/>
+					<Item Name="Magic Active Layer Constant.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Magic Active Layer Constant.vi"/>
 					<Item Name="MoveLayers.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/MoveLayers.vi"/>
 					<Item Name="PrepareData4HTML.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/PrepareData4HTML.vi"/>
 					<Item Name="PrepareTemporaryView.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/PrepareTemporaryView.vi"/>
@@ -270,7 +270,7 @@
 					<Item Name="Settings Init.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Settings Init.vi"/>
 					<Item Name="Settings Requested Path.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Settings Requested Path.vi"/>
 					<Item Name="Settings Shutdown.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Settings Shutdown.vi"/>
-					<Item Name="Specify Path Enum.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Specify Path Enum.vi"/>
+					<Item Name="Specify Path Enum.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Miscellaneous/Specify Path Enum.vi"/>
 					<Item Name="Truncate string.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Truncate string.vi"/>
 					<Item Name="Write Error to File.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Miscellaneous/Write Error to File.vi"/>
 				</Item>
@@ -278,13 +278,13 @@
 					<Item Name="ApplyLibIconOverlayToVIIcon.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/ApplyLibIconOverlayToVIIcon.vi"/>
 					<Item Name="Call Keep ApplyLib in Memory.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/Call Keep ApplyLib in Memory.vi"/>
 					<Item Name="Create or Substitute NI_Layer layer.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/Create or Substitute NI_Layer layer.vi"/>
-					<Item Name="DefaultIconGlyphData.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/DefaultIconGlyphData.vi"/>
+					<Item Name="DefaultIconGlyphData.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Support/DefaultIconGlyphData.vi"/>
 					<Item Name="Get 32x32 Image Data.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/Get 32x32 Image Data.vi"/>
 					<Item Name="Get VI Library.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/Get VI Library.vi"/>
 					<Item Name="GetLibIconForVIIconOverlay.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/GetLibIconForVIIconOverlay.vi"/>
 					<Item Name="GetLibIconForVIIconOverlayFromVI.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/GetLibIconForVIIconOverlayFromVI.vi"/>
 					<Item Name="GetOffsetRWIcon.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/GetOffsetRWIcon.vi"/>
-					<Item Name="Icon Editor First Call.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/Icon Editor First Call.vi"/>
+					<Item Name="Icon Editor First Call.vi" Type="VI" URL="../resource/plugins/NIIconEditor/Support/Icon Editor First Call.vi"/>
 					<Item Name="IE_Open Help Link.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/IE_Open Help Link.vi"/>
 					<Item Name="IE_Resolve Symbolic Paths.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/IE_Resolve Symbolic Paths.vi"/>
 					<Item Name="Keep ApplyLib in Memory.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Support/Keep ApplyLib in Memory.vi"/>
@@ -300,9 +300,9 @@
 				<Item Name="Get Icon Editor Source Paths.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Get Icon Editor Source Paths.vi"/>
 				<Item Name="Launch Icon Editor From String.vi" Type="VI" URL="/&lt;resource&gt;/plugins/NIIconEditor/Launch Icon Editor From String.vi"/>
 			</Item>
-			<Item Name="lv_icon.lvlib" Type="Library" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/lv_icon.lvlib"/>
+			<Item Name="lv_icon.lvlib" Type="Library" URL="../vi.lib/LabVIEW Icon API/lv_icon/lv_icon.lvlib"/>
 			<Item Name="lv_icon.vit" Type="VI" URL="/&lt;resource&gt;/plugins/lv_icon.vit"/>
-			<Item Name="lv_IconEditor.lvlib" Type="Library" URL="/&lt;resource&gt;/plugins/lv_IconEditor.lvlib"/>
+			<Item Name="lv_IconEditor.lvlib" Type="Library" URL="../resource/plugins/lv_IconEditor.lvlib"/>
 			<Item Name="SAMPLE_lv_icon.vi" Type="VI" URL="/&lt;resource&gt;/plugins/SAMPLE_lv_icon.vi"/>
 		</Item>
 		<Item Name="Tooling" Type="Folder">
@@ -321,30 +321,30 @@
 		<Item Name="vi.lib/LabVIEW Icon API" Type="Folder">
 			<Item Name="lv_icon" Type="Folder">
 				<Item Name="Classes" Type="Folder">
-					<Item Name="Icon.lvclass" Type="LVClass" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Classes/Icon/Icon.lvclass"/>
-					<Item Name="Icon Framework.lvclass" Type="LVClass" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Classes/Icon Framework/Icon Framework.lvclass"/>
-					<Item Name="Layer.lvclass" Type="LVClass" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Classes/Layer/Layer.lvclass"/>
-					<Item Name="Load &amp; Unload.lvclass" Type="LVClass" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Classes/Load_Unload/Load &amp; Unload.lvclass"/>
+					<Item Name="Icon.lvclass" Type="LVClass" URL="../vi.lib/LabVIEW Icon API/lv_icon/Classes/Icon/Icon.lvclass"/>
+					<Item Name="Icon Framework.lvclass" Type="LVClass" URL="../vi.lib/LabVIEW Icon API/lv_icon/Classes/Icon Framework/Icon Framework.lvclass"/>
+					<Item Name="Layer.lvclass" Type="LVClass" URL="../vi.lib/LabVIEW Icon API/lv_icon/Classes/Layer/Layer.lvclass"/>
+					<Item Name="Load &amp; Unload.lvclass" Type="LVClass" URL="../vi.lib/LabVIEW Icon API/lv_icon/Classes/Load_Unload/Load &amp; Unload.lvclass"/>
 				</Item>
 				<Item Name="Controls" Type="Folder">
-					<Item Name="Alignment.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/Alignment.ctl"/>
-					<Item Name="BodyText.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/BodyText.ctl"/>
-					<Item Name="BodyTextPosition.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/BodyTextPosition.ctl"/>
-					<Item Name="Font.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/Font.ctl"/>
-					<Item Name="Graphic.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/Graphic.ctl"/>
-					<Item Name="IEColor.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/IEColor.ctl"/>
-					<Item Name="LabVIEW Icon Stored Information.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/LabVIEW Icon Stored Information.ctl"/>
-					<Item Name="Layer.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/Layer.ctl"/>
-					<Item Name="LayerType.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/LayerType.ctl"/>
-					<Item Name="Pathes.ctl" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/lv_icon/Controls/Pathes.ctl"/>
+					<Item Name="Alignment.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/Alignment.ctl"/>
+					<Item Name="BodyText.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/BodyText.ctl"/>
+					<Item Name="BodyTextPosition.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/BodyTextPosition.ctl"/>
+					<Item Name="Font.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/Font.ctl"/>
+					<Item Name="Graphic.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/Graphic.ctl"/>
+					<Item Name="IEColor.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/IEColor.ctl"/>
+					<Item Name="LabVIEW Icon Stored Information.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/LabVIEW Icon Stored Information.ctl"/>
+					<Item Name="Layer.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/Layer.ctl"/>
+					<Item Name="LayerType.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/LayerType.ctl"/>
+					<Item Name="Pathes.ctl" Type="VI" URL="../vi.lib/LabVIEW Icon API/lv_icon/Controls/Pathes.ctl"/>
 				</Item>
 			</Item>
 			<Item Name="Set Text Icon" Type="Folder">
 				<Item Name="Configure Named Icons.vi" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/Set Text Icon/Configure Named Icons.vi"/>
 				<Item Name="Group 1-Character Tokens.vi" Type="VI" URL="/&lt;vilib&gt;/LabVIEW Icon API/Set Text Icon/Group 1-Character Tokens.vi"/>
-				<Item Name="Text-Based VI Icon.lvlib" Type="Library" URL="/&lt;vilib&gt;/LabVIEW Icon API/Set Text Icon/Text-Based VI Icon.lvlib"/>
+				<Item Name="Text-Based VI Icon.lvlib" Type="Library" URL="../vi.lib/LabVIEW Icon API/Set Text Icon/Text-Based VI Icon.lvlib"/>
 			</Item>
-			<Item Name="LabVIEW Icon API.lvlib" Type="Library" URL="/&lt;vilib&gt;/LabVIEW Icon API/LabVIEW Icon API.lvlib"/>
+			<Item Name="LabVIEW Icon API.lvlib" Type="Library" URL="../vi.lib/LabVIEW Icon API/LabVIEW Icon API.lvlib"/>
 		</Item>
 		<Item Name="Unit tests" Type="Folder">
 			<Property Name="NI.SortType" Type="Int">1</Property>
@@ -512,8 +512,6 @@
 				<Item Name="lveventtype.ctl" Type="VI" URL="/&lt;vilib&gt;/event_ctls.llb/lveventtype.ctl"/>
 				<Item Name="Write to XML File.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/xml.llb/Write to XML File.vi"/>
 				<Item Name="Trim Whitespace One-Sided.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Trim Whitespace One-Sided.vi"/>
-				<Item Name="Single String To Qualified Name Array.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/LVClass/Single String To Qualified Name Array.vi"/>
-				<Item Name="Qualified Name Array To Single String.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/LVClass/Qualified Name Array To Single String.vi"/>
 				<Item Name="Write to XML File(string).vi" Type="VI" URL="/&lt;vilib&gt;/Utility/xml.llb/Write to XML File(string).vi"/>
 				<Item Name="Open_Create_Replace File.vi" Type="VI" URL="/&lt;vilib&gt;/_oldvers/_oldvers.llb/Open_Create_Replace File.vi"/>
 				<Item Name="compatFileDialog.vi" Type="VI" URL="/&lt;vilib&gt;/_oldvers/_oldvers.llb/compatFileDialog.vi"/>
@@ -567,7 +565,7 @@
 				<Property Name="Bld_preActionVIID" Type="Ref">/My Computer/Tooling/Pre Build Icon Editor PPL.vi</Property>
 				<Property Name="Bld_previewCacheID" Type="Str">{C699D48A-6A0A-4A55-BF6A-D6FC254001CD}</Property>
 				<Property Name="Bld_version.build" Type="Int">1</Property>
-				<Property Name="Bld_version.major" Type="Int">1</Property>
+				<Property Name="Bld_version.minor" Type="Int">6</Property>
 				<Property Name="Destination[0].destName" Type="Str">lv_icon.lvlibp</Property>
 				<Property Name="Destination[0].path" Type="Path">../resource/plugins/lv_icon.lvlibp</Property>
 				<Property Name="Destination[0].path.type" Type="Str">relativeToProject</Property>

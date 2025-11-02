@@ -608,14 +608,6 @@ function Resolve-LabVIEWCLIPath {
 
   & $addCandidate $candidates $LabVIEWCLIPath
 
-  foreach ($envKey in @('LABVIEWCLI_PATH', 'LABVIEWCLI_EXE_PATH')) {
-    $envValue = [System.Environment]::GetEnvironmentVariable($envKey)
-    if ([string]::IsNullOrWhiteSpace($envValue)) { continue }
-    foreach ($entry in ($envValue -split ';')) {
-      & $addCandidate $candidates ($entry.Trim())
-    }
-  }
-
   foreach ($config in (Get-LabVIEWConfigObjects)) {
     foreach ($propName in @('labviewCli', 'LabVIEWCli', 'LabVIEWCLIPath', 'LabVIEWCliPath', 'labviewCliPath')) {
       $prop = $config.PSObject.Properties[$propName]
@@ -633,6 +625,14 @@ function Resolve-LabVIEWCLIPath {
         $versionValue = Get-VersionedConfigValue -Config $config -PropertyName $name -Version $Version -Bitness $Bitness
         if ($versionValue) { & $addCandidate $candidates $versionValue }
       }
+    }
+  }
+
+  foreach ($envKey in @('LABVIEWCLI_PATH', 'LABVIEWCLI_EXE_PATH')) {
+    $envValue = [System.Environment]::GetEnvironmentVariable($envKey)
+    if ([string]::IsNullOrWhiteSpace($envValue)) { continue }
+    foreach ($entry in ($envValue -split ';')) {
+      & $addCandidate $candidates ($entry.Trim())
     }
   }
 

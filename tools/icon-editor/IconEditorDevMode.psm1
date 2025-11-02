@@ -94,6 +94,7 @@ function Set-IconEditorDevModeState {
 function Invoke-IconEditorDevModeScript {
   param(
     [Parameter(Mandatory)][string]$ScriptPath,
+    [string[]]$ArgumentList,
     [string]$RepoRoot,
     [string]$IconEditorRoot
   )
@@ -125,27 +126,24 @@ function Invoke-IconEditorDevModeScript {
   $previousPath = $env:Path
   $gCliDirectory = Split-Path -Parent $gCliPath
 
+  $pwshCmd = Get-Command pwsh -ErrorAction Stop
+  $args = if ($ArgumentList -and $ArgumentList.Count -gt 0) { $ArgumentList } else { @('-RelativePath', $IconEditorRoot) }
+
   Set-Location -LiteralPath $scriptDirectory
   try {
     if ($previousPath -notlike "$gCliDirectory*") {
       $env:Path = "$gCliDirectory;$previousPath"
     }
 
-    & $ScriptPath -RelativePath $IconEditorRoot
-
-    $exitCode = $null
-    $exitCodeVar = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
-    if ($exitCodeVar) {
-      $exitCode = $exitCodeVar.Value
-    }
-
-    if ($exitCode -ne $null -and $exitCode -ne 0) {
+    & $pwshCmd.Source -NoLogo -NoProfile -File $ScriptPath @args
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
       throw "Dev-mode script '$ScriptPath' exited with code $exitCode."
     }
   }
   finally {
-    $env:Path = $previousPath
     Set-Location -LiteralPath $previousLocation.Path
+    $env:Path = $previousPath
   }
 }
 
@@ -167,8 +165,55 @@ function Enable-IconEditorDevelopmentMode {
     $IconEditorRoot = (Resolve-Path -LiteralPath $IconEditorRoot).Path
   }
 
-  $scriptPath = Join-Path $IconEditorRoot '.github\actions\set-development-mode\Set_Development_Mode.ps1'
-  Invoke-IconEditorDevModeScript -ScriptPath $scriptPath -RepoRoot $RepoRoot -IconEditorRoot $IconEditorRoot
+  $actionsRoot = Join-Path $IconEditorRoot '.github' 'actions'
+  $addTokenScript = Join-Path $actionsRoot 'add-token-to-labview' 'AddTokenToLabVIEW.ps1'
+  $prepareScript  = Join-Path $actionsRoot 'prepare-labview-source' 'Prepare_LabVIEW_source.ps1'
+  $closeScript    = Join-Path $actionsRoot 'close-labview' 'Close_LabVIEW.ps1'
+
+  foreach ($required in @($addTokenScript, $prepareScript, $closeScript)) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+      throw "Icon editor dev-mode helper '$required' was not found."
+    }
+  }
+
+  $pluginsPath = Join-Path $IconEditorRoot 'resource' 'plugins'
+  if (Test-Path -LiteralPath $pluginsPath -PathType Container) {
+    Get-ChildItem -LiteralPath $pluginsPath -Filter '*.lvlibp' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+  }
+
+  foreach ($bitness in @('32','64')) {
+    Invoke-IconEditorDevModeScript `
+      -ScriptPath $addTokenScript `
+      -ArgumentList @(
+        '-MinimumSupportedLVVersion','2021',
+        '-SupportedBitness',        $bitness,
+        '-RelativePath',            $IconEditorRoot
+      ) `
+      -RepoRoot $RepoRoot `
+      -IconEditorRoot $IconEditorRoot
+
+    Invoke-IconEditorDevModeScript `
+      -ScriptPath $prepareScript `
+      -ArgumentList @(
+        '-MinimumSupportedLVVersion','2021',
+        '-SupportedBitness',        $bitness,
+        '-RelativePath',            $IconEditorRoot,
+        '-LabVIEW_Project',         'lv_icon_editor',
+        '-Build_Spec',              'Editor Packed Library'
+      ) `
+      -RepoRoot $RepoRoot `
+      -IconEditorRoot $IconEditorRoot
+
+    Invoke-IconEditorDevModeScript `
+      -ScriptPath $closeScript `
+      -ArgumentList @(
+        '-MinimumSupportedLVVersion','2021',
+        '-SupportedBitness',        $bitness
+      ) `
+      -RepoRoot $RepoRoot `
+      -IconEditorRoot $IconEditorRoot
+  }
+
   return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $true -Source 'Enable-IconEditorDevelopmentMode'
 }
 
@@ -190,8 +235,39 @@ function Disable-IconEditorDevelopmentMode {
     $IconEditorRoot = (Resolve-Path -LiteralPath $IconEditorRoot).Path
   }
 
-  $scriptPath = Join-Path $IconEditorRoot '.github\actions\revert-development-mode\RevertDevelopmentMode.ps1'
-  Invoke-IconEditorDevModeScript -ScriptPath $scriptPath -RepoRoot $RepoRoot -IconEditorRoot $IconEditorRoot
+  $actionsRoot = Join-Path $IconEditorRoot '.github' 'actions'
+  $restoreScript = Join-Path $actionsRoot 'restore-setup-lv-source' 'RestoreSetupLVSource.ps1'
+  $closeScript   = Join-Path $actionsRoot 'close-labview' 'Close_LabVIEW.ps1'
+
+  foreach ($required in @($restoreScript, $closeScript)) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+      throw "Icon editor dev-mode helper '$required' was not found."
+    }
+  }
+
+  foreach ($bitness in @('32','64')) {
+    Invoke-IconEditorDevModeScript `
+      -ScriptPath $restoreScript `
+      -ArgumentList @(
+        '-MinimumSupportedLVVersion','2021',
+        '-SupportedBitness',        $bitness,
+        '-RelativePath',            $IconEditorRoot,
+        '-LabVIEW_Project',         'lv_icon_editor',
+        '-Build_Spec',              'Editor Packed Library'
+      ) `
+      -RepoRoot $RepoRoot `
+      -IconEditorRoot $IconEditorRoot
+
+    Invoke-IconEditorDevModeScript `
+      -ScriptPath $closeScript `
+      -ArgumentList @(
+        '-MinimumSupportedLVVersion','2021',
+        '-SupportedBitness',        $bitness
+      ) `
+      -RepoRoot $RepoRoot `
+      -IconEditorRoot $IconEditorRoot
+  }
+
   return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $false -Source 'Disable-IconEditorDevelopmentMode'
 }
 
