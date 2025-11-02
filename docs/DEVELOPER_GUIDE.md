@@ -171,6 +171,9 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
      - The finalize helper blocks if the release PR has pending or failing checks; set
        `RELEASE_FINALIZE_SKIP_CHECKS=1` (or `RELEASE_FINALIZE_ALLOW_MERGED=1` / `RELEASE_FINALIZE_ALLOW_DIRTY=1`)
        to override in emergencies.
+     - If `main` and the release branch no longer share history (for example, after cutting over to a new repository
+       baseline), rerun the helper with `RELEASE_FINALIZE_ALLOW_RESET=1` so it can reset `main` to the release tip and
+       push with `--force-with-lease`. Leave the variable unset during normal releases so unintended history rewrites are blocked.
 - When rehearsing feature branch work, use `npm run feature:branch:dry -- my-feature` and
   `npm run feature:finalize:dry -- my-feature` to simulate branch creation and finalization without touching remotes.
 - Delete branches automatically after merging (GitHub setting) so the standing-priority flow starts clean each time.

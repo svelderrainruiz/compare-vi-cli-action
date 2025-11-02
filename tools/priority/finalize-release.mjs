@@ -185,6 +185,15 @@ function refsEqual(repoRoot, refA, refB) {
   return result.status === 0;
 }
 
+function hasSharedHistory(repoRoot, refA, refB) {
+  const result = spawnSync('git', ['merge-base', refA, refB], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore']
+  });
+  return result.status === 0 && Boolean((result.stdout ?? '').trim());
+}
+
 async function main() {
   const versionInput = parseSingleValueArg(process.argv, {
     usageLines: USAGE_LINES,
@@ -213,6 +222,7 @@ async function main() {
 
   let finalizeMetadata = null;
   let restoreBranch = true;
+  let forcePushMain = false;
 
   try {
     run('git', ['checkout', releaseBranch], { cwd: repoRoot });
@@ -240,11 +250,34 @@ async function main() {
         console.warn(
           `[release:finalize] ${releaseBranch} tree matches main; treating fast-forward failure as no-op (${error.message}).`
         );
+      } else if (!hasSharedHistory(repoRoot, 'HEAD', releaseBranch)) {
+        if (process.env.RELEASE_FINALIZE_ALLOW_RESET === '1') {
+          console.warn(
+            `[release:finalize] ${releaseBranch} shares no history with main; resetting main to ${releaseBranch}.`
+          );
+          run('git', ['reset', '--hard', releaseBranch], { cwd: repoRoot });
+          forcePushMain = true;
+        } else {
+          throw new Error(
+            `${releaseBranch} does not share history with main. Set RELEASE_FINALIZE_ALLOW_RESET=1 to reset main to ${releaseBranch} (force push required) or reconcile histories manually. Original merge error: ${error.message}`
+          );
+        }
       } else {
         throw error;
       }
     }
-    pushToRemote(repoRoot, 'upstream', 'main');
+    if (forcePushMain) {
+      const pushResult = spawnSync('git', ['push', '--force-with-lease', 'upstream', 'main'], {
+        cwd: repoRoot,
+        stdio: 'inherit',
+        encoding: 'utf8'
+      });
+      if (pushResult.status !== 0) {
+        throw new Error('Failed to push main with --force-with-lease. Resolve the push error above.');
+      }
+    } else {
+      pushToRemote(repoRoot, 'upstream', 'main');
+    }
     const mainCommit = run('git', ['rev-parse', 'HEAD'], { cwd: repoRoot });
 
     const releaseTitle = buildReleaseTitle(tag);
