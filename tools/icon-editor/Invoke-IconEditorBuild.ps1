@@ -26,6 +26,7 @@ function Resolve-RepoRoot {
 
 $repoRoot = Resolve-RepoRoot
 Import-Module (Join-Path $repoRoot 'tools' 'VendorTools.psm1') -Force
+Import-Module (Join-Path $repoRoot 'tools' 'icon-editor' 'IconEditorDevMode.psm1') -Force
 
 if (-not $IconEditorRoot) {
   $IconEditorRoot = Join-Path $repoRoot 'vendor' 'icon-editor'
@@ -161,6 +162,13 @@ try {
     dependenciesApplied = [bool]$InstallDependencies
     unitTestsRun        = [bool]$RunUnitTests
     artifacts = @()
+  }
+
+  $devModeState = Get-IconEditorDevModeState -RepoRoot $repoRoot
+  $manifest.developmentMode = [ordered]@{
+    active    = $devModeState.Active
+    updatedAt = $devModeState.UpdatedAt
+    source    = $devModeState.Source
   }
 
   foreach ($artifact in $artifactMap) {
