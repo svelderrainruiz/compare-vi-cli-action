@@ -697,8 +697,14 @@ function Resolve-VIPMPath {
     }
   }
 
-  & $addCandidate $candidates 'C:\Program Files (x86)\JKI\VI Package Manager\VIPM.exe'
-  & $addCandidate $candidates 'C:\Program Files\JKI\VI Package Manager\VIPM.exe'
+  foreach ($path in @(
+      'C:\Program Files\JKI\VI Package Manager\VIPM.exe',
+      'C:\Program Files (x86)\JKI\VI Package Manager\VIPM.exe',
+      'C:\Program Files\JKI\VI Package Manager\VI Package Manager.exe',
+      'C:\Program Files (x86)\JKI\VI Package Manager\VI Package Manager.exe'
+    )) {
+    & $addCandidate $candidates $path
+  }
 
   foreach ($candidate in $candidates) {
     try {
