@@ -101,6 +101,49 @@ function Render-FixtureOnlyAssets {
   return $lines
 }
 
+function Build-FixtureManifestFromSummary {
+  param($Summary)
+  $entries = @()
+  foreach ($asset in ($Summary.fixtureOnlyAssets | Sort-Object category, name)) {
+    $rel = if ($asset.category -eq 'script') { Join-Path 'scripts' $asset.name } else { Join-Path 'tests' $asset.name }
+    $entries += [ordered]@{
+      key       = ($asset.category + ':' + $rel).ToLower()
+      category  = $asset.category
+      path      = $rel
+      sizeBytes = ($asset.sizeBytes ?? 0)
+      hash      = $asset.hash
+    }
+  }
+  return $entries
+}
+
+function Compute-ManifestDelta {
+  param($BaseEntries, $NewEntries)
+  $baseMap = @{}
+  foreach ($e in $BaseEntries) { $baseMap[$e.key] = $e }
+  $newMap = @{}
+  foreach ($e in $NewEntries) { $newMap[$e.key] = $e }
+
+  $added = @()
+  $removed = @()
+  $changed = @()
+
+  foreach ($k in $newMap.Keys) {
+    if (-not $baseMap.ContainsKey($k)) { $added += $newMap[$k]; continue }
+    $b = $baseMap[$k]; $n = $newMap[$k]
+    if (($b.hash -ne $n.hash) -or ([int64]$b.sizeBytes -ne [int64]$n.sizeBytes)) { $changed += $n }
+  }
+  foreach ($k in $baseMap.Keys) {
+    if (-not $newMap.ContainsKey($k)) { $removed += $baseMap[$k] }
+  }
+
+  return [ordered]@{
+    added   = $added
+    removed = $removed
+    changed = $changed
+  }
+}
+
 $repoRoot = Resolve-RepoRoot
 $resolvedReportPath = Ensure-FixtureReport -ReportPath $ReportPath -FixturePath $FixturePath -RepoRoot $repoRoot
 $summary = Get-Content -LiteralPath $resolvedReportPath -Raw | ConvertFrom-Json -Depth 10
@@ -116,6 +159,7 @@ try {
   $fixturePath = $fixturePathFull
 }
 $manifest = $summary.manifest
+$stakeholder = $summary.stakeholder
 
 $lines = @()
 $lines += "## Package layout highlights"
@@ -123,10 +167,18 @@ $lines += ""
 $lines += [string]::Format('- Fixture version `{0}` (system `{1}`), license `{2}`.', $fixtureVersion, $systemVersion, $fixtureLicense)
 $lines += [string]::Format('- Fixture path: `{0}`', $fixturePath)
 $lines += [string]::Format('- Package smoke status: **{0}** (VIPs: {1})', $manifest.packageSmoke.status, $manifest.packageSmoke.vipCount)
+$lines += [string]::Format('- Report generated: `{0}`', $stakeholder.generatedAt ?? $generatedAt)
 $lines += "- Artifacts:"
 foreach ($item in (Render-ArtifactList $summary.artifacts)) {
   $lines += ("  - {0}" -f $item)
 }
+$lines += ""
+$lines += "## Stakeholder summary"
+$lines += ""
+$lines += [string]::Format('- Smoke status: **{0}**', $stakeholder.smokeStatus)
+$lines += [string]::Format('- Runner dependencies: {0}', $stakeholder.runnerDependencies.matchesRepo ? 'match' : 'mismatch')
+$lines += [string]::Format('- Custom actions: {0} entries (all match: {1})', ($stakeholder.customActions | Measure-Object).Count, (($stakeholder.customActions | Where-Object { $_.matchStatus -ne 'match' } | Measure-Object).Count -eq 0))
+$lines += [string]::Format('- Fixture-only assets discovered: {0}', ($stakeholder.fixtureOnlyAssets | Measure-Object).Count)
 $lines += ""
 $lines += "## Comparison with repository sources"
 $lines += ""
@@ -138,6 +190,39 @@ $lines += ""
 $lines += "## Fixture-only assets"
 $lines += ""
 $lines += Render-FixtureOnlyAssets $summary.fixtureOnlyAssets
+$lines += ""
+$lines += "## Fixture-only manifest delta"
+$lines += ""
+$baselinePath = Join-Path $repoRoot 'tests' 'fixtures' 'icon-editor' 'fixture-manifest.json'
+if (-not (Test-Path -LiteralPath $baselinePath -PathType Leaf)) {
+  $lines += "- Baseline manifest not found (tests/fixtures/icon-editor/fixture-manifest.json); skipping delta."
+} else {
+  try {
+    $baseline = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json -Depth 6
+    $currentEntries = Build-FixtureManifestFromSummary -Summary $summary
+    $delta = Compute-ManifestDelta -BaseEntries $baseline.entries -NewEntries $currentEntries
+    $lines += [string]::Format('- Added: {0}, Removed: {1}, Changed: {2}', ($delta.added | Measure-Object).Count, ($delta.removed | Measure-Object).Count, ($delta.changed | Measure-Object).Count)
+    foreach ($tuple in @(@('Added', $delta.added), @('Removed', $delta.removed), @('Changed', $delta.changed))) {
+      $label = $tuple[0]; $items = $tuple[1]
+      if (($items | Measure-Object).Count -gt 0) {
+        $lines += ([string]::Format('- {0}:', $label))
+        foreach ($e in ($items | Sort-Object key | Select-Object -First 5)) { $lines += ([string]::Format('  - `{0}`', $e.key)) }
+        if (($items | Measure-Object).Count -gt 5) {
+          $more = ((($items | Measure-Object).Count) - 5)
+          $lines += ([string]::Format('  - (+{0} more)', $more))
+        }
+      }
+    }
+  } catch {
+    $lines += ("- Failed to compute delta: {0}" -f $_.Exception.Message)
+  }
+}
+$lines += ""
+$lines += "## Changed VI comparison (requests)"
+$lines += ""
+$lines += "- When changed VI assets are detected, Validate publishes an 'icon-editor-fixture-vi-diff-requests' artifact"
+$lines += "  with the list of base/head paths for LVCompare."
+$lines += "- Local runs can generate requests via tools/icon-editor/Prepare-FixtureViDiffs.ps1."
 $lines += ""
 $lines += "## Simulation metadata"
 $lines += ""

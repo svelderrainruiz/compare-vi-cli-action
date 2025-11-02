@@ -24,11 +24,19 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
+- Report generated: `11/2/2025 1:46:43 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
   - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
   - lv_icon_x64.lvlibp - 2.85 MB (`e851ac8d296e78f4ed1fd66af576c50ae5ff48caf18775ac3d4085c29d4bd013`)
   - lv_icon_x86.lvlibp - 2.85 MB (`8a3d07791c5f03d11bddfb32d25fd5d7c933a2950d96b5668cc5837fe7dece23`)
+
+## Stakeholder summary
+
+- Smoke status: **ok**
+- Runner dependencies: match
+- Custom actions: 4 entries (all match: True)
+- Fixture-only assets discovered: 24
 
 ## Comparison with repository sources
 
@@ -54,6 +62,16 @@ carries the actual LabVIEW payload.
   - Unit Tests\Editor Position\INI Position Removed.vi (62872f3cc37348238d71d3c5ecb64bc7f0d93e62a3ec0e24b3137f9d6a5b391d)
   - ... 18 more
 
+## Fixture-only manifest delta
+
+- Added: 0, Removed: 0, Changed: 0
+
+## Changed VI comparison (requests)
+
+- When changed VI assets are detected, Validate publishes an 'icon-editor-fixture-vi-diff-requests' artifact
+  with the list of base/head paths for LVCompare.
+- Local runs can generate requests via tools/icon-editor/Prepare-FixtureViDiffs.ps1.
+
 ## Simulation metadata
 
 - Simulation enabled: True
@@ -74,4 +92,5 @@ carries the actual LabVIEW payload.
 - Run `pwsh -File tools/icon-editor/Update-IconEditorFixtureReport.ps1` to regenerate the JSON summary and refresh the section above. The script runs automatically in the pre-push checks and fails when the committed doc is stale.
 - The generated summary lives at `tests/results/_agent/icon-editor/fixture-report.json`; delete it if you need a clean slate.
 - Canonical hashes are enforced by `node --test tools/icon-editor/__tests__/fixture-hashes.test.mjs` (invoked from `tools/PrePush-Checks.ps1`), so report drift from the committed fixture is caught automatically.
+- Validate uploads the `icon-editor-fixture-report` artifact (JSON + Markdown) so stakeholders can review the latest snapshot without digging through logs.
 
