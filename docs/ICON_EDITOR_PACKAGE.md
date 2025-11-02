@@ -18,46 +18,47 @@ Expand-Archive -Path (Join-Path $scratch 'Packages/ni_icon_editor_system-1.4.1.9
 The outer package (`ni_icon_editor`) contains the custom action VIs and a nested `ni_icon_editor_system` VIP that
 carries the actual LabVIEW payload.
 
+<!-- icon-editor-report:start -->
 ## Package layout highlights
 
-- **Top-level files** - `PreInstall.vi`, `PostInstall.vi`, `PreUninstall.vi`, `PostUninstall.vi`, `icon.bmp`, and `spec`
-  (the VIP metadata). These wire into VIPM's custom action hooks.
-- **Nested package** - `Packages/ni_icon_editor_system-1.4.1.948.vip` plus its own `spec`.
-- **Deployment payload** (inside `Packages/ni_icon_editor_system/.../LabVIEW Icon Editor`):
-  - `install/temp/lv_icon_x64.lvlibp` and `install/temp/lv_icon_x86.lvlibp` (built PPLs for 64-bit and 32-bit
-    LabVIEW).
-  - `Tooling/deployment/NI Icon editor.vipb`, `runner_dependencies.vipc`, Release Notes, and the four VIP custom action
-    VIs.
-  - Unit-test suites under `Test/Unit Tests/*` and support scripts such as `scripts/update_readme_hours.py`.
-  - Historical telemetry (e.g., `reports/git-hours-2025-07-24.txt`).
-
-Both `spec` files report version **1.4.1.948**, license **MIT**, and list the same release note history that is
-generated during the upstream CI build.
+- Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
+- Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
+- Package smoke status: **ok** (VIPs: 1)
+- Artifacts:
+  - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
+  - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
+  - lv_icon_x64.lvlibp - 2.85 MB (`e851ac8d296e78f4ed1fd66af576c50ae5ff48caf18775ac3d4085c29d4bd013`)
+  - lv_icon_x86.lvlibp - 2.85 MB (`8a3d07791c5f03d11bddfb32d25fd5d7c933a2950d96b5668cc5837fe7dece23`)
 
 ## Comparison with repository sources
 
-- Confirmed: the four VIP custom action VIs match byte-for-byte the restored copies in
-  `vendor/icon-editor/.github/actions/build-vi-package/` (verified via SHA-256 hashes).
-- Confirmed: `runner_dependencies.vipc` in the package aligns with the file mirrored under
-  `vendor/icon-editor/.github/actions/apply-vipc/`.
-- Fixture-only: the packaged script `scripts/update_readme_hours.py` and the bundled unit-test suites are not mirrored
-  in this repository. They currently live only inside the VIP artifact.
-- Generated output: the built PPLs (`lv_icon_x64.lvlibp`, `lv_icon_x86.lvlibp`) are produced during the build. We do
-  not track reference copies or hashes in-source, so reproducibility checks rely on inspecting a produced package.
+- Custom action hashes:
+| Action | Fixture Hash | Repo Hash | Match |
+| --- | --- | --- | --- |
+| VIP_Pre-Install Custom Action 2021.vi | `05ddb5a2995124712e31651ed4a623e0e43044435ff7af62c24a65fbe2a5273a` | `05ddb5a2995124712e31651ed4a623e0e43044435ff7af62c24a65fbe2a5273a` | match |
+| VIP_Post-Install Custom Action 2021.vi | `29b4aec05c38707975a4d6447daab8eea6c59fcf0cde45f899f8807b11cd475e` | `29b4aec05c38707975a4d6447daab8eea6c59fcf0cde45f899f8807b11cd475e` | match |
+| VIP_Pre-Uninstall Custom Action 2021.vi | `a10234da4dfe23b87f6e7a25f3f74ae30751193928d5700a628593f1120a5a91` | `a10234da4dfe23b87f6e7a25f3f74ae30751193928d5700a628593f1120a5a91` | match |
+| VIP_Post-Uninstall Custom Action 2021.vi | `958b253a321fec8e65805195b1e52cda2fd509823d0ad18b29ae341513d4615b` | `958b253a321fec8e65805195b1e52cda2fd509823d0ad18b29ae341513d4615b` | match |
 
-## Simulation mode
+- Runner dependencies hash match: match
 
-- `tools/icon-editor/Simulate-IconEditorBuild.ps1` unpacks the committed fixture, copies both VIPs and the 32/64-bit
-  PPLs into a results directory, and records a manifest (`icon-editor/build@v1`) plus `package-smoke-summary.json`. The
-  helper calls the same smoke test (`Test-IconEditorPackage.ps1`) that the full build invokes, so downstream validation
-  jobs see consistent outputs.
-- In CI (or local `priority:validate` runs), set `ICON_EDITOR_BUILD_MODE=simulate` to flip the `icon-editor-build` job
-  into fixture mode. The workflow accepts `ICON_EDITOR_SIMULATION_FIXTURE` when you need to point at a different VIP
-  path; otherwise it defaults to the committed fixture. Clear the variable (or set it back to `build`) before release or
-  sign-off runs so LabVIEW still produces a real package.
-- Simulation does not execute the LabVIEW unit suite (the manifest keeps `unitTestsRun` set to `false`), and the smoke
-  test only exercises the nested `ni_icon_editor_system-*.vip`. Run a full build periodically to exercise the entire
-  pipeline and regenerate fresh artifacts when the upstream Icon Editor sources change.
+## Fixture-only assets
+
+- script (1 entries)
+  - update_readme_hours.py (7f5bbfadb1193a89f1a4aa6332ccf62650951d389edb2188d86e1e29442049c4)
+- test (23 entries)
+  - Unit Tests\Editor Position\Adjust Position.vi (7b14873d4a25688c5f78c40ffa547b93836a04661fbeeeddb426268fcd192dbb)
+  - Unit Tests\Editor Position\Assert Windows Bounds.vi (8eb3bdbc13edaa58df1d3f9ad8d005c24cdae6ee2178bc9b099dc9781e69d7ca)
+  - Unit Tests\Editor Position\Backup INI Data.vi (da527567a1c21e2c3bb89c28e315ae22ae4202323d28f4bc302ca56113a7e48b)
+  - Unit Tests\Editor Position\Editor Position.lvclass (58ea81ddcd56be9a0aaa74a50684270d0c6c624fbde9ab538416ed87ae7321d8)
+  - Unit Tests\Editor Position\INI Position Removed.vi (62872f3cc37348238d71d3c5ecb64bc7f0d93e62a3ec0e24b3137f9d6a5b391d)
+  - ... 18 more
+
+## Simulation metadata
+
+- Simulation enabled: True
+- Unit tests executed: False
+<!-- icon-editor-report:end -->
 
 ## Follow-up opportunities
 
@@ -67,3 +68,10 @@ generated during the upstream CI build.
   drift without checking large binaries into git.
 - Extend the simulation helper to emit a lightweight manifest of fixture-only scripts/tests so we can track upstream
   changes without unpacking the VIP manually.
+
+## Maintaining this report
+
+- Run `pwsh -File tools/icon-editor/Update-IconEditorFixtureReport.ps1` to regenerate the JSON summary and refresh the section above. The script runs automatically in the pre-push checks and fails when the committed doc is stale.
+- The generated summary lives at `tests/results/_agent/icon-editor/fixture-report.json`; delete it if you need a clean slate.
+- Canonical hashes are enforced by `node --test tools/icon-editor/__tests__/fixture-hashes.test.mjs` (invoked from `tools/PrePush-Checks.ps1`), so report drift from the committed fixture is caught automatically.
+
