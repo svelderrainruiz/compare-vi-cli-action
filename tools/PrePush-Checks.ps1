@@ -107,3 +107,30 @@ if ($code -ne 0) {
   exit $code
 }
 Write-Host '[pre-push] actionlint OK' -ForegroundColor Green
+
+$updateReportScript = Join-Path $root 'tools' 'icon-editor' 'Update-IconEditorFixtureReport.ps1'
+if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
+  Write-Host '[pre-push] Verifying icon-editor fixture report freshness' -ForegroundColor Cyan
+  Push-Location $root
+  try {
+    pwsh -NoLogo -NoProfile -File $updateReportScript
+    if ($LASTEXITCODE -ne 0) {
+      throw "Update-IconEditorFixtureReport.ps1 reported issues (exit=$LASTEXITCODE)."
+    }
+    git -C $root diff --quiet -- docs/ICON_EDITOR_PACKAGE.md
+    if ($LASTEXITCODE -ne 0) {
+      throw "docs/ICON_EDITOR_PACKAGE.md is out of date. Run `pwsh -File tools/icon-editor/Update-IconEditorFixtureReport.ps1` and commit the changes."
+    }
+    Write-Host '[pre-push] icon-editor fixture report OK' -ForegroundColor Green
+    Write-Host '[pre-push] Checking icon-editor canonical hashes via node --test' -ForegroundColor Cyan
+    node --test tools/icon-editor/__tests__/fixture-hashes.test.mjs
+    if ($LASTEXITCODE -ne 0) {
+      throw "node --test reported failures (exit=$LASTEXITCODE)."
+    }
+    Write-Host '[pre-push] icon-editor hash checks OK' -ForegroundColor Green
+    git checkout -- docs/ICON_EDITOR_PACKAGE.md | Out-Null
+    Remove-Item -LiteralPath (Join-Path $root 'tests' 'results' '_agent' 'icon-editor' 'fixture-report.json') -ErrorAction SilentlyContinue
+  } finally {
+    Pop-Location | Out-Null
+  }
+}
