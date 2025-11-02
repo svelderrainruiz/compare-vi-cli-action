@@ -263,6 +263,7 @@ foreach ($buffer in $bufferValues) {
       '-BaseVi', (Join-Path $repoRoot 'VI1.vi'),
       '-HeadVi', (Join-Path $repoRoot 'VI2.vi'),
       '-OutputDir', $outputDir,
+      '-NoiseProfile', 'full',
       '-LeakCheck',
       '-LeakGraceSeconds', '0'
     )

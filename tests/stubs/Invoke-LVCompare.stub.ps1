@@ -4,7 +4,8 @@ param(
     [string]$OutputDir,
     [string[]]$Flags,
     [switch]$RenderReport,
-    [string]$ReportFormat = 'html'
+    [string]$ReportFormat = 'html',
+    [string]$NoiseProfile = 'full'
 )
 
 Set-StrictMode -Version Latest
@@ -61,3 +62,5 @@ if ($RenderReport.IsPresent -or $ReportFormat.ToLowerInvariant() -eq 'html') {
 }
 
 exit $exitCode
+
+

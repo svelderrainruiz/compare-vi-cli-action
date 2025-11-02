@@ -26,46 +26,48 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       Copy-Item -LiteralPath $script:StageScript -Destination "tools/Stage-CompareInputs.ps1"
 
       $logPath = Join-Path $fsRoot "invoke-log.json"
-      $stubLines = @(
-        "param(",
-        "  [string]`$BaseVi,",
-        "  [string]`$HeadVi,",
-        "  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,",
-        "  [Alias('LVCompareExePath')][string]`$LVComparePath,",
-        "  [string]`$OutputRoot,",
-        "  [ValidateSet('detect','spawn','skip')][string]`$Warmup,",
-        "  [switch]`$RenderReport,",
-        "  [switch]`$CloseLabVIEW,",
-        "  [switch]`$CloseLVCompare,",
-        "  [int]`$TimeoutSeconds,",
-        "  [switch]`$DisableTimeout,",
-        "  [string]`$StagingRoot,",
-        "  [switch]`$SameNameHint,",
-        "  [switch]`$AllowSameLeaf",
-        ")",
-        "`$logDir = Split-Path '$logPath'",
-        "if (`$logDir -and -not (Test-Path `$logDir)) { New-Item -ItemType Directory -Path `$logDir -Force | Out-Null }",
-        "`$payload = [ordered]@{",
-          "  base = `$BaseVi",
-          "  head = `$HeadVi",
-        "  output = `$OutputRoot",
-        "  warmup = `$Warmup",
-        "  renderReport = `$RenderReport.IsPresent",
-        "  closeLabVIEW = `$CloseLabVIEW.IsPresent",
-        "  closeLVCompare = `$CloseLVCompare.IsPresent",
-          "  timeout = `$TimeoutSeconds",
-          "  disableTimeout = `$DisableTimeout.IsPresent",
-          "  policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')",
-          "  mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')",
-        "  stagingRoot = `$StagingRoot",
-        "  sameNameHint = `$SameNameHint.IsPresent",
-        "  allowSameLeaf = `$AllowSameLeaf.IsPresent",
-      "}",
-        "`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8",
-        "exit 0"
-      )
+      $harnessStub = @"
+param(
+  [string]`$BaseVi,
+  [string]`$HeadVi,
+  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,
+  [Alias('LVCompareExePath')][string]`$LVComparePath,
+  [string]`$OutputRoot,
+  [ValidateSet('detect','spawn','skip')][string]`$Warmup,
+  [switch]`$RenderReport,
+  [switch]`$CloseLabVIEW,
+  [switch]`$CloseLVCompare,
+  [int]`$TimeoutSeconds,
+  [switch]`$DisableTimeout,
+  [string]`$StagingRoot,
+  [switch]`$SameNameHint,
+  [switch]`$AllowSameLeaf,
+  [string]`$NoiseProfile
+)
+`$logDir = Split-Path '$logPath'
+if (`$logDir -and -not (Test-Path `$logDir)) { New-Item -ItemType Directory -Path `$logDir -Force | Out-Null }
+`$payload = [ordered]@{
+  base = `$BaseVi
+  head = `$HeadVi
+  output = `$OutputRoot
+  warmup = `$Warmup
+  renderReport = `$RenderReport.IsPresent
+  closeLabVIEW = `$CloseLabVIEW.IsPresent
+  closeLVCompare = `$CloseLVCompare.IsPresent
+  timeout = `$TimeoutSeconds
+  disableTimeout = `$DisableTimeout.IsPresent
+  policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')
+  mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')
+  stagingRoot = `$StagingRoot
+  sameNameHint = `$SameNameHint.IsPresent
+  allowSameLeaf = `$AllowSameLeaf.IsPresent
+  noiseProfile = `$NoiseProfile
+}
+`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8
+exit 0
+"@
       $stubPath = [System.IO.Path]::Combine($fsRoot, "tools", "TestStand-CompareHarness.ps1")
-      [System.IO.File]::WriteAllLines($stubPath, $stubLines)
+      Set-Content -LiteralPath $stubPath -Value $harnessStub -Encoding UTF8
       Test-Path -LiteralPath $stubPath | Should -BeTrue
 
       $baseLeaf = ('Bas' + 'e') + '.vi'
@@ -103,6 +105,7 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       $data.stagingRoot | Should -Not -BeNullOrEmpty
       $data.sameNameHint | Should -BeFalse
       $data.allowSameLeaf | Should -BeFalse
+      $data.noiseProfile | Should -Be 'full'
       Test-Path -LiteralPath $data.stagingRoot | Should -BeFalse
     }
     finally {
@@ -121,38 +124,40 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       Copy-Item -LiteralPath $script:StageScript -Destination "tools/Stage-CompareInputs.ps1"
 
       $logPath = Join-Path $fsRoot "invoke-log.json"
-      $stubLines = @(
-        "param(",
-        "  [string]`$BaseVi,",
-        "  [string]`$HeadVi,",
-        "  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,",
-        "  [Alias('LVCompareExePath')][string]`$LVComparePath,",
-        "  [string]`$OutputRoot,",
-        "  [ValidateSet('detect','spawn','skip')][string]`$Warmup,",
-        "  [switch]`$RenderReport,",
-        "  [switch]`$CloseLabVIEW,",
-        "  [switch]`$CloseLVCompare,",
-        "  [int]`$TimeoutSeconds,",
-        "  [switch]`$DisableTimeout,",
-        "  [string]`$StagingRoot,",
-        "  [switch]`$SameNameHint,",
-        "  [switch]`$AllowSameLeaf",
-        ")",
-        "`$payload = [ordered]@{",
-          "base = `$BaseVi",
-          "head = `$HeadVi",
-          "stagingRoot = `$StagingRoot",
-          "warmup = `$Warmup",
-          "policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')",
-          "mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')",
-          "sameNameHint = `$SameNameHint.IsPresent",
-          "allowSameLeaf = `$AllowSameLeaf.IsPresent",
-        "}",
-        "`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8",
-        "exit 0"
-      )
+      $harnessStub = @"
+param(
+  [string]`$BaseVi,
+  [string]`$HeadVi,
+  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,
+  [Alias('LVCompareExePath')][string]`$LVComparePath,
+  [string]`$OutputRoot,
+  [ValidateSet('detect','spawn','skip')][string]`$Warmup,
+  [switch]`$RenderReport,
+  [switch]`$CloseLabVIEW,
+  [switch]`$CloseLVCompare,
+  [int]`$TimeoutSeconds,
+  [switch]`$DisableTimeout,
+  [string]`$StagingRoot,
+  [switch]`$SameNameHint,
+  [switch]`$AllowSameLeaf,
+  [string]`$NoiseProfile
+)
+`$payload = [ordered]@{
+  base = `$BaseVi
+  head = `$HeadVi
+  stagingRoot = `$StagingRoot
+  warmup = `$Warmup
+  policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')
+  mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')
+  sameNameHint = `$SameNameHint.IsPresent
+  allowSameLeaf = `$AllowSameLeaf.IsPresent
+  noiseProfile = `$NoiseProfile
+}
+`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8
+exit 0
+"@
       $stubPath = [System.IO.Path]::Combine($fsRoot, "tools", "TestStand-CompareHarness.ps1")
-      [System.IO.File]::WriteAllLines($stubPath, $stubLines)
+      Set-Content -LiteralPath $stubPath -Value $harnessStub -Encoding UTF8
       Test-Path -LiteralPath $stubPath | Should -BeTrue
 
       $baseDir = Join-Path $fsRoot "base"
@@ -182,6 +187,7 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       $data.sameNameHint | Should -BeTrue
       $data.allowSameLeaf | Should -BeFalse
       Test-Path -LiteralPath $data.stagingRoot | Should -BeFalse
+      $data.noiseProfile | Should -Be 'full'
     }
     finally {
       Pop-Location
@@ -199,37 +205,39 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       Copy-Item -LiteralPath $script:StageScript -Destination "tools/Stage-CompareInputs.ps1"
 
       $logPath = Join-Path $fsRoot "invoke-log.json"
-      $stubLines = @(
-        "param(",
-        "  [string]`$BaseVi,",
-        "  [string]`$HeadVi,",
-        "  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,",
-        "  [Alias('LVCompareExePath')][string]`$LVComparePath,",
-        "  [string]`$OutputRoot,",
-        "  [ValidateSet('detect','spawn','skip')][string]`$Warmup,",
-        "  [switch]`$RenderReport,",
-        "  [switch]`$CloseLabVIEW,",
-        "  [switch]`$CloseLVCompare,",
-        "  [int]`$TimeoutSeconds,",
-        "  [switch]`$DisableTimeout,",
-        "  [string]`$StagingRoot,",
-        "  [switch]`$SameNameHint,",
-        "  [switch]`$AllowSameLeaf",
-        ")",
-        "`$payload = [ordered]@{",
-          "base = `$BaseVi",
-          "head = `$HeadVi",
-          "stagingRoot = `$StagingRoot",
-          "policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')",
-          "mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')",
-          "sameNameHint = `$SameNameHint.IsPresent",
-          "allowSameLeaf = `$AllowSameLeaf.IsPresent",
-        "}",
-        "`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8",
-        "exit 0"
-      )
+      $harnessStub = @"
+param(
+  [string]`$BaseVi,
+  [string]`$HeadVi,
+  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,
+  [Alias('LVCompareExePath')][string]`$LVComparePath,
+  [string]`$OutputRoot,
+  [ValidateSet('detect','spawn','skip')][string]`$Warmup,
+  [switch]`$RenderReport,
+  [switch]`$CloseLabVIEW,
+  [switch]`$CloseLVCompare,
+  [int]`$TimeoutSeconds,
+  [switch]`$DisableTimeout,
+  [string]`$StagingRoot,
+  [switch]`$SameNameHint,
+  [switch]`$AllowSameLeaf,
+  [string]`$NoiseProfile
+)
+`$payload = [ordered]@{
+  base = `$BaseVi
+  head = `$HeadVi
+  stagingRoot = `$StagingRoot
+  policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')
+  mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')
+  sameNameHint = `$SameNameHint.IsPresent
+  allowSameLeaf = `$AllowSameLeaf.IsPresent
+  noiseProfile = `$NoiseProfile
+}
+`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8
+exit 0
+"@
       $stubPath = [System.IO.Path]::Combine($fsRoot, "tools", "TestStand-CompareHarness.ps1")
-      [System.IO.File]::WriteAllLines($stubPath, $stubLines)
+      Set-Content -LiteralPath $stubPath -Value $harnessStub -Encoding UTF8
       Test-Path -LiteralPath $stubPath | Should -BeTrue
 
       $baseDir = Join-Path $fsRoot "base-tree"
@@ -256,6 +264,7 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       $data.allowSameLeaf | Should -BeTrue
       $data.stagingRoot | Should -Not -BeNullOrEmpty
       Test-Path -LiteralPath $data.stagingRoot | Should -BeFalse
+      $data.noiseProfile | Should -Be 'full'
     }
     finally {
       Pop-Location
@@ -273,42 +282,45 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       Copy-Item -LiteralPath $script:StageScript -Destination "tools/Stage-CompareInputs.ps1"
 
       $logPath = Join-Path $fsRoot "invoke-log.json"
-      $stubLines = @(
-        "param(",
-        "  [string]`$BaseVi,",
-        "  [string]`$HeadVi,",
-        "  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,",
-        "  [Alias('LVCompareExePath')][string]`$LVComparePath,",
-        "  [string]`$OutputRoot,",
-        "  [ValidateSet('detect','spawn','skip')][string]`$Warmup,",
-        "  [switch]`$RenderReport,",
-        "  [switch]`$CloseLabVIEW,",
-        "  [switch]`$CloseLVCompare,",
-        "  [int]`$TimeoutSeconds,",
-        "  [switch]`$DisableTimeout,",
-        "  [string]`$StagingRoot,",
-        "  [switch]`$SameNameHint,",
-        "  [switch]`$AllowSameLeaf",
-        ")",
-        "`$logDir = Split-Path '$logPath'",
-        "if (`$logDir -and -not (Test-Path `$logDir)) { New-Item -ItemType Directory -Path `$logDir -Force | Out-Null }",
-        "`$payload = [ordered]@{",
-          "  warmup = `$Warmup",
-        "  renderReport = `$RenderReport.IsPresent",
-        "  closeLabVIEW = `$CloseLabVIEW.IsPresent",
-        "  closeLVCompare = `$CloseLVCompare.IsPresent",
-          "  timeout = `$TimeoutSeconds",
-          "  disableTimeout = `$DisableTimeout.IsPresent",
-          "  policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')",
-          "  mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')",
-          "  stagingRoot = `$StagingRoot",
-          "  sameNameHint = `$SameNameHint.IsPresent",
-        "}",
-        "`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8",
-        "exit 0"
-      )
+      $harnessStub = @"
+param(
+  [string]`$BaseVi,
+  [string]`$HeadVi,
+  [Alias('LabVIEWPath')][string]`$LabVIEWExePath,
+  [Alias('LVCompareExePath')][string]`$LVComparePath,
+  [string]`$OutputRoot,
+  [ValidateSet('detect','spawn','skip')][string]`$Warmup,
+  [switch]`$RenderReport,
+  [switch]`$CloseLabVIEW,
+  [switch]`$CloseLVCompare,
+  [int]`$TimeoutSeconds,
+  [switch]`$DisableTimeout,
+  [string]`$StagingRoot,
+  [switch]`$SameNameHint,
+  [switch]`$AllowSameLeaf,
+  [string]`$NoiseProfile
+)
+`$logDir = Split-Path '$logPath'
+if (`$logDir -and -not (Test-Path `$logDir)) { New-Item -ItemType Directory -Path `$logDir -Force | Out-Null }
+`$payload = [ordered]@{
+  warmup = `$Warmup
+  renderReport = `$RenderReport.IsPresent
+  closeLabVIEW = `$CloseLabVIEW.IsPresent
+  closeLVCompare = `$CloseLVCompare.IsPresent
+  timeout = `$TimeoutSeconds
+  disableTimeout = `$DisableTimeout.IsPresent
+  policy = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_POLICY')
+  mode = [System.Environment]::GetEnvironmentVariable('LVCI_COMPARE_MODE')
+  stagingRoot = `$StagingRoot
+  sameNameHint = `$SameNameHint.IsPresent
+  allowSameLeaf = `$AllowSameLeaf.IsPresent
+  noiseProfile = `$NoiseProfile
+}
+`$payload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath '$logPath' -Encoding utf8
+exit 0
+"@
       $stubPath = [System.IO.Path]::Combine($fsRoot, "tools", "TestStand-CompareHarness.ps1")
-      [System.IO.File]::WriteAllLines($stubPath, $stubLines)
+      Set-Content -LiteralPath $stubPath -Value $harnessStub -Encoding UTF8
       Test-Path -LiteralPath $stubPath | Should -BeTrue
 
       $baseLeaf = ('Bas' + 'e') + '.vi'
@@ -330,7 +342,8 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
         -TimeoutSeconds 45 `
         -DisableTimeout `
         -DisableCleanup `
-        -UseRawPaths 2>&1
+        -UseRawPaths `
+        -NoiseProfile legacy 2>&1
       $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
 
       Test-Path -LiteralPath $logPath | Should -BeTrue
@@ -345,6 +358,7 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
       $data.closeLVCompare | Should -BeFalse
       $data.stagingRoot | Should -BeNullOrEmpty
       $data.sameNameHint | Should -BeFalse
+      $data.noiseProfile | Should -Be 'legacy'
     }
     finally {
       Remove-Item Env:LVCI_COMPARE_POLICY, Env:LVCI_COMPARE_MODE -ErrorAction SilentlyContinue
@@ -352,3 +366,4 @@ Describe "Run-HeadlessCompare.ps1" -Tag "Unit" {
     }
   }
 }
+

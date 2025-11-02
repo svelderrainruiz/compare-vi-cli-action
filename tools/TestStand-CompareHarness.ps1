@@ -36,6 +36,10 @@
 .PARAMETER ReplaceFlags
   Replace the default LVCompare flags with the provided -Flags values.
 
+.PARAMETER NoiseProfile
+  Selects which LVCompare ignore bundle to apply when -ReplaceFlags is omitted.
+  Defaults to 'full' for complete compare detail; pass 'legacy' to restore the historical suppression bundle.
+
 .PARAMETER CloseLabVIEW
   Attempt graceful LabVIEW close via tools/Close-LabVIEW.ps1 at the end.
 
@@ -55,6 +59,8 @@ param(
 [string]$Warmup = 'detect',
 [string[]]$Flags,
 [switch]$ReplaceFlags,
+[ValidateSet('full','legacy')]
+[string]$NoiseProfile = 'full',
 [switch]$RenderReport,
 [switch]$CloseLabVIEW,
 [switch]$CloseLVCompare,
@@ -193,11 +199,12 @@ try {
   $invoke = Join-Path $repo 'tools' 'Invoke-LVCompare.ps1'
   if (-not (Test-Path -LiteralPath $invoke)) { throw "Invoke-LVCompare.ps1 not found at $invoke" }
   $invokeParams = @{
-    BaseVi      = $BaseVi
-    HeadVi      = $HeadVi
-    OutputDir   = $paths.compareDir
-    JsonLogPath = $compareLog
-    RenderReport= $RenderReport.IsPresent
+    BaseVi       = $BaseVi
+    HeadVi       = $HeadVi
+    OutputDir    = $paths.compareDir
+    JsonLogPath  = $compareLog
+    RenderReport = $RenderReport.IsPresent
+    NoiseProfile = $NoiseProfile
   }
   if ($LabVIEWExePath) { $invokeParams.LabVIEWExePath = $LabVIEWExePath }
   if ($LVComparePath) { $invokeParams.LVComparePath = $LVComparePath }

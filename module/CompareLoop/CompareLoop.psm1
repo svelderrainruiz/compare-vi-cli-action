@@ -488,6 +488,7 @@ function Invoke-IntegrationCompareLoop {
             HeadVi      = $headAbs
             OutputDir   = $iterationOutput
             RenderReport = $true
+            NoiseProfile = 'full'
             Quiet       = $true
           }
           if ($argsList -and $argsList.Count -gt 0) { $lvParams.Flags = $argsList }

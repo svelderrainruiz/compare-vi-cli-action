@@ -23,6 +23,10 @@
 .PARAMETER RenderReport
   Request compare-report.html generation.
 
+.PARAMETER NoiseProfile
+  Choose which LVCompare ignore bundle the harness should apply when -ReplaceFlags is not used.
+  Default 'full' emits all compare detail; pass 'legacy' to restore the historical suppression bundle.
+
 .PARAMETER TimeoutSeconds
   Timeout applied to warmup and compare stages (defaults to 600 seconds).
 
@@ -40,6 +44,8 @@ param(
   [ValidateSet('detect','spawn','skip')]
   [string]$WarmupMode = 'skip',
   [switch]$RenderReport,
+  [ValidateSet('full','legacy')]
+  [string]$NoiseProfile = 'full',
   [int]$TimeoutSeconds = 600,
   [switch]$DisableTimeout,
   [switch]$DisableCleanup,
@@ -128,6 +134,7 @@ $params = @{
   HeadVi        = $headEffective
   OutputRoot    = $OutputRoot
   Warmup        = $WarmupMode
+  NoiseProfile  = $NoiseProfile
   TimeoutSeconds = $TimeoutSeconds
 }
 if (-not $DisableTimeout) { } else { $params.DisableTimeout = $true }

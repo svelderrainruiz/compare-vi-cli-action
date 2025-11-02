@@ -42,7 +42,8 @@ param(
   [string]$OutputDir,
   [switch]$RenderReport,
   [string]$JsonLogPath,
-  [object]$Flags
+  [object]$Flags,
+  [string]$NoiseProfile
 )
 if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null }
 $argsArray = @()
@@ -53,6 +54,7 @@ $log = [pscustomobject]@{
   head = $HeadVi
   lvExe = $LabVIEWExePath
   lvCompare = $LVComparePath
+  noiseProfile = $NoiseProfile
 }
 $log | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDir 'invoke-args.json') -Encoding utf8
 exit 0
@@ -90,6 +92,7 @@ exit 0
       $invokeData.head | Should -Be $stagedHead
       $invokeData.lvExe | Should -Be 'C:\Program Files\National Instruments\LabVIEW 2025\LabVIEW.exe'
       $invokeData.lvCompare | Should -BeNullOrEmpty
+      $invokeData.noiseProfile | Should -Be 'full'
 
       $sessionIndex = Join-Path $outputRoot 'session-index.json'
       Test-Path -LiteralPath $sessionIndex | Should -BeTrue
@@ -138,6 +141,7 @@ param(
   [switch]`$RenderReport,
   [string]`$JsonLogPath,
   [object]`$Flags
+  [string]`$NoiseProfile
 )
 if (-not (Test-Path `$OutputDir)) { New-Item -ItemType Directory -Path `$OutputDir -Force | Out-Null }
 if (`$JsonLogPath) { '{}' | Set-Content -LiteralPath `$JsonLogPath -Encoding utf8 }
@@ -189,3 +193,4 @@ exit 0
     finally { Pop-Location }
   }
 }
+

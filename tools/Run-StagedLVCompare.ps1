@@ -33,6 +33,8 @@ param(
 
     [string[]]$Flags,
     [switch]$ReplaceFlags,
+    [ValidateSet('full','legacy')]
+    [string]$NoiseProfile = 'full',
 
     [scriptblock]$InvokeLVCompare
 )
@@ -258,7 +260,9 @@ if (-not $InvokeLVCompare) {
             [switch]$AllowSameLeaf,
             [switch]$RenderReport,
             [string[]]$Flags,
-            [switch]$ReplaceFlags
+            [switch]$ReplaceFlags,
+            [ValidateSet('full','legacy')]
+            [string]$NoiseProfile = 'full'
         )
 
         $args = @(
@@ -267,7 +271,8 @@ if (-not $InvokeLVCompare) {
             '-BaseVi', $BaseVi,
             '-HeadVi', $HeadVi,
             '-OutputDir', $OutputDir,
-            '-Summary'
+            '-Summary',
+            '-NoiseProfile', $NoiseProfile
         )
         if ($AllowSameLeaf.IsPresent) { $args += '-AllowSameLeaf' }
         if ($RenderReport.IsPresent) { $args += '-RenderReport' }
@@ -383,6 +388,7 @@ foreach ($entry in $results) {
                 BaseVi    = $stagedBasePath
                 HeadVi    = $stagedHeadPath
                 OutputDir = $modeOutputDir
+                NoiseProfile = $NoiseProfile
             }
             if ($RenderReport.IsPresent) { $invokeParams.RenderReport = $true }
             if ($profile.flags -and $profile.flags.Count -gt 0) { $invokeParams.Flags = $profile.flags }

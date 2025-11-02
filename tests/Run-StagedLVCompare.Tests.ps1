@@ -95,7 +95,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $call = [pscustomobject]@{
                 Base         = $BaseVi
@@ -106,6 +107,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 LeakCheck    = $LeakCheck.IsPresent
                 TimeoutSeconds = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             }
             $null = $invokeCalls.Add($call)
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -140,6 +142,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $invokeCalls.Count | Should -Be 1
         $invokeCalls[0].AllowSameLeaf | Should -BeFalse
         $invokeCalls[0].RenderReport | Should -BeTrue
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
 
         $summaryPath = Join-Path $artifactsDir 'vi-staging-compare.json'
         $compareSummary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
@@ -198,7 +201,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             $capturePath = Join-Path $OutputDir 'lvcompare-capture.json'
@@ -308,7 +312,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             return [pscustomobject]@{
@@ -374,7 +379,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             return [pscustomobject]@{
                 ExitCode = 2
@@ -426,7 +432,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $null = $invokeCalls.Add([pscustomobject]@{
                 Flags        = @($Flags)
@@ -434,6 +441,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 LeakCheck    = $LeakCheck.IsPresent
                 TimeoutSeconds = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             })
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             return [pscustomobject]@{
@@ -441,13 +449,15 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
             }
         }.GetNewClosure()
 
-        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -ReplaceFlags -Flags @('-nobd','-nobdcosm') -InvokeLVCompare $invoke
+        & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -ReplaceFlags -Flags @('-nobd','-nobdcosm') -NoiseProfile legacy -InvokeLVCompare $invoke
 
         $invokeCalls.Count | Should -Be 2
         $invokeCalls[0].ReplaceFlags | Should -BeTrue
         $invokeCalls[0].Flags | Should -Be @('-nobd','-nobdcosm')
         $invokeCalls[1].ReplaceFlags | Should -BeTrue
         (@($invokeCalls[1].Flags | Where-Object { $_ })).Count | Should -Be 0
+        $invokeCalls[0].NoiseProfile | Should -Be 'legacy'
+        $invokeCalls[1].NoiseProfile | Should -Be 'legacy'
     }
 
     It 'honors environment flag configuration when parameters omitted' {
@@ -488,7 +498,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $null = $invokeCalls.Add([pscustomobject]@{
                 Flags        = @($Flags)
@@ -496,6 +507,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 LeakCheck    = $LeakCheck.IsPresent
                 TimeoutSeconds = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             })
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             return [pscustomobject]@{
@@ -510,6 +522,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $invokeCalls[0].Flags | Should -Be @('-nobd','-nobdcosm')
         $invokeCalls[1].ReplaceFlags | Should -BeTrue
         (@($invokeCalls[1].Flags | Where-Object { $_ })).Count | Should -Be 0
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
+        $invokeCalls[1].NoiseProfile | Should -Be 'full'
     }
 
     It 'honors replace mode without explicit flags' {
@@ -551,7 +565,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $null = $invokeCalls.Add([pscustomobject]@{
                 Flags        = $Flags
@@ -559,6 +574,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 LeakCheck    = $LeakCheck.IsPresent
                 TimeoutSeconds = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             })
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             return [pscustomobject]@{
@@ -569,6 +585,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -InvokeLVCompare $invoke
 
         $invokeCalls.Count | Should -Be 1
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
         $invokeCalls[0].ReplaceFlags | Should -BeTrue
         $invokeCalls[0].Flags | Should -BeNullOrEmpty
     }
@@ -611,7 +628,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $null = $invokeCalls.Add([pscustomobject]@{
                 Flags        = @($Flags)
@@ -619,6 +637,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 LeakCheck    = $LeakCheck.IsPresent
                 TimeoutSeconds = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             })
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
             return [pscustomobject]@{
@@ -633,6 +652,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         @($invokeCalls[0].Flags) | Should -Contain '-nobd'
         $invokeCalls[1].ReplaceFlags | Should -BeTrue
         (@($invokeCalls[1].Flags | Where-Object { $_ })).Count | Should -Be 0
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
+        $invokeCalls[1].NoiseProfile | Should -Be 'full'
     }
 
     It 'detects diffs via full profile when filtered flags suppress changes' {
@@ -688,12 +709,14 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $flagList = @($Flags | Where-Object { $_ })
             $invokeCalls.Add([pscustomobject]@{
                 Flags        = $flagList
                 ReplaceFlags = $ReplaceFlags.IsPresent
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             }) | Out-Null
 
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -723,6 +746,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $invokeCalls.Count | Should -Be 2
         @($invokeCalls[0].Flags) | Should -Contain '-nobdcosm'
         @($invokeCalls[1].Flags).Count | Should -Be 0
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
+        $invokeCalls[1].NoiseProfile | Should -Be 'full'
 
         $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
         $compareInfo = $updated[0].compare
@@ -779,12 +804,14 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $null = $invokeCalls.Add([pscustomobject]@{
                 LeakCheck    = $LeakCheck.IsPresent
                 TimeoutSeconds = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             })
 
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -821,6 +848,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         & $script:scriptPath -ResultsPath $resultsPath -ArtifactsDir $artifactsDir -RenderReport -InvokeLVCompare $invoke
 
         $invokeCalls.Count | Should -Be 1
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
         $invokeCalls[0].LeakCheck | Should -BeTrue
 
         $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
@@ -887,7 +915,8 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 [switch]$ReplaceFlags,
                 [switch]$LeakCheck,
                 [Nullable[int]]$TimeoutSeconds,
-                [Nullable[double]]$LeakGraceSeconds
+                [Nullable[double]]$LeakGraceSeconds,
+                [string]$NoiseProfile
             )
             $call = [pscustomobject]@{
                 LeakCheck        = $LeakCheck.IsPresent
@@ -895,6 +924,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
                 TimeoutSeconds   = if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -ne $null) { [int]$TimeoutSeconds } else { $null }
                 LeakGraceProvided= $PSBoundParameters.ContainsKey('LeakGraceSeconds')
                 LeakGraceSeconds = if ($PSBoundParameters.ContainsKey('LeakGraceSeconds') -and $LeakGraceSeconds -ne $null) { [double]$LeakGraceSeconds } else { $null }
+                NoiseProfile     = if ($PSBoundParameters.ContainsKey('NoiseProfile')) { $NoiseProfile } else { $null }
             }
             $null = $invokeCalls.Add($call)
             New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
@@ -914,6 +944,7 @@ Describe 'Run-StagedLVCompare.ps1' -Tag 'Unit' {
         $invokeCalls[0].TimeoutSeconds | Should -Be 45
         $invokeCalls[0].LeakGraceProvided | Should -BeFalse
         $invokeCalls[0].LeakGraceSeconds | Should -Be $null
+        $invokeCalls[0].NoiseProfile | Should -Be 'full'
 
         $updated = @(Get-Content -LiteralPath $resultsPath -Raw | ConvertFrom-Json)
         $compareObject = $updated[0].compare

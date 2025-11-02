@@ -24,6 +24,11 @@
 .PARAMETER ReplaceFlags
   Replace the default Invoke-LVCompare flags entirely with the provided Flags array.
 
+.PARAMETER NoiseProfile
+  Selects which LVCompare ignore bundle Invoke-LVCompare should apply when -ReplaceFlags
+  is not provided. Defaults to 'full' for complete compare detail; pass 'legacy' to reuse
+  the historical suppression bundle.
+
 .PARAMETER InvokeLVCompare
   Optional scriptblock used to invoke LVCompare (primarily for tests).  When omitted,
   the helper shell-outs to tools/Invoke-LVCompare.ps1.
@@ -44,6 +49,8 @@ param(
 
     [string[]]$Flags,
     [switch]$ReplaceFlags,
+    [ValidateSet('full','legacy')]
+    [string]$NoiseProfile = 'full',
 
     [scriptblock]$InvokeLVCompare
 )
@@ -129,9 +136,11 @@ if (-not $InvokeLVCompare) {
             [string]$HeadVi,
             [string]$OutputDir,
             [string[]]$Flags,
-            [switch]$ReplaceFlags
+            [switch]$ReplaceFlags,
+            [ValidateSet('full','legacy')]
+            [string]$NoiseProfile = 'full'
         )
-        $args = @('-NoLogo','-NoProfile','-File',$invokeScript,'-BaseVi',$BaseVi,'-HeadVi',$HeadVi,'-OutputDir',$OutputDir,'-RenderReport','-Summary')
+        $args = @('-NoLogo','-NoProfile','-File',$invokeScript,'-BaseVi',$BaseVi,'-HeadVi',$HeadVi,'-OutputDir',$OutputDir,'-NoiseProfile',$NoiseProfile,'-RenderReport','-Summary')
         if ($ReplaceFlags.IsPresent) { $args += '-ReplaceFlags' }
         if ($Flags) { $args += @('-Flags') + $Flags }
         & pwsh @args | Out-String | Out-Null
@@ -139,7 +148,7 @@ if (-not $InvokeLVCompare) {
     }.GetNewClosure()
 }
 
-$invokeResult = & $InvokeLVCompare -BaseVi $resolvedBase -HeadVi $resolvedHead -OutputDir $compareDir -Flags $Flags -ReplaceFlags:$ReplaceFlags.IsPresent
+$invokeResult = & $InvokeLVCompare -BaseVi $resolvedBase -HeadVi $resolvedHead -OutputDir $compareDir -Flags $Flags -ReplaceFlags:$ReplaceFlags.IsPresent -NoiseProfile $NoiseProfile
 $exitCode = 0
 if ($invokeResult -is [int]) {
     $exitCode = [int]$invokeResult
