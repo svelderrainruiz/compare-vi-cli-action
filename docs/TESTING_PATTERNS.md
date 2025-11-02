@@ -15,7 +15,7 @@ Patterns for structuring Pester tests in this repository.
   - Component: `IconEditor`, `CompareVI`, `Watcher`
   - Feature: `DevMode`, `INI`, `Manifest`, `VIPC`, `Build`
   - Layer: `Unit`, `Integration`, `E2E`, `Smoke`
-  - Environment: `RequiresGCLI`, `RequiresLabVIEW`, `SelfHosted`
+  - Environment: `RequiresGCLI`, `RequiresLabVIEW`, `RequiresLabVIEW2025`, `RequiresVIPM`, `SelfHosted`
   - Speed: `Slow` (mark long/expensive paths)
 - Traceability: add `REQ:XYZ`, `ADR:0001` when linking to requirements or design records.
 

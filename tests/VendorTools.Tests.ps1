@@ -151,4 +151,50 @@ Describe 'VendorTools LabVIEW helpers' {
     $resolved = Find-LabVIEWVersionExePath -Version 2099 -Bitness 64
     $resolved | Should -Be $null
   }
+
+  It 'resolves LabVIEWCLI path from versioned config' {
+    if (-not $IsWindows) {
+      Set-ItResult -Skipped -Because 'LabVIEWCLI resolution only applies on Windows'
+      return
+    }
+
+    $tempRoot = Join-Path $TestDrive 'labviewcli-config'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+    $cliPath = Join-Path $tempRoot 'LabVIEWCLI.exe'
+    Set-Content -LiteralPath $cliPath -Value '' -Encoding ascii
+
+    $config = @{
+      versions = @{
+        '2025' = @{
+          '64' = @{
+            LabVIEWCliPath = $cliPath
+          }
+        }
+      }
+    } | ConvertTo-Json -Depth 6
+    Set-Content -LiteralPath $script:localConfigPath -Value $config -Encoding utf8
+
+    $resolved = Resolve-LabVIEWCLIPath -Version 2025 -Bitness 64
+    $resolved | Should -Be (Resolve-Path -LiteralPath $cliPath).Path
+  }
+
+  It 'resolves VIPM path from config overrides' {
+    if (-not $IsWindows) {
+      Set-ItResult -Skipped -Because 'VIPM resolution only applies on Windows'
+      return
+    }
+
+    $tempRoot = Join-Path $TestDrive 'vipm-config'
+    New-Item -ItemType Directory -Path $tempRoot | Out-Null
+    $vipmPath = Join-Path $tempRoot 'VIPM.exe'
+    Set-Content -LiteralPath $vipmPath -Value '' -Encoding ascii
+
+    $config = @{
+      VipmPath = $vipmPath
+    } | ConvertTo-Json -Depth 3
+    Set-Content -LiteralPath $script:localConfigPath -Value $config -Encoding utf8
+
+    $resolved = Resolve-VIPMPath
+    $resolved | Should -Be (Resolve-Path -LiteralPath $vipmPath).Path
+  }
 }
