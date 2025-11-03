@@ -24,7 +24,7 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
-- Report generated: `11/2/2025 8:40:34 PM`
+- Report generated: `11/3/2025 9:00:58 AM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
   - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
@@ -64,7 +64,14 @@ carries the actual LabVIEW payload.
 
 ## Fixture-only manifest delta
 
-- Added: 0, Removed: 0, Changed: 0
+- Added: 0, Removed: 311, Changed: 0
+- Removed:
+  - `resource:resource\plugins\lv_icon.vi`
+  - `resource:resource\plugins\lv_icon.vit`
+  - `resource:resource\plugins\lv_iconeditor.lvlib`
+  - `resource:resource\plugins\niiconeditor\class\ants\ants.lvclass`
+  - `resource:resource\plugins\niiconeditor\class\ants\get\get_antsline.vi`
+  - (+306 more)
 
 ## Changed VI comparison (requests)
 
@@ -327,3 +334,4 @@ carries the actual LabVIEW payload.
 - The generated summary lives at `tests/results/_agent/icon-editor/fixture-report.json`; delete it if you need a clean slate.
 - Canonical hashes are enforced by `node --test tools/icon-editor/__tests__/fixture-hashes.test.mjs` (invoked from `tools/PrePush-Checks.ps1`), so report drift from the committed fixture is caught automatically.
 - Validate uploads the `icon-editor-fixture-report` artifact (JSON + Markdown) so stakeholders can review the latest snapshot without digging through logs.
+

@@ -312,7 +312,9 @@ jobs:
         $mdFiles = Get-ChildItem -Path . -Recurse -Include *.md -File |
           Where-Object {
             $path = $_.FullName -replace '\\','/'
-            return $path -notmatch '/node_modules/'
+            return $path -notmatch '/node_modules/' `
+              -and $path -notmatch '/vendor/icon-editor/' `
+              -and $path -notmatch '/tmp/icon-editor/'
           }
         $errors = @()
         foreach ($file in $mdFiles) {
