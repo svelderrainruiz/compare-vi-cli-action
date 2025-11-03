@@ -1,18 +1,19 @@
 {
-  "number": 583,
-  "title": "Make VI diff sweep smarter so LVCompare runs only when needed",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/583",
+  "number": 575,
+  "title": "Icon-editor: Generate VI Comparison Report for changed VIs",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/575",
   "state": "OPEN",
   "labels": [
+    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
-  "commentCount": 3,
-  "lastSeenUpdatedAt": "2025-11-03T19:19:27Z",
-  "issueDigest": "3a695ff45ff372284a91f5296f6e11c6ff014d40cd575b57a46096c498a3e986",
-  "bodyDigest": "cc144ccf5e9ba492e65f1358feae7ba036019ce149e7aaaaee0ab842fe652657",
-  "cachedAtUtc": "2025-11-03T20:31:15.386Z",
+  "commentCount": 0,
+  "lastSeenUpdatedAt": "2025-11-03T21:51:32Z",
+  "issueDigest": "b6478d8125bb43022c3235e5e111df61a7556c6d5b51f6fbfcafd2a5fdc261b1",
+  "bodyDigest": "cbcef8efd6225758792c9862e1603397acafc633d793b8ea59f0d7b32237d11d",
+  "cachedAtUtc": "2025-11-03T21:54:46.715Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
