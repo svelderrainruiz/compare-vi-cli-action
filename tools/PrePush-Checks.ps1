@@ -129,9 +129,17 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
   Write-Host '[pre-push] Verifying icon-editor fixture report freshness' -ForegroundColor Cyan
   Push-Location $root
   try {
-    pwsh -NoLogo -NoProfile -File $updateReportScript
-    if ($LASTEXITCODE -ne 0) {
+    $updateOutput = pwsh -NoLogo -NoProfile -File $updateReportScript -NoSummary 2>&1
+    $updateExitCode = $LASTEXITCODE
+    if ($updateExitCode -ne 0) {
+      if ($updateOutput) {
+        $updateOutput | ForEach-Object { Write-Error $_ }
+      }
       throw "Update-IconEditorFixtureReport.ps1 reported issues (exit=$LASTEXITCODE)."
+    }
+    # Surface any non-fatal warnings for optional debugging without breaking parity noise.
+    if ($updateOutput) {
+      Write-Verbose ($updateOutput -join [Environment]::NewLine)
     }
     git -C $root diff --quiet -- docs/ICON_EDITOR_PACKAGE.md
     $docClean = $LASTEXITCODE -eq 0
@@ -151,6 +159,45 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
       throw "node --test reported failures (exit=$manifestExit)."
     }
     Write-Host '[pre-push] icon-editor manifest checks OK' -ForegroundColor Green
+    $reportPath = Join-Path $root 'tests' 'results' '_agent' 'icon-editor' 'fixture-report.json'
+    if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+      try {
+        $fixtureReport = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json -Depth 8
+        if ($fixtureReport) {
+          $sanitizedSummary = [ordered]@{
+            schema                       = $fixtureReport.schema
+            fixturePackage               = $fixtureReport.fixture.package
+            systemPackage                = $fixtureReport.systemPackage.package
+            artifactHashes               = @()
+            customActions                = @()
+            runnerDependencyHashMatch    = [bool]$fixtureReport.runnerDependencies.hashMatch
+            fixtureAssetCategoryCounts   = @()
+          }
+          foreach ($artifact in ($fixtureReport.artifacts | Sort-Object name)) {
+            $sanitizedSummary.artifactHashes += [ordered]@{
+              name = $artifact.name
+              hash = $artifact.hash
+            }
+          }
+          foreach ($action in ($fixtureReport.customActions | Sort-Object name)) {
+            $sanitizedSummary.customActions += [ordered]@{
+              name      = $action.name
+              hashMatch = [bool]$action.hashMatch
+            }
+          }
+          foreach ($group in ($fixtureReport.fixtureOnlyAssets | Group-Object category | Sort-Object Name)) {
+            $sanitizedSummary.fixtureAssetCategoryCounts += [ordered]@{
+              category = $group.Name
+              count    = $group.Count
+            }
+          }
+          Write-Host '[pre-push] icon-editor fixture summary (sanitized):' -ForegroundColor Cyan
+          Write-Host ($sanitizedSummary | ConvertTo-Json -Depth 5) -ForegroundColor Green
+        }
+      } catch {
+        Write-Warning "Failed to load icon-editor fixture summary: $_"
+      }
+    }
     if ($docClean) {
       git checkout -- docs/ICON_EDITOR_PACKAGE.md | Out-Null
     }
