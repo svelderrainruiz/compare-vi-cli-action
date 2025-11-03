@@ -164,6 +164,18 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
       try {
         $fixtureReport = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json -Depth 8
         if ($fixtureReport) {
+          $categoryGroups = @()
+          if ($fixtureReport.PSObject.Properties['fixtureOnlyAssets'] -and $fixtureReport.fixtureOnlyAssets) {
+            $categoryGroups = @($fixtureReport.fixtureOnlyAssets | Group-Object category | Sort-Object Name)
+          }
+          if ($env:HOOKS_FIXTURE_DEBUG) {
+            $categorySummary = if ($categoryGroups.Count -gt 0) {
+              $categoryGroups | ForEach-Object { '{0}={1}' -f $_.Name, $_.Count } -join ', '
+            } else {
+              '<none>'
+            }
+            Write-Host "[pre-push] fixture asset categories -> $categorySummary" -ForegroundColor DarkGray
+          }
           $sanitizedSummary = [ordered]@{
             schema                       = $fixtureReport.schema
             fixturePackage               = $fixtureReport.fixture.package
@@ -172,6 +184,7 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
             customActions                = @()
             runnerDependencyHashMatch    = [bool]$fixtureReport.runnerDependencies.hashMatch
             fixtureAssetCategoryCounts   = @()
+            fixtureAssetCategorySummary  = @()
           }
           foreach ($artifact in ($fixtureReport.artifacts | Sort-Object name)) {
             $sanitizedSummary.artifactHashes += [ordered]@{
@@ -185,11 +198,12 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
               hashMatch = [bool]$action.hashMatch
             }
           }
-          foreach ($group in ($fixtureReport.fixtureOnlyAssets | Group-Object category | Sort-Object Name)) {
+          foreach ($group in $categoryGroups) {
             $sanitizedSummary.fixtureAssetCategoryCounts += [ordered]@{
               category = $group.Name
               count    = $group.Count
             }
+            $sanitizedSummary.fixtureAssetCategorySummary += ('{0}={1}' -f $group.Name, $group.Count)
           }
           Write-Host '[pre-push] icon-editor fixture summary (sanitized):' -ForegroundColor Cyan
           Write-Host ($sanitizedSummary | ConvertTo-Json -Depth 5) -ForegroundColor Green
