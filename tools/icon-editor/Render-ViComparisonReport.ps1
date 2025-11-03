@@ -32,25 +32,6 @@ function Format-Link {
   return "[$Label]($Path)"
 }
 
-function Get-ArtifactPath {
-  param(
-    [object]$Artifacts,
-    [string]$PropertyName
-  )
-  if (-not $Artifacts -or [string]::IsNullOrWhiteSpace($PropertyName)) {
-    return $null
-  }
-
-  if ($Artifacts -is [System.Collections.IDictionary]) {
-    if ($Artifacts.Contains($PropertyName)) { return $Artifacts[$PropertyName] }
-    return $null
-  }
-
-  $props = $Artifacts.PSObject.Properties
-  if ($props[$PropertyName]) { return $props[$PropertyName].Value }
-  return $null
-}
-
 $repoRoot = Resolve-RepoRoot
 if (-not $SummaryPath) {
   $SummaryPath = Join-Path $repoRoot 'tests/results/_agent/icon-editor/vi-diff-captures/vi-comparison-summary.json'
@@ -94,22 +75,12 @@ if ($requests.Count -eq 0) {
     $note = if ($req.message) { $req.message } else { '' }
 
     $artifactLinks = @()
-    # Tolerate both PSCustomObject and IDictionary for request and its artifacts,
-    # and also absence of an 'artifacts' member entirely
-    $artifacts = $null
-    if ($req -is [System.Collections.IDictionary]) {
-      if ($req.Contains('artifacts')) { $artifacts = $req['artifacts'] }
-    } else {
-      $prop = $req.PSObject.Properties['artifacts']
-      if ($prop) { $artifacts = $prop.Value }
-    }
-
-    if ($artifacts) {
-      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $artifacts -PropertyName 'sessionIndex') -Label 'session-index'
+    if ($req.artifacts) {
+      $link = Format-Link -Path $req.artifacts.sessionIndex -Label 'session-index'
       if ($link) { $artifactLinks += $link }
-      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $artifacts -PropertyName 'captureJson') -Label 'capture'
+      $link = Format-Link -Path $req.artifacts.captureJson -Label 'capture'
       if ($link) { $artifactLinks += $link }
-      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $artifacts -PropertyName 'compareReport') -Label 'report'
+      $link = Format-Link -Path $req.artifacts.compareReport -Label 'report'
       if ($link) { $artifactLinks += $link }
     }
     $artifactCell = if ($artifactLinks.Count -gt 0) { $artifactLinks -join '<br>' } else { '' }
