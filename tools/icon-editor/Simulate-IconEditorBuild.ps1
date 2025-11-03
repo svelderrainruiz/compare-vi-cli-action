@@ -3,7 +3,9 @@
 param(
   [string]$FixturePath,
   [string]$ResultsRoot,
-  [hashtable]$ExpectedVersion,
+  [object]$ExpectedVersion,
+  [string]$VipDiffOutputDir,
+  [string]$VipDiffRequestsPath,
   [switch]$KeepExtract
 )
 
@@ -130,12 +132,25 @@ Get-ChildItem -LiteralPath $lvlibpSource -Filter '*.lvlibp' | ForEach-Object {
   $artifacts += Register-Artifact -SourcePath $_.FullName -DestinationPath $dest -Kind 'lvlibp'
 }
 
+$expectedVersionValue = $ExpectedVersion
+if ($expectedVersionValue -is [string] -and -not [string]::IsNullOrWhiteSpace($expectedVersionValue)) {
+  try {
+    $expectedVersionValue = $expectedVersionValue | ConvertFrom-Json -AsHashtable -Depth 6
+  } catch {
+    $expectedVersionValue = $null
+  }
+} elseif ($expectedVersionValue -is [pscustomobject]) {
+  $expectedVersionValue = $expectedVersionValue | ConvertTo-Json | ConvertFrom-Json -AsHashtable -Depth 6
+} elseif ($expectedVersionValue -and $expectedVersionValue -isnot [System.Collections.IDictionary]) {
+  $expectedVersionValue = $null
+}
+
 $packageSmokeScript = Join-Path $repoRoot 'tools' 'icon-editor' 'Test-IconEditorPackage.ps1'
 $packageSmokeSummary = $null
 if (Test-Path -LiteralPath $packageSmokeScript -PathType Leaf) {
   $fixtureCommit = 'fixture'
-  if ($ExpectedVersion -and $ExpectedVersion.ContainsKey('commit') -and $ExpectedVersion['commit']) {
-    $fixtureCommit = $ExpectedVersion['commit']
+  if ($expectedVersionValue -and ($expectedVersionValue.Keys -contains 'commit') -and $expectedVersionValue['commit']) {
+    $fixtureCommit = $expectedVersionValue['commit']
   }
 
   $fixtureVersionInfo = [ordered]@{
@@ -154,7 +169,7 @@ if (Test-Path -LiteralPath $packageSmokeScript -PathType Leaf) {
     -RequireVip
 }
 
-$expectedVersionOrdered = Convert-ToOrderedHashtable $ExpectedVersion
+$expectedVersionOrdered = Convert-ToOrderedHashtable $expectedVersionValue
 if ($expectedVersionOrdered) {
   $hasNumericParts =
     $expectedVersionOrdered.Contains('major') -and
@@ -168,6 +183,21 @@ if ($expectedVersionOrdered) {
       $expectedVersionOrdered['patch'], `
       $expectedVersionOrdered['build']
   }
+}
+
+$vipDiffInfo = $null
+if ($VipDiffOutputDir) {
+  $prepareVipScript = Join-Path $repoRoot 'tools' 'icon-editor' 'Prepare-VipViDiffRequests.ps1'
+  if (-not (Test-Path -LiteralPath $prepareVipScript -PathType Leaf)) {
+    throw "Prepare-VipViDiffRequests.ps1 not found at '$prepareVipScript'."
+  }
+  $effectiveRequestsPath = if ($VipDiffRequestsPath) { $VipDiffRequestsPath } else { Join-Path $VipDiffOutputDir 'vi-diff-requests.json' }
+  $vipDiffInfo = & $prepareVipScript `
+    -ExtractRoot $nestedExtract `
+    -RepoRoot $repoRoot `
+    -OutputDir $VipDiffOutputDir `
+    -RequestsPath $effectiveRequestsPath `
+    -Category 'vip'
 }
 
 $manifest = [ordered]@{
@@ -197,6 +227,15 @@ foreach ($artifact in $artifacts) {
 
 if ($packageSmokeSummary) {
   $manifest.packageSmoke = $packageSmokeSummary
+}
+
+if ($vipDiffInfo) {
+  $manifest.vipDiff = [ordered]@{
+    requestsPath = $vipDiffInfo.requestsPath
+    count        = $vipDiffInfo.count
+    generatedAt  = $vipDiffInfo.generatedAt
+    headRoot     = $vipDiffInfo.headRoot
+  }
 }
 
 $manifestPath = Join-Path $ResultsRoot 'manifest.json'

@@ -123,10 +123,16 @@ try {
   $systemSpec = Parse-SpecFile -Path (Join-Path $systemExtractRoot 'spec')
 
   $artifactFiles = @()
-  foreach ($artifact in @('ni_icon_editor-1.4.1.948.vip', 'ni_icon_editor_system-1.4.1.948.vip', 'lv_icon_x64.lvlibp', 'lv_icon_x86.lvlibp')) {
-    $info = Get-FileHashInfo -Path (Join-Path $workRoot $artifact)
-    if ($info) {
-      $artifactFiles += $info
+  $artifactPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  $artifactPatterns = @('ni_icon_editor-*.vip', 'ni_icon_editor_system-*.vip', '*.lvlibp')
+  foreach ($pattern in $artifactPatterns) {
+    Get-ChildItem -LiteralPath $workRoot -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
+      if ($artifactPaths.Add($_.FullName)) {
+        $info = Get-FileHashInfo -Path $_.FullName
+        if ($info) {
+          $artifactFiles += $info
+        }
+      }
     }
   }
 
