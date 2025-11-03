@@ -17,6 +17,10 @@ on:
         description: 'Sampling correlation id (prevents cancels)'
         required: false
         type: string
+      enable_compare:
+        description: 'Force-enable self-hosted icon-editor VI comparisons for this dispatch (1 = enable)'
+        required: false
+        default: '0'
 
 concurrency:
   group: ${{ github.workflow }}-${{ (github.event_name == 'pull_request' && github.event.pull_request.number) || github.event.inputs.sample_id || github.ref }}
@@ -1151,7 +1155,7 @@ jobs:
       needs.smoke-gate.outputs.skip != 'true' &&
       needs.icon-editor-gate.outputs.proceed == 'true' &&
       needs.lint.outputs.vi_diff_requests == 'true' &&
-      vars.ICON_EDITOR_COMPARE_ENABLE == '1'
+      (vars.ICON_EDITOR_COMPARE_ENABLE == '1' || github.event.inputs.enable_compare == '1')
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
