@@ -6,7 +6,8 @@ param(
   [string]$ManifestPath,
   [string]$ResultsRoot,
   [string]$ResourceOverlayRoot,
-  [switch]$SkipDocUpdate
+  [switch]$SkipDocUpdate,
+  [switch]$NoSummary
 )
 
 Set-StrictMode -Version Latest
@@ -139,6 +140,10 @@ if ($CheckOnly.IsPresent) {
   if ($diffExit -ne 0) {
     throw "docs/ICON_EDITOR_PACKAGE.md is out of date. Run `pwsh -File tools/icon-editor/Update-IconEditorFixtureReport.ps1` and commit the changes."
   }
+  return
+}
+
+if ($NoSummary.IsPresent) {
   return
 }
 
