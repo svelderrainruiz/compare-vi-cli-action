@@ -24,7 +24,7 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
-- Report generated: `11/2/2025 5:32:00 PM`
+- Report generated: `11/2/2025 6:04:54 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
   - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
@@ -88,6 +88,46 @@ carries the actual LabVIEW payload.
   changes without unpacking the VIP manually.
 - A secondary fixture (`tests\fixtures\icon-editor\ni_icon_editor-1.4.1.794.vip`) plus manifest
   (`tests\fixtures\icon-editor\fixture-manifest-1.4.1.794.json`) exists for automated baseline comparisons.
+
+## Local validate helper (self-hosted)
+
+- Script: `tools/icon-editor/Invoke-ValidateLocal.ps1`
+- Purpose: replicate the icon-editor jobs from Validate on the self-hosted runner without waiting for GitHub Actions.
+- Requirements:
+  - Run on the self-hosted Windows machine with LabVIEW/LVCompare + TestStand harness configured (same tooling as CI).
+  - Provide `GH_TOKEN`/`GITHUB_TOKEN` so priority sync and policy checks succeed.
+  - Baseline fixtures live under `tests/fixtures/icon-editor/`.
+- Usage:
+
+  ```powershell
+  # Full run (LVCompare enabled)
+  pwsh -File tools/icon-editor/Invoke-ValidateLocal.ps1
+
+  # Dry run without launching LVCompare
+  pwsh -File tools/icon-editor/Invoke-ValidateLocal.ps1 -SkipLVCompare
+
+  # Override baseline VIP
+  pwsh -File tools/icon-editor/Invoke-ValidateLocal.ps1 `
+    -BaselineFixture 'D:\vip\ni_icon_editor-1.4.1.700.vip' `
+    -BaselineManifest 'D:\vip\fixture-manifest-1.4.1.700.json'
+
+  # Run via npm helper (dry-run)
+  npm run icon-editor:validate -- --DryRun --SkipBootstrap --SkipLVCompare
+  ```
+
+- Outputs land in `tests/results/_agent/icon-editor/local-validate` by default:
+  - `fixture-report.json` / `manifest.json`
+  - `vi-diff/vi-diff-requests.json`
+  - `vi-diff-captures/**` + `vi-comparison-report.md`
+  - (optional) `vip-vi-diff*` when `-IncludeSimulation` is supplied
+  - Pester / PrePush outputs (standard locations under `tests/results`)
+
+- Flags:
+  - `-SkipBootstrap` skips `priority/bootstrap.ps1` when you already ran it.
+  - `-SkipLVCompare` or `-DryRun` keeps the compare tooling in dry-run mode.
+  - `-ResultsRoot` customizes the output directory.
+  - `-KeepWorkspace` retains extraction folders for debugging.
+  - `-IncludeSimulation` runs the simulation VIP diff path (dry-run comparisons).
 
 ## Maintaining this report
 
