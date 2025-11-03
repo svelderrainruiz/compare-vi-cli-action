@@ -3,7 +3,7 @@
 param(
   [string]$FixturePath,
   [string]$ResultsRoot,
-  [hashtable]$ExpectedVersion,
+  [object]$ExpectedVersion,
   [switch]$KeepExtract
 )
 
@@ -130,12 +130,23 @@ Get-ChildItem -LiteralPath $lvlibpSource -Filter '*.lvlibp' | ForEach-Object {
   $artifacts += Register-Artifact -SourcePath $_.FullName -DestinationPath $dest -Kind 'lvlibp'
 }
 
+$expectedVersionValue = $ExpectedVersion
+if ($expectedVersionValue -is [string] -and $expectedVersionValue) {
+  try {
+    $expectedVersionValue = $expectedVersionValue | ConvertFrom-Json -AsHashtable -Depth 6
+  } catch {
+    $expectedVersionValue = $null
+  }
+} elseif ($expectedVersionValue -is [pscustomobject]) {
+  $expectedVersionValue = $expectedVersionValue | ConvertTo-Json | ConvertFrom-Json -AsHashtable -Depth 6
+}
+
 $packageSmokeScript = Join-Path $repoRoot 'tools' 'icon-editor' 'Test-IconEditorPackage.ps1'
 $packageSmokeSummary = $null
 if (Test-Path -LiteralPath $packageSmokeScript -PathType Leaf) {
   $fixtureCommit = 'fixture'
-  if ($ExpectedVersion -and $ExpectedVersion.ContainsKey('commit') -and $ExpectedVersion['commit']) {
-    $fixtureCommit = $ExpectedVersion['commit']
+  if ($expectedVersionValue -and $expectedVersionValue.ContainsKey('commit') -and $expectedVersionValue['commit']) {
+    $fixtureCommit = $expectedVersionValue['commit']
   }
 
   $fixtureVersionInfo = [ordered]@{
@@ -154,7 +165,7 @@ if (Test-Path -LiteralPath $packageSmokeScript -PathType Leaf) {
     -RequireVip
 }
 
-$expectedVersionOrdered = Convert-ToOrderedHashtable $ExpectedVersion
+$expectedVersionOrdered = Convert-ToOrderedHashtable $expectedVersionValue
 if ($expectedVersionOrdered) {
   $hasNumericParts =
     $expectedVersionOrdered.Contains('major') -and
