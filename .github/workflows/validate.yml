@@ -1014,13 +1014,15 @@ jobs:
           $metadataPath = Join-Path $results 'metadata.json'
           $metadata | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding utf8
 
-          $expectedVersionJson = $expectedVersion | ConvertTo-Json -Depth 6
-
           if ($mode -eq 'simulate') {
+            $vipDiffRoot = Join-Path $results 'vip-vi-diff'
+            $vipRequests = Join-Path $vipDiffRoot 'vi-diff-requests.json'
             pwsh -NoLogo -NoProfile -File tools/icon-editor/Simulate-IconEditorBuild.ps1 `
               -FixturePath $fixturePath `
               -ResultsRoot $results `
-              -ExpectedVersion $expectedVersionJson | Out-Null
+              -ExpectedVersion $expectedVersion `
+              -VipDiffOutputDir $vipDiffRoot `
+              -VipDiffRequestsPath $vipRequests | Out-Null
           } else {
             pwsh -NoLogo -NoProfile -File tools/icon-editor/Invoke-IconEditorBuild.ps1 `
               -Major $major `
@@ -1084,6 +1086,58 @@ jobs:
           } else {
             Write-Warning "manifest.json not found at $manifestPath"
           }
+      - name: Execute VIP VI comparisons
+        if: ${{ steps.build.outputs.build_mode == 'simulate' }}
+        env:
+          RESULTS_DIR: ${{ runner.temp }}\icon-editor
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $requestsPath = Join-Path $env:RESULTS_DIR 'vip-vi-diff\vi-diff-requests.json'
+          if (-not (Test-Path -LiteralPath $requestsPath -PathType Leaf)) {
+            Write-Host '::notice::VIP VI diff requests not found; skipping comparisons.'
+            exit 0
+          }
+          $capturesRoot = Join-Path $env:RESULTS_DIR 'vip-vi-diff-captures'
+          $dryRun = $true
+          pwsh -File tools/icon-editor/Invoke-FixtureViDiffs.ps1 `
+            -RequestsPath $requestsPath `
+            -CapturesRoot $capturesRoot `
+            -SummaryPath (Join-Path $capturesRoot 'vi-comparison-summary.json') `
+            -TimeoutSeconds 900 `
+            -DryRun:$dryRun
+      - name: Render VIP VI comparison report
+        if: ${{ always() && steps.build.outputs.build_mode == 'simulate' }}
+        env:
+          RESULTS_DIR: ${{ runner.temp }}\icon-editor
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $summaryPath = Join-Path $env:RESULTS_DIR 'vip-vi-diff-captures\vi-comparison-summary.json'
+          if (Test-Path -LiteralPath $summaryPath -PathType Leaf) {
+            $reportPath = Join-Path (Split-Path -Parent $summaryPath) 'vi-comparison-report.md'
+            pwsh -File tools/icon-editor/Render-ViComparisonReport.ps1 -SummaryPath $summaryPath -OutputPath $reportPath | Out-Null
+          } else {
+            Write-Host '::notice::VIP comparison summary not found; skipping report.'
+          }
+      - name: Upload VIP VI diff captures
+        if: ${{ always() && steps.build.outputs.build_mode == 'simulate' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: icon-editor-vip-vi-diff-captures
+          path: |
+            ${{ runner.temp }}\icon-editor\vip-vi-diff-captures\**\compare\**
+            ${{ runner.temp }}\icon-editor\vip-vi-diff-captures\**\session-index.json
+          if-no-files-found: warn
+      - name: Upload VIP VI comparison report
+        if: ${{ always() && steps.build.outputs.build_mode == 'simulate' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: icon-editor-vip-vi-comparison-report
+          path: |
+            ${{ runner.temp }}\icon-editor\vip-vi-diff\vi-diff-requests.json
+            ${{ runner.temp }}\icon-editor\vip-vi-diff\head\**
+            ${{ runner.temp }}\icon-editor\vip-vi-diff-captures\vi-comparison-summary.json
+            ${{ runner.temp }}\icon-editor\vip-vi-diff-captures\vi-comparison-report.md
+          if-no-files-found: warn
       - name: Upload icon-editor artifacts
         if: always()
         uses: actions/upload-artifact@v5
@@ -1157,4 +1211,3 @@ jobs:
           path: |
             tests/results/_agent/icon-editor/vi-diff-captures/vi-comparison-summary.json
             tests/results/_agent/icon-editor/vi-diff-captures/vi-comparison-report.md
-          if-no-files-found: warn
