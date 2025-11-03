@@ -114,4 +114,24 @@ Sub-Packages=""
     $artifactNames | Should -Contain 'lv_icon_x64.lvlibp'
     $artifactNames | Should -Contain 'lv_icon_x86.lvlibp'
   }
+
+  It 'falls back to Copy-Item overlay when robocopy is unavailable' {
+    $resultsRoot = Join-Path $TestDrive 'fallback-results'
+    $overlayRoot = Join-Path $TestDrive 'overlay-source'
+    New-Item -ItemType Directory -Path $overlayRoot | Out-Null
+    Set-Content -LiteralPath (Join-Path $overlayRoot 'overlay.txt') -Value 'overlay-data' -Encoding utf8
+
+    Mock -CommandName Get-Command -MockWith { return $null } -ParameterFilter { $Name -eq 'robocopy' }
+
+    $manifest = & $script:scriptPath `
+      -FixturePath $script:fixturePath `
+      -ResultsRoot $resultsRoot `
+      -ResourceOverlayRoot $overlayRoot `
+      -KeepExtract
+
+    $manifest | Should -Not -BeNullOrEmpty
+
+    $resourceCopy = Join-Path $resultsRoot '__fixture_extract\__system_extract\File Group 0\National Instruments\LabVIEW Icon Editor\resource\overlay.txt'
+    Test-Path -LiteralPath $resourceCopy -PathType Leaf | Should -BeTrue
+  }
 }
