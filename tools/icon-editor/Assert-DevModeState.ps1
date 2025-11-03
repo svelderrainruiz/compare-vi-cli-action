@@ -3,7 +3,10 @@
 param(
   [Parameter(Mandatory = $true)][bool]$ExpectedActive,
   [string]$RepoRoot,
-  [string]$IconEditorRoot
+  [string]$IconEditorRoot,
+  [int[]]$Versions,
+  [int[]]$Bitness,
+  [string]$Operation = 'BuildPackage'
 )
 
 Set-StrictMode -Version Latest
@@ -13,12 +16,58 @@ $scriptDirectory = Split-Path -Parent $PSCommandPath
 $modulePath = Join-Path $scriptDirectory 'IconEditorDevMode.psm1'
 Import-Module $modulePath -Force
 
-$invokeParams = @{}
-if ($RepoRoot) {
-  $invokeParams.RepoRoot = $RepoRoot
+$targetsOverride = $null
+try {
+  $targetsOverride = Get-IconEditorDevModePolicyEntry -RepoRoot $RepoRoot -Operation $Operation
+} catch {
+  $targetsOverride = $null
 }
-if ($IconEditorRoot) {
-  $invokeParams.IconEditorRoot = $IconEditorRoot
+
+function Get-AssertDefaultTargets {
+  param([string]$OperationName)
+  $normalized = if ($OperationName) { $OperationName.ToLowerInvariant() } else { 'buildpackage' }
+  switch ($normalized) {
+    'compare' { return @{ Versions = @(2025); Bitness = @(64) } }
+    default   { return @{ Versions = @(2021); Bitness = @(32, 64) } }
+  }
+}
+
+$defaultTargets = Get-AssertDefaultTargets -OperationName $Operation
+[array]$overrideVersions = @()
+[array]$overrideBitness  = @()
+if ($targetsOverride) {
+  $overrideVersions = @($targetsOverride.Versions)
+  $overrideBitness  = @($targetsOverride.Bitness)
+}
+$versionFallback = if ($overrideVersions.Count -gt 0) { $overrideVersions } else { @($defaultTargets.Versions) }
+$bitnessFallback = if ($overrideBitness.Count -gt 0) { $overrideBitness } else { @($defaultTargets.Bitness) }
+[array]$effectiveVersions = @()
+[array]$effectiveBitness  = @()
+
+function Convert-AssertValues {
+  param([int[]]$Values, [int[]]$Fallback)
+  $result = @()
+  if ($Values) {
+    foreach ($value in $Values) {
+      if ($null -ne $value) { $result += [int]$value }
+    }
+  }
+  if (($result.Count -eq 0) -and $Fallback) {
+    foreach ($value in $Fallback) {
+      if ($null -ne $value) { $result += [int]$value }
+    }
+  }
+  return $result
+}
+
+[array]$effectiveVersions = Convert-AssertValues -Values $Versions -Fallback $versionFallback
+[array]$effectiveBitness  = Convert-AssertValues -Values $Bitness -Fallback $bitnessFallback
+
+$invokeParams = @{
+  RepoRoot = $RepoRoot
+  IconEditorRoot = $IconEditorRoot
+  Versions = $effectiveVersions
+  Bitness  = $effectiveBitness
 }
 
 $result = Test-IconEditorDevelopmentMode @invokeParams
@@ -26,7 +75,10 @@ $entries = $result.Entries
 $present = $entries | Where-Object { $_.Present }
 
 if ($present.Count -eq 0) {
-  Write-Error "No LabVIEW installations were detected for development mode verification. Expected to find LabVIEW 2021 (32-bit and/or 64-bit)."
+  $expectText = ($effectiveVersions | ForEach-Object {
+      foreach ($bit in $effectiveBitness) { "LabVIEW $_ ($bit-bit)" }
+    }) -join ', '
+  Write-Error ("No LabVIEW installations were detected for development mode verification. Expected to find: {0}." -f $expectText)
   exit 1
 }
 

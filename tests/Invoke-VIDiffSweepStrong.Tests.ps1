@@ -34,6 +34,7 @@ Describe 'Invoke-VIDiffSweepStrong.ps1' -Tag 'Script','IconEditor' {
         -Quiet
 
       $result.totalCommits | Should -Be 1
+      $result.candidates.totalCommits | Should -Be 1
       $commit = $result.commits[0]
       $commit.comparePaths.Count | Should -Be 0
       $commit.skipped.Count | Should -Be 1
@@ -68,6 +69,7 @@ Describe 'Invoke-VIDiffSweepStrong.ps1' -Tag 'Script','IconEditor' {
         -Quiet
 
       $result.totalCommits | Should -Be 1
+      $result.candidates.totalCommits | Should -Be 1
       $commit = $result.commits[0]
       $commit.comparePaths.Count | Should -Be 1
       $commit.comparePaths[0] | Should -Match 'resource/plugins/Sample.vi'
