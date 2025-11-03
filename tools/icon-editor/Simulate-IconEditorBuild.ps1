@@ -96,9 +96,19 @@ if (Test-Path -LiteralPath $nestedExtract) {
 
 Expand-Archive -Path $nestedVip.FullName -DestinationPath $nestedExtract -Force
 
-$lvlibpSource = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install\temp'
-if (-not (Test-Path -LiteralPath $lvlibpSource -PathType Container)) {
-  throw "Unable to locate lvlibp directory inside system VIP at '$lvlibpSource'."
+$installRoot = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install'
+$lvlibpFiles = @()
+if (Test-Path -LiteralPath $installRoot -PathType Container) {
+  $lvlibpFiles = Get-ChildItem -LiteralPath $installRoot -Filter '*.lvlibp' -File -Recurse -ErrorAction SilentlyContinue
+}
+if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
+  $legacyTemp = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install\temp'
+  if (Test-Path -LiteralPath $legacyTemp -PathType Container) {
+    $lvlibpFiles = Get-ChildItem -LiteralPath $legacyTemp -Filter '*.lvlibp' -File -ErrorAction SilentlyContinue
+  }
+}
+if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
+  throw "Unable to locate lvlibp artifacts inside system VIP under '$installRoot'."
 }
 
 $artifacts = @()
@@ -127,9 +137,12 @@ $systemVipName = Split-Path -Leaf $nestedVip.FullName
 $systemDest = Join-Path $ResultsRoot $systemVipName
 $artifacts += Register-Artifact -SourcePath $nestedVip.FullName -DestinationPath $systemDest -Kind 'vip'
 
-Get-ChildItem -LiteralPath $lvlibpSource -Filter '*.lvlibp' | ForEach-Object {
-  $dest = Join-Path $ResultsRoot $_.Name
-  $artifacts += Register-Artifact -SourcePath $_.FullName -DestinationPath $dest -Kind 'lvlibp'
+$seenDestinations = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($file in $lvlibpFiles) {
+  $dest = Join-Path $ResultsRoot $file.Name
+  if ($seenDestinations.Add($dest)) {
+    $artifacts += Register-Artifact -SourcePath $file.FullName -DestinationPath $dest -Kind 'lvlibp'
+  }
 }
 
 $expectedVersionValue = $ExpectedVersion

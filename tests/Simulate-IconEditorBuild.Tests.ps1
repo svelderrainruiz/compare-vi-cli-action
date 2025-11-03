@@ -42,4 +42,76 @@ Describe 'Simulate-IconEditorBuild.ps1' -Tag 'IconEditor','Simulation','Unit' {
 
     Test-Path -LiteralPath (Join-Path $resultsRoot '__fixture_extract') | Should -BeFalse
   }
+
+  It 'handles legacy fixtures with install\plugins layout' {
+    $resultsRoot = Join-Path $TestDrive 'legacy-results'
+    $fixtureRoot = Join-Path $TestDrive 'legacy-fixture'
+    $systemRoot = Join-Path $TestDrive 'legacy-system'
+    New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
+    New-Item -ItemType Directory -Path $systemRoot | Out-Null
+
+    $fixtureSpec = @"
+[Package]
+Name="ni_icon_editor"
+Version="1.2.3.4"
+Release=""
+File Format="vip"
+Format Version="2017"
+Display Name="Legacy Icon Editor"
+
+[Description]
+Description=""
+Summary=""
+License="MIT"
+Vendor="NI"
+
+[Files]
+Num File Groups="1"
+Sub-Packages="ni_icon_editor_system-1.2.3.4"
+"@
+    Set-Content -LiteralPath (Join-Path $fixtureRoot 'spec') -Value $fixtureSpec -Encoding ascii
+    $packagesDir = Join-Path $fixtureRoot 'Packages'
+    New-Item -ItemType Directory -Path $packagesDir | Out-Null
+
+    $systemSpec = @"
+[Package]
+Name="ni_icon_editor_system"
+Version="1.2.3.4"
+File Format="vip"
+Format Version="2017"
+Display Name="Legacy Icon Editor (System)"
+
+[Files]
+Num File Groups="1"
+Sub-Packages=""
+"@
+    Set-Content -LiteralPath (Join-Path $systemRoot 'spec') -Value $systemSpec -Encoding ascii
+
+    $pluginsDir = Join-Path $systemRoot 'File Group 0\National Instruments\LabVIEW Icon Editor\install\plugins'
+    New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $pluginsDir 'lv_icon_x64.lvlibp') -Value 'dummy64' -Encoding ascii
+    Set-Content -LiteralPath (Join-Path $pluginsDir 'lv_icon_x86.lvlibp') -Value 'dummy86' -Encoding ascii
+
+    $systemVipPath = Join-Path $packagesDir 'ni_icon_editor_system-1.2.3.4.vip'
+    Push-Location $systemRoot
+    Compress-Archive -Path * -DestinationPath $systemVipPath
+    Pop-Location
+
+    $fixtureVipPath = Join-Path $TestDrive 'ni_icon_editor-1.2.3.4.vip'
+    Push-Location $fixtureRoot
+    Compress-Archive -Path * -DestinationPath $fixtureVipPath
+    Pop-Location
+
+    $manifest = & $script:scriptPath `
+      -FixturePath $fixtureVipPath `
+      -ResultsRoot $resultsRoot `
+      -KeepExtract
+
+    $manifest | Should -Not -BeNullOrEmpty
+    $manifest.version.fixture.raw | Should -Be '1.2.3.4'
+
+    $artifactNames = $manifest.artifacts | ForEach-Object name
+    $artifactNames | Should -Contain 'lv_icon_x64.lvlibp'
+    $artifactNames | Should -Contain 'lv_icon_x86.lvlibp'
+  }
 }
