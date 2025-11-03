@@ -412,8 +412,6 @@ jobs:
       run: |
         markdownlint "**/*.md" --ignore node_modules
       continue-on-error: true
-    env:
-      ACTIONLINT_VERSION: '${{ vars.ACTIONLINT_VERSION || ''1.7.7'' }}'
   fixtures:
     runs-on: [self-hosted, Windows, X64]
     env:
