@@ -19,15 +19,32 @@ function Ensure-Directory { param([string]$Path) $n = New-Item -ItemType Directo
 
 function Expand-VipWithSystem {
   param([string]$VipPath, [string]$DestRoot)
-  if (-not (Test-Path -LiteralPath $VipPath -PathType Leaf)) { throw "VI Package not found: $VipPath" }
+  if (-not (Test-Path -LiteralPath $VipPath -PathType Leaf)) {
+    throw "VI Package not found: $VipPath"
+  }
+
   $root = Ensure-Directory $DestRoot
   Expand-Archive -Path $VipPath -DestinationPath $root -Force
-  $systemVip = Join-Path $root 'Packages/ni_icon_editor_system-1.4.1.948.vip'
-  $systemRoot = Join-Path $root '__system_extract'
-  if (Test-Path -LiteralPath $systemVip -PathType Leaf) {
-    Expand-Archive -Path $systemVip -DestinationPath $systemRoot -Force
+
+  $packagesDir = Join-Path $root 'Packages'
+  $systemVip = $null
+  if (Test-Path -LiteralPath $packagesDir -PathType Container) {
+    $systemVip = Get-ChildItem -LiteralPath $packagesDir -Filter 'ni_icon_editor_system-*.vip' -File -ErrorAction SilentlyContinue | Select-Object -First 1
   }
-  return [ordered]@{ extract=$root; system=$systemRoot }
+
+  $systemRoot = $null
+  if ($systemVip) {
+    $systemRoot = Join-Path $root '__system_extract'
+    Expand-Archive -Path $systemVip.FullName -DestinationPath $systemRoot -Force
+  } else {
+    Write-Host '::notice::No nested system VIP detected; continuing without system extraction.'
+  }
+
+  return [ordered]@{
+    extract     = $root
+    system      = $systemRoot
+    systemVip   = ($systemVip ? $systemVip.FullName : $null)
+  }
 }
 
 function Build-CurrentManifestFromReport { param($Summary)
