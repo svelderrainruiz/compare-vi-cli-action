@@ -1122,6 +1122,23 @@ jobs:
           } else {
             Write-Host '::notice::VIP comparison summary not found; skipping report.'
           }
+      - name: Run IconEditor dev-mode integration checks
+        env:
+          RESULTS_DIR: ${{ runner.temp }}\icon-editor
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $resultsDir = Join-Path $env:RESULTS_DIR 'dev-mode-integration'
+          if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+          }
+          $include = 'IconEditorDevMode.Integration.Tests.ps1'
+          pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 `
+            -TestsPath tests `
+            -IntegrationMode include `
+            -ResultsPath $resultsDir `
+            -IncludePatterns $include `
+            -EmitFailuresJsonAlways `
+            -LiveOutput
       - name: Upload VIP VI diff captures
         if: ${{ always() && steps.build.outputs.build_mode == 'simulate' }}
         uses: actions/upload-artifact@v5
@@ -1148,6 +1165,13 @@ jobs:
         with:
           name: icon-editor-build-${{ steps.build.outputs.package_version || 'unversioned' }}
           path: ${{ runner.temp }}\icon-editor
+      - name: Upload IconEditor dev-mode proof
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: icon-editor-dev-mode-proof
+          path: tests/results/_agent/icon-editor/dev-mode-proof.json
+          if-no-files-found: warn
 
   icon-editor-compare:
     needs: [smoke-gate, lint, icon-editor-gate]

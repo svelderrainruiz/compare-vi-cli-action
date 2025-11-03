@@ -38,6 +38,13 @@ function Normalize-RepoPath {
   return $normalized
 }
 
+function Get-ShortCommit {
+  param([string]$Hash)
+  if ([string]::IsNullOrWhiteSpace($Hash)) { return '(unknown)' }
+  if ($Hash.Length -le 8) { return $Hash }
+  return $Hash.Substring(0,8)
+}
+
 function Get-ParentCommit {
   param(
     [string]$RepoPath,
@@ -118,10 +125,10 @@ if (-not (Test-Path -LiteralPath $sweepScript -PathType Leaf)) {
   throw "Invoke-VIDiffSweep.ps1 not found at '$sweepScript'."
 }
 
-$sweepResult = $null
+$sweepWrapper = $null
 Push-Location $codeRepoRoot
 try {
-  $sweepResult = & $sweepScript `
+  $sweepWrapper = & $sweepScript `
     -RepoPath $RepoPath `
     -BaseRef $BaseRef `
     -HeadRef $HeadRef `
@@ -133,14 +140,25 @@ finally {
   Pop-Location
 }
 
-$repoResolved = $sweepResult.repoPath
+if (-not $sweepWrapper) {
+  throw 'Invoke-VIDiffSweep.ps1 returned no data.'
+}
+
+$candidates = $sweepWrapper.candidates
+if (-not $candidates) {
+  throw 'Invoke-VIDiffSweep.ps1 did not return candidate metadata.'
+}
+
+$repoResolved = $candidates.repoPath
 $commitResults = New-Object System.Collections.Generic.List[object]
 
 if (-not $repoResolved) {
   throw 'Failed to resolve repository for sweep.'
 }
 
-foreach ($commit in $sweepResult.commits) {
+$commitList = if ($candidates.PSObject.Properties['commits'] -and $candidates.commits) { $candidates.commits } else { @() }
+
+foreach ($commit in $commitList) {
   $parentCommit = Get-ParentCommit -RepoPath $repoResolved -Commit $commit.commit
   $comparePaths = New-Object System.Collections.Generic.List[string]
   $skipped = New-Object System.Collections.Generic.List[object]
@@ -166,9 +184,11 @@ foreach ($commit in $sweepResult.commits) {
 
   if (-not $Quiet) {
     if ($comparePaths.Count -eq 0) {
-      Write-Information ("Commit {0}: all VI changes skipped ({1})" -f $commit.commit.Substring(0,8), ($skipped | Select-Object -ExpandProperty reason -Unique) -join ', ')
+      $skipReasons = ($skipped | Select-Object -ExpandProperty reason -Unique)
+      $reasonText = if ($skipReasons -and $skipReasons.Count -gt 0) { $skipReasons -join ', ' } else { 'no compare candidates' }
+      Write-Information ("Commit {0}: all VI changes skipped ({1})" -f (Get-ShortCommit -Hash $commit.commit), $reasonText)
     } else {
-      Write-Information ("Commit {0}: comparing {1} file(s)" -f $commit.commit.Substring(0,8), $comparePaths.Count)
+      Write-Information ("Commit {0}: comparing {1} file(s)" -f (Get-ShortCommit -Hash $commit.commit), $comparePaths.Count)
     }
   }
 
@@ -183,7 +203,8 @@ foreach ($commit in $sweepResult.commits) {
   $commitResults.Add([pscustomobject]$commitResult) | Out-Null
 
   if ($comparePaths.Count -gt 0 -and -not $DryRun.IsPresent) {
-    $stageName = "{0}-{1}" -f $StageNamePrefix, $commit.commit.Substring(0,8)
+    $shortCommit = Get-ShortCommit -Hash $commit.commit
+    $stageName = "{0}-{1}" -f $StageNamePrefix, $shortCommit
     $commitScript = Join-Path $codeRepoRoot 'tools/icon-editor/Invoke-VIComparisonFromCommit.ps1'
     if (-not (Test-Path -LiteralPath $commitScript -PathType Leaf)) {
       throw "Invoke-VIComparisonFromCommit.ps1 not found at '$commitScript'."
@@ -205,10 +226,12 @@ foreach ($commit in $sweepResult.commits) {
 
 $result = [pscustomobject]@{
   repoPath     = $repoResolved
-  baseRef      = $sweepResult.baseRef
-  headRef      = $sweepResult.headRef
+  baseRef      = $candidates.baseRef
+  headRef      = $candidates.headRef
   totalCommits = $commitResults.Count
   commits      = $commitResults.ToArray()
+  candidates   = $candidates
+  outputPath   = $sweepWrapper.outputPath
 }
 
 if ($SummaryPath) {

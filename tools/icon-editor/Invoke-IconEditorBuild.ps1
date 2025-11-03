@@ -123,7 +123,7 @@ try {
   $devModeActive = $false
   if ($InstallDependencies -and (-not $previousDevState.Active)) {
     Write-Host 'Enabling icon editor development mode...' -ForegroundColor Cyan
-    Enable-IconEditorDevelopmentMode -RepoRoot $repoRoot -IconEditorRoot $IconEditorRoot | Out-Null
+    Enable-IconEditorDevelopmentMode -RepoRoot $repoRoot -IconEditorRoot $IconEditorRoot -Operation 'BuildPackage' | Out-Null
     $devModeWasToggled = $true
     $devModeActive = $true
   } elseif ($previousDevState.Active) {
@@ -336,7 +336,7 @@ try {
   if ($devModeActive -and $devModeWasToggled) {
     Write-Host 'Disabling icon editor development mode...' -ForegroundColor Cyan
     try {
-      Disable-IconEditorDevelopmentMode -RepoRoot $repoRoot -IconEditorRoot $IconEditorRoot | Out-Null
+      Disable-IconEditorDevelopmentMode -RepoRoot $repoRoot -IconEditorRoot $IconEditorRoot -Operation 'BuildPackage' | Out-Null
       $devModeActive = $false
     } catch {
       Write-Warning "Failed to disable icon editor development mode: $($_.Exception.Message)"
@@ -408,7 +408,7 @@ finally {
   if ($devModeWasToggled -and $devModeActive) {
     try {
       Write-Host 'Disabling icon editor development mode...' -ForegroundColor Cyan
-      Disable-IconEditorDevelopmentMode -RepoRoot $repoRoot -IconEditorRoot $IconEditorRoot | Out-Null
+      Disable-IconEditorDevelopmentMode -RepoRoot $repoRoot -IconEditorRoot $IconEditorRoot -Operation 'BuildPackage' | Out-Null
     } catch {
       Write-Warning "Failed to disable icon editor development mode: $($_.Exception.Message)"
     }

@@ -155,22 +155,56 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     }
 
     Mock Enable-IconEditorDevelopmentMode {
+      param(
+        [int[]]$Versions,
+        [int[]]$Bitness,
+        [string]$RepoRoot,
+        [string]$IconEditorRoot,
+        [string]$Operation
+      )
+      if (-not $Versions) { $Versions = @(2021) }
+      if (-not $Bitness) { $Bitness = @(32,64) }
+      if (-not $Operation) { $Operation = 'BuildPackage' }
       $global:IconBuildDevModeState = [pscustomobject]@{
         Active    = $true
         UpdatedAt = (Get-Date).ToString('o')
         Source    = 'enable'
       }
-      $global:IconBuildRecorded.Add([pscustomobject]@{ Script = 'EnableDevMode'; Arguments = @() }) | Out-Null
+      $global:IconBuildRecorded.Add([pscustomobject]@{
+        Script    = 'EnableDevMode'
+        Arguments = [ordered]@{
+          Versions = $Versions
+          Bitness  = $Bitness
+          Operation = $Operation
+        }
+      }) | Out-Null
       return $global:IconBuildDevModeState
     }
 
     Mock Disable-IconEditorDevelopmentMode {
+      param(
+        [int[]]$Versions,
+        [int[]]$Bitness,
+        [string]$RepoRoot,
+        [string]$IconEditorRoot,
+        [string]$Operation
+      )
+      if (-not $Versions) { $Versions = @(2021) }
+      if (-not $Bitness) { $Bitness = @(32,64) }
+      if (-not $Operation) { $Operation = 'BuildPackage' }
       $global:IconBuildDevModeState = [pscustomobject]@{
         Active    = $false
         UpdatedAt = (Get-Date).ToString('o')
         Source    = 'disable'
       }
-      $global:IconBuildRecorded.Add([pscustomobject]@{ Script = 'DisableDevMode'; Arguments = @() }) | Out-Null
+      $global:IconBuildRecorded.Add([pscustomobject]@{
+        Script    = 'DisableDevMode'
+        Arguments = [ordered]@{
+          Versions = $Versions
+          Bitness  = $Bitness
+          Operation = $Operation
+        }
+      }) | Out-Null
       return $global:IconBuildDevModeState
     }
 
@@ -284,6 +318,18 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $calledScripts | Should -Contain 'ModifyVIPBDisplayInfo.ps1'
     $calledScripts | Should -Contain 'build_vip.ps1'
 
+    $enableCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'EnableDevMode' } | Select-Object -First 1
+    $enableCall | Should -Not -BeNullOrEmpty
+    $enableCall.Arguments.Operation | Should -Be 'BuildPackage'
+    ($enableCall.Arguments.Versions -join ',') | Should -Be '2021'
+    ($enableCall.Arguments.Bitness -join ',')  | Should -Be '32,64'
+
+    $disableCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'DisableDevMode' } | Select-Object -First 1
+    $disableCall | Should -Not -BeNullOrEmpty
+    $disableCall.Arguments.Operation | Should -Be 'BuildPackage'
+    ($disableCall.Arguments.Versions -join ',') | Should -Be '2021'
+    ($disableCall.Arguments.Bitness -join ',')  | Should -Be '32,64'
+
     Test-Path -LiteralPath (Join-Path $script:resultsRoot 'lv_icon_x86.lvlibp') | Should -BeTrue
     Test-Path -LiteralPath (Join-Path $script:resultsRoot 'lv_icon_x64.lvlibp') | Should -BeTrue
     Test-Path -LiteralPath (Join-Path $script:resultsRoot 'IconEditor_Test.vip') | Should -BeTrue
@@ -313,6 +359,18 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $calledScripts | Should -Not -Contain 'build_vip.ps1'
 
     Test-Path -LiteralPath (Join-Path $script:resultsRoot 'IconEditor_Test.vip') | Should -BeFalse
+
+    $enableCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'EnableDevMode' } | Select-Object -First 1
+    $enableCall | Should -Not -BeNullOrEmpty
+    $enableCall.Arguments.Operation | Should -Be 'BuildPackage'
+    ($enableCall.Arguments.Versions -join ',') | Should -Be '2021'
+    ($enableCall.Arguments.Bitness -join ',')  | Should -Be '32,64'
+
+    $disableCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'DisableDevMode' } | Select-Object -First 1
+    $disableCall | Should -Not -BeNullOrEmpty
+    $disableCall.Arguments.Operation | Should -Be 'BuildPackage'
+    ($disableCall.Arguments.Versions -join ',') | Should -Be '2021'
+    ($disableCall.Arguments.Bitness -join ',')  | Should -Be '32,64'
 
     $manifest = Get-Content -LiteralPath (Join-Path $script:resultsRoot 'manifest.json') -Raw | ConvertFrom-Json
     $manifest.packagingRequested | Should -BeFalse

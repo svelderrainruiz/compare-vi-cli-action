@@ -2,7 +2,10 @@
 [CmdletBinding()]
 param(
   [string]$RepoRoot,
-  [string]$IconEditorRoot
+  [string]$IconEditorRoot,
+  [int[]]$Versions,
+  [int[]]$Bitness,
+  [string]$Operation = 'BuildPackage'
 )
 
 Set-StrictMode -Version Latest
@@ -18,6 +21,15 @@ if ($RepoRoot) {
 }
 if ($IconEditorRoot) {
   $invokeParams.IconEditorRoot = $IconEditorRoot
+}
+if ($Versions) {
+  $invokeParams.Versions = $Versions
+}
+if ($Bitness) {
+  $invokeParams.Bitness = $Bitness
+}
+if ($Operation) {
+  $invokeParams.Operation = $Operation
 }
 
 $state = Enable-IconEditorDevelopmentMode @invokeParams
