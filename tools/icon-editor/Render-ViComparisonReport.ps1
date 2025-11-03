@@ -94,12 +94,22 @@ if ($requests.Count -eq 0) {
     $note = if ($req.message) { $req.message } else { '' }
 
     $artifactLinks = @()
-    if ($req.artifacts) {
-      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $req.artifacts -PropertyName 'sessionIndex') -Label 'session-index'
+    # Tolerate both PSCustomObject and IDictionary for request and its artifacts,
+    # and also absence of an 'artifacts' member entirely
+    $artifacts = $null
+    if ($req -is [System.Collections.IDictionary]) {
+      if ($req.Contains('artifacts')) { $artifacts = $req['artifacts'] }
+    } else {
+      $prop = $req.PSObject.Properties['artifacts']
+      if ($prop) { $artifacts = $prop.Value }
+    }
+
+    if ($artifacts) {
+      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $artifacts -PropertyName 'sessionIndex') -Label 'session-index'
       if ($link) { $artifactLinks += $link }
-      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $req.artifacts -PropertyName 'captureJson') -Label 'capture'
+      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $artifacts -PropertyName 'captureJson') -Label 'capture'
       if ($link) { $artifactLinks += $link }
-      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $req.artifacts -PropertyName 'compareReport') -Label 'report'
+      $link = Format-Link -Path (Get-ArtifactPath -Artifacts $artifacts -PropertyName 'compareReport') -Label 'report'
       if ($link) { $artifactLinks += $link }
     }
     $artifactCell = if ($artifactLinks.Count -gt 0) { $artifactLinks -join '<br>' } else { '' }
