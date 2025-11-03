@@ -24,7 +24,7 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
-- Report generated: `11/3/2025 1:06:57 PM`
+- Report generated: `11/3/2025 2:01:28 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
   - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
@@ -36,7 +36,7 @@ carries the actual LabVIEW payload.
 - Smoke status: **ok**
 - Runner dependencies: match
 - Custom actions: 4 entries (all match: False)
-- Fixture-only assets discovered: 24
+- Fixture-only assets discovered: 335
 
 ## Comparison with repository sources
 
@@ -52,6 +52,13 @@ carries the actual LabVIEW payload.
 
 ## Fixture-only assets
 
+- resource (311 entries)
+  - plugins\lv_icon.vi (af6be82644d7b0d9252bb5188847a161c641653a38f664bddcacc75bbc6b0b51)
+  - plugins\lv_icon.vit (c74159e8f4e16d1881359dae205e71fdee6131020c7c735440697138eec0c0dd)
+  - plugins\lv_IconEditor.lvlib (a2721f0b8aea3c32a00d0b148f24bdeee05201b41cffbaa212dbe325fdd4f3f7)
+  - plugins\NIIconEditor\Class\Ants\Ants.lvclass (650baef4cded7115e549f0f99258884c43185f88b6a082b1629e0fa72406f176)
+  - plugins\NIIconEditor\Class\Ants\GET\GET_AntsLine.vi (794dfcbf2ed7ff560f2346ba51c840d00dc22e58098c9f4a76cdeb370b9c9df9)
+  - ... 306 more
 - script (1 entries)
   - update_readme_hours.py (7f5bbfadb1193a89f1a4aa6332ccf62650951d389edb2188d86e1e29442049c4)
 - test (23 entries)
@@ -64,7 +71,14 @@ carries the actual LabVIEW payload.
 
 ## Fixture-only manifest delta
 
-- Added: 0, Removed: 0, Changed: 0
+- Added: 311, Removed: 0, Changed: 0
+- Added:
+  - `resource:tests\plugins\niiconeditor\miscellaneous\icon editor\mouse down_templates.vi`
+  - `resource:tests\plugins\niiconeditor\class\fakedarray\tomorespecificclass\clusterref_2_displaytemplatesref.vi`
+  - `resource:tests\plugins\niiconeditor\miscellaneous\magic active layer constant.vi`
+  - `resource:tests\plugins\niiconeditor\miscellaneous\graphics\buildcategories.vi`
+  - `resource:tests\plugins\niiconeditor\controls\drawaction.ctl`
+  - (+306 more)
 
 ## Changed VI comparison (requests)
 
@@ -183,6 +197,23 @@ carries the actual LabVIEW payload.
   - Use `-WorkingPath <path>` to mirror the fork into a disposable workspace instead of `vendor/icon-editor/` (handy for staging synthetic heads).
 - Sync uses `robocopy /MIR`; review changes under `vendor/icon-editor/` before committing.
 - Use `-UpdateFixture` to regenerate `fixture-report.json` / `fixture-manifest.json`, then run `Invoke-ValidateLocal` or dispatch CI to produce VI comparison reports.
+
+### VI comparison report artifacts
+
+- Validate publishes the report when the `icon-editor-compare` job runs on the self-hosted Windows pool. Enable the job by setting the repo variable `ICON_EDITOR_COMPARE_ENABLE=1`, or queue a one-off dispatch with `enable_compare=1`.
+- The job emits two artifacts whenever `vi-diff-requests.json` contains entries:
+  - `icon-editor-vi-diff-captures` – per-VI capture directories, including `compare/lvcompare-capture.json` and raw LVCompare assets.
+  - `icon-editor-vi-comparison-report` – Markdown + JSON summary (`vi-comparison-report.md` / `.json`) linking back to the captures.
+- Download the latest report from CI:
+
+  ```powershell
+  $run    = gh run list --repo $Env:GITHUB_REPOSITORY --workflow Validate --json databaseId,conclusion \
+             | ConvertFrom-Json | Where-Object conclusion -eq 'success' | Select-Object -First 1
+  gh run download $run.databaseId --repo $Env:GITHUB_REPOSITORY `
+    --name icon-editor-vi-comparison-report --dir artifacts/icon-editor/report
+  ```
+
+  The Markdown file includes a status table (same/different/error) and links back to the capture artifact.
 
 ## Building overlays from icon-editor commits
 
