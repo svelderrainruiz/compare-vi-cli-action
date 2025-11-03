@@ -559,7 +559,7 @@ jobs:
         }
         Invoke-HookSample
         PS
-        git add tmp/hooks/sample.ps1
+        git add -f tmp/hooks/sample.ps1
 
     - name: Prime actionlint binary
       shell: pwsh
