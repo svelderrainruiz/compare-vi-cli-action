@@ -52,6 +52,8 @@ jobs:
     environment:
       name: validation
     runs-on: ubuntu-latest
+    env:
+      ICON_EDITOR_SKIP_DOC_UPDATE: '1'
     outputs:
       vi_diff_requests: ${{ steps.vi_diff.outputs.has_requests }}
       vi_diff_request_count: ${{ steps.vi_diff.outputs.request_count }}
