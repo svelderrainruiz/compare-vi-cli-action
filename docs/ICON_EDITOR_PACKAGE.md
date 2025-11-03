@@ -24,7 +24,7 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
-- Report generated: `11/2/2025 5:32:00 PM`
+- Report generated: `11/3/2025 1:06:57 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
   - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
@@ -35,7 +35,7 @@ carries the actual LabVIEW payload.
 
 - Smoke status: **ok**
 - Runner dependencies: match
-- Custom actions: 4 entries (all match: True)
+- Custom actions: 4 entries (all match: False)
 - Fixture-only assets discovered: 24
 
 ## Comparison with repository sources
@@ -43,10 +43,10 @@ carries the actual LabVIEW payload.
 - Custom action hashes:
 | Action | Fixture Hash | Repo Hash | Match |
 | --- | --- | --- | --- |
-| VIP_Pre-Install Custom Action 2021.vi | `05ddb5a2995124712e31651ed4a623e0e43044435ff7af62c24a65fbe2a5273a` | `05ddb5a2995124712e31651ed4a623e0e43044435ff7af62c24a65fbe2a5273a` | match |
-| VIP_Post-Install Custom Action 2021.vi | `29b4aec05c38707975a4d6447daab8eea6c59fcf0cde45f899f8807b11cd475e` | `29b4aec05c38707975a4d6447daab8eea6c59fcf0cde45f899f8807b11cd475e` | match |
-| VIP_Pre-Uninstall Custom Action 2021.vi | `a10234da4dfe23b87f6e7a25f3f74ae30751193928d5700a628593f1120a5a91` | `a10234da4dfe23b87f6e7a25f3f74ae30751193928d5700a628593f1120a5a91` | match |
-| VIP_Post-Uninstall Custom Action 2021.vi | `958b253a321fec8e65805195b1e52cda2fd509823d0ad18b29ae341513d4615b` | `958b253a321fec8e65805195b1e52cda2fd509823d0ad18b29ae341513d4615b` | match |
+| VIP_Pre-Install Custom Action 2021.vi | `05ddb5a2995124712e31651ed4a623e0e43044435ff7af62c24a65fbe2a5273a` | `_missing_` | mismatch |
+| VIP_Post-Install Custom Action 2021.vi | `29b4aec05c38707975a4d6447daab8eea6c59fcf0cde45f899f8807b11cd475e` | `_missing_` | mismatch |
+| VIP_Pre-Uninstall Custom Action 2021.vi | `a10234da4dfe23b87f6e7a25f3f74ae30751193928d5700a628593f1120a5a91` | `_missing_` | mismatch |
+| VIP_Post-Uninstall Custom Action 2021.vi | `958b253a321fec8e65805195b1e52cda2fd509823d0ad18b29ae341513d4615b` | `_missing_` | mismatch |
 
 - Runner dependencies hash match: match
 
@@ -78,6 +78,36 @@ carries the actual LabVIEW payload.
 - Unit tests executed: False
 <!-- icon-editor-report:end -->
 
+## Development mode targets
+
+- LabVIEW targets are now managed in `configs/icon-editor/dev-mode-targets.json` (schema `icon-editor/dev-mode-targets@v1`). Each operation maps to the LabVIEW version/bitness it needs; the defaults ship with:
+  - `BuildPackage` → LabVIEW 2021 (32-bit and 64-bit) for VIP builds.
+  - `Compare` → LabVIEW 2025 (64-bit) for VI comparison/report helpers.
+- `Enable-IconEditorDevelopmentMode` and `Disable-IconEditorDevelopmentMode` accept an `-Operation` switch so callers do not have to repeat version/bitness lists. Examples:
+
+  ```powershell
+  # Prep the icon editor repository for VI comparisons (LabVIEW 2025 x64)
+  pwsh -File tools/icon-editor/Enable-DevMode.ps1 `
+    -RepoRoot . `
+    -IconEditorRoot vendor/icon-editor `
+    -Operation Compare
+
+  # ... run comparisons ...
+
+  pwsh -File tools/icon-editor/Disable-DevMode.ps1 `
+    -RepoRoot . `
+    -IconEditorRoot vendor/icon-editor `
+    -Operation Compare
+
+  # Enable development mode for packaging/build flows (LabVIEW 2021 32/64)
+  pwsh -File tools/icon-editor/Enable-DevMode.ps1 `
+    -RepoRoot . `
+    -IconEditorRoot vendor/icon-editor `
+    -Operation BuildPackage
+  ```
+
+- You can still override `-Versions`/`-Bitness` explicitly when experimenting; doing so bypasses the policy file for that invocation.
+
 ## Follow-up opportunities
 
 - Decide whether key assets that only live inside the package (e.g., `update_readme_hours.py`, unit-test directories)
@@ -88,6 +118,227 @@ carries the actual LabVIEW payload.
   changes without unpacking the VIP manually.
 - A secondary fixture (`tests\fixtures\icon-editor\ni_icon_editor-1.4.1.794.vip`) plus manifest
   (`tests\fixtures\icon-editor\fixture-manifest-1.4.1.794.json`) exists for automated baseline comparisons.
+
+## Local validate helper (self-hosted)
+
+- Script: `tools/icon-editor/Invoke-ValidateLocal.ps1`
+- Purpose: replicate the icon-editor jobs from Validate on the self-hosted runner without waiting for GitHub Actions.
+- Requirements:
+  - Run on the self-hosted Windows machine with LabVIEW/LVCompare + TestStand harness configured (same tooling as CI).
+  - Provide `GH_TOKEN`/`GITHUB_TOKEN` so priority sync and policy checks succeed.
+  - Baseline fixtures live under `tests/fixtures/icon-editor/`.
+- Usage:
+
+  ```powershell
+  # Full run (LVCompare enabled)
+  pwsh -File tools/icon-editor/Invoke-ValidateLocal.ps1
+
+  # Dry run without launching LVCompare
+  pwsh -File tools/icon-editor/Invoke-ValidateLocal.ps1 -SkipLVCompare
+
+  # Override baseline VIP
+  pwsh -File tools/icon-editor/Invoke-ValidateLocal.ps1 `
+    -BaselineFixture 'D:\vip\ni_icon_editor-1.4.1.700.vip' `
+    -BaselineManifest 'D:\vip\fixture-manifest-1.4.1.700.json'
+
+  # Run via npm helper (dry-run)
+  npm run icon-editor:validate -- --DryRun --SkipBootstrap --SkipLVCompare
+  ```
+
+- Outputs land in `tests/results/_agent/icon-editor/local-validate` by default:
+  - `fixture-report.json` / `manifest.json`
+  - `vi-diff/vi-diff-requests.json`
+  - `vi-diff-captures/**` + `vi-comparison-report.md`
+  - (optional) `vip-vi-diff*` when `-IncludeSimulation` is supplied
+  - Pester / PrePush outputs (standard locations under `tests/results`)
+
+- Flags:
+  - `-SkipBootstrap` skips `priority/bootstrap.ps1` when you already ran it.
+  - `-SkipLVCompare` or `-DryRun` keeps the compare tooling in dry-run mode.
+  - `-ResultsRoot` customizes the output directory.
+  - `-KeepWorkspace` retains extraction folders for debugging.
+  - `-IncludeSimulation` runs the simulation VIP diff path (dry-run comparisons).
+
+## Syncing a fork for diff coverage
+
+- Script: `tools/icon-editor/Sync-IconEditorFork.ps1`
+- Purpose: clone a forked `labview-icon-editor` repository (default remote `icon-editor`), mirror it into `vendor/icon-editor/`, and optionally kick off fixture updates or the local Validate helper.
+- Usage:
+
+  ```powershell
+  # Sync using configured remote "icon-editor" (branch develop)
+  pwsh -File tools/icon-editor/Sync-IconEditorFork.ps1
+
+  # Sync a specific slug + update fixture report + run local validate
+  pwsh -File tools/icon-editor/Sync-IconEditorFork.ps1 `
+    -RepoSlug 'your-org/labview-icon-editor' `
+    -UpdateFixture `
+    -RunValidateLocal `
+    -SkipBootstrap
+  ```
+
+- Assumptions:
+  - Remote `icon-editor` is configured (`git remote add icon-editor ...`). Pass `-RepoSlug owner/repo` if you prefer direct slugs.
+  - Branch defaults to `develop`; override via `-Branch`.
+  - Use `-WorkingPath <path>` to mirror the fork into a disposable workspace instead of `vendor/icon-editor/` (handy for staging synthetic heads).
+- Sync uses `robocopy /MIR`; review changes under `vendor/icon-editor/` before committing.
+- Use `-UpdateFixture` to regenerate `fixture-report.json` / `fixture-manifest.json`, then run `Invoke-ValidateLocal` or dispatch CI to produce VI comparison reports.
+
+## Building overlays from icon-editor commits
+
+- Script: `tools/icon-editor/Prepare-OverlayFromRepo.ps1`
+- Purpose: diff two refs inside an icon-editor repository and copy only the changed resource/test VIs into a clean overlay directory.
+- Usage:
+
+  ```powershell
+  $repo    = 'tmp/icon-editor/repo'   # git clone of labview-icon-editor
+  $overlay = 'tmp/icon-editor/overlay'
+  $baseRef = 'e293e7335870e33c5c33ed2e5052f8edf504c5a0^'
+  $headRef = 'e293e7335870e33c5c33ed2e5052f8edf504c5a0'
+
+  pwsh -File tools/icon-editor/Prepare-OverlayFromRepo.ps1 `
+    -RepoPath $repo `
+    -BaseRef $baseRef `
+    -HeadRef $headRef `
+    -OverlayRoot $overlay `
+    -Force
+  ```
+
+- The overlay is ready to feed into `Stage-IconEditorSnapshot.ps1` or `Invoke-IconEditorSnapshotFromRepo.ps1` so only the changed VIs are queued for LVCompare.
+
+## Staging synthetic head snapshots (fake PRs)
+
+- Script: `tools/icon-editor/Stage-IconEditorSnapshot.ps1`
+- Purpose: reuse an existing checkout (or an overlay generated by `Prepare-OverlayFromRepo.ps1`) inside an isolated workspace, regenerate the head manifest/report on top of the committed VIP fixture, and optionally run `Invoke-ValidateLocal.ps1` to produce VI comparison requests/captures.
+- Usage:
+
+  ```powershell
+  # Refresh manifest + report only
+  pwsh -File tools/icon-editor/Stage-IconEditorSnapshot.ps1 `
+    -SourcePath vendor/icon-editor `
+    -WorkspaceRoot tmp/icon-editor/snapshots `
+    -StageName 'local-head' `
+    -SkipValidate
+
+  # Stage overlay results and run validate in dry-run mode
+  pwsh -File tools/icon-editor/Stage-IconEditorSnapshot.ps1 `
+    -SourcePath tmp/icon-editor/repo `
+    -ResourceOverlayRoot tmp/icon-editor/overlay `
+    -WorkspaceRoot tests/results/_agent/icon-editor/snapshots `
+    -StageName 'auto-proof' `
+    -DryRun `
+    -SkipBootstrapForValidate
+  ```
+
+- For a single command that prepares the overlay, stages the snapshot, and (optionally) runs Validate, use `tools/icon-editor/Invoke-IconEditorSnapshotFromRepo.ps1`:
+
+  ```powershell
+  pwsh -File tools/icon-editor/Invoke-IconEditorSnapshotFromRepo.ps1 `
+    -RepoPath tmp/icon-editor/repo `
+    -BaseRef main~1 `
+    -HeadRef main `
+    -WorkspaceRoot tests/results/_agent/icon-editor/snapshots `
+    -StageName 'auto-proof' `
+    -DryRun
+  ```
+
+- Outputs (under `tests/results/_agent/icon-editor/snapshots/<stage>/` by default):
+  - `head-manifest.json` — synthetic `icon-editor/fixture-manifest@v1` for the staged overlay
+  - `report/fixture-report.json` — the refreshed fixture report (rendered by `Update-IconEditorFixtureReport.ps1`)
+  - `validate/**` — results from `Invoke-ValidateLocal` (when not skipped), including VI diff requests/captures and comparison report
+- Flags:
+  - `-SourcePath` reuses an existing tree. Pair it with `Prepare-OverlayFromRepo.ps1` to limit the snapshot to just the changed resources/tests.
+  - `-SkipValidate` prevents `Invoke-ValidateLocal` from running; the helper still emits the manifest/report.
+  - `-DryRun` automatically sets `-SkipLVCompare` for the validate step so LVCompare stays offline.
+  - `-DevModeVersions` / `-DevModeBitness` let you override the LabVIEW version/bitness used when toggling development mode (defaults to 2025 / 64-bit). Use `-SkipDevMode` to bypass the toggle entirely if you have already prepared the environment.
+  - When not specified, the helper inspects the local LabVIEW installations via `Get-IconEditorDevModeLabVIEWTargets` and prefers LabVIEW 2025 x64 when present, falling back to any available LabVIEW 2025 bitness (or the newest detected version).
+  - `-SkipBootstrapForValidate` passes through to `Invoke-ValidateLocal` when `priority/bootstrap.ps1` already ran.
+- Pair with `Sync-IconEditorFork.ps1` when you want a long-lived mirror under `vendor/icon-editor/`, or use this helper to stage ad-hoc “fake PR” heads before pushing upstream.
+- For quick diffs without editing the VI in LabVIEW, mirror the resource tree into a disposable overlay, swap in a substitute VI, then stage the snapshot:
+
+  ```powershell
+  $overlay = 'tmp/icon-editor/overlay'
+  robocopy vendor/icon-editor/resource $overlay /MIR
+
+  Remove-Item (Join-Path $overlay 'plugins\NIIconEditor\Miscellaneous\User Events\Initialization_UserEvents.vi')
+  Copy-Item (Join-Path $overlay 'plugins\NIIconEditor\Support\ApplyLibIconOverlayToVIIcon.vi') `
+           (Join-Path $overlay 'plugins\NIIconEditor\Miscellaneous\User Events\Initialization_UserEvents.vi')
+
+  pwsh -File tools/icon-editor/Stage-IconEditorSnapshot.ps1 `
+    -SourcePath vendor/icon-editor `
+    -ResourceOverlayRoot $overlay `
+    -WorkspaceRoot tests/results/_agent/icon-editor/snapshots `
+    -StageName 'vi-diff-proof' `
+    -SkipValidate
+  ```
+
+  After the run, rebuild the overlay from `vendor/icon-editor/resource` (or restore the original VI) so the next snapshot starts from a clean baseline.
+### Heuristic VI diff sweep (Issue #583)
+
+- Script: `tools/icon-editor/Invoke-VIDiffSweepStrong.ps1`
+- Purpose: triage a range of icon-editor commits, skipping LVCompare for VIs that are pure renames or whose blobs are unchanged. Only the remaining “interesting” VIs are passed to `Invoke-VIComparisonFromCommit.ps1`, which still uses raw paths so dependencies stay intact.
+- Quick triage (heuristics only; no LVCompare launches):
+
+  ```powershell
+  pwsh -File tools/icon-editor/Invoke-VIDiffSweepStrong.ps1 `
+    -RepoPath tmp/icon-editor/repo `
+    -BaseRef origin/develop~20 `
+    -HeadRef origin/develop `
+    -Mode quick `
+    -CachePath tests/results/_agent/icon-editor/vi-diff-cache.json `
+    -EventsPath tests/results/_agent/icon-editor/vi-diff/compare-events.ndjson `
+    -SummaryPath tests/results/_agent/icon-editor/vi-diff-summary.json `
+    -Quiet
+  ```
+
+- Full sweep (default; launches LVCompare when heuristics say “compare”):
+
+  ```powershell
+  pwsh -File tools/icon-editor/Invoke-VIDiffSweepStrong.ps1 `
+    -RepoPath tmp/icon-editor/repo `
+    -BaseRef origin/develop~20 `
+    -HeadRef origin/develop `
+    -WorkspaceRoot tests/results/_agent/icon-editor/snapshots `
+    -CachePath tests/results/_agent/icon-editor/vi-diff-cache.json `
+    -EventsPath tests/results/_agent/icon-editor/vi-diff/compare-events.ndjson `
+    -SummaryPath tests/results/_agent/icon-editor/vi-diff-summary.json `
+    -Quiet
+  ```
+
+  Remove `-Mode quick` (or pass `-Mode full`) to run the full path. Delete the cache file if you need to force fresh decisions.
+
+- Flags roll up to the underlying helpers:
+  - `-SkipValidate`, `-SkipLVCompare` → forwarded to `Invoke-VIComparisonFromCommit.ps1` when comparisons still run.
+  - `-LabVIEWExePath` → overrides the auto-resolved LabVIEW 2025 64-bit binary.
+- `-EventsPath` controls where heuristic decisions are logged (`compare-events.ndjson` style). Omit to use the default under `tests/results/_agent/icon-editor/vi-diff/`.
+- `-CachePath` stores per-commit decisions so re-running the sweep can fast-path previously triaged commits.
+- Heuristic tuning (size delta threshold, compare throttling, prefix allow/deny rules) lives in `configs/icon-editor/vi-diff-heuristics.json`. Set `ICON_EDITOR_VI_DIFF_RULES` to point at an alternate JSON file while experimenting locally. `maxComparePerCommit` limits how many VI paths a single commit can send to LVCompare; overflow paths are skipped with a `compare-throttle` reason so you can follow up manually.
+- Summary output structure (also written to `-SummaryPath` when provided):
+
+  ```json
+  {
+    "repoPath": "tmp/icon-editor/repo",
+    "baseRef": "origin/develop~20",
+    "headRef": "origin/develop",
+    "totalCommits": 5,
+    "commits": [
+      {
+        "commit": "4de1aeae…",
+        "comparePaths": [],
+        "skipped": [
+          { "path": "resource/plugins/…/MenuSelection(User).vi", "reason": "rename without content change" }
+        ]
+      },
+      {
+        "commit": "ec1d4952…",
+        "comparePaths": [ "resource/plugins/…/Export_Clipboard.vi" ],
+        "skipped": []
+      }
+    ]
+  }
+  ```
+
+  Use `-StageNamePrefix` (default `commit`) to control the directory naming inside `tests/results/_agent/icon-editor/snapshots`.
 
 ## Maintaining this report
 

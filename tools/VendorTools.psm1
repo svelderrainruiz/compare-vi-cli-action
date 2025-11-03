@@ -295,6 +295,102 @@ function Resolve-LabVIEWCliPath {
   return $null
 }
 
+function Resolve-LabVIEW2025Environment {
+  param([switch]$ThrowOnMissing)
+
+  if (-not $IsWindows) {
+    if ($ThrowOnMissing) { throw 'LabVIEW 2025 (64-bit) resolution requires Windows.' }
+    return [pscustomobject]@{
+      LabVIEWExePath = $null
+      LabVIEWCliPath = $null
+      LVComparePath  = $null
+    }
+  }
+
+  $config = Get-LabVIEWConfig
+
+  function Add-LabVIEWCandidate {
+    param($list, $value)
+    if ($null -eq $value) { return }
+    if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) {
+      foreach ($item in $value) { Add-LabVIEWCandidate $list $item }
+      return
+    }
+    $text = [string]$value
+    if ([string]::IsNullOrWhiteSpace($text)) { return }
+    foreach ($entry in ($text -split ';')) {
+      $trimmed = $entry.Trim()
+      if ($trimmed.Length -eq 0) { continue }
+      if (-not $list.Contains($trimmed)) { $list.Add($trimmed) | Out-Null }
+    }
+  }
+
+  $labviewCandidates = New-Object System.Collections.Generic.List[string]
+  Add-LabVIEWCandidate $labviewCandidates $env:LABVIEW_PATH
+  Add-LabVIEWCandidate $labviewCandidates $env:LABVIEW_EXE_PATH
+  Add-LabVIEWCandidate $labviewCandidates (Get-VersionedConfigValue -Config $config -PropertyName 'LabVIEWExePath' -Version 2025 -Bitness 64)
+  Add-LabVIEWCandidate $labviewCandidates (Find-LabVIEWVersionExePath -Version 2025 -Bitness 64 -Config $config)
+  if ($env:ProgramFiles) {
+    Add-LabVIEWCandidate $labviewCandidates (Join-Path $env:ProgramFiles 'National Instruments\LabVIEW 2025\LabVIEW.exe')
+  }
+
+  $labviewExe = $null
+  foreach ($candidate in $labviewCandidates) {
+    try {
+      if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+      $resolved = (Resolve-Path -LiteralPath $candidate).Path
+      if ($resolved -match '(?i)Program Files \(x86\)') { continue }
+      $labviewExe = $resolved
+      break
+    } catch {}
+  }
+
+  if (-not $labviewExe -and $ThrowOnMissing) {
+    throw 'LabVIEW 2025 (64-bit) executable not found. Set LABVIEW_PATH, configure configs/labview-paths(.local).json, or install LabVIEW 2025 (64-bit).'
+  }
+
+  $cliCandidates = New-Object System.Collections.Generic.List[string]
+  Add-LabVIEWCandidate $cliCandidates $env:LABVIEWCLI_PATH
+  Add-LabVIEWCandidate $cliCandidates $env:LABVIEW_CLI_PATH
+  Add-LabVIEWCandidate $cliCandidates (Get-VersionedConfigValue -Config $config -PropertyName 'LabVIEWCLIPath' -Version 2025 -Bitness 64)
+  if ($config -and $config.PSObject.Properties['labviewcli']) { Add-LabVIEWCandidate $cliCandidates $config.labviewcli }
+  if ($config -and $config.PSObject.Properties['LabVIEWCLIPath']) { Add-LabVIEWCandidate $cliCandidates $config.LabVIEWCLIPath }
+  if ($env:ProgramFiles) {
+    Add-LabVIEWCandidate $cliCandidates (Join-Path $env:ProgramFiles 'National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.exe')
+  }
+
+  $labviewCli = $null
+  foreach ($candidate in $cliCandidates) {
+    try {
+      if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+      $resolved = (Resolve-Path -LiteralPath $candidate).Path
+      if ($resolved -match '(?i)Program Files \(x86\)') { continue }
+      $labviewCli = $resolved
+      break
+    } catch {}
+  }
+
+  $lvComparePath = $null
+  try {
+    $candidateCompare = Resolve-LVComparePath
+    if ($candidateCompare -and -not ($candidateCompare -match '(?i)Program Files \(x86\)')) {
+      $lvComparePath = $candidateCompare
+    } else {
+      $canonicalCompare = if ($env:ProgramFiles) { Join-Path $env:ProgramFiles 'National Instruments\Shared\LabVIEW Compare\LVCompare.exe' } else { $null }
+      if ($canonicalCompare -and (Test-Path -LiteralPath $canonicalCompare -PathType Leaf)) {
+        $lvComparePath = (Resolve-Path -LiteralPath $canonicalCompare).Path
+      }
+    }
+  } catch {}
+
+  return [pscustomobject]@{
+    LabVIEWExePath = $labviewExe
+    LabVIEWCliPath = $labviewCli
+    LVComparePath  = $lvComparePath
+  }
+}
+
+
 function Get-GCliCandidateExePaths {
   param([string]$GCliExePath)
 

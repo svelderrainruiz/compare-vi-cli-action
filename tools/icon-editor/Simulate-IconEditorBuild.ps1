@@ -6,7 +6,9 @@ param(
   [object]$ExpectedVersion,
   [string]$VipDiffOutputDir,
   [string]$VipDiffRequestsPath,
-  [switch]$KeepExtract
+  [switch]$KeepExtract,
+  [switch]$SkipResourceOverlay,
+  [string]$ResourceOverlayRoot
 )
 
 Set-StrictMode -Version Latest
@@ -96,9 +98,66 @@ if (Test-Path -LiteralPath $nestedExtract) {
 
 Expand-Archive -Path $nestedVip.FullName -DestinationPath $nestedExtract -Force
 
-$lvlibpSource = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install\temp'
-if (-not (Test-Path -LiteralPath $lvlibpSource -PathType Container)) {
-  throw "Unable to locate lvlibp directory inside system VIP at '$lvlibpSource'."
+$resourceRoot = $ResourceOverlayRoot
+if (-not $resourceRoot) {
+  $resourceRoot = Join-Path $repoRoot 'vendor/icon-editor/resource'
+}
+if (-not $SkipResourceOverlay.IsPresent -and $resourceRoot -and (Test-Path -LiteralPath $resourceRoot -PathType Container)) {
+  $resourceDest = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\resource'
+  if (-not (Test-Path -LiteralPath $resourceDest -PathType Container)) {
+    [void](New-Item -ItemType Directory -Path $resourceDest -Force)
+  }
+  $robocopyCommand = $null
+  try {
+    $robocopyCommand = Get-Command 'robocopy' -ErrorAction SilentlyContinue
+  } catch {
+    $robocopyCommand = $null
+  }
+
+  $useFallback = $false
+  if ($robocopyCommand) {
+    $quotedSource = '"{0}"' -f $resourceRoot
+    $quotedDest = '"{0}"' -f $resourceDest
+    $robocopyArgs = @($quotedSource, $quotedDest, '/MIR')
+    $rc = Start-Process -FilePath $robocopyCommand.Source -ArgumentList $robocopyArgs -NoNewWindow -PassThru -Wait
+    if ($rc.ExitCode -gt 3) {
+      Write-Warning "Failed to mirror resource directory with robocopy (exit code $($rc.ExitCode)); using Copy-Item fallback."
+      $useFallback = $true
+    }
+  } else {
+    Write-Host '::notice::robocopy not found; using Copy-Item fallback for resource overlay.'
+    $useFallback = $true
+  }
+
+  if ($useFallback) {
+    if (Test-Path -LiteralPath $resourceDest -PathType Container) {
+      Get-ChildItem -LiteralPath $resourceDest -Force | Remove-Item -Recurse -Force
+    } else {
+      [void](New-Item -ItemType Directory -Path $resourceDest -Force)
+    }
+    Get-ChildItem -LiteralPath $resourceRoot -Force | ForEach-Object {
+      Copy-Item -LiteralPath $_.FullName -Destination $resourceDest -Recurse -Force -ErrorAction Stop
+    }
+  }
+} elseif ($SkipResourceOverlay.IsPresent) {
+  Write-Host '::notice::Skipping resource overlay by request.'
+} else {
+  Write-Host '::notice::vendor/icon-editor/resource not found; skipping resource overlay.'
+}
+
+$installRoot = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install'
+$lvlibpFiles = @()
+if (Test-Path -LiteralPath $installRoot -PathType Container) {
+  $lvlibpFiles = Get-ChildItem -LiteralPath $installRoot -Filter '*.lvlibp' -File -Recurse -ErrorAction SilentlyContinue
+}
+if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
+  $legacyTemp = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install\temp'
+  if (Test-Path -LiteralPath $legacyTemp -PathType Container) {
+    $lvlibpFiles = Get-ChildItem -LiteralPath $legacyTemp -Filter '*.lvlibp' -File -ErrorAction SilentlyContinue
+  }
+}
+if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
+  throw "Unable to locate lvlibp artifacts inside system VIP under '$installRoot'."
 }
 
 $artifacts = @()
@@ -127,9 +186,12 @@ $systemVipName = Split-Path -Leaf $nestedVip.FullName
 $systemDest = Join-Path $ResultsRoot $systemVipName
 $artifacts += Register-Artifact -SourcePath $nestedVip.FullName -DestinationPath $systemDest -Kind 'vip'
 
-Get-ChildItem -LiteralPath $lvlibpSource -Filter '*.lvlibp' | ForEach-Object {
-  $dest = Join-Path $ResultsRoot $_.Name
-  $artifacts += Register-Artifact -SourcePath $_.FullName -DestinationPath $dest -Kind 'lvlibp'
+$seenDestinations = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($file in $lvlibpFiles) {
+  $dest = Join-Path $ResultsRoot $file.Name
+  if ($seenDestinations.Add($dest)) {
+    $artifacts += Register-Artifact -SourcePath $file.FullName -DestinationPath $dest -Kind 'lvlibp'
+  }
 }
 
 $expectedVersionValue = $ExpectedVersion

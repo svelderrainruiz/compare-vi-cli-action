@@ -1,7 +1,7 @@
 {
   "schema": "agent/priority-router@v1",
-  "issue": 575,
-  "updatedAt": "2025-11-02T21:51:33Z",
+  "issue": 583,
+  "updatedAt": "2025-11-03T19:19:27Z",
   "actions": [
     {
       "key": "hooks:pre-commit",

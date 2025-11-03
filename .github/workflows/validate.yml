@@ -52,6 +52,8 @@ jobs:
     environment:
       name: validation
     runs-on: ubuntu-latest
+    env:
+      ICON_EDITOR_SKIP_DOC_UPDATE: '1'
     outputs:
       vi_diff_requests: ${{ steps.vi_diff.outputs.has_requests }}
       vi_diff_request_count: ${{ steps.vi_diff.outputs.request_count }}
@@ -312,7 +314,9 @@ jobs:
         $mdFiles = Get-ChildItem -Path . -Recurse -Include *.md -File |
           Where-Object {
             $path = $_.FullName -replace '\\','/'
-            return $path -notmatch '/node_modules/'
+            return $path -notmatch '/node_modules/' `
+              -and $path -notmatch '/vendor/icon-editor/' `
+              -and $path -notmatch '/tmp/icon-editor/'
           }
         $errors = @()
         foreach ($file in $mdFiles) {
@@ -408,8 +412,6 @@ jobs:
       run: |
         markdownlint "**/*.md" --ignore node_modules
       continue-on-error: true
-    env:
-      ACTIONLINT_VERSION: '${{ vars.ACTIONLINT_VERSION || ''1.7.7'' }}'
   fixtures:
     runs-on: [self-hosted, Windows, X64]
     env:
@@ -557,7 +559,7 @@ jobs:
         }
         Invoke-HookSample
         PS
-        git add tmp/hooks/sample.ps1
+        git add -f tmp/hooks/sample.ps1
 
     - name: Prime actionlint binary
       shell: pwsh
@@ -1122,6 +1124,23 @@ jobs:
           } else {
             Write-Host '::notice::VIP comparison summary not found; skipping report.'
           }
+      - name: Run IconEditor dev-mode integration checks
+        env:
+          RESULTS_DIR: ${{ runner.temp }}\icon-editor
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $resultsDir = Join-Path $env:RESULTS_DIR 'dev-mode-integration'
+          if (-not (Test-Path -LiteralPath $resultsDir -PathType Container)) {
+            New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+          }
+          $include = 'IconEditorDevMode.Integration.Tests.ps1'
+          pwsh -NoLogo -NoProfile -File Invoke-PesterTests.ps1 `
+            -TestsPath tests `
+            -IntegrationMode include `
+            -ResultsPath $resultsDir `
+            -IncludePatterns $include `
+            -EmitFailuresJsonAlways `
+            -LiveOutput
       - name: Upload VIP VI diff captures
         if: ${{ always() && steps.build.outputs.build_mode == 'simulate' }}
         uses: actions/upload-artifact@v5
@@ -1148,6 +1167,13 @@ jobs:
         with:
           name: icon-editor-build-${{ steps.build.outputs.package_version || 'unversioned' }}
           path: ${{ runner.temp }}\icon-editor
+      - name: Upload IconEditor dev-mode proof
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: icon-editor-dev-mode-proof
+          path: tests/results/_agent/icon-editor/dev-mode-proof.json
+          if-no-files-found: warn
 
   icon-editor-compare:
     needs: [smoke-gate, lint, icon-editor-gate]

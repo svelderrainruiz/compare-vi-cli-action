@@ -147,10 +147,166 @@ function Invoke-IconEditorDevModeScript {
   }
 }
 
+function ConvertTo-IntList {
+  param(
+    $Values,
+    [int[]]$DefaultValues
+  )
+
+  $result = @()
+  if ($Values) {
+    foreach ($value in $Values) {
+      if ($null -eq $value) { continue }
+      if ($value -is [array]) {
+        foreach ($inner in $value) {
+          if ($null -ne $inner) { $result += [int]$inner }
+        }
+      } else {
+        $result += [int]$value
+      }
+    }
+  }
+
+  if ($result.Count -eq 0) {
+    $result = @()
+    foreach ($default in $DefaultValues) {
+      $result += [int]$default
+    }
+  }
+
+  return $result
+}
+
+function Get-DefaultIconEditorDevModeTargets {
+  param([string]$Operation)
+
+  $normalized = if ($Operation) { $Operation.ToLowerInvariant() } else { 'compare' }
+  switch ($normalized) {
+    'buildpackage' {
+      return [pscustomobject]@{
+        Versions = @(2021)
+        Bitness  = @(32, 64)
+      }
+    }
+    default {
+      return [pscustomobject]@{
+        Versions = @(2025)
+        Bitness  = @(64)
+      }
+    }
+  }
+}
+
+function Get-IconEditorDevModePolicyPath {
+  param([string]$RepoRoot)
+
+  if (-not $RepoRoot) {
+    $RepoRoot = Resolve-IconEditorRepoRoot
+  } else {
+    $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+  }
+
+  if ($env:ICON_EDITOR_DEV_MODE_POLICY_PATH) {
+    return (Resolve-Path -LiteralPath $env:ICON_EDITOR_DEV_MODE_POLICY_PATH).Path
+  }
+
+  return (Join-Path $RepoRoot 'configs' 'icon-editor' 'dev-mode-targets.json')
+}
+
+function Get-IconEditorDevModePolicy {
+  param(
+    [string]$RepoRoot,
+    [switch]$ThrowIfMissing
+  )
+
+  $policyPath = Get-IconEditorDevModePolicyPath -RepoRoot $RepoRoot
+  if (-not (Test-Path -LiteralPath $policyPath -PathType Leaf)) {
+    if ($ThrowIfMissing.IsPresent) {
+      throw "Icon editor dev-mode policy not found at '$policyPath'."
+    }
+    return $null
+  }
+
+  try {
+    $policyContent = Get-Content -LiteralPath $policyPath -Raw -Encoding UTF8
+    $policy = $policyContent | ConvertFrom-Json -AsHashtable -Depth 5
+  } catch {
+    throw "Failed to parse icon editor dev-mode policy '$policyPath': $($_.Exception.Message)"
+  }
+
+  if (-not ($policy -and $policy.ContainsKey('operations'))) {
+    if ($ThrowIfMissing.IsPresent) {
+      throw "Icon editor dev-mode policy at '$policyPath' is missing the 'operations' node."
+    }
+    return $null
+  }
+
+  return [pscustomobject]@{
+    Path       = (Resolve-Path -LiteralPath $policyPath).Path
+    Schema     = $policy['schema']
+    Operations = $policy['operations']
+  }
+}
+
+function Get-IconEditorDevModePolicyEntry {
+  param(
+    [Parameter(Mandatory)][string]$Operation,
+    [string]$RepoRoot
+  )
+
+  $policy = Get-IconEditorDevModePolicy -RepoRoot $RepoRoot -ThrowIfMissing
+  $operations = $policy.Operations
+  if (-not $operations) {
+    throw "Icon editor dev-mode policy at '$($policy.Path)' does not define any operations."
+  }
+
+  $entry = $null
+  if ($operations.ContainsKey($Operation)) {
+    $entry = $operations[$Operation]
+    $operationKey = $Operation
+  } else {
+    foreach ($key in $operations.Keys) {
+      if ($key -and ($key.ToString().ToLowerInvariant() -eq $Operation.ToLowerInvariant())) {
+        $entry = $operations[$key]
+        $operationKey = $key
+        break
+      }
+    }
+  }
+
+  if (-not $entry) {
+    throw "Operation '$Operation' is not defined in icon editor dev-mode policy '$($policy.Path)'."
+  }
+
+  $versions = @()
+  if ($entry.versions) {
+    foreach ($value in $entry.versions) {
+      if ($null -ne $value) { $versions += [int]$value }
+    }
+  }
+
+  $bitness = @()
+  if ($entry.bitness) {
+    foreach ($value in $entry.bitness) {
+      if ($null -ne $value) { $bitness += [int]$value }
+    }
+  }
+
+  return [pscustomobject]@{
+    Operation = $operationKey
+    Versions  = $versions
+    Bitness   = $bitness
+    Path      = $policy.Path
+  }
+}
+
 function Enable-IconEditorDevelopmentMode {
   param(
     [string]$RepoRoot,
-    [string]$IconEditorRoot
+    [string]$IconEditorRoot,
+    [int[]]$Versions,
+    [int[]]$Bitness,
+    [string]$Operation = 'Compare'
   )
 
   if (-not $RepoRoot) {
@@ -176,51 +332,87 @@ function Enable-IconEditorDevelopmentMode {
     }
   }
 
+  $targetsOverride = $null
+  if (-not $PSBoundParameters.ContainsKey('Versions') -or -not $PSBoundParameters.ContainsKey('Bitness')) {
+    try {
+      $targetsOverride = Get-IconEditorDevModePolicyEntry -RepoRoot $RepoRoot -Operation $Operation
+    } catch {
+      $targetsOverride = $null
+      if (-not $PSBoundParameters.ContainsKey('Versions') -and -not $PSBoundParameters.ContainsKey('Bitness')) {
+        throw
+      }
+    }
+  }
+
+  $defaultTargets = Get-DefaultIconEditorDevModeTargets -Operation $Operation
+  [array]$overrideVersions = @()
+  [array]$overrideBitness  = @()
+  if ($targetsOverride) {
+    $overrideVersions = @($targetsOverride.Versions)
+    $overrideBitness  = @($targetsOverride.Bitness)
+  }
+  [array]$effectiveVersions = if ($overrideVersions.Count -gt 0) { $overrideVersions } else { @($defaultTargets.Versions) }
+  [array]$effectiveBitness  = if ($overrideBitness.Count -gt 0)  { $overrideBitness }  else { @($defaultTargets.Bitness) }
+
+  [array]$versionList = ConvertTo-IntList -Values $Versions -DefaultValues $effectiveVersions
+  [array]$bitnessList = ConvertTo-IntList -Values $Bitness -DefaultValues $effectiveBitness
+
+  if ($versionList.Count -eq 0 -or $bitnessList.Count -eq 0) {
+    throw "LabVIEW version/bitness selection resolved to an empty set for operation '$Operation'."
+  }
+
   $pluginsPath = Join-Path $IconEditorRoot 'resource' 'plugins'
   if (Test-Path -LiteralPath $pluginsPath -PathType Container) {
     Get-ChildItem -LiteralPath $pluginsPath -Filter '*.lvlibp' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
   }
 
-  foreach ($bitness in @('32','64')) {
-    Invoke-IconEditorDevModeScript `
-      -ScriptPath $addTokenScript `
-      -ArgumentList @(
-        '-MinimumSupportedLVVersion','2021',
-        '-SupportedBitness',        $bitness,
-        '-RelativePath',            $IconEditorRoot
-      ) `
-      -RepoRoot $RepoRoot `
-      -IconEditorRoot $IconEditorRoot
+  foreach ($versionValue in $versionList) {
+    $versionText = [string]$versionValue
+    foreach ($bitnessValue in $bitnessList) {
+      $bitnessText = [string]$bitnessValue
+      Invoke-IconEditorDevModeScript `
+        -ScriptPath $addTokenScript `
+        -ArgumentList @(
+          '-MinimumSupportedLVVersion', $versionText,
+          '-SupportedBitness',          $bitnessText,
+          '-RelativePath',            $IconEditorRoot
+        ) `
+        -RepoRoot $RepoRoot `
+        -IconEditorRoot $IconEditorRoot
 
-    Invoke-IconEditorDevModeScript `
-      -ScriptPath $prepareScript `
-      -ArgumentList @(
-        '-MinimumSupportedLVVersion','2021',
-        '-SupportedBitness',        $bitness,
-        '-RelativePath',            $IconEditorRoot,
-        '-LabVIEW_Project',         'lv_icon_editor',
-        '-Build_Spec',              'Editor Packed Library'
-      ) `
-      -RepoRoot $RepoRoot `
-      -IconEditorRoot $IconEditorRoot
+      Invoke-IconEditorDevModeScript `
+        -ScriptPath $prepareScript `
+        -ArgumentList @(
+          '-MinimumSupportedLVVersion', $versionText,
+          '-SupportedBitness',          $bitnessText,
+          '-RelativePath',            $IconEditorRoot,
+          '-LabVIEW_Project',         'lv_icon_editor',
+          '-Build_Spec',              'Editor Packed Library'
+        ) `
+        -RepoRoot $RepoRoot `
+        -IconEditorRoot $IconEditorRoot
 
-    Invoke-IconEditorDevModeScript `
-      -ScriptPath $closeScript `
-      -ArgumentList @(
-        '-MinimumSupportedLVVersion','2021',
-        '-SupportedBitness',        $bitness
-      ) `
-      -RepoRoot $RepoRoot `
-      -IconEditorRoot $IconEditorRoot
+      Invoke-IconEditorDevModeScript `
+        -ScriptPath $closeScript `
+        -ArgumentList @(
+          '-MinimumSupportedLVVersion', $versionText,
+          '-SupportedBitness',          $bitnessText
+        ) `
+        -RepoRoot $RepoRoot `
+        -IconEditorRoot $IconEditorRoot
+    }
   }
 
-  return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $true -Source 'Enable-IconEditorDevelopmentMode'
+  return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $true -Source ("Enable-IconEditorDevelopmentMode:{0}" -f $Operation)
 }
 
 function Disable-IconEditorDevelopmentMode {
   param(
     [string]$RepoRoot,
-    [string]$IconEditorRoot
+    [string]$IconEditorRoot,
+    [int[]]$Versions,
+    [int[]]$Bitness,
+    [string]$Operation = 'Compare'
   )
 
   if (-not $RepoRoot) {
@@ -245,30 +437,60 @@ function Disable-IconEditorDevelopmentMode {
     }
   }
 
-  foreach ($bitness in @('32','64')) {
-    Invoke-IconEditorDevModeScript `
-      -ScriptPath $restoreScript `
-      -ArgumentList @(
-        '-MinimumSupportedLVVersion','2021',
-        '-SupportedBitness',        $bitness,
-        '-RelativePath',            $IconEditorRoot,
-        '-LabVIEW_Project',         'lv_icon_editor',
-        '-Build_Spec',              'Editor Packed Library'
-      ) `
-      -RepoRoot $RepoRoot `
-      -IconEditorRoot $IconEditorRoot
-
-    Invoke-IconEditorDevModeScript `
-      -ScriptPath $closeScript `
-      -ArgumentList @(
-        '-MinimumSupportedLVVersion','2021',
-        '-SupportedBitness',        $bitness
-      ) `
-      -RepoRoot $RepoRoot `
-      -IconEditorRoot $IconEditorRoot
+  $targetsOverride = $null
+  if (-not $PSBoundParameters.ContainsKey('Versions') -or -not $PSBoundParameters.ContainsKey('Bitness')) {
+    try {
+      $targetsOverride = Get-IconEditorDevModePolicyEntry -RepoRoot $RepoRoot -Operation $Operation
+    } catch {
+      $targetsOverride = $null
+    }
   }
 
-  return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $false -Source 'Disable-IconEditorDevelopmentMode'
+  $defaultTargets = Get-DefaultIconEditorDevModeTargets -Operation $Operation
+  [array]$overrideVersions = @()
+  [array]$overrideBitness  = @()
+  if ($targetsOverride) {
+    $overrideVersions = @($targetsOverride.Versions)
+    $overrideBitness  = @($targetsOverride.Bitness)
+  }
+  [array]$effectiveVersions = if ($overrideVersions.Count -gt 0) { $overrideVersions } else { @($defaultTargets.Versions) }
+  [array]$effectiveBitness  = if ($overrideBitness.Count -gt 0)  { $overrideBitness }  else { @($defaultTargets.Bitness) }
+
+  [array]$versionsList = ConvertTo-IntList -Values $Versions -DefaultValues $effectiveVersions
+  [array]$bitnessList  = ConvertTo-IntList -Values $Bitness -DefaultValues $effectiveBitness
+
+  if ($versionsList.Count -eq 0 -or $bitnessList.Count -eq 0) {
+    throw "LabVIEW version/bitness selection resolved to an empty set for operation '$Operation'."
+  }
+
+  foreach ($versionValue in $versionsList) {
+    $versionText = [string]$versionValue
+    foreach ($bitnessValue in $bitnessList) {
+      $bitnessText = [string]$bitnessValue
+      Invoke-IconEditorDevModeScript `
+        -ScriptPath $restoreScript `
+        -ArgumentList @(
+          '-MinimumSupportedLVVersion', $versionText,
+          '-SupportedBitness',          $bitnessText,
+          '-RelativePath',            $IconEditorRoot,
+          '-LabVIEW_Project',         'lv_icon_editor',
+          '-Build_Spec',              'Editor Packed Library'
+        ) `
+        -RepoRoot $RepoRoot `
+        -IconEditorRoot $IconEditorRoot
+
+      Invoke-IconEditorDevModeScript `
+        -ScriptPath $closeScript `
+        -ArgumentList @(
+          '-MinimumSupportedLVVersion', $versionText,
+          '-SupportedBitness',          $bitnessText
+        ) `
+        -RepoRoot $RepoRoot `
+        -IconEditorRoot $IconEditorRoot
+    }
+  }
+
+  return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $false -Source ("Disable-IconEditorDevelopmentMode:{0}" -f $Operation)
 }
 
 function Get-IconEditorDevModeLabVIEWTargets {
@@ -293,9 +515,12 @@ function Get-IconEditorDevModeLabVIEWTargets {
 
   Import-Module (Join-Path $RepoRoot 'tools' 'VendorTools.psm1') -Force
 
+  $versionList = ConvertTo-IntList -Values $Versions -DefaultValues @(2021)
+  $bitnessList = ConvertTo-IntList -Values $Bitness -DefaultValues @(32,64)
+
   $targets = New-Object System.Collections.Generic.List[object]
-  foreach ($version in $Versions) {
-    foreach ($bit in $Bitness) {
+  foreach ($version in $versionList) {
+    foreach ($bit in $bitnessList) {
       $exePath = Find-LabVIEWVersionExePath -Version $version -Bitness $bit
       $iniPath = $null
       $present = $false
@@ -320,7 +545,9 @@ function Get-IconEditorDevModeLabVIEWTargets {
 function Test-IconEditorDevelopmentMode {
   param(
     [string]$RepoRoot,
-    [string]$IconEditorRoot
+    [string]$IconEditorRoot,
+    [int[]]$Versions = @(2021),
+    [int[]]$Bitness = @(32, 64)
   )
 
   if (-not $RepoRoot) {
@@ -336,7 +563,7 @@ function Test-IconEditorDevelopmentMode {
   }
 
   $iconEditorRootLower = $IconEditorRoot.ToLowerInvariant().TrimEnd('\')
-  $targets = Get-IconEditorDevModeLabVIEWTargets -RepoRoot $RepoRoot -IconEditorRoot $IconEditorRoot
+  $targets = Get-IconEditorDevModeLabVIEWTargets -RepoRoot $RepoRoot -IconEditorRoot $IconEditorRoot -Versions $Versions -Bitness $Bitness
   $results = New-Object System.Collections.Generic.List[object]
 
   foreach ($target in $targets) {
@@ -397,5 +624,8 @@ Export-ModuleMember -Function `
   Invoke-IconEditorDevModeScript, `
   Enable-IconEditorDevelopmentMode, `
   Disable-IconEditorDevelopmentMode, `
+  Get-IconEditorDevModePolicyPath, `
+  Get-IconEditorDevModePolicy, `
+  Get-IconEditorDevModePolicyEntry, `
   Get-IconEditorDevModeLabVIEWTargets, `
   Test-IconEditorDevelopmentMode

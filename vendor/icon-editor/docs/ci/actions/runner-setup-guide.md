@@ -159,7 +159,7 @@ With your runner online:
 
 ## 4. Next Steps
 
-- **Check the Main Repo's [README.md](../../README.md)**: for environment disclaimers, additional tips, or project-specific instructions.  
+- **Check the Main Repo’s [README.md](../README.md)**: for environment disclaimers, additional tips, or project-specific instructions.  
 - **Extend the Workflows**: You can add custom steps for linting, coverage, or multi-version LabVIEW tests.  
 - **Submit Pull Requests**: If you refine scripts or fix issues, open a PR with logs showing your updated workflow runs.  
 - **Troubleshoot**: If manual environment edits are needed, consult `ManualSetup.md` or the original documentation for advanced configuration steps.  
