@@ -1154,8 +1154,11 @@ jobs:
     if: >
       needs.smoke-gate.outputs.skip != 'true' &&
       needs.icon-editor-gate.outputs.proceed == 'true' &&
-      needs.lint.outputs.vi_diff_requests == 'true' &&
-      (vars.ICON_EDITOR_COMPARE_ENABLE == '1' || github.event.inputs.enable_compare == '1')
+      (
+        needs.lint.outputs.vi_diff_requests == 'true' ||
+        vars.ICON_EDITOR_COMPARE_ENABLE == '1' ||
+        github.event.inputs.enable_compare == '1'
+      )
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
