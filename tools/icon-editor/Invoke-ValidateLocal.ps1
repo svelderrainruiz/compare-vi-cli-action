@@ -39,6 +39,7 @@ Also run Simulate-IconEditorBuild VIP diff (dry-run compare and report).
 param(
   [string]$BaselineFixture,
   [string]$BaselineManifest,
+  [string]$ResourceOverlayRoot,
   [switch]$SkipLVCompare,
   [string]$ResultsRoot,
   [switch]$KeepWorkspace,
@@ -93,11 +94,23 @@ $resultsRootResolved = (Resolve-Path -LiteralPath $ResultsRoot).Path
 $fixtureCurrent = Resolve-PathOrDefault -DefaultRelative 'tests/fixtures/icon-editor/ni_icon_editor-1.4.1.948.vip'
 $baselineFixtureResolved = Resolve-PathOrDefault -DefaultRelative 'tests/fixtures/icon-editor/ni_icon_editor-1.4.1.794.vip' -Override $BaselineFixture
 $baselineManifestResolved = Resolve-PathOrDefault -DefaultRelative 'tests/fixtures/icon-editor/fixture-manifest-1.4.1.794.json' -Override $BaselineManifest
+$overlayResolved = $null
+if ($ResourceOverlayRoot) {
+  $overlayResolved = (Resolve-Path -LiteralPath $ResourceOverlayRoot).Path
+} else {
+  $defaultOverlay = Join-Path $repoRoot 'vendor/icon-editor/resource'
+  if (Test-Path -LiteralPath $defaultOverlay -PathType Container) {
+    $overlayResolved = (Resolve-Path -LiteralPath $defaultOverlay).Path
+  }
+}
 
 Write-Host "==> Current fixture: $fixtureCurrent"
 Write-Host "==> Baseline fixture: $baselineFixtureResolved"
 Write-Host "==> Baseline manifest: $baselineManifestResolved"
 Write-Host "==> Results root: $resultsRootResolved"
+if ($overlayResolved) {
+  Write-Host "==> Resource overlay: $overlayResolved"
+}
 
 if (-not $env:GH_TOKEN -and -not $env:GITHUB_TOKEN) {
   Write-Warning 'GH_TOKEN / GITHUB_TOKEN not set; GitHub API calls may fail.'
@@ -109,11 +122,16 @@ $describeWork = Join-Path $resultsRootResolved '__describe'
 if ((Test-Path -LiteralPath $describeWork -PathType Container) -and -not $KeepWorkspace.IsPresent) {
   Remove-Item -LiteralPath $describeWork -Recurse -Force
 }
-$summary = & (Join-Path $repoRoot 'tools/icon-editor/Describe-IconEditorFixture.ps1') `
-  -FixturePath $fixtureCurrent `
-  -ResultsRoot $describeWork `
-  -OutputPath $describeOut `
-  -KeepWork:$KeepWorkspace
+$describeParams = @{
+  FixturePath = $fixtureCurrent
+  ResultsRoot = $describeWork
+  OutputPath  = $describeOut
+  KeepWork    = $KeepWorkspace
+}
+if ($overlayResolved) {
+  $describeParams['ResourceOverlayRoot'] = $overlayResolved
+}
+$summary = & (Join-Path $repoRoot 'tools/icon-editor/Describe-IconEditorFixture.ps1') @describeParams
 
 if (-not (Test-Path -LiteralPath $describeOut -PathType Leaf)) {
   Write-Host '    Report missing after describe; writing summary manually'
@@ -138,6 +156,9 @@ $prepareArgs = @{
   BaselineManifestPath= $baselineManifestResolved
   BaselineFixturePath = $baselineFixtureResolved
   OutputDir           = $viDiffRoot
+}
+if ($overlayResolved) {
+  $prepareArgs['ResourceOverlayRoot'] = $overlayResolved
 }
 Write-Host '==> Preparing VI diff requests'
 & (Join-Path $repoRoot 'tools/icon-editor/Prepare-FixtureViDiffs.ps1') @prepareArgs | Out-Null
@@ -183,11 +204,16 @@ if ($IncludeSimulation.IsPresent) {
   Write-Host '==> Running simulation VIP diff (dry-run)'
   $simRoot = Join-Path $resultsRootResolved 'vip-vi-diff'
   if (Test-Path -LiteralPath $simRoot) { Remove-Item -LiteralPath $simRoot -Recurse -Force }
-  & (Join-Path $repoRoot 'tools/icon-editor/Simulate-IconEditorBuild.ps1') `
-    -FixturePath $fixtureCurrent `
-    -ResultsRoot $resultsRootResolved `
-    -VipDiffOutputDir $simRoot `
-    -KeepExtract:$KeepWorkspace | Out-Null
+  $simulateParams = @{
+    FixturePath      = $fixtureCurrent
+    ResultsRoot      = $resultsRootResolved
+    VipDiffOutputDir = $simRoot
+    KeepExtract      = $KeepWorkspace
+  }
+  if ($overlayResolved) {
+    $simulateParams['ResourceOverlayRoot'] = $overlayResolved
+  }
+  & (Join-Path $repoRoot 'tools/icon-editor/Simulate-IconEditorBuild.ps1') @simulateParams | Out-Null
   $simRequests = Join-Path $simRoot 'vi-diff-requests.json'
   if (Test-Path -LiteralPath $simRequests -PathType Leaf) {
     & (Join-Path $repoRoot 'tools/icon-editor/Invoke-FixtureViDiffs.ps1') `
@@ -210,11 +236,12 @@ if (-not $DryRun.IsPresent) {
     'tests/Prepare-FixtureViDiffs.Tests.ps1',
     'tests/Prepare-VipViDiffRequests.Tests.ps1',
     'tests/Render-ViComparisonReport.Tests.ps1',
-    'tests/Simulate-IconEditorVipDiff.Tests.ps1',
-    'tests/Invoke-FixtureViDiffs.Tests.ps1',
-    'tests/Simulate-IconEditorBuild.Tests.ps1',
-    'tests/Invoke-ValidateLocal.Tests.ps1'
-  )
+  'tests/Simulate-IconEditorVipDiff.Tests.ps1',
+  'tests/Invoke-FixtureViDiffs.Tests.ps1',
+  'tests/Simulate-IconEditorBuild.Tests.ps1',
+  'tests/Stage-IconEditorSnapshot.Tests.ps1',
+  'tests/Invoke-ValidateLocal.Tests.ps1'
+)
   $invokeCmd = "Import-Module Pester -MinimumVersion 5.0; Invoke-Pester -Path {0} -CI -Output Detailed" -f ($pesterTests -join ',')
   pwsh -NoLogo -NoProfile -Command $invokeCmd
 } else {

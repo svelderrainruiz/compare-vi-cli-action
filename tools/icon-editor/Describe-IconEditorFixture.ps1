@@ -4,7 +4,9 @@ param(
   [string]$FixturePath,
   [string]$ResultsRoot,
   [string]$OutputPath,
-  [switch]$KeepWork
+  [switch]$KeepWork,
+  [switch]$SkipResourceOverlay,
+  [string]$ResourceOverlayRoot
 )
 
 Set-StrictMode -Version Latest
@@ -19,7 +21,7 @@ function Resolve-RepoRoot {
   }
 }
 
-function Parse-SpecFile {
+function Get-SpecFileSections {
   param([string]$Path)
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     throw "Spec file not found at '$Path'."
@@ -74,7 +76,7 @@ function Get-FileHashInfo {
   }
 }
 
-function Ensure-Directory {
+function Get-DirectoryPath {
   param([string]$Path)
   $resolved = Resolve-Path -LiteralPath (New-Item -ItemType Directory -Path $Path -Force)
   return $resolved.Path
@@ -89,16 +91,18 @@ if (-not (Test-Path -LiteralPath $FixturePath -PathType Leaf)) {
 }
 
 $workRoot = if ($ResultsRoot) {
-  Ensure-Directory $ResultsRoot
+  Get-DirectoryPath $ResultsRoot
 } else {
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("icon-editor-describe-{0}" -f ([guid]::NewGuid().ToString('n')))
-  Ensure-Directory $tmp
+  Get-DirectoryPath $tmp
 }
 
 $simulationParams = @{
-  FixturePath = $FixturePath
-  ResultsRoot = $workRoot
-  KeepExtract = $true
+  FixturePath         = $FixturePath
+  ResultsRoot         = $workRoot
+  KeepExtract         = $true
+  SkipResourceOverlay = $SkipResourceOverlay
+  ResourceOverlayRoot = $ResourceOverlayRoot
 }
 
 $manifest = $null
@@ -119,8 +123,8 @@ try {
     throw "System extraction directory not found at '$systemExtractRoot'."
   }
 
-  $fixtureSpec = Parse-SpecFile -Path (Join-Path $extractRoot 'spec')
-  $systemSpec = Parse-SpecFile -Path (Join-Path $systemExtractRoot 'spec')
+  $fixtureSpec = Get-SpecFileSections -Path (Join-Path $extractRoot 'spec')
+  $systemSpec = Get-SpecFileSections -Path (Join-Path $systemExtractRoot 'spec')
 
   $artifactFiles = @()
   $artifactPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -180,6 +184,20 @@ try {
       $rel  = $item.FullName.Substring($testsPath.Length + 1)
       $fixtureOnlyAssets += [ordered]@{
         category  = 'test'
+        name      = $rel
+        path      = $item.FullName
+        sizeBytes = $item.Length
+        hash      = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+      }
+    }
+  }
+  $resourcesPath = Join-Path $systemExtractRoot 'File Group 0\National Instruments\LabVIEW Icon Editor\resource'
+  if (Test-Path -LiteralPath $resourcesPath -PathType Container) {
+    Get-ChildItem -LiteralPath $resourcesPath -Recurse -File | ForEach-Object {
+      $item = $_
+      $rel  = $item.FullName.Substring($resourcesPath.Length + 1)
+      $fixtureOnlyAssets += [ordered]@{
+        category  = 'resource'
         name      = $rel
         path      = $item.FullName
         sizeBytes = $item.Length
