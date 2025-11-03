@@ -1166,6 +1166,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Download icon-editor fixture report
+        uses: actions/download-artifact@v5
+        with:
+          name: icon-editor-fixture-report
+          path: tests/results/_agent/icon-editor
+
       - name: Prepare comparison requests (self-hosted)
         run: |
           $ErrorActionPreference = 'Stop'
