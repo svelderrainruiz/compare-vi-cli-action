@@ -6,7 +6,9 @@ param(
   [object]$ExpectedVersion,
   [string]$VipDiffOutputDir,
   [string]$VipDiffRequestsPath,
-  [switch]$KeepExtract
+  [switch]$KeepExtract,
+  [switch]$SkipResourceOverlay,
+  [string]$ResourceOverlayRoot
 )
 
 Set-StrictMode -Version Latest
@@ -95,6 +97,29 @@ if (Test-Path -LiteralPath $nestedExtract) {
 }
 
 Expand-Archive -Path $nestedVip.FullName -DestinationPath $nestedExtract -Force
+
+$resourceRoot = $ResourceOverlayRoot
+if (-not $resourceRoot) {
+  $resourceRoot = Join-Path $repoRoot 'vendor/icon-editor/resource'
+}
+if (-not $SkipResourceOverlay.IsPresent -and $resourceRoot -and (Test-Path -LiteralPath $resourceRoot -PathType Container)) {
+  $resourceDest = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\resource'
+  if (-not (Test-Path -LiteralPath $resourceDest -PathType Container)) {
+    [void](New-Item -ItemType Directory -Path $resourceDest -Force)
+  }
+  $quotedSource = '"{0}"' -f $resourceRoot
+  $quotedDest = '"{0}"' -f $resourceDest
+  $robocopyArgs = @($quotedSource, $quotedDest, '/MIR')
+  $rc = Start-Process -FilePath 'robocopy' -ArgumentList $robocopyArgs -NoNewWindow -PassThru -Wait
+  if ($rc.ExitCode -gt 3) {
+    Write-Warning "Failed to mirror resource directory (exit code $($rc.ExitCode)); falling back to Copy-Item."
+    Copy-Item -LiteralPath (Join-Path $resourceRoot '*') -Destination $resourceDest -Recurse -Force -ErrorAction Stop
+  }
+} elseif ($SkipResourceOverlay.IsPresent) {
+  Write-Host '::notice::Skipping resource overlay by request.'
+} else {
+  Write-Host '::notice::vendor/icon-editor/resource not found; skipping resource overlay.'
+}
 
 $installRoot = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\install'
 $lvlibpFiles = @()

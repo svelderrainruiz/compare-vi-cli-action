@@ -1,19 +1,18 @@
 {
-  "number": 575,
-  "title": "Icon-editor: Generate VI Comparison Report for changed VIs",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/575",
+  "number": 580,
+  "title": "Automate icon-editor fake PR snapshot staging",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/580",
   "state": "OPEN",
   "labels": [
-    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
-  "commentCount": 0,
-  "lastSeenUpdatedAt": "2025-11-02T21:51:33Z",
-  "issueDigest": "c16d9bf3d2c8845aeced81faaa26a5510f1c86f4ee835044bae9ed193106950b",
-  "bodyDigest": "cbcef8efd6225758792c9862e1603397acafc633d793b8ea59f0d7b32237d11d",
-  "cachedAtUtc": "2025-11-02T21:51:46.029Z",
+  "commentCount": 2,
+  "lastSeenUpdatedAt": "2025-11-03T04:17:26Z",
+  "issueDigest": "ef02e3d5d6bab48b37a30622e6867439d1f898af6dd53ee06ad893376c377947",
+  "bodyDigest": "ab709ca7b39efcd2bb547d266c96215b4042765494e7594b931e201a7b9a5d4f",
+  "cachedAtUtc": "2025-11-03T04:20:55.690Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
