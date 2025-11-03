@@ -40,7 +40,7 @@ function Get-LabVIEWInstallCandidates {
       $candidates.Add((Join-Path $root ("National Instruments\LabVIEW $Version\LabVIEW.exe")))
     }
   } else {
-    foreach ($root in @($pf, $pf86)) {
+    foreach ($root in @($pf)) {
       if (-not $root) { continue }
       $candidates.Add((Join-Path $root ("National Instruments\LabVIEW $Version\LabVIEW.exe")))
     }
@@ -50,10 +50,29 @@ function Get-LabVIEWInstallCandidates {
 
 function Resolve-LabVIEWPathFromParams {
   param([hashtable]$Params)
+  $Params = $Params ?? @{}
+  $effectiveBitness = if ($Params.ContainsKey('labviewBitness') -and $Params.labviewBitness) {
+    [string]$Params.labviewBitness
+  } else {
+    '64'
+  }
   if ($Params.ContainsKey('labviewPath') -and $Params.labviewPath) {
     $candidate = $Params.labviewPath
     if (Test-Path -LiteralPath $candidate -PathType Leaf) { return (Resolve-Path -LiteralPath $candidate).Path }
     return $candidate
+  }
+  foreach ($envName in @('LABVIEW_PATH','LABVIEW_EXE_PATH')) {
+    $envValue = [System.Environment]::GetEnvironmentVariable($envName)
+    if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+      if (Test-Path -LiteralPath $envValue -PathType Leaf) {
+        $resolvedEnv = (Resolve-Path -LiteralPath $envValue).Path
+        if ($effectiveBitness -eq '64' -and $resolvedEnv -match '(?i)Program Files \(x86\)') {
+          continue
+        }
+        return $resolvedEnv
+      }
+      return $envValue
+    }
   }
   $config = $null
   $root = Get-ProviderRepoRoot
@@ -62,12 +81,13 @@ function Resolve-LabVIEWPathFromParams {
     try { $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 4 } catch {}
   }
   $version = if ($Params.ContainsKey('labviewVersion')) { $Params.labviewVersion } else { '2025' }
-  $bitness = if ($Params.ContainsKey('labviewBitness')) { $Params.labviewBitness } else { '64' }
   $candidates = New-Object System.Collections.Generic.List[string]
-  foreach ($candidate in Get-LabVIEWInstallCandidates -Version $version -Bitness $bitness -Config $config) {
+  foreach ($candidate in Get-LabVIEWInstallCandidates -Version $version -Bitness $effectiveBitness -Config $config) {
     $candidates.Add($candidate)
     if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-      return (Resolve-Path -LiteralPath $candidate).Path
+      $resolvedCandidate = (Resolve-Path -LiteralPath $candidate).Path
+      if ($effectiveBitness -eq '64' -and $resolvedCandidate -match '(?i)Program Files \(x86\)') { continue }
+      return $resolvedCandidate
     }
   }
   Write-Verbose ("LabVIEWCLI provider: LabVIEW candidates -> {0}" -f ($candidates -join '; '))
@@ -106,6 +126,10 @@ function Get-LabVIEWCliArgs {
             $args += [string]$flag
           }
         }
+      }
+      $resolvedLvPath = Resolve-LabVIEWPathFromParams -Params $Params
+      if ($resolvedLvPath) {
+        $args += @('-LabVIEWPath', $resolvedLvPath)
       }
       return $args
     }

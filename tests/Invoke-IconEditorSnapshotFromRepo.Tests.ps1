@@ -6,7 +6,7 @@ Describe 'Invoke-IconEditorSnapshotFromRepo.ps1' -Tag 'IconEditor','Snapshot','I
         Set-Variable -Scope Script -Name scriptPath -Value (Join-Path $repoRoot 'tools/icon-editor/Invoke-IconEditorSnapshotFromRepo.ps1')
         Test-Path -LiteralPath $script:scriptPath | Should -BeTrue "Snapshot invocation script not found."
         Set-Variable -Scope Script -Name fixturePath -Value (Join-Path $repoRoot 'tests/fixtures/icon-editor/ni_icon_editor-1.4.1.948.vip')
-        Set-Variable -Scope Script -Name manifestPath -Value (Join-Path $repoRoot 'tests/fixtures/icon-editor/fixture-manifest-1.4.1.948.json')
+        Set-Variable -Scope Script -Name manifestPath -Value (Join-Path $repoRoot 'tests/fixtures/icon-editor/fixture-manifest.json')
     }
 
     BeforeEach {
@@ -42,7 +42,7 @@ Describe 'Invoke-IconEditorSnapshotFromRepo.ps1' -Tag 'IconEditor','Snapshot','I
         $workspace = Join-Path $TestDrive 'snapshots'
         $stageName = 'test-snapshot'
 
-        $result = & pwsh -NoLogo -NoProfile -File $script:scriptPath `
+        $result = & $script:scriptPath `
             -RepoPath $script:testRoot `
             -BaseRef $script:baseRef `
             -HeadRef $script:headRef `
@@ -60,7 +60,7 @@ Describe 'Invoke-IconEditorSnapshotFromRepo.ps1' -Tag 'IconEditor','Snapshot','I
 
         $overlayPath = $result.overlay
         Test-Path -LiteralPath $overlayPath | Should -BeTrue
-        (Get-ChildItem -LiteralPath $overlayPath -Recurse | Measure-Object).Count | Should -Be 1
+        (Get-ChildItem -LiteralPath $overlayPath -Recurse -File | Measure-Object).Count | Should -Be 1
 
         $stageRoot = $result.stageRoot
         Test-Path -LiteralPath $stageRoot | Should -BeTrue

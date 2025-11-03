@@ -239,10 +239,57 @@ carries the actual LabVIEW payload.
 
   After the run, rebuild the overlay from `vendor/icon-editor/resource` (or restore the original VI) so the next snapshot starts from a clean baseline.
 
+### Heuristic VI diff sweep (Issue #583)
+
+- Script: `tools/icon-editor/Invoke-VIDiffSweepStrong.ps1`
+- Purpose: triage a range of icon-editor commits, skipping LVCompare for VIs that are pure renames or whose blobs are unchanged. Only the remaining “interesting” VIs are passed to `Invoke-VIComparisonFromCommit.ps1`, which still uses raw paths so dependencies stay intact.
+- Usage (dry run to preview what would launch LVCompare):
+
+  ```powershell
+  pwsh -File tools/icon-editor/Invoke-VIDiffSweepStrong.ps1 `
+    -RepoPath tmp/icon-editor/repo `
+    -BaseRef origin/develop~20 `
+    -HeadRef origin/develop `
+    -WorkspaceRoot tests/results/_agent/icon-editor/snapshots `
+    -DryRun `
+    -Quiet
+  ```
+
+  Re-run without `-DryRun` to emit comparison captures. Pass `-SummaryPath` to persist the triage decisions (`comparePaths` vs `skipped`) for audit trails or follow-up reviews.
+
+- Flags roll up to the underlying helpers:
+  - `-SkipValidate`, `-SkipLVCompare` → forwarded to `Invoke-VIComparisonFromCommit.ps1` when comparisons still run.
+  - `-LabVIEWExePath` → overrides the auto-resolved LabVIEW 2025 64-bit binary.
+- Summary output structure (also written to `-SummaryPath` when provided):
+
+  ```json
+  {
+    "repoPath": "tmp/icon-editor/repo",
+    "baseRef": "origin/develop~20",
+    "headRef": "origin/develop",
+    "totalCommits": 5,
+    "commits": [
+      {
+        "commit": "4de1aeae…",
+        "comparePaths": [],
+        "skipped": [
+          { "path": "resource/plugins/…/MenuSelection(User).vi", "reason": "rename without content change" }
+        ]
+      },
+      {
+        "commit": "ec1d4952…",
+        "comparePaths": [ "resource/plugins/…/Export_Clipboard.vi" ],
+        "skipped": []
+      }
+    ]
+  }
+  ```
+
+  Use `-StageNamePrefix` (default `commit`) to control the directory naming inside `tests/results/_agent/icon-editor/snapshots`.
+
 ## Maintaining this report
 
 - Run `pwsh -File tools/icon-editor/Update-IconEditorFixtureReport.ps1` to regenerate the JSON summary and refresh the section above. The script runs automatically in the pre-push checks and fails when the committed doc is stale.
 - The generated summary lives at `tests/results/_agent/icon-editor/fixture-report.json`; delete it if you need a clean slate.
 - Canonical hashes are enforced by `node --test tools/icon-editor/__tests__/fixture-hashes.test.mjs` (invoked from `tools/PrePush-Checks.ps1`), so report drift from the committed fixture is caught automatically.
 - Validate uploads the `icon-editor-fixture-report` artifact (JSON + Markdown) so stakeholders can review the latest snapshot without digging through logs.
-
