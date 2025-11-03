@@ -1,36 +1,21 @@
 ﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
-<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="3" errors="0" failures="2" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-11-02" time="20:56:21">
-  <environment os-version="10.0.22631" machine-name="USAUSLT-Z7DLW6G" clr-version="9.0.8" cwd="C:\codex\home\runner\work\compare-vi-cli-action" user-domain="NI" platform="Microsoft Windows 11 Enterprise|C:\WINDOWS|\Device\Harddisk0\Partition3" nunit-version="2.5.8.0" user="svelderr" />
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="2" errors="0" failures="1" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-11-02" time="20:58:44">
+  <environment nunit-version="2.5.8.0" platform="Microsoft Windows 11 Enterprise|C:\WINDOWS|\Device\Harddisk0\Partition3" user="svelderr" machine-name="USAUSLT-Z7DLW6G" user-domain="NI" clr-version="9.0.8" cwd="C:\codex\home\runner\work\compare-vi-cli-action" os-version="10.0.22631" />
   <culture-info current-culture="en-US" current-uiculture="en-US" />
-  <test-suite type="TestFixture" name="Pester" executed="True" result="Failure" success="False" time="9.0952" asserts="0" description="Pester">
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Failure" success="False" time="5.8879" asserts="0" description="Pester">
     <results>
-      <test-suite type="TestFixture" name="C:\codex\home\runner\work\compare-vi-cli-action\tests\Prepare-OverlayFromRepo.Tests.ps1" executed="True" result="Failure" success="False" time="5.6848" asserts="0" description="C:\codex\home\runner\work\compare-vi-cli-action\tests\Prepare-OverlayFromRepo.Tests.ps1">
+      <test-suite type="TestFixture" name="C:\codex\home\runner\work\compare-vi-cli-action\tests\Prepare-OverlayFromRepo.Tests.ps1" executed="True" result="Failure" success="False" time="5.8879" asserts="0" description="C:\codex\home\runner\work\compare-vi-cli-action\tests\Prepare-OverlayFromRepo.Tests.ps1">
         <results>
-          <test-suite type="TestFixture" name="Prepare-OverlayFromRepo.ps1" executed="True" result="Failure" success="False" time="5.159" asserts="0" description="Prepare-OverlayFromRepo.ps1">
+          <test-suite type="TestFixture" name="Prepare-OverlayFromRepo.ps1" executed="True" result="Failure" success="False" time="5.3421" asserts="0" description="Prepare-OverlayFromRepo.ps1">
             <results>
-              <test-case description="copies only changed files into the overlay" name="Prepare-OverlayFromRepo.ps1.copies only changed files into the overlay" time="2.5269" asserts="0" success="False" result="Failure" executed="True">
+              <test-case description="copies only changed files into the overlay" name="Prepare-OverlayFromRepo.ps1.copies only changed files into the overlay" time="2.6225" asserts="0" success="False" result="Failure" executed="True">
                 <failure>
                   <message>Expected 1, but got 0.</message>
                   <stack-trace>at $result.files.Count | Should -Be 1, C:\codex\home\runner\work\compare-vi-cli-action\tests\Prepare-OverlayFromRepo.Tests.ps1:59
 at &lt;ScriptBlock&gt;, C:\codex\home\runner\work\compare-vi-cli-action\tests\Prepare-OverlayFromRepo.Tests.ps1:59</stack-trace>
                 </failure>
               </test-case>
-              <test-case description="skips unchanged files even when extensions match" name="Prepare-OverlayFromRepo.ps1.skips unchanged files even when extensions match" time="2.3991" asserts="0" success="True" result="Success" executed="True" />
-            </results>
-          </test-suite>
-        </results>
-      </test-suite>
-      <test-suite type="TestFixture" name="C:\codex\home\runner\work\compare-vi-cli-action\tests\Invoke-IconEditorSnapshotFromRepo.Tests.ps1" executed="True" result="Failure" success="False" time="3.4104" asserts="0" description="C:\codex\home\runner\work\compare-vi-cli-action\tests\Invoke-IconEditorSnapshotFromRepo.Tests.ps1">
-        <results>
-          <test-suite type="TestFixture" name="Invoke-IconEditorSnapshotFromRepo.ps1" executed="True" result="Failure" success="False" time="3.2647" asserts="0" description="Invoke-IconEditorSnapshotFromRepo.ps1">
-            <results>
-              <test-case description="generates a snapshot workspace using changed files from the repo" name="Invoke-IconEditorSnapshotFromRepo.ps1.generates a snapshot workspace using changed files from the repo" time="3.1522" asserts="0" success="False" result="Failure" executed="True">
-                <failure>
-                  <message>Expected a value, but got $null or empty.</message>
-                  <stack-trace>at $result | Should -Not -BeNullOrEmpty, C:\codex\home\runner\work\compare-vi-cli-action\tests\Invoke-IconEditorSnapshotFromRepo.Tests.ps1:57
-at &lt;ScriptBlock&gt;, C:\codex\home\runner\work\compare-vi-cli-action\tests\Invoke-IconEditorSnapshotFromRepo.Tests.ps1:57</stack-trace>
-                </failure>
-              </test-case>
+              <test-case description="skips unchanged files even when extensions match" name="Prepare-OverlayFromRepo.ps1.skips unchanged files even when extensions match" time="2.4415" asserts="0" success="True" result="Success" executed="True" />
             </results>
           </test-suite>
         </results>

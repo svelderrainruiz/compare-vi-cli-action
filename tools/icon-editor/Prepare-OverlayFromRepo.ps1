@@ -122,6 +122,7 @@ foreach ($path in $changedPaths) {
   if (-not $extensionsSet.Contains($ext)) {
     continue
   }
+  Write-Information ("Evaluating {0}" -f $trimmedPath)
   try {
     $headBytes = Get-GitBlobBytes -Repo $repoResolved -Ref $HeadRef -Path $trimmedPath
   } catch {
