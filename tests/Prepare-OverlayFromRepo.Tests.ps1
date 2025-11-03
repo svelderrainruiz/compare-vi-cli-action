@@ -48,7 +48,7 @@ Describe 'Prepare-OverlayFromRepo.ps1' -Tag 'IconEditor','Overlay','Unit' {
 
     It 'copies only changed files into the overlay' {
         $overlay = Join-Path $TestDrive 'overlay'
-        $result = & pwsh -NoLogo -NoProfile -File $script:scriptPath `
+        $result = & $script:scriptPath `
             -RepoPath $script:testRoot `
             -BaseRef $script:baseRef `
             -HeadRef $script:headRef `
@@ -67,7 +67,7 @@ Describe 'Prepare-OverlayFromRepo.ps1' -Tag 'IconEditor','Overlay','Unit' {
 
     It 'skips unchanged files even when extensions match' {
         $overlay = Join-Path $TestDrive 'overlay-two'
-        $result = & pwsh -NoLogo -NoProfile -File $script:scriptPath `
+        $result = & $script:scriptPath `
             -RepoPath $script:testRoot `
             -BaseRef $script:headRef `
             -HeadRef $script:headRef `

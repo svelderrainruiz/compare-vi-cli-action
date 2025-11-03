@@ -75,7 +75,7 @@ $overlayResolved = if ($OverlayRoot) {
 
 $stageResolvedName = if ($StageName) { $StageName } else { "snapshot-{0}" -f (Get-Date -Format 'yyyyMMddTHHmmss') }
 
-$overlaySummary = & pwsh -NoLogo -NoProfile -File $prepareOverlayScript `
+$overlaySummary = & $prepareOverlayScript `
   -RepoPath $repoPathResolved `
   -BaseRef $BaseRef `
   -HeadRef $HeadRef `
@@ -93,28 +93,28 @@ if ($overlaySummary.files.Count -eq 0) {
 
 $defaultFixture = Resolve-PathMaybeRelative -Path 'tests/fixtures/icon-editor/ni_icon_editor-1.4.1.948.vip' -Base $repoRoot
 $defaultBaselineFixture = $defaultFixture
-$defaultBaselineManifest = Resolve-PathMaybeRelative -Path 'tests/fixtures/icon-editor/fixture-manifest-1.4.1.948.json' -Base $repoRoot
+$defaultBaselineManifest = Resolve-PathMaybeRelative -Path 'tests/fixtures/icon-editor/fixture-manifest.json' -Base $repoRoot
 
-$stageParams = @(
-  '-File', $stageScript,
-  '-SourcePath', $repoPathResolved,
-  '-ResourceOverlayRoot', $overlaySummary.overlayRoot,
-  '-StageName', $stageResolvedName,
-  '-WorkspaceRoot', $workspaceResolved,
-  '-FixturePath', (Resolve-PathMaybeRelative -Path ($FixturePath ?? $defaultFixture) -Base $repoRoot),
-  '-BaselineFixture', (Resolve-PathMaybeRelative -Path ($BaselineFixture ?? $defaultBaselineFixture) -Base $repoRoot),
-  '-BaselineManifest', (Resolve-PathMaybeRelative -Path ($BaselineManifest ?? $defaultBaselineManifest) -Base $repoRoot)
-)
-if ($SkipValidate.IsPresent) { $stageParams += '-SkipValidate' }
-if ($SkipLVCompare.IsPresent) { $stageParams += '-SkipLVCompare' }
-if ($DryRun.IsPresent) { $stageParams += '-DryRun' }
-if ($SkipBootstrapForValidate.IsPresent) { $stageParams += '-SkipBootstrapForValidate' }
+$stageParams = @{
+  SourcePath         = $repoPathResolved
+  ResourceOverlayRoot= $overlaySummary.overlayRoot
+  StageName          = $stageResolvedName
+  WorkspaceRoot      = $workspaceResolved
+  FixturePath        = (Resolve-PathMaybeRelative -Path ($FixturePath ?? $defaultFixture) -Base $repoRoot)
+  BaselineFixture    = (Resolve-PathMaybeRelative -Path ($BaselineFixture ?? $defaultBaselineFixture) -Base $repoRoot)
+  BaselineManifest   = (Resolve-PathMaybeRelative -Path ($BaselineManifest ?? $defaultBaselineManifest) -Base $repoRoot)
+}
+if ($SkipValidate.IsPresent) { $stageParams['SkipValidate'] = $true }
+if ($SkipLVCompare.IsPresent) { $stageParams['SkipLVCompare'] = $true }
+if ($DryRun.IsPresent) { $stageParams['DryRun'] = $true }
+if ($SkipBootstrapForValidate.IsPresent) { $stageParams['SkipBootstrapForValidate'] = $true }
 
-& pwsh -NoLogo -NoProfile @stageParams
+$stageSummary = & $stageScript @stageParams
 
 [pscustomobject]@{
   overlay       = $overlaySummary.overlayRoot
   files         = $overlaySummary.files
-  stageRoot     = Join-Path $workspaceResolved $stageResolvedName
+  stageRoot     = if ($stageSummary.PSObject.Properties['stageRoot']) { $stageSummary.stageRoot } else { Join-Path $workspaceResolved $stageResolvedName }
   stageExecuted = $true
+  stageSummary  = $stageSummary
 }

@@ -56,7 +56,9 @@ function Get-GitBlobBytes {
     [string]$Path
   )
   $psi = New-Object System.Diagnostics.ProcessStartInfo 'git'
-  $psi.ArgumentList.AddRange(@('-C', $Repo, 'show', '--no-textconv', "$Ref`:$Path"))
+  foreach ($arg in @('-C', $Repo, 'show', '--no-textconv', "$Ref`:$Path")) {
+    [void]$psi.ArgumentList.Add($arg)
+  }
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
   $psi.UseShellExecute = $false
@@ -107,7 +109,8 @@ if ($IncludePatterns.Count -gt 0) {
   $diffArgs += $IncludePatterns
 }
 $diffOutput = Invoke-Git -Arguments $diffArgs
-$changedPaths = $diffOutput -split "`n" | Where-Object { $_ -and ($_ -match '\S') }
+$changedPaths = @($diffOutput -split "`n" | Where-Object { $_ -and ($_ -match '\S') })
+Write-Information ("Changed path count: {0}" -f $changedPaths.Count)
 
 $extensionsSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 foreach ($ext in $Extensions) {
@@ -122,7 +125,6 @@ foreach ($path in $changedPaths) {
   if (-not $extensionsSet.Contains($ext)) {
     continue
   }
-  Write-Information ("Evaluating {0}" -f $trimmedPath)
   try {
     $headBytes = Get-GitBlobBytes -Repo $repoResolved -Ref $HeadRef -Path $trimmedPath
   } catch {
