@@ -24,7 +24,7 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
-- Report generated: `11/3/2025 9:00:58 AM`
+- Report generated: `11/3/2025 12:51:32 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 28.12 MB (`ed48a629e7fe5256dcb04cf3288a6e42fe8c8996dc33c4d838f8b102b43a9e44`)
   - ni_icon_editor_system-1.4.1.948.vip - 28.03 MB (`534ff97b24f608ac79997169eca9616ab2c72014cc9c9ea9955ee7fb3c5493c2`)
@@ -64,14 +64,7 @@ carries the actual LabVIEW payload.
 
 ## Fixture-only manifest delta
 
-- Added: 0, Removed: 311, Changed: 0
-- Removed:
-  - `resource:resource\plugins\lv_icon.vi`
-  - `resource:resource\plugins\lv_icon.vit`
-  - `resource:resource\plugins\lv_iconeditor.lvlib`
-  - `resource:resource\plugins\niiconeditor\class\ants\ants.lvclass`
-  - `resource:resource\plugins\niiconeditor\class\ants\get\get_antsline.vi`
-  - (+306 more)
+- Added: 0, Removed: 0, Changed: 0
 
 ## Changed VI comparison (requests)
 
@@ -284,7 +277,21 @@ carries the actual LabVIEW payload.
 
 - Script: `tools/icon-editor/Invoke-VIDiffSweepStrong.ps1`
 - Purpose: triage a range of icon-editor commits, skipping LVCompare for VIs that are pure renames or whose blobs are unchanged. Only the remaining “interesting” VIs are passed to `Invoke-VIComparisonFromCommit.ps1`, which still uses raw paths so dependencies stay intact.
-- Usage (dry run to preview what would launch LVCompare):
+- Quick triage (heuristics only; no LVCompare launches):
+
+  ```powershell
+  pwsh -File tools/icon-editor/Invoke-VIDiffSweepStrong.ps1 `
+    -RepoPath tmp/icon-editor/repo `
+    -BaseRef origin/develop~20 `
+    -HeadRef origin/develop `
+    -Mode quick `
+    -CachePath tests/results/_agent/icon-editor/vi-diff-cache.json `
+    -EventsPath tests/results/_agent/icon-editor/vi-diff/compare-events.ndjson `
+    -SummaryPath tests/results/_agent/icon-editor/vi-diff-summary.json `
+    -Quiet
+  ```
+
+- Full sweep (default; launches LVCompare when heuristics say “compare”):
 
   ```powershell
   pwsh -File tools/icon-editor/Invoke-VIDiffSweepStrong.ps1 `
@@ -292,15 +299,20 @@ carries the actual LabVIEW payload.
     -BaseRef origin/develop~20 `
     -HeadRef origin/develop `
     -WorkspaceRoot tests/results/_agent/icon-editor/snapshots `
-    -DryRun `
+    -CachePath tests/results/_agent/icon-editor/vi-diff-cache.json `
+    -EventsPath tests/results/_agent/icon-editor/vi-diff/compare-events.ndjson `
+    -SummaryPath tests/results/_agent/icon-editor/vi-diff-summary.json `
     -Quiet
   ```
 
-  Re-run without `-DryRun` to emit comparison captures. Pass `-SummaryPath` to persist the triage decisions (`comparePaths` vs `skipped`) for audit trails or follow-up reviews.
+  Remove `-Mode quick` (or pass `-Mode full`) to run the full path. Delete the cache file if you need to force fresh decisions.
 
 - Flags roll up to the underlying helpers:
   - `-SkipValidate`, `-SkipLVCompare` → forwarded to `Invoke-VIComparisonFromCommit.ps1` when comparisons still run.
   - `-LabVIEWExePath` → overrides the auto-resolved LabVIEW 2025 64-bit binary.
+- `-EventsPath` controls where heuristic decisions are logged (`compare-events.ndjson` style). Omit to use the default under `tests/results/_agent/icon-editor/vi-diff/`.
+- `-CachePath` stores per-commit decisions so re-running the sweep can fast-path previously triaged commits.
+- Heuristic tuning (size delta threshold, compare throttling, prefix allow/deny rules) lives in `configs/icon-editor/vi-diff-heuristics.json`. Set `ICON_EDITOR_VI_DIFF_RULES` to point at an alternate JSON file while experimenting locally. `maxComparePerCommit` limits how many VI paths a single commit can send to LVCompare; overflow paths are skipped with a `compare-throttle` reason so you can follow up manually.
 - Summary output structure (also written to `-SummaryPath` when provided):
 
   ```json
