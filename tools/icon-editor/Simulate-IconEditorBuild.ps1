@@ -107,13 +107,37 @@ if (-not $SkipResourceOverlay.IsPresent -and $resourceRoot -and (Test-Path -Lite
   if (-not (Test-Path -LiteralPath $resourceDest -PathType Container)) {
     [void](New-Item -ItemType Directory -Path $resourceDest -Force)
   }
-  $quotedSource = '"{0}"' -f $resourceRoot
-  $quotedDest = '"{0}"' -f $resourceDest
-  $robocopyArgs = @($quotedSource, $quotedDest, '/MIR')
-  $rc = Start-Process -FilePath 'robocopy' -ArgumentList $robocopyArgs -NoNewWindow -PassThru -Wait
-  if ($rc.ExitCode -gt 3) {
-    Write-Warning "Failed to mirror resource directory (exit code $($rc.ExitCode)); falling back to Copy-Item."
-    Copy-Item -LiteralPath (Join-Path $resourceRoot '*') -Destination $resourceDest -Recurse -Force -ErrorAction Stop
+  $robocopyCommand = $null
+  try {
+    $robocopyCommand = Get-Command 'robocopy' -ErrorAction SilentlyContinue
+  } catch {
+    $robocopyCommand = $null
+  }
+
+  $useFallback = $false
+  if ($robocopyCommand) {
+    $quotedSource = '"{0}"' -f $resourceRoot
+    $quotedDest = '"{0}"' -f $resourceDest
+    $robocopyArgs = @($quotedSource, $quotedDest, '/MIR')
+    $rc = Start-Process -FilePath $robocopyCommand.Source -ArgumentList $robocopyArgs -NoNewWindow -PassThru -Wait
+    if ($rc.ExitCode -gt 3) {
+      Write-Warning "Failed to mirror resource directory with robocopy (exit code $($rc.ExitCode)); using Copy-Item fallback."
+      $useFallback = $true
+    }
+  } else {
+    Write-Host '::notice::robocopy not found; using Copy-Item fallback for resource overlay.'
+    $useFallback = $true
+  }
+
+  if ($useFallback) {
+    if (Test-Path -LiteralPath $resourceDest -PathType Container) {
+      Get-ChildItem -LiteralPath $resourceDest -Force | Remove-Item -Recurse -Force
+    } else {
+      [void](New-Item -ItemType Directory -Path $resourceDest -Force)
+    }
+    Get-ChildItem -LiteralPath $resourceRoot -Force | ForEach-Object {
+      Copy-Item -LiteralPath $_.FullName -Destination $resourceDest -Recurse -Force -ErrorAction Stop
+    }
   }
 } elseif ($SkipResourceOverlay.IsPresent) {
   Write-Host '::notice::Skipping resource overlay by request.'
