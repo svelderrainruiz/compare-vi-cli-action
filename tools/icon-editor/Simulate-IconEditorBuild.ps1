@@ -157,6 +157,12 @@ if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
   }
 }
 if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
+  $resourcePlugins = Join-Path $nestedExtract 'File Group 0\National Instruments\LabVIEW Icon Editor\resource\plugins'
+  if (Test-Path -LiteralPath $resourcePlugins -PathType Container) {
+    $lvlibpFiles = Get-ChildItem -LiteralPath $resourcePlugins -Filter '*.lvlibp' -File -Recurse -ErrorAction SilentlyContinue
+  }
+}
+if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
   throw "Unable to locate lvlibp artifacts inside system VIP under '$installRoot'."
 }
 
