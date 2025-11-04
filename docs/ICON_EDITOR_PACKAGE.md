@@ -24,12 +24,12 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **fail** (VIPs: 1)
-- Report generated: `11/3/2025 9:49:48 PM`
+- Report generated: `11/3/2025 10:14:02 PM`
 - Artifacts:
-  - ni_icon_editor-1.4.1.948.vip - 0.35 MB (`b132e271b03277b10fe0056af8643f02d47edcbe0771e49cd13902a53fa633a0`)
-  - ni_icon_editor_system-1.4.1.948.vip - 0.28 MB (`bbad92eba52eace56e0a5865b0a3333df20c6da66b1a3e369a146102edd1356b`)
-  - lv_icon_x64.lvlibp - 2.85 MB (`9f40629cddd5ec2e4ae7af0e27ccc1086d4e3d9f76d8743f0ddf776cd5375ab9`)
-  - lv_icon_x86.lvlibp - 2.85 MB (`50347dee5b74083cb0917607390a362f42ff68d1c886e0fa7211c59f10f0dcfd`)
+  - ni_icon_editor-1.4.1.948.vip - 0.35 MB (`919104d1e35405e40862776f853cc6b9c23b87121d4b717fcbd06742e937e75e`)
+  - ni_icon_editor_system-1.4.1.948.vip - 0.28 MB (`8181b37939ed27faa0fdf5f87c881e1cc0b2fe4edecee4384a10c04b9b9af03a`)
+  - lv_icon_x64.lvlibp - 2.85 MB (`38c48a463db3735fedcf59cc7aee4022214392d97b51d892c01a9d7ff2d3abf0`)
+  - lv_icon_x86.lvlibp - 2.85 MB (`1092bc553474f43a77630713f06a0fad79fa72055ca074d7380c1c07fec31710`)
 
 ## Stakeholder summary
 
@@ -53,8 +53,8 @@ carries the actual LabVIEW payload.
 ## Fixture-only assets
 
 - resource (313 entries)
-  - plugins\lv_icon_x64.lvlibp (9f40629cddd5ec2e4ae7af0e27ccc1086d4e3d9f76d8743f0ddf776cd5375ab9)
-  - plugins\lv_icon_x86.lvlibp (50347dee5b74083cb0917607390a362f42ff68d1c886e0fa7211c59f10f0dcfd)
+  - plugins\lv_icon_x64.lvlibp (38c48a463db3735fedcf59cc7aee4022214392d97b51d892c01a9d7ff2d3abf0)
+  - plugins\lv_icon_x86.lvlibp (1092bc553474f43a77630713f06a0fad79fa72055ca074d7380c1c07fec31710)
   - plugins\lv_icon.vi (af6be82644d7b0d9252bb5188847a161c641653a38f664bddcacc75bbc6b0b51)
   - plugins\lv_icon.vit (c74159e8f4e16d1881359dae205e71fdee6131020c7c735440697138eec0c0dd)
   - plugins\lv_IconEditor.lvlib (a2721f0b8aea3c32a00d0b148f24bdeee05201b41cffbaa212dbe325fdd4f3f7)
@@ -64,11 +64,11 @@ carries the actual LabVIEW payload.
 
 - Added: 313, Removed: 313, Changed: 0
 - Added:
-  - `resource:tests\plugins\niiconeditor\controls\ok.ctl`
-  - `resource:tests\plugins\niiconeditor\miscellaneous\layer\deletelayer.vi`
-  - `resource:tests\plugins\niiconeditor\miscellaneous\tools\selection_prepareicon.vi`
-  - `resource:tests\plugins\niiconeditor\support\defaulticonglyphdata.vi`
-  - `resource:tests\plugins\niiconeditor\controls\move.ctl`
+  - `resource:tests\plugins\niiconeditor\controls\settings.ctl`
+  - `resource:tests\plugins\niiconeditor\controls\circle.ctl`
+  - `resource:tests\plugins\niiconeditor\ini\read data from labview ini.vi`
+  - `resource:tests\plugins\niiconeditor\class\fakedarray\misc\layer_set active data bg color.vi`
+  - `resource:tests\plugins\niiconeditor\miscellaneous\movelayers.vi`
   - (+308 more)
 - Removed:
   - `resource:resource\plugins\lv_icon_x64.lvlibp`
