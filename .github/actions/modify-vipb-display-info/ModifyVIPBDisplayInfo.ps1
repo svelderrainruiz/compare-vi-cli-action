@@ -68,8 +68,8 @@ param (
 
 # 1) Resolve paths
 try {
-    $ResolvedRelativePath = Resolve-Path -Path $RelativePath -ErrorAction Stop
-    $ResolvedVIPBPath = Join-Path -Path $ResolvedRelativePath -ChildPath $VIPBPath -ErrorAction Stop
+    $ResolvedRelativePath = (Resolve-Path -Path $RelativePath -ErrorAction Stop).ProviderPath
+    $ResolvedVIPBPath = (Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $VIPBPath) -ErrorAction Stop).ProviderPath
 }
 catch {
     $errorObject = [PSCustomObject]@{
@@ -134,10 +134,24 @@ $UpdatedDisplayInformationJSON = $jsonObj | ConvertTo-Json -Depth 5
 
 # 5) Prepare the g-cli command and arguments
 $cmd  = "g-cli"
+$modifyVipbRelative = "Tooling\deployment\Modify_VIPB_Display_Information.vi"
+
+try {
+    $modifyVipbPath = (Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $modifyVipbRelative) -ErrorAction Stop).ProviderPath
+} catch {
+    $errorObject = [PSCustomObject]@{
+        error      = "Modify_VIPB_Display_Information VI not found. Ensure the vendored icon editor tooling is present."
+        exception  = $_.Exception.Message
+        stackTrace = $_.Exception.StackTrace
+    }
+    $errorObject | ConvertTo-Json -Depth 10
+    exit 1
+}
+
 $args = @(
     '--lv-ver', $MinimumSupportedLVVersion,
     '--arch',   $SupportedBitness,
-    "$ResolvedRelativePath\Tooling\deployment\Modify_VIPB_Display_Information.vi",
+    $modifyVipbPath,
     '--',
     $ResolvedVIPBPath,
     $VIP_LVVersion_A,
