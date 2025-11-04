@@ -149,7 +149,7 @@ jobs:
         with:
           minimum_supported_lv_version: 2021
           supported_bitness: ${{ matrix.bitness }}
-          relative_path: ${{ github.workspace }}
+          relative_path: ${{ github.workspace }}/vendor/icon-editor
           major: ${{ needs.version.outputs.MAJOR }}
           minor: ${{ needs.version.outputs.MINOR }}
           patch: ${{ needs.version.outputs.PATCH }}
@@ -161,12 +161,12 @@ jobs:
           supported_bitness: ${{ matrix.bitness }}
       - uses: ./.github/actions/rename-file
         with:
-          current_filename: ${{ github.workspace }}/resource/plugins/lv_icon.lvlibp
-          new_filename: ${{ github.workspace }}/resource/plugins/lv_icon_${{ matrix.suffix }}.lvlibp
+          current_filename: ${{ github.workspace }}/vendor/icon-editor/resource/plugins/lv_icon.lvlibp
+          new_filename: ${{ github.workspace }}/vendor/icon-editor/resource/plugins/lv_icon_${{ matrix.suffix }}.lvlibp
       - uses: actions/upload-artifact@v4
         with:
           name: lv_icon_${{ matrix.suffix }}.lvlibp
-          path: resource/plugins/lv_icon_${{ matrix.suffix }}.lvlibp
+          path: vendor/icon-editor/resource/plugins/lv_icon_${{ matrix.suffix }}.lvlibp
 
   build-vi-package:
     name: Build VI Package
