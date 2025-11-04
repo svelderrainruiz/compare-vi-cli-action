@@ -238,7 +238,7 @@ jobs:
     name: Apply VIPC Dependencies
     needs: changes
     if: needs.changes.outputs.vipc == 'true'
-    runs-on: self-hosted-windows-lv
+    runs-on: [self-hosted, Windows, X64]
     strategy:
       matrix:
         include:
@@ -260,7 +260,7 @@ jobs:
     name: Compute Version
     needs: issue-status
     if: needs.issue-status.outputs.proceed == 'true'
-    runs-on: self-hosted-windows-lv
+    runs-on: [self-hosted, Windows, X64]
     outputs:
       VERSION:       ${{ steps.compute.outputs.VERSION }}
       MAJOR:         ${{ steps.compute.outputs.MAJOR }}
@@ -281,7 +281,7 @@ jobs:
     name: Test Missing-In-Project Action on Windows
     needs: [changes, apply-deps]
     if: ${{ needs.changes.result == 'success' && (needs.apply-deps.result == 'success' || needs.apply-deps.result == 'skipped') }}
-    runs-on: self-hosted-windows-lv
+    runs-on: [self-hosted, Windows, X64]
     strategy:
       fail-fast: false
       matrix:
@@ -297,7 +297,7 @@ jobs:
   test:
     name: Run Unit Tests
     needs: [changes, missing-in-project-check]
-    runs-on: ${{ matrix.os == 'windows' && 'self-hosted-windows-lv' || 'self-hosted-linux-lv' }}
+    runs-on: [self-hosted, Windows, X64]
     strategy:
       matrix:
         os: [windows]
@@ -313,7 +313,7 @@ jobs:
   build-ppl:
     name: Build ${{ matrix.bitness }}-bit Packed Library
     needs: [test, version]
-    runs-on: self-hosted-windows-lv
+    runs-on: [self-hosted, Windows, X64]
     permissions:
       contents: read
       actions: write
@@ -352,7 +352,7 @@ jobs:
   build-vi-package:
     name: Build VI Package
     needs: [build-ppl, version]
-    runs-on: self-hosted-windows-lv
+    runs-on: [self-hosted, Windows, X64]
     permissions:
       contents: read
       actions: read
@@ -426,3 +426,5 @@ jobs:
         with:
           name: vi-package
           path: builds/VI Package/*.vip
+
+
