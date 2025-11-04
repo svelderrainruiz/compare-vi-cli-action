@@ -44,14 +44,14 @@ Write-Verbose " - VIPCPath:                  $VIPCPath"
 # -------------------------
 try {
     Write-Verbose "Attempting to resolve the 'RelativePath'..."
-    $ResolvedRelativePath = Resolve-Path -Path $RelativePath -ErrorAction Stop
+    $ResolvedRelativePath = (Resolve-Path -Path $RelativePath -ErrorAction Stop).ProviderPath
     Write-Verbose "ResolvedRelativePath: $ResolvedRelativePath"
 
     Write-Verbose "Building full path for the .vipc file..."
     if ([System.IO.Path]::IsPathRooted($VIPCPath)) {
-        $ResolvedVIPCPath = Resolve-Path -Path $VIPCPath -ErrorAction Stop
+        $ResolvedVIPCPath = (Resolve-Path -Path $VIPCPath -ErrorAction Stop).ProviderPath
     } else {
-        $ResolvedVIPCPath = Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $VIPCPath) -ErrorAction Stop
+        $ResolvedVIPCPath = (Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $VIPCPath) -ErrorAction Stop).ProviderPath
     }
     Write-Verbose "ResolvedVIPCPath:     $ResolvedVIPCPath"
 
@@ -62,6 +62,15 @@ try {
         exit 1
     }
     Write-Verbose "The .vipc file was found successfully."
+
+    $applyVipcRelative = "vendor/icon-editor/Tooling/deployment/Applyvipc.vi"
+    Write-Verbose "Resolving vendored Applyvipc VI at '$applyVipcRelative'..."
+    $ApplyVipcPath = (Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $applyVipcRelative) -ErrorAction Stop).ProviderPath
+    if (-not (Test-Path $ApplyVipcPath)) {
+        Write-Error "Applyvipc VI not found at '$ApplyVipcPath'."
+        exit 1
+    }
+    Write-Verbose "Applyvipc VI resolved: $ApplyVipcPath"
 }
 catch {
     Write-Error "Error resolving paths. Ensure RelativePath and VIPCPath are valid. Details: $($_.Exception.Message)"
@@ -115,7 +124,7 @@ Write-Verbose "VIP_LVVersion_B (for minimum LVVersion): $VIP_LVVersion_B"
 # -------------------------
 Write-Verbose "Constructing the g-cli command script..."
 $script = @"
-g-cli --lv-ver $MinimumSupportedLVVersion --arch $SupportedBitness -v "$($ResolvedRelativePath)\Tooling\Deployment\Applyvipc.vi" -- "$ResolvedVIPCPath" "$VIP_LVVersion_B"
+g-cli --lv-ver $MinimumSupportedLVVersion --arch $SupportedBitness -v "$ApplyVipcPath" -- "$ResolvedVIPCPath" "$VIP_LVVersion_B"
 "@
 
 if ($VIP_LVVersion -ne $MinimumSupportedLVVersion) {
