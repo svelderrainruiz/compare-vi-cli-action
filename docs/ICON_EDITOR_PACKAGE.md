@@ -405,3 +405,16 @@ which backend executed the build. The generated `icon-editor/build@v1` manifest 
 the requested backend under `packaging.requestedToolchain` (and `packaging.requestedProvider`
 when supplied) so downstream diagnostics stay transparent.
 
+When dependency application is the failing stage, replay it via:
+
+```powershell
+pwsh tools/icon-editor/Replay-ApplyVipcJob.ps1 -RunId <workflow-run-id> -JobName 'Apply VIPC Dependencies (2025, 64)'
+```
+
+The script resolves the LabVIEW version/bitness from the matrix entry (or accepts them
+explicitly), reruns `.github/actions/apply-vipc/ApplyVIPC.ps1` using the VIPM provider,
+and surfaces the same telemetry locally so you can investigate VIPM prompts or missing
+paths without re-queuing a self-hosted runner. Pass `-SkipExecution` to inspect the
+replay command without running it, or reuse `-LogPath` when you already downloaded the
+job log (`gh run view … --log`).
+
