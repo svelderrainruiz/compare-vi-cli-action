@@ -134,15 +134,24 @@ $UpdatedDisplayInformationJSON = $jsonObj | ConvertTo-Json -Depth 5
 
 # 5) Prepare the g-cli command and arguments
 $cmd  = "g-cli"
-$modifyVipbRelative = "Tooling\deployment\Modify_VIPB_Display_Information.vi"
+$modifyVipbCandidates = @(
+    Join-Path -Path $ResolvedRelativePath -ChildPath 'Tooling\deployment\Modify_VIPB_Display_Information.vi',
+    Join-Path -Path $ResolvedRelativePath -ChildPath 'vendor\icon-editor\Tooling\deployment\Modify_VIPB_Display_Information.vi'
+)
 
-try {
-    $modifyVipbPath = (Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $modifyVipbRelative) -ErrorAction Stop).ProviderPath
-} catch {
+$modifyVipbPath = $null
+foreach ($candidate in $modifyVipbCandidates) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $modifyVipbPath = (Resolve-Path -LiteralPath $candidate -ErrorAction Stop).ProviderPath
+        break
+    }
+}
+
+if (-not $modifyVipbPath) {
     $errorObject = [PSCustomObject]@{
         error      = "Modify_VIPB_Display_Information VI not found. Ensure the vendored icon editor tooling is present."
-        exception  = $_.Exception.Message
-        stackTrace = $_.Exception.StackTrace
+        exception  = "Checked paths: $($modifyVipbCandidates -join '; ')"
+        stackTrace = $null
     }
     $errorObject | ConvertTo-Json -Depth 10
     exit 1
