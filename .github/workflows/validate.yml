@@ -205,7 +205,7 @@ jobs:
 
     - name: Prepare icon-editor VI diff requests
       id: vi_diff
-      if: always()
+      if: always() && hashFiles('tests/results/_agent/icon-editor/fixture-report.json') != ''
       uses: ./.github/actions/icon-editor/prepare-vi-diff
       with:
         report-path: tests/results/_agent/icon-editor/fixture-report.json
@@ -1272,6 +1272,7 @@ jobs:
 
       - name: Prepare comparison requests (self-hosted)
         id: compare_prepare
+        if: hashFiles('tests/results/_agent/icon-editor/fixture-report.json') != ''
         uses: ./.github/actions/icon-editor/prepare-vi-diff
         with:
           report-path: tests/results/_agent/icon-editor/fixture-report.json
