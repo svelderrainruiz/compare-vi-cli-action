@@ -9,7 +9,25 @@ runs:
         fetch-depth: 0
         clean: false
 
-    - name: Run ModifyVIPBDisplayInfo.ps1
+    - name: Update display information via PowerShell
+      shell: pwsh
+      run: |
+        & "${{ github.action_path }}/Update-VipbDisplayInfo.ps1" `
+          -SupportedBitness ${{ inputs.supported_bitness }} `
+          -RelativePath "${{ inputs.relative_path }}" `
+          -VIPBPath "${{ inputs.vipb_path }}" `
+          -MinimumSupportedLVVersion ${{ inputs.minimum_supported_lv_version }} `
+          -LabVIEWMinorRevision ${{ inputs.labview_minor_revision }} `
+          -Major ${{ inputs.major }} `
+          -Minor ${{ inputs.minor }} `
+          -Patch ${{ inputs.patch }} `
+          -Build ${{ inputs.build }} `
+          -Commit "${{ inputs.commit }}" `
+          -ReleaseNotesFile "${{ inputs.release_notes_file }}" `
+          -DisplayInformationJSON '${{ inputs.display_information_json }}'
+
+    - name: (Fallback) Run ModifyVIPBDisplayInfo.ps1
+      if: always() && failure()
       shell: pwsh
       run: |
         & "${{ github.action_path }}/ModifyVIPBDisplayInfo.ps1" `
