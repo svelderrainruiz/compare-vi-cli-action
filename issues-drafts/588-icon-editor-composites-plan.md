@@ -47,23 +47,18 @@
   - `stage-artifacts`: bucket paths (`packages`, `reports`, `logs`) and JSON summary string.
   - Future composites (compare/report/hook parity) should expose summary/report paths + metadata for uploads.
   - Update developer docs to list these outputs and example usage.
-- [ ] Prototype workflow changes locally (swap one job to use the new composite while keeping inline steps as fallback until tests pass). _In progress_: `validate.yml` now routes the simulate path through `./.github/actions/icon-editor/simulate-build`; follow-up to cover staging + compare steps.
+- [x] Prototype workflow changes locally (swap one job to use the new composite while keeping inline steps as fallback until tests pass). _Status_: `validate.yml` now relies on the composite suite for simulate + compare paths, and artifact staging flows through `stage-artifacts`.
 
 ## Wiring plan for staging & compare composites
-1. **Stage artifacts**
-   - Replace the inline staging block with `uses: ./.github/actions/icon-editor/stage-artifacts`.
-   - Surface outputs (`packages-path`, `reports-path`, `logs-path`) and feed them to the artifact upload steps.
-   - Ensure fixture report preservation is still honoured (composite already copies rather than moves).
+1. **Stage artifacts** ✅
+   - Inline staging block replaced with `stage-artifacts` composite; artifact uploads now read composite outputs.
+   - Fixture reports remain available for hook parity (composite copies the originals).
 
-2. **VI diff composites**
-   - Author composites:
-     - `prepare-vi-diff`: wraps `Prepare-FixtureViDiffs.ps1` (inputs: report path, baseline manifest, output dir; outputs: requests path, request count).
-     - `invoke-vi-diff`: wraps `Invoke-FixtureViDiffs.ps1` (inputs: requests path, captures root, summary path, timeout; outputs: summary path, captures root).
-     - `render-vi-report`: wraps `Render-ViComparisonReport.ps1` (inputs: summary path, output path).
-   - Wire these into `icon-editor-build` (simulate path) and `icon-editor-compare` jobs, replacing the current PowerShell blocks.
-   - Expose request counts to the lint job outputs and ensure artifact uploads reference composite outputs.
+2. **VI diff composites** ✅
+   - Composites (`prepare-vi-diff`, `invoke-vi-diff`, `render-vi-report`) landed and replace the remaining PowerShell blocks in both icon-editor jobs.
+   - Lint job outputs still surface request counts from the composite metadata.
 
 3. **Docs & validation**
    - Update composite READMEs and `docs/ICON_EDITOR_PACKAGE.md` to mention the new actions and usage.
-   - Add simple tests (Node snapshot or schema checks) verifying action metadata consistency.
+   - ✅ Node metadata test added (`tools/icon-editor/__tests__/composites-metadata.test.mjs`); consider any extra coverage if gaps appear.
    - Run `tools/PrePush-Checks.ps1` and dispatch Validate in both simulate and real build modes to confirm end-to-end behaviour.
