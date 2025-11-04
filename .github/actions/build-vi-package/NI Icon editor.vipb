@@ -1,11 +1,11 @@
-<VI_Package_Builder_Settings Version="2020.1" Created_Date="2024-11-13 13:58:09" Modified_Date="2025-11-03 22:12:31" Creator="svelderr" Comments="" ID="436ecc3ea11d78ae7b4e52c2ca284c03">
+<VI_Package_Builder_Settings Version="2020.1" Created_Date="2024-11-13 13:58:09" Modified_Date="2025-11-04 10:17:50" Creator="svelderr" Comments="" ID="9ac277a654aea36c425b5ae58c6e355a">
   <Library_General_Settings>
     <Package_File_Name>NI_Icon_editor</Package_File_Name>
-    <Library_Version>1.4.1.948</Library_Version>
+    <Library_Version>0.6.0.1214</Library_Version>
     <Auto_Increment_Version>false</Auto_Increment_Version>
     <Library_Source_Folder>..\..</Library_Source_Folder>
     <Library_Output_Folder>..\..\builds\VI Package</Library_Output_Folder>
-    <Company_Name>NI</Company_Name>
+    <Company_Name>LABVIEW-COMMUNITY-CI-CD</Company_Name>
     <Library_Summary/>
     <Library_License>MIT</Library_License>
     <Package_LabVIEW_Version>23.3 (64-bit)</Package_LabVIEW_Version>
@@ -35,9 +35,44 @@
       <One_Line_Description_Summary/>
       <Description/>
       <Copyright/>
-      <Packager>Sergio Velderrain</Packager>
+      <Packager>COMPARE-VI-CLI-ACTION</Packager>
       <URL/>
-      <Release_Notes/>
+      <Release_Notes># Release Notes
+
+- Expand VIPB updater coverage #588 (521531f)
+- Add PowerShell VIPB updater and tests #588 (0af4c9b)
+- Fix modify-vipb candidate list syntax #588 (1736f40)
+- Fall back to vendored Modify_VIPB VI #588 (db9f40c)
+- Resolve modify-vipb tooling paths for vendored layout #588 (6c721a9)
+- Point build pipeline at vendored project for PPL build #588 (5dcfe77)
+- Allow unit tests to specify icon editor project #588 (b859ee7)
+- point ci composite missing-in-project to vendored project #588 (96c106e)
+- fix missing-in-project manifest formatting #588 (026ad33)
+- point missing-in-project to vendored project #588 (7c25f96)
+- fix apply vipc path #588 (44526d6)
+- Vendor icon-editor composite actions (#588) (2da17a6)
+- Remove issue status gate from ci composite (#588) (7cf2828)
+- Use standard self-hosted labels in ci composite (#588) (c925d99)
+- Allow issue-status bypass label (#588) (ec663e1)
+- Add icon-editor CI composite workflow (#588) (5ac1fd8)
+- Skip VI diff prep when fixture report missing (#588) (a5798a5)
+- Restore fixture report data with lvlibp artifacts (#588) (de99d80)
+- Include packed libraries in icon-editor fixture (#588) (7cc6c15)
+- feat: add stage helper and build-mode follow-up (#590) (478eb4b)
+- build: normalize validate workflow endings (#588) (5449897)
+- test: add composite metadata guard (#588) (d893e36)
+- adding composite actions (2fabfb7)
+- Docs: describe VI comparison report artifact (#575) (#585) (4a7f735)
+- Heuristic throttling + cross-platform fixture overlay (#583) (#584) (6d994a0)
+- feat: VIP-contained VI diff report (simulation) (#576) (#578) (1ade770)
+- feat(validate): upload icon-editor fixture manifest + render delta (Deep Dive) (#573) (b4ced5d)
+- feat: simulate icon-editor build via fixture (#571) (#572) (de8f71b)
+- CI: add icon-editor build job (#562) (#567) (8cf9e98)
+- Icon Editor: mirror build pipeline (#558) (#566) (af802c8)
+- issue/557 icon editor deps (#563) (1104c88)
+- chore: allow release finalize resets (#551) (26d0653)
+- fix: tolerate missing manual compare summaries (#551) (ef36195)
+- fix: retry manual compare summary generation (#551) (8c37fc7)</Release_Notes>
     </Description>
     <Destinations>
       <Toolkit_VIs>

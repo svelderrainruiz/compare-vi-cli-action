@@ -376,3 +376,24 @@ carries the actual LabVIEW payload.
 - Canonical hashes are enforced by `node --test tools/icon-editor/__tests__/fixture-hashes.test.mjs` (invoked from `tools/PrePush-Checks.ps1`), so report drift from the committed fixture is caught automatically.
 - Validate uploads the `icon-editor-fixture-report` artifact (JSON + Markdown) so stakeholders can review the latest snapshot without digging through logs.
 
+## Local replay for CI build failures
+
+When the `Build VI Package` job fails late in `ci-composite.yml`, you can replay that
+stage locally without re-running the whole pipeline:
+
+```powershell
+pwsh tools/icon-editor/Replay-BuildVipJob.ps1 -RunId <workflow-run-id>
+```
+
+The helper:
+
+1. Downloads the job log via `gh`, extracts the display-information payload, and
+   (optionally) fetches the packaged `lv_icon_*.lvlibp` artifacts.
+2. Regenerates release notes and updates the VIPB metadata with the new PowerShell
+   helper.
+3. Invokes `.github/actions/build-vi-package/build_vip.ps1` using the same inputs CI
+   consumed.
+
+Pass `-LogPath path\to\log.txt` when you already have the log, and `-DownloadArtifacts`
+to pull the upstream PPLs automatically before the build.
+
