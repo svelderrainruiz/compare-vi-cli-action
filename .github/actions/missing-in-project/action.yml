@@ -1,9 +1,9 @@
-name: "Missing In Project"
-  description: >
-    Executes MissingInProjectCLI.vi (bundled with this action) via g‑cli,
-    pointing at a user‑supplied *.lvproj* (default: vendor/icon-editor/lv_icon_editor.lvproj).
+name: "Missing In Project"
+description: >
+  Executes MissingInProjectCLI.vi (bundled with this action) via g-cli,
+  pointing at a user-supplied *.lvproj* (default: vendor/icon-editor/lv_icon_editor.lvproj).
   Fails instantly on any missing file and exports:
-    • passed        (Boolean)  
+    • passed        (Boolean)
     • missing-files (String)
 
 branding:
