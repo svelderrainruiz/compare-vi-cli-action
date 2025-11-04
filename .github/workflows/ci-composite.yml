@@ -110,7 +110,7 @@ jobs:
         with:
           lv-ver:       ${{ matrix.lv-version }}
           arch:         ${{ matrix.bitness }}
-          project-file: "lv_icon_editor.lvproj"
+          project-file: "vendor/icon-editor/lv_icon_editor.lvproj"
 
   test:
     name: Run Unit Tests
