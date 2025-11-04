@@ -322,7 +322,11 @@ try {
 
     Push-Location (Split-Path -Parent $unitTestScript)
     try {
-      & $unitTestScript -MinimumSupportedLVVersion $MinimumSupportedLVVersion -SupportedBitness '64'
+      $unitTestProject = Join-Path $IconEditorRoot 'lv_icon_editor.lvproj'
+      & $unitTestScript `
+        -MinimumSupportedLVVersion $MinimumSupportedLVVersion `
+        -SupportedBitness '64' `
+        -ProjectPath $unitTestProject
     } finally {
       Pop-Location
     }

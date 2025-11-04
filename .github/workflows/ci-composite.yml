@@ -127,6 +127,7 @@ jobs:
         with:
           minimum_supported_lv_version: ${{ matrix['lv-version'] }}
           supported_bitness:            ${{ matrix.bitness }}
+          project-file:                 vendor/icon-editor/lv_icon_editor.lvproj
 
   build-ppl:
     name: Build ${{ matrix.bitness }}-bit Packed Library

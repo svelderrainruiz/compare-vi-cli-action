@@ -16,6 +16,11 @@
 .PARAMETER SupportedBitness
     Bitness for LabVIEW (e.g., "64").
 
+.PARAMETER ProjectPath
+    Optional path to the LabVIEW project. When provided, the script skips the
+    upward search and uses this path (relative paths are resolved against
+    $GITHUB_WORKSPACE or the current working directory).
+
 .NOTES
     PowerShell 7.5+ assumed for cross-platform support.
     This script *requires* that g-cli and LabVIEW be compatible with the OS.
@@ -29,13 +34,44 @@ param(
     [Parameter(Mandatory=$true)]
     [ValidateSet("32","64")]
     [string]
-    $SupportedBitness
+    $SupportedBitness,
+
+    [string]
+    $ProjectPath
 )
 
 # --------------------------------------------------------------------
 # 1) Locate exactly one .lvproj file by searching upward from $PSScriptRoot
 # --------------------------------------------------------------------
 Write-Host "Starting directory for .lvproj search: $PSScriptRoot"
+
+function Resolve-ProjectPath {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string] $PathCandidate
+    )
+
+    if ([System.IO.Path]::IsPathRooted($PathCandidate)) {
+        return (Resolve-Path -LiteralPath $PathCandidate -ErrorAction Stop).ProviderPath
+    }
+
+    $candidateBases = @()
+    if ($env:GITHUB_WORKSPACE) {
+        $candidateBases += $env:GITHUB_WORKSPACE
+    }
+    $candidateBases += (Get-Location).Path
+
+    foreach ($base in $candidateBases | Select-Object -Unique) {
+        try {
+            $resolved = Resolve-Path -LiteralPath (Join-Path -Path $base -ChildPath $PathCandidate) -ErrorAction Stop
+            return $resolved.ProviderPath
+        } catch {
+            continue
+        }
+    }
+
+    throw "Unable to resolve project path '$PathCandidate'. Checked bases: $($candidateBases -join ', ')"
+}
 
 function Get-SingleLvproj {
     param(
@@ -73,13 +109,24 @@ function Get-SingleLvproj {
     }
 }
 
-$AbsoluteProjectPath = Get-SingleLvproj -StartFolder $PSScriptRoot
-
-if (-not $AbsoluteProjectPath) {
-    # We failed to find exactly one .lvproj in any ancestor up to the level before root
-    exit 3
+$AbsoluteProjectPath = $null
+if ($ProjectPath) {
+    try {
+        $AbsoluteProjectPath = Resolve-ProjectPath -PathCandidate $ProjectPath
+        Write-Host "Using LabVIEW project file (override): $AbsoluteProjectPath"
+    }
+    catch {
+        Write-Error "Failed to resolve project path '$ProjectPath': $($_.Exception.Message)"
+        exit 3
+    }
+} else {
+    $AbsoluteProjectPath = Get-SingleLvproj -StartFolder $PSScriptRoot
+    if (-not $AbsoluteProjectPath) {
+        # We failed to find exactly one .lvproj in any ancestor up to the level before root
+        exit 3
+    }
+    Write-Host "Using LabVIEW project file: $AbsoluteProjectPath"
 }
-Write-Host "Using LabVIEW project file: $AbsoluteProjectPath"
 
 # Script-level variables to track exit states
 $Script:OriginalExitCode = 0
