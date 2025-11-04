@@ -1,7 +1,7 @@
 name: "Missing In Project"
-description: >
-  Executes MissinInProjectCLI.vi (bundled with this action) via g‑cli,
-  pointing at a user‑supplied *.lvproj* (default: lv_icon.lvproj in repo root).
+  description: >
+    Executes MissingInProjectCLI.vi (bundled with this action) via g‑cli,
+    pointing at a user‑supplied *.lvproj* (default: vendor/icon-editor/lv_icon_editor.lvproj).
   Fails instantly on any missing file and exports:
     • passed        (Boolean)  
     • missing-files (String)
@@ -20,9 +20,9 @@ inputs:
   project-file:
     description: >
       Path to the .lvproj to inspect.
-      Defaults to `lv_icon.lvproj` in the repository root.
+      Defaults to `vendor/icon-editor/lv_icon_editor.lvproj`.
     required: false
-    default: lv_icon.lvproj
+    default: vendor/icon-editor/lv_icon_editor.lvproj
 
 outputs:
   passed:
