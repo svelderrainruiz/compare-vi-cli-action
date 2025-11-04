@@ -77,8 +77,8 @@ switch ("$VIP_LVVersion-$SupportedBitness") {
     "2021-32" { $VIP_LVVersion_A = "21.0" }
     "2022-64" { $VIP_LVVersion_A = "22.3 (64-bit)" }
     "2022-32" { $VIP_LVVersion_A = "22.3" }
-    "2023-64" { $VIP_LVVersion_A = "23.3 (64-bit)" }
-    "2023-32" { $VIP_LVVersion_A = "23.3" }
+    "2025-64" { $VIP_LVVersion_A = "23.3 (64-bit)" }
+    "2025-32" { $VIP_LVVersion_A = "23.3" }
     "2024-64" { $VIP_LVVersion_A = "24.3 (64-bit)" }
     "2024-32" { $VIP_LVVersion_A = "24.3" }
     "2025-64" { $VIP_LVVersion_A = "25.3 (64-bit)" }
@@ -94,8 +94,8 @@ switch ("$MinimumSupportedLVVersion-$SupportedBitness") {
     "2021-32" { $VIP_LVVersion_B = "21.0" }
     "2022-64" { $VIP_LVVersion_B = "22.3 (64-bit)" }
     "2022-32" { $VIP_LVVersion_B = "22.3" }
-    "2023-64" { $VIP_LVVersion_B = "23.3 (64-bit)" }
-    "2023-32" { $VIP_LVVersion_B = "23.3" }
+    "2025-64" { $VIP_LVVersion_B = "23.3 (64-bit)" }
+    "2025-32" { $VIP_LVVersion_B = "23.3" }
     "2024-64" { $VIP_LVVersion_B = "24.3 (64-bit)" }
     "2024-32" { $VIP_LVVersion_B = "24.3" }
     "2025-64" { $VIP_LVVersion_B = "25.3 (64-bit)" }

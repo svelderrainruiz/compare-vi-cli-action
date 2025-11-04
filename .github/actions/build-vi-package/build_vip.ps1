@@ -4,7 +4,8 @@
 
 .DESCRIPTION
     Locates a VIPB file stored alongside this script, merges version details into
-    DisplayInformation JSON, and calls g-cli to create the final VI package.
+    DisplayInformation JSON, and invokes the provider-backed packaging helper
+    (g-cli by default) to create the final VI package.
 
 .PARAMETER SupportedBitness
     LabVIEW bitness for the build ("32" or "64").
@@ -37,6 +38,12 @@
 .PARAMETER DisplayInformationJSON
     JSON string representing the VIPB display information to update.
 
+.PARAMETER BuildToolchain
+    Toolchain requested for the package build (`gcli` or `vipm`). Defaults to `gcli`.
+
+.PARAMETER BuildProvider
+    Optional provider name routed to the selected toolchain (e.g. custom g-cli shim).
+
 .EXAMPLE
     .\build_vip.ps1 -SupportedBitness "64" -MinimumSupportedLVVersion 2021 -LabVIEWMinorRevision 3 -Major 1 -Minor 0 -Patch 0 -Build 2 -Commit "abcd123" -ReleaseNotesFile "Tooling\deployment\release_notes.md" -DisplayInformationJSON '{"Package Version":{"major":1,"minor":0,"patch":0,"build":2}}'
 #>
@@ -56,9 +63,23 @@ param (
     [string]$Commit,
     [string]$ReleaseNotesFile,
 
+    [ValidateSet("gcli","vipm")]
+    [string]$BuildToolchain = "gcli",
+
+    [string]$BuildProvider,
+
     [Parameter(Mandatory=$true)]
     [string]$DisplayInformationJSON
 )
+
+Set-StrictMode -Version Latest
+
+$workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).ProviderPath
+$iconEditorModulePath = Join-Path $workspaceRoot 'tools\icon-editor\IconEditorPackage.psm1'
+if (-not (Test-Path -LiteralPath $iconEditorModulePath -PathType Leaf)) {
+    throw "IconEditor package module not found at '$iconEditorModulePath'."
+}
+Import-Module $iconEditorModulePath -Force
 
 # 1) Locate VIPB file in the action directory
 try {
@@ -74,12 +95,6 @@ catch {
     }
     $errorObject | ConvertTo-Json -Depth 10
     exit 1
-}
-
-# 2) Create release notes if needed
-if (-not (Test-Path $ReleaseNotesFile)) {
-    Write-Host "Release notes file '$ReleaseNotesFile' does not exist. Creating it..."
-    New-Item -ItemType File -Path $ReleaseNotesFile -Force | Out-Null
 }
 
 # 3) Calculate the LabVIEW version string
@@ -127,18 +142,40 @@ else {
 # Re-convert to a JSON string with a comfortable nesting depth
 $UpdatedDisplayInformationJSON = $jsonObj | ConvertTo-Json -Depth 5
 
-# 5) Construct the command script
-
-$script = @"
-g-cli --lv-ver $MinimumSupportedLVVersion --arch $SupportedBitness vipb -- --buildspec "$ResolvedVIPBPath" -v "$Major.$Minor.$Patch.$Build" --release-notes "$ReleaseNotesFile" --timeout 300
-"@
-
-Write-Output "Executing the following commands:"
-Write-Output $script
-
-# 6) Execute the commands
+# 5) Execute the package build via the provider-aware helper
 try {
-    Invoke-Expression $script
+    Write-Host ("Invoking icon-editor package build via {0} toolchain..." -f $BuildToolchain)
+
+    $buildParams = @{
+        VipbPath                  = $ResolvedVIPBPath
+        Major                     = $Major
+        Minor                     = $Minor
+        Patch                     = $Patch
+        Build                     = $Build
+        SupportedBitness          = [int]$SupportedBitness
+        MinimumSupportedLVVersion = $MinimumSupportedLVVersion
+        LabVIEWMinorRevision      = [int]$LabVIEWMinorRevision
+        ReleaseNotesPath          = $ReleaseNotesFile
+        WorkspaceRoot             = $workspaceRoot
+        Provider                  = $BuildToolchain
+    }
+
+    if ($BuildToolchain -eq 'gcli' -and $BuildProvider) {
+        $buildParams.GCliProviderName = $BuildProvider
+    } elseif ($BuildToolchain -eq 'vipm' -and $BuildProvider) {
+        $buildParams.VipmProviderName = $BuildProvider
+    }
+
+    $buildResult = Invoke-IconEditorVipBuild @buildParams
+
+    if ($buildResult.ReleaseNotes) {
+        $ReleaseNotesFile = $buildResult.ReleaseNotes
+    }
+
+    if ($buildResult.Provider) {
+        Write-Host ("Resolved provider backend: {0}" -f $buildResult.Provider)
+    }
+
     Write-Host "Successfully built VI package: $ResolvedVIPBPath"
 }
 catch {

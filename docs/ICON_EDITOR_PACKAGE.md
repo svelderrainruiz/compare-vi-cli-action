@@ -24,59 +24,59 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **fail** (VIPs: 1)
-- Report generated: `11/3/2025 10:14:02 PM`
+- Report generated: `11/4/2025 2:11:28 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 0.35 MB (`919104d1e35405e40862776f853cc6b9c23b87121d4b717fcbd06742e937e75e`)
   - ni_icon_editor_system-1.4.1.948.vip - 0.28 MB (`8181b37939ed27faa0fdf5f87c881e1cc0b2fe4edecee4384a10c04b9b9af03a`)
-  - lv_icon_x64.lvlibp - 2.85 MB (`38c48a463db3735fedcf59cc7aee4022214392d97b51d892c01a9d7ff2d3abf0`)
-  - lv_icon_x86.lvlibp - 2.85 MB (`1092bc553474f43a77630713f06a0fad79fa72055ca074d7380c1c07fec31710`)
+  - lv_icon_x64.lvlibp - 2.85 MB (`e851ac8d296e78f4ed1fd66af576c50ae5ff48caf18775ac3d4085c29d4bd013`)
+  - lv_icon_x86.lvlibp - 2.85 MB (`8a3d07791c5f03d11bddfb32d25fd5d7c933a2950d96b5668cc5837fe7dece23`)
 
 ## Stakeholder summary
 
 - Smoke status: **fail**
 - Runner dependencies: mismatch
 - Custom actions: 4 entries (all match: False)
-- Fixture-only assets discovered: 313
+- Fixture-only assets discovered: 311
 
 ## Comparison with repository sources
 
 - Custom action hashes:
 | Action | Fixture Hash | Repo Hash | Match |
 | --- | --- | --- | --- |
-| VIP_Pre-Install Custom Action 2021.vi | `_missing_` | `05ddb5a2995124712e31651ed4a623e0e43044435ff7af62c24a65fbe2a5273a` | mismatch |
-| VIP_Post-Install Custom Action 2021.vi | `_missing_` | `29b4aec05c38707975a4d6447daab8eea6c59fcf0cde45f899f8807b11cd475e` | mismatch |
-| VIP_Pre-Uninstall Custom Action 2021.vi | `_missing_` | `a10234da4dfe23b87f6e7a25f3f74ae30751193928d5700a628593f1120a5a91` | mismatch |
-| VIP_Post-Uninstall Custom Action 2021.vi | `_missing_` | `958b253a321fec8e65805195b1e52cda2fd509823d0ad18b29ae341513d4615b` | mismatch |
+| VIP_Pre-Install Custom Action 2021.vi | `_missing_` | `_missing_` | mismatch |
+| VIP_Post-Install Custom Action 2021.vi | `_missing_` | `_missing_` | mismatch |
+| VIP_Pre-Uninstall Custom Action 2021.vi | `_missing_` | `_missing_` | mismatch |
+| VIP_Post-Uninstall Custom Action 2021.vi | `_missing_` | `_missing_` | mismatch |
 
 - Runner dependencies hash match: mismatch
 
 ## Fixture-only assets
 
-- resource (313 entries)
-  - plugins\lv_icon_x64.lvlibp (38c48a463db3735fedcf59cc7aee4022214392d97b51d892c01a9d7ff2d3abf0)
-  - plugins\lv_icon_x86.lvlibp (1092bc553474f43a77630713f06a0fad79fa72055ca074d7380c1c07fec31710)
+- resource (311 entries)
   - plugins\lv_icon.vi (af6be82644d7b0d9252bb5188847a161c641653a38f664bddcacc75bbc6b0b51)
   - plugins\lv_icon.vit (c74159e8f4e16d1881359dae205e71fdee6131020c7c735440697138eec0c0dd)
   - plugins\lv_IconEditor.lvlib (a2721f0b8aea3c32a00d0b148f24bdeee05201b41cffbaa212dbe325fdd4f3f7)
-  - ... 308 more
+  - plugins\NIIconEditor\Class\Ants\Ants.lvclass (650baef4cded7115e549f0f99258884c43185f88b6a082b1629e0fa72406f176)
+  - plugins\NIIconEditor\Class\Ants\GET\GET_AntsLine.vi (794dfcbf2ed7ff560f2346ba51c840d00dc22e58098c9f4a76cdeb370b9c9df9)
+  - ... 306 more
 
 ## Fixture-only manifest delta
 
-- Added: 313, Removed: 313, Changed: 0
+- Added: 311, Removed: 311, Changed: 0
 - Added:
-  - `resource:tests\plugins\niiconeditor\controls\settings.ctl`
-  - `resource:tests\plugins\niiconeditor\controls\circle.ctl`
-  - `resource:tests\plugins\niiconeditor\ini\read data from labview ini.vi`
-  - `resource:tests\plugins\niiconeditor\class\fakedarray\misc\layer_set active data bg color.vi`
-  - `resource:tests\plugins\niiconeditor\miscellaneous\movelayers.vi`
-  - (+308 more)
+  - `resource:tests\plugins\niiconeditor\class\fakedarray\misc\updatevisibledata.vi`
+  - `resource:tests\plugins\niiconeditor\controls\draw.ctl`
+  - `resource:tests\plugins\niiconeditor\controls\user event communication enum.ctl`
+  - `resource:tests\plugins\niiconeditor\miscellaneous\icon editor\mousemove.vi`
+  - `resource:tests\plugins\lv_icon.vit`
+  - (+306 more)
 - Removed:
-  - `resource:resource\plugins\lv_icon_x64.lvlibp`
-  - `resource:resource\plugins\lv_icon_x86.lvlibp`
   - `resource:resource\plugins\lv_icon.vi`
   - `resource:resource\plugins\lv_icon.vit`
   - `resource:resource\plugins\lv_iconeditor.lvlib`
-  - (+308 more)
+  - `resource:resource\plugins\niiconeditor\class\ants\ants.lvclass`
+  - `resource:resource\plugins\niiconeditor\class\ants\get\get_antsline.vi`
+  - (+306 more)
 
 ## Changed VI comparison (requests)
 
@@ -391,9 +391,17 @@ The helper:
    (optionally) fetches the packaged `lv_icon_*.lvlibp` artifacts.
 2. Regenerates release notes and updates the VIPB metadata with the new PowerShell
    helper.
-3. Invokes `.github/actions/build-vi-package/build_vip.ps1` using the same inputs CI
-   consumed.
+3. Rebuilds the VI package via `Invoke-IconEditorVipBuild` (g-cli toolchain by
+   default) so the replay path matches the CI job.
 
 Pass `-LogPath path\to\log.txt` when you already have the log, and `-DownloadArtifacts`
 to pull the upstream PPLs automatically before the build.
+
+To experiment with alternate backends, supply `-BuildToolchain vipm` to route the
+package step through the VIPM provider, or pass `-BuildProvider <name>` to request a
+specific provider registration (for example, a custom g-cli shim). The summary emitted
+by the script now records both the toolchain and resolved provider so you can confirm
+which backend executed the build. The generated `icon-editor/build@v1` manifest records
+the requested backend under `packaging.requestedToolchain` (and `packaging.requestedProvider`
+when supplied) so downstream diagnostics stay transparent.
 

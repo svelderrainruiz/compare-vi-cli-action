@@ -102,8 +102,8 @@ jobs:
           supported_bitness: 64
           relative_path: ${{ github.workspace }}
           vipb_path: Tooling/deployment/NI Icon editor.vipb
-          minimum_supported_lv_version: 2023
-          # labview_minor_revision omitted (defaults to 3 for LV2023 SP1)
+          minimum_supported_lv_version: 2025
+          # labview_minor_revision omitted (defaults to 3 for LV2025 SP1)
           major: 1
           minor: 0
           patch: 0
@@ -117,7 +117,7 @@ jobs:
         uses: LabVIEW-Community-CI-CD/open-source-actions/build-vi-package@v1
         with:
           supported_bitness: 64
-          minimum_supported_lv_version: 2023
+          minimum_supported_lv_version: 2025
           # labview_minor_revision omitted (defaults to 3)
           major: 1
           minor: 0

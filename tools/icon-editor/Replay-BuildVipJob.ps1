@@ -45,6 +45,14 @@
     When supplied, downloads the run's artifacts (via gh run download) into a
     temporary directory and copies any lv_icon_*.lvlibp files into the expected
     resource/plugins folder.
+
+.PARAMETER BuildToolchain
+    Toolchain used to rebuild the VIP. Defaults to 'gcli'; pass 'vipm' to route
+    through the VIPM provider.
+
+.PARAMETER BuildProvider
+    Optional provider name forwarded to the selected toolchain (for example, a
+    specific g-cli or VIPM backend).
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Default')]
@@ -65,11 +73,17 @@ param(
     [switch]$SkipVipbUpdate,
     [switch]$SkipBuild,
     [switch]$CloseLabVIEW,
-    [switch]$DownloadArtifacts
+    [switch]$DownloadArtifacts,
+
+    [ValidateSet('gcli','vipm')]
+    [string]$BuildToolchain = 'gcli',
+
+    [string]$BuildProvider
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$PwshExecutable = (Get-Command pwsh).Source
 
 function Invoke-GitHubCli {
     param(
@@ -98,12 +112,58 @@ function Invoke-GitHubCli {
     return ($stdout | ConvertFrom-Json)
 }
 
+function Invoke-ExternalPwsh {
+    param([Parameter(Mandatory)][string[]]$Arguments)
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $PwshExecutable
+    foreach ($arg in $Arguments) {
+        [void]$psi.ArgumentList.Add($arg)
+    }
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+
+    [pscustomobject]@{
+        ExitCode = $proc.ExitCode
+        StdOut   = $stdout
+        StdErr   = $stderr
+    }
+}
+
 function Resolve-WorkspacePath {
     param([string]$Path)
     return (Resolve-Path -Path $Path -ErrorAction Stop).ProviderPath
 }
 
 $workspaceRoot = Resolve-WorkspacePath -Path $Workspace
+$script:stagedArtifacts = New-Object System.Collections.Generic.List[string]
+$script:removedPackage = $false
+$script:buildOutput = $null
+$script:buildWarnings = @()
+$script:viServerSnapshots = @()
+$script:packagePath = $null
+$script:buildProviderName = $null
+$script:buildToolchain = $BuildToolchain
+
+$iconEditorModulePath = Join-Path $workspaceRoot 'tools\icon-editor\IconEditorPackage.psm1'
+if (-not (Test-Path -LiteralPath $iconEditorModulePath -PathType Leaf)) {
+    throw "IconEditor package module not found at '$iconEditorModulePath'."
+}
+Import-Module $iconEditorModulePath -Force
+
+if ($IsWindows) {
+    try {
+        $script:viServerSnapshots = Get-IconEditorViServerSnapshots -Version 2021 -Bitness @(32, 64) -WorkspaceRoot $workspaceRoot
+    } catch {
+        Write-Verbose ("Unable to capture VI Server snapshot: {0}" -f $_.Exception.Message)
+        $script:viServerSnapshots = @()
+    }
+}
 
 if ($RunId) {
     Write-Verbose "Fetching job metadata for run $RunId"
@@ -171,19 +231,6 @@ function Remove-AnsiEscapes {
     return ([regex]::Replace($Text, '\x1B\[[0-9;]*[A-Za-z]', ''))
 }
 
-function Get-VipbPackageFileName {
-    param([string]$VipbPath)
-
-    $doc = New-Object System.Xml.XmlDocument
-    $doc.PreserveWhitespace = $true
-    $doc.Load($VipbPath)
-    $node = $doc.SelectSingleNode('/VI_Package_Builder_Settings/Library_General_Settings/Package_File_Name')
-    if (-not $node) {
-        throw "Unable to locate Package_File_Name node in $VipbPath"
-    }
-    return $node.InnerText
-}
-
 $sanitizedLines = $logLines | ForEach-Object { Remove-AnsiEscapes $_ }
 $jsonLine = $sanitizedLines | Where-Object { $_ -match 'DisplayInformationJSON' -or $_ -match 'display_information_json' } | Select-Object -Last 1
 if (-not $jsonLine) {
@@ -230,55 +277,77 @@ try {
 
     if (-not $SkipReleaseNotes) {
         Write-Host "Generating release notes at $releaseNotesFull"
-        & pwsh -NoLogo -NoProfile -File '.github/actions/generate-release-notes/GenerateReleaseNotes.ps1' `
-            -OutputPath $releaseNotesArgument
+        $releaseResult = Invoke-ExternalPwsh -Arguments @('-NoLogo','-NoProfile','-File','.github/actions/generate-release-notes/GenerateReleaseNotes.ps1','-OutputPath',$releaseNotesArgument)
+        if ($releaseResult.ExitCode -ne 0) {
+            throw "Release notes generation failed:`n$($releaseResult.StdOut)$($releaseResult.StdErr)"
+        }
     }
 
     if (-not $SkipVipbUpdate) {
         Write-Host "Updating VIPB metadata via PowerShell helper"
-        & pwsh -NoLogo -NoProfile -File '.github/actions/modify-vipb-display-info/Update-VipbDisplayInfo.ps1' `
-            -SupportedBitness 64 `
-            -RelativePath (Get-Location).Path `
-            -VIPBPath $vipbRelative `
-            -MinimumSupportedLVVersion 2023 `
-            -LabVIEWMinorRevision 3 `
-            -Major $intMajor `
-            -Minor $intMinor `
-            -Patch $intPatch `
-            -Build $intBuild `
-            -Commit ($RunId ?? 'local-replay') `
-            -ReleaseNotesFile $releaseNotesArgument `
-            -DisplayInformationJSON ($displayInfo | ConvertTo-Json -Depth 5)
+        $updateResult = Invoke-ExternalPwsh -Arguments @(
+            '-NoLogo','-NoProfile','-File','.github/actions/modify-vipb-display-info/Update-VipbDisplayInfo.ps1',
+            '-SupportedBitness','64',
+            '-RelativePath',(Get-Location).Path,
+            '-VIPBPath',$vipbRelative,
+            '-MinimumSupportedLVVersion','2025',
+            '-LabVIEWMinorRevision','3',
+            '-Major',$intMajor,
+            '-Minor',$intMinor,
+            '-Patch',$intPatch,
+            '-Build',$intBuild,
+            '-Commit',($RunId ?? 'local-replay'),
+            '-ReleaseNotesFile',$releaseNotesArgument,
+            '-DisplayInformationJSON',($displayInfo | ConvertTo-Json -Depth 5)
+        )
+        if ($updateResult.ExitCode -ne 0) {
+            throw "VIPB update failed:`n$($updateResult.StdOut)$($updateResult.StdErr)"
+        }
     }
 
+    $buildResult = $null
     if (-not $SkipBuild) {
-        $packageName = Get-VipbPackageFileName -VipbPath $vipbFullPath
-        $outputDir = Join-Path $workspaceRoot '.github/builds/VI Package'
-        $expectedVip = Join-Path $outputDir ("{0}-{1}.{2}.{3}.{4}.vip" -f $packageName, $intMajor, $intMinor, $intPatch, $intBuild)
-        if (Test-Path -LiteralPath $expectedVip) {
-            Write-Host "Removing existing package at $expectedVip to avoid collisions."
-            Remove-Item -LiteralPath $expectedVip -Force
+        Write-Host ("Running Invoke-IconEditorVipBuild via {0} toolchain to produce VI Package" -f $BuildToolchain)
+
+        $buildParams = @{
+            VipbPath                  = $vipbFullPath
+            Major                     = $intMajor
+            Minor                     = $intMinor
+            Patch                     = $intPatch
+            Build                     = $intBuild
+            SupportedBitness          = 64
+            MinimumSupportedLVVersion = 2025
+            LabVIEWMinorRevision      = 3
+            ReleaseNotesPath          = $releaseNotesFull
+            WorkspaceRoot             = $workspaceRoot
+            Provider                  = $BuildToolchain
         }
 
-        Write-Host "Running build_vip.ps1 to produce VI Package"
-        & pwsh -NoLogo -NoProfile -File '.github/actions/build-vi-package/build_vip.ps1' `
-            -SupportedBitness 64 `
-            -MinimumSupportedLVVersion 2023 `
-            -LabVIEWMinorRevision 3 `
-            -Major $intMajor `
-            -Minor $intMinor `
-            -Patch $intPatch `
-            -Build $intBuild `
-            -Commit ($RunId ?? 'local-replay') `
-            -ReleaseNotesFile $releaseNotesArgument `
-            -DisplayInformationJSON ($displayInfo | ConvertTo-Json -Depth 5)
+        if ($BuildToolchain -eq 'gcli' -and $BuildProvider) {
+            $buildParams.GCliProviderName = $BuildProvider
+        } elseif ($BuildToolchain -eq 'vipm' -and $BuildProvider) {
+            $buildParams.VipmProviderName = $BuildProvider
+        }
+
+        $buildResult = Invoke-IconEditorVipBuild @buildParams
+
+        $script:buildOutput = $buildResult.Output
+        $script:buildWarnings = $buildResult.Warnings
+        if ($buildResult.RemovedExisting) { $script:removedPackage = $true }
+        if ($buildResult.PackagePath) { $script:packagePath = $buildResult.PackagePath }
+        if ($buildResult.Provider) { $script:buildProviderName = $buildResult.Provider }
     }
 
     if ($CloseLabVIEW) {
-        Write-Host "Closing LabVIEW 2023 (64-bit)"
-        & pwsh -NoLogo -NoProfile -File '.github/actions/close-labview/Close_LabVIEW.ps1' `
-            -MinimumSupportedLVVersion 2023 `
-            -SupportedBitness 64
+        Write-Host "Closing LabVIEW 2025 (64-bit)"
+        $closeResult = Invoke-ExternalPwsh -Arguments @(
+            '-NoLogo','-NoProfile','-File','.github/actions/close-labview/Close_LabVIEW.ps1',
+            '-MinimumSupportedLVVersion','2025',
+            '-SupportedBitness','64'
+        )
+        if ($closeResult.ExitCode -ne 0) {
+            Write-Warning "close-labview script reported an error:`n$($closeResult.StdOut)$($closeResult.StdErr)"
+        }
     }
 }
 finally {
@@ -288,4 +357,59 @@ finally {
 $vipOutputDir = Join-Path $workspaceRoot '.github/builds/VI Package'
 Write-Host "Replay completed."
 Write-Host " VIPB updated at $(Join-Path $workspaceRoot $vipbRelative)"
-Write-Host " Generated .vip located under $vipOutputDir"
+Write-Host " Release notes path: $releaseNotesFull"
+Write-Host (" Build toolchain: {0}" -f $script:buildToolchain)
+if ($script:buildProviderName) {
+    Write-Host (" Provider backend: {0}" -f $script:buildProviderName)
+} elseif ($BuildProvider) {
+    Write-Host (" Provider backend: {0}" -f $BuildProvider)
+}
+if ($stagedArtifacts.Count -gt 0) {
+    Write-Host " Staged artifacts copied to resource/plugins:"
+    $stagedArtifacts | ForEach-Object { Write-Host "   - $_" }
+}
+if ($script:removedPackage) {
+    Write-Host " Removed previous .vip to avoid collisions."
+}
+if ($script:buildOutput) {
+    if ($script:buildWarnings.Count -gt 0) {
+        Write-Warning "g-cli emitted warnings during build:"
+        $script:buildWarnings | ForEach-Object { Write-Warning "  $_" }
+        $logHint = Join-Path $env:USERPROFILE 'Documents\LabVIEW Data\Logs'
+        if (-not (Test-Path -LiteralPath $logHint -PathType Container)) {
+            $logHint = '%USERPROFILE%\Documents\LabVIEW Data\Logs'
+        }
+        Write-Host " Hint: g-cli reported transient comms errors; if the build still completes you can proceed. Otherwise rerun or inspect LabVIEW logs at $logHint."
+        if ($script:viServerSnapshots.Count -gt 0) {
+            Write-Host " VI Server ports (LabVIEW.ini snapshot):"
+            foreach ($snapshot in $script:viServerSnapshots) {
+                $label = "{0} {1}-bit" -f $snapshot.Version, $snapshot.Bitness
+                if ($snapshot.Status -ne 'ok') {
+                    $detail = if ($snapshot.Message) { $snapshot.Message } else { 'Unavailable' }
+                    Write-Host ("  - {0}: {1}" -f $label, $detail)
+                } else {
+                    $portText = if ($snapshot.Port) { $snapshot.Port } else { 'unknown' }
+                    $enabledText = if ($snapshot.Enabled) { $snapshot.Enabled } else { 'unknown' }
+                    $iniRef = if ($snapshot.IniPath) { $snapshot.IniPath } else { 'n/a' }
+                    Write-Host ("  - {0}: port={1}, enabled={2} (ini: {3})" -f $label, $portText, $enabledText, $iniRef)
+                }
+            }
+        }
+    }
+    Write-Host " Build output (last 10 lines):"
+    ($script:buildOutput -split "`r?`n" | Where-Object { $_ } | Select-Object -Last 10) | ForEach-Object { Write-Host "  $_" }
+}
+
+$finalPackagePath = $script:packagePath
+if (-not $finalPackagePath) {
+    $finalPackagePath = Get-IconEditorPackagePath -VipbPath $vipbFullPath -Major $intMajor -Minor $intMinor -Patch $intPatch -Build $intBuild -WorkspaceRoot $workspaceRoot
+}
+
+if ($finalPackagePath -and (Test-Path -LiteralPath $finalPackagePath)) {
+    $pkgInfo = Get-Item -LiteralPath $finalPackagePath
+    $sizeMB = [Math]::Round($pkgInfo.Length / 1MB, 2)
+    Write-Host " Generated .vip located under $vipOutputDir ($sizeMB MB):"
+    Write-Host "   $finalPackagePath"
+} else {
+    Write-Warning "Unable to locate the generated .vip. Inspect build logs above."
+}

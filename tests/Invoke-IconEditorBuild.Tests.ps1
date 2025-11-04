@@ -7,11 +7,13 @@ Describe 'Invoke-IconEditorBuild.ps1' -Tag 'IconEditor','Build','Unit' {
 
     Import-Module (Join-Path $script:repoRoot 'tools' 'VendorTools.psm1') -Force
     Import-Module (Join-Path $script:repoRoot 'tools' 'icon-editor' 'IconEditorDevMode.psm1') -Force
+    Import-Module (Join-Path $script:repoRoot 'tools' 'icon-editor' 'IconEditorPackage.psm1') -Force
   }
 
   AfterAll {
     Remove-Module IconEditorDevMode -Force -ErrorAction SilentlyContinue
     Remove-Module VendorTools -Force -ErrorAction SilentlyContinue
+    Remove-Module IconEditorPackage -Force -ErrorAction SilentlyContinue
   }
 
   BeforeEach {
@@ -132,6 +134,8 @@ param(
   [int]$Build,
   [string]$Commit,
   [string]$ReleaseNotesFile,
+  [string]$BuildToolchain,
+  [string]$BuildProvider,
   [string]$DisplayInformationJSON
 )
 $iconRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -148,6 +152,19 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $global:IconBuildRecorded = New-Object System.Collections.Generic.List[object]
 
     Mock Resolve-GCliPath { 'C:\Program Files\G-CLI\bin\g-cli.exe' }
+
+    Mock -CommandName Get-IconEditorViServerSnapshot -ModuleName IconEditorPackage -MockWith {
+      param([int]$Version, [int]$Bitness, [string]$WorkspaceRoot)
+      [pscustomobject]@{
+        Version = $Version
+        Bitness = $Bitness
+        Status  = 'ok'
+        ExePath = 'C:\LabVIEW.exe'
+        IniPath = 'C:\LabVIEW.ini'
+        Enabled = 'TRUE'
+        Port    = 3368
+      }
+    }
 
     Mock Find-LabVIEWVersionExePath {
       param([int]$Version, [int]$Bitness)
@@ -341,6 +358,8 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $manifest.packagingRequested | Should -BeTrue
     $manifest.dependenciesApplied | Should -BeTrue
     $manifest.developmentMode.toggled | Should -BeTrue
+    $manifest.packaging.requestedToolchain | Should -Be 'gcli'
+    [string]::IsNullOrEmpty($manifest.packaging.requestedProvider) | Should -BeTrue
     @($manifest.artifacts | Where-Object { $_.kind -eq 'vip' }).Count | Should -BeGreaterThan 0
     $manifest.packageSmoke.status | Should -Be 'ok'
     $manifest.packageSmoke.vipCount | Should -Be 1
@@ -374,7 +393,35 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
 
     $manifest = Get-Content -LiteralPath (Join-Path $script:resultsRoot 'manifest.json') -Raw | ConvertFrom-Json
     $manifest.packagingRequested | Should -BeFalse
+    $manifest.packaging.requestedToolchain | Should -Be 'gcli'
     @($manifest.artifacts | Where-Object { $_.kind -eq 'vip' }).Count | Should -Be 0
     $manifest.packageSmoke.status | Should -Be 'skipped'
+  }
+
+  It 'forwards toolchain overrides to the build script and manifest' {
+    { & $script:scriptPath `
+        -IconEditorRoot $script:iconRoot `
+        -ResultsRoot $script:resultsRoot `
+        -BuildToolchain 'vipm' `
+        -BuildProvider 'vipm-custom' `
+        -Commit 'vipmtest'
+    } | Should -Not -Throw
+
+    $buildCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'build_vip.ps1' } | Select-Object -Last 1
+    $buildCall | Should -Not -BeNullOrEmpty
+
+    $argMap = @{}
+    for ($i = 0; $i -lt $buildCall.Arguments.Count; $i += 2) {
+      $key = $buildCall.Arguments[$i].TrimStart('-')
+      $value = if ($i + 1 -lt $buildCall.Arguments.Count) { $buildCall.Arguments[$i + 1] } else { $null }
+      $argMap[$key] = $value
+    }
+
+    $argMap['BuildToolchain'] | Should -Be 'vipm'
+    $argMap['BuildProvider']  | Should -Be 'vipm-custom'
+
+    $manifest = Get-Content -LiteralPath (Join-Path $script:resultsRoot 'manifest.json') -Raw | ConvertFrom-Json
+    $manifest.packaging.requestedToolchain | Should -Be 'vipm'
+    $manifest.packaging.requestedProvider  | Should -Be 'vipm-custom'
   }
 }

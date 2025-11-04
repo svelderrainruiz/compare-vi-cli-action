@@ -48,7 +48,7 @@ steps:
       relative_path: ${{ github.workspace }}
 ```
 
-The CI pipeline applies these dependencies across multiple LabVIEW versions—2021 (32-bit and 64-bit) and 2023 (64-bit)—as shown in
+The CI pipeline applies these dependencies across multiple LabVIEW versions—2021 (32-bit and 64-bit) and 2025 (64-bit)—as shown in
 [`.github/workflows/ci-composite.yml`](../../workflows/ci-composite.yml).
 
 ---
