@@ -10,6 +10,9 @@
 .PARAMETER InstallIfMissing
   Attempt to install actionlint if not found (default: true).
 #>
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost','',Justification='Colored status output keeps pre-push messages readable across local and CI planes.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter','ActionlintVersion',Justification='Parameter is consumed when invoking Install-Actionlint; flagged due to usage inside helper functions.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter','InstallIfMissing',Justification='Parameter gates auto-install path; helper function usage triggers false positive.')]
 param(
   [string]$ActionlintVersion = '1.7.7',
   [bool]$InstallIfMissing = $true
@@ -65,10 +68,10 @@ function Install-Actionlint([string]$repoRoot,[string]$version){
 
 function Invoke-NodeTestSanitized {
   param(
-    [string[]]$Args
+    [string[]]$NodeArgs
   )
 
-  $output = & node @Args 2>&1
+  $output = & node @NodeArgs 2>&1
   $exitCode = $LASTEXITCODE
   if ($output) {
     $normalized = $output | ForEach-Object {
@@ -148,13 +151,13 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
     }
     Write-Host '[pre-push] icon-editor fixture report OK' -ForegroundColor Green
     Write-Host '[pre-push] Checking icon-editor canonical hashes via node --test' -ForegroundColor Cyan
-    $hashExit = Invoke-NodeTestSanitized -Args @('--test','tools/icon-editor/__tests__/fixture-hashes.test.mjs')
+    $hashExit = Invoke-NodeTestSanitized -NodeArgs @('--test','tools/icon-editor/__tests__/fixture-hashes.test.mjs')
     if ($hashExit -ne 0) {
       throw "node --test reported failures (exit=$hashExit)."
     }
     Write-Host '[pre-push] icon-editor hash checks OK' -ForegroundColor Green
     Write-Host '[pre-push] Checking icon-editor fixture manifest vs baseline via node --test' -ForegroundColor Cyan
-    $manifestExit = Invoke-NodeTestSanitized -Args @('--test','tools/icon-editor/__tests__/fixture-manifests.test.mjs')
+    $manifestExit = Invoke-NodeTestSanitized -NodeArgs @('--test','tools/icon-editor/__tests__/fixture-manifests.test.mjs')
     if ($manifestExit -ne 0) {
       throw "node --test reported failures (exit=$manifestExit)."
     }
@@ -218,7 +221,8 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
     $artifactDir = Join-Path $root 'tests' 'results' '_agent' 'icon-editor'
     $jsonPath = Join-Path $artifactDir 'fixture-report.json'
     $markdownPath = Join-Path $artifactDir 'fixture-report.md'
-    if (-not ($env:GITHUB_ACTIONS -eq 'true')) {
+    $preserveFixture = $env:HOOKS_PRESERVE_FIXTURE_REPORT -eq '1'
+    if (-not ($env:GITHUB_ACTIONS -eq 'true' -or $preserveFixture)) {
       if (Test-Path -LiteralPath $jsonPath) {
         Remove-Item -LiteralPath $jsonPath -Force -ErrorAction SilentlyContinue
       }

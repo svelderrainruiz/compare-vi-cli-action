@@ -7,7 +7,11 @@ const runner = new HookRunner('pre-push');
 
 const scriptPath = path.join('tools', 'hooks', 'scripts', 'pre-push.ps1');
 info('[pre-push] Running core pre-push checks');
-runner.runPwshStep('pre-push-checks', scriptPath);
+runner.runPwshStep('pre-push-checks', scriptPath, [], {
+  env: {
+    HOOKS_PRESERVE_FIXTURE_REPORT: '1',
+  },
+});
 
 const fixtureReportRel = path.join('tests', 'results', '_agent', 'icon-editor', 'fixture-report.json');
 const fixtureReportAbs = path.join(runner.repoRoot, fixtureReportRel);
@@ -20,7 +24,7 @@ if (existsSync(fixtureReportAbs)) {
   fixtureMeta.exists = true;
   const stats = statSync(fixtureReportAbs);
   fixtureMeta.sizeBytes = stats.size;
-  fixtureMeta.modifiedAt = stats.mtime.toISOString();
+  fixtureMeta.modifiedAt = 'normalized';
   try {
     const report = JSON.parse(readFileSync(fixtureReportAbs, 'utf8'));
     if (report && Array.isArray(report.fixtureOnlyAssets)) {

@@ -53,6 +53,16 @@ function Move-FileToBucket {
   return (Resolve-Path -LiteralPath $destination).Path
 }
 
+function Copy-FileToBucket {
+  param(
+    [System.IO.FileInfo]$Item,
+    [string]$BucketPath
+  )
+  $destination = Join-Path $BucketPath $Item.Name
+  Copy-Item -LiteralPath $Item.FullName -Destination $destination -Force
+  return (Resolve-Path -LiteralPath $destination).Path
+}
+
 function Move-DirectoryToBucket {
   param(
     [System.IO.DirectoryInfo]$Item,
@@ -100,6 +110,20 @@ foreach ($name in @('manifest.json','metadata.json')) {
       $movedFiles.reports.Add($dest)
     } catch {
       Write-Warning "Failed to stage '$path' -> reports: $($_.Exception.Message)"
+    }
+  }
+}
+
+# Stage fixture reports (preserve originals for hook parity)
+foreach ($name in @('fixture-report.json','fixture-report.md')) {
+  $path = Join-Path $root $name
+  if (Test-Path -LiteralPath $path -PathType Leaf) {
+    try {
+      $item = Get-Item -LiteralPath $path
+      $dest = Copy-FileToBucket -Item $item -BucketPath $bucketPaths.reports
+      $movedFiles.reports.Add($dest)
+    } catch {
+      Write-Warning "Failed to copy '$path' -> reports: $($_.Exception.Message)"
     }
   }
 }
