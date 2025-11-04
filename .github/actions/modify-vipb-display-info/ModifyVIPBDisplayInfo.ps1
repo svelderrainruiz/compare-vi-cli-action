@@ -135,8 +135,8 @@ $UpdatedDisplayInformationJSON = $jsonObj | ConvertTo-Json -Depth 5
 # 5) Prepare the g-cli command and arguments
 $cmd  = "g-cli"
 $modifyVipbCandidates = @(
-    Join-Path -Path $ResolvedRelativePath -ChildPath 'Tooling\deployment\Modify_VIPB_Display_Information.vi',
-    Join-Path -Path $ResolvedRelativePath -ChildPath 'vendor\icon-editor\Tooling\deployment\Modify_VIPB_Display_Information.vi'
+    (Join-Path -Path $ResolvedRelativePath -ChildPath 'Tooling\deployment\Modify_VIPB_Display_Information.vi')
+    (Join-Path -Path $ResolvedRelativePath -ChildPath 'vendor\icon-editor\Tooling\deployment\Modify_VIPB_Display_Information.vi')
 )
 
 $modifyVipbPath = $null
