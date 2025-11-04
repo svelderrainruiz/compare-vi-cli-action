@@ -164,11 +164,13 @@ Quick reference for building, testing, and releasing the LVCompare composite act
 ## GitHub helper utilities
 
 - `node tools/priority/github-helper.mjs sanitize --input issue-body.md --output issue-body.gh.txt`  
-  Doubles backslashes and normalises line endings so literal sequences (for example `\t`, `\tools`) survive `gh issue create/edit`. Omit `--output` to print to STDOUT.
+  Doubles backslashes and normalises line endings so literal sequences (for example `\t`, `\tools`) survive `gh issue create/edit`.  
+  Omit `--output` to print to STDOUT.
 - `node tools/priority/github-helper.mjs snippet --issue 531 --prefix Fixes`  
   Emits an auto-link snippet (defaults to `Fixes #531`) you can drop into PR descriptions so GitHub auto-closes the issue.
 - `node tools/priority/standing-priority-handoff.mjs [--dry-run] <next-issue>`  
-  Removes the `standing-priority` label from the current issue (if any), applies it to `<next-issue>`, and re-runs the cache sync (`tools/priority/sync-standing-priority.mjs`). Use `--dry-run` to preview the actions without mutating labels.
+  Removes the `standing-priority` label from the current issue (if any), applies it to `<next-issue>`, and re-runs the cache sync (`tools/priority/sync-standing-priority.mjs`).  
+  Use `--dry-run` to preview the actions without mutating labels.
 
 ```bash
 node tools/npm/run-script.mjs build
