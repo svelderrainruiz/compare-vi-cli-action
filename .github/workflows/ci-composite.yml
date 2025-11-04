@@ -75,19 +75,41 @@ jobs:
             }
             const issueNumber = parseInt(match[1], 10);
 
-            // Skip CI when a 'NoCI' label is present
+            const bypassLabel = 'AllowCIBypass';
+            // Skip CI when a 'NoCI' label is present (unless bypass label present)
             const prNumber = context.payload.pull_request?.number;
             let hasNoCILabel = false;
+            let hasBypassLabel = false;
+            let prs = [];
             if (prNumber) {
-              hasNoCILabel = context.payload.pull_request.labels.some(l => l.name === 'NoCI');
+              const labels = context.payload.pull_request.labels ?? [];
+              hasNoCILabel = labels.some(l => l.name === 'NoCI');
+              hasBypassLabel = labels.some(l => l.name === bypassLabel);
             } else {
-              const { data: prs } = await github.rest.pulls.list({
+              const response = await github.rest.pulls.list({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 head: `${context.repo.owner}:${branch}`,
                 state: 'open'
               });
+              prs = response.data;
               hasNoCILabel = prs.some(pr => pr.labels.some(l => l.name === 'NoCI'));
+              hasBypassLabel = prs.some(pr => pr.labels.some(l => l.name === bypassLabel));
+            }
+            if (hasBypassLabel) {
+              core.setOutput('proceed', 'true');
+              const msg = `Branch '${branch}' is labeled '${bypassLabel}'. CI bypass enabled.`;
+              core.info(msg);
+              fs.appendFileSync(
+                process.env.GITHUB_STEP_SUMMARY,
+                [
+                  '### Issue Status',
+                  '',
+                  msg,
+                  ''
+                ].join('\n')
+              );
+              return;
             }
             if (hasNoCILabel) {
               core.setOutput('proceed', 'false');
