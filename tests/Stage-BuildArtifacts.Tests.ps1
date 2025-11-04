@@ -25,12 +25,28 @@ Describe 'Stage-BuildArtifacts.ps1' -Tag 'IconEditor','Artifacts','Unit' {
         $resultRaw = & $script:stageScript -ResultsRoot $workspace
         $result = $resultRaw | ConvertFrom-Json -Depth 5
 
-        Test-Path -LiteralPath $fixtureJson -PathType Leaf | Should -BeTrue
-        Test-Path -LiteralPath $fixtureMarkdown -PathType Leaf | Should -BeTrue
+        (Test-Path -LiteralPath $fixtureJson -PathType Leaf) | Should -BeTrue -Because 'fixture-report.json should remain in the results root'
+        (Test-Path -LiteralPath $fixtureMarkdown -PathType Leaf) | Should -BeTrue -Because 'fixture-report.md should remain in the results root'
 
         $result.buckets.reports | Should -Not -BeNullOrEmpty
         $reportsRoot = $result.buckets.reports.path
-        Test-Path -LiteralPath (Join-Path $reportsRoot 'fixture-report.json') -PathType Leaf | Should -BeTrue
-        Test-Path -LiteralPath (Join-Path $reportsRoot 'fixture-report.md') -PathType Leaf | Should -BeTrue
+        (Test-Path -LiteralPath (Join-Path $reportsRoot 'fixture-report.json') -PathType Leaf) | Should -BeTrue -Because 'fixture-report.json should be staged under reports/'
+        (Test-Path -LiteralPath (Join-Path $reportsRoot 'fixture-report.md') -PathType Leaf) | Should -BeTrue -Because 'fixture-report.md should be staged under reports/'
+    }
+
+    It 'fails if required fixture reports are missing' {
+        $workspace = Join-Path $TestDrive 'results-missing'
+        New-Item -ItemType Directory -Path $workspace | Out-Null
+
+        '{"schema":"icon-editor/fixture-manifest@v1"}' | Set-Content -LiteralPath (Join-Path $workspace 'manifest.json') -Encoding utf8
+
+        $thrown = $null
+        try {
+            & $script:stageScript -ResultsRoot $workspace | Out-Null
+        } catch {
+            $thrown = $_
+        }
+        $thrown | Should -Not -BeNullOrEmpty -Because 'Stage-BuildArtifacts.ps1 should throw when fixture reports are missing'
+        $thrown.Exception.Message | Should -Match 'Stage-BuildArtifacts.ps1 must preserve fixture reports'
     }
 }

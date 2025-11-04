@@ -114,6 +114,10 @@ foreach ($name in @('manifest.json','metadata.json')) {
   }
 }
 
+# Files that must never be removed from the results root
+$preserveReportFiles = @('fixture-report.json', 'fixture-report.md')
+$preserveFailures = @()
+
 # Stage fixture reports (preserve originals for hook parity)
 foreach ($name in @('fixture-report.json','fixture-report.md')) {
   $path = Join-Path $root $name
@@ -126,6 +130,19 @@ foreach ($name in @('fixture-report.json','fixture-report.md')) {
       Write-Warning "Failed to copy '$path' -> reports: $($_.Exception.Message)"
     }
   }
+}
+
+# Ensure preserved report files still exist after staging
+foreach ($name in $preserveReportFiles) {
+  $path = Join-Path $root $name
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    $preserveFailures += $path
+  }
+}
+
+if ($preserveFailures.Count -gt 0) {
+  $missingList = $preserveFailures -join "', '"
+  throw "Stage-BuildArtifacts.ps1 must preserve fixture reports. Missing file(s): '${missingList}'. Update the helper to copy (not move) these reports."
 }
 
 # Stage package smoke summary if present

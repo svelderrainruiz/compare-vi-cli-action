@@ -230,6 +230,15 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
         Remove-Item -LiteralPath $markdownPath -Force -ErrorAction SilentlyContinue
       }
     }
+    $stageBuildScript = Join-Path $root 'tools' 'icon-editor' 'Stage-BuildArtifacts.ps1'
+    if (Test-Path -LiteralPath $stageBuildScript -PathType Leaf) {
+      $stageContent = Get-Content -LiteralPath $stageBuildScript -Raw
+      foreach ($preserve in @('fixture-report.json','fixture-report.md')) {
+        if ($stageContent -match "Move-Item[^\n]+$([Regex]::Escape($preserve))") {
+          throw "Stage-BuildArtifacts.ps1 should not move '${preserve}' out of the results root. Update the helper to copy and preserve fixture reports."
+        }
+      }
+    }
   } finally {
     Pop-Location | Out-Null
   }
