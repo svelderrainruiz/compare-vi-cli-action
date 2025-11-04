@@ -8,22 +8,22 @@ Describe 'Update-VipbDisplayInfo.ps1' {
         $script:ScriptPath = Join-Path $RepoRoot '.github\actions\modify-vipb-display-info\Update-VipbDisplayInfo.ps1'
         $script:FixtureVipb = Join-Path $RepoRoot '.github\actions\build-vi-package\NI Icon editor.vipb'
 
-        if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+        if (-not (Test-Path -LiteralPath $script:ScriptPath -PathType Leaf)) {
             throw "Update-VipbDisplayInfo.ps1 not found at '$ScriptPath'."
         }
 
         $originalDoc = New-Object System.Xml.XmlDocument
         $originalDoc.PreserveWhitespace = $true
-        $originalDoc.Load($FixtureVipb)
+        $originalDoc.Load($script:FixtureVipb)
         $script:OriginalXml = $originalDoc
     }
 
-    It 'updates only the targeted display nodes' {
-        $vipbCopyDir = Join-Path $TestDrive 'vipb'
-        New-Item -ItemType Directory -Path $vipbCopyDir | Out-Null
+    BeforeEach {
+        $contextDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $contextDir | Out-Null
 
-        $vipbCopyPath = Join-Path $vipbCopyDir 'spec-under-test.vipb'
-        Copy-Item -LiteralPath $FixtureVipb -Destination $vipbCopyPath -Force
+        $vipbCopyPath = Join-Path $contextDir 'spec-under-test.vipb'
+        Copy-Item -LiteralPath $script:FixtureVipb -Destination $vipbCopyPath -Force
 
         $releaseNotesRelative = 'release_notes.md'
         $displayPayload = @{
@@ -44,7 +44,7 @@ Describe 'Update-VipbDisplayInfo.ps1' {
             'License Agreement Name'         = 'Custom License'
         } | ConvertTo-Json -Depth 5
 
-        & $ScriptPath `
+        & $script:ScriptPath `
             -MinimumSupportedLVVersion 2023 `
             -LabVIEWMinorRevision 3 `
             -SupportedBitness 64 `
@@ -53,38 +53,93 @@ Describe 'Update-VipbDisplayInfo.ps1' {
             -Patch 7 `
             -Build 6 `
             -Commit 'commit-hash' `
-            -RelativePath $vipbCopyDir `
+            -RelativePath $contextDir `
             -VIPBPath (Split-Path -Leaf $vipbCopyPath) `
             -ReleaseNotesFile $releaseNotesRelative `
             -DisplayInformationJSON $displayPayload
 
-        $updatedDoc = New-Object System.Xml.XmlDocument
-        $updatedDoc.PreserveWhitespace = $true
-        $updatedDoc.Load($vipbCopyPath)
+        $script:UpdatedDoc = New-Object System.Xml.XmlDocument
+        $script:UpdatedDoc.PreserveWhitespace = $true
+        $script:UpdatedDoc.Load($vipbCopyPath)
+        $script:UpdatedRoot = $script:UpdatedDoc.VI_Package_Builder_Settings
+        $script:UpdatedDescription = $script:UpdatedRoot.Advanced_Settings.Description
+        $script:ReleaseNotesPath = Join-Path $contextDir $releaseNotesRelative
+        $script:VipbCopyPath = $vipbCopyPath
+    }
 
-        $updatedRoot = $updatedDoc.VI_Package_Builder_Settings
+    AfterEach {
+        Remove-Item -LiteralPath $script:VipbCopyPath -ErrorAction SilentlyContinue
+    }
 
-        $updatedRoot.Library_General_Settings.Company_Name | Should -Be 'INJECTED CO'
-        $updatedRoot.Library_General_Settings.Product_Name | Should -Be 'Injected Product'
-        $updatedRoot.Library_General_Settings.Library_Summary | Should -Be 'Summary text'
-        $updatedRoot.Library_General_Settings.Library_License | Should -Be 'Custom License'
-        $updatedRoot.Library_General_Settings.Library_Version | Should -Be '9.8.7.6'
-        $updatedRoot.Library_General_Settings.Package_LabVIEW_Version | Should -Be '23.3 (64-bit)'
+    Context 'Library general settings' {
+        It 'updates company name' {
+            $script:UpdatedRoot.Library_General_Settings.Company_Name | Should -Be 'INJECTED CO'
+        }
 
-        $desc = $updatedRoot.Advanced_Settings.Description
-        $desc.One_Line_Description_Summary | Should -Be 'Summary text'
-        $desc.Description | Should -Be 'Full description'
-        $desc.Release_Notes | Should -Be 'Release notes text'
-        $desc.Packager | Should -Be 'INJECTED AUTHOR'
-        $desc.URL | Should -Be 'https://example.test'
-        $desc.Copyright | Should -Be 'Copyright 2025'
+        It 'updates product name' {
+            $script:UpdatedRoot.Library_General_Settings.Product_Name | Should -Be 'Injected Product'
+        }
 
-        $updatedRoot.Advanced_Settings.VI_Package_Configuration_File | Should -Be 'spec-under-test.vipc'
+        It 'updates summary' {
+            $script:UpdatedRoot.Library_General_Settings.Library_Summary | Should -Be 'Summary text'
+        }
 
-        $updatedRoot.GetAttribute('ID') | Should -Not -Be $OriginalXml.VI_Package_Builder_Settings.GetAttribute('ID')
-        $updatedRoot.GetAttribute('Modified_Date') | Should -Not -Be $OriginalXml.VI_Package_Builder_Settings.GetAttribute('Modified_Date')
+        It 'updates license' {
+            $script:UpdatedRoot.Library_General_Settings.Library_License | Should -Be 'Custom License'
+        }
 
-        Test-Path (Join-Path $vipbCopyDir $releaseNotesRelative) | Should -BeTrue
+        It 'updates version' {
+            $script:UpdatedRoot.Library_General_Settings.Library_Version | Should -Be '9.8.7.6'
+        }
+
+        It 'updates LabVIEW target' {
+            $script:UpdatedRoot.Library_General_Settings.Package_LabVIEW_Version | Should -Be '23.3 (64-bit)'
+        }
+    }
+
+    Context 'Advanced description fields' {
+        It 'updates summary mirror' {
+            $script:UpdatedDescription.One_Line_Description_Summary | Should -Be 'Summary text'
+        }
+
+        It 'updates product description' {
+            $script:UpdatedDescription.Description | Should -Be 'Full description'
+        }
+
+        It 'updates release notes text' {
+            $script:UpdatedDescription.Release_Notes | Should -Be 'Release notes text'
+        }
+
+        It 'updates packager name' {
+            $script:UpdatedDescription.Packager | Should -Be 'INJECTED AUTHOR'
+        }
+
+        It 'updates website url' {
+            $script:UpdatedDescription.URL | Should -Be 'https://example.test'
+        }
+
+        It 'updates copyright' {
+            $script:UpdatedDescription.Copyright | Should -Be 'Copyright 2025'
+        }
+    }
+
+    Context 'Ancillary updates' {
+        It 'updates configuration file name' {
+            $script:UpdatedRoot.Advanced_Settings.VI_Package_Configuration_File | Should -Be 'spec-under-test.vipc'
+        }
+
+        It 'regenerates ID and Modified date' {
+            $script:UpdatedRoot.GetAttribute('ID') | Should -Not -Be $script:OriginalXml.VI_Package_Builder_Settings.GetAttribute('ID')
+            $script:UpdatedRoot.GetAttribute('Modified_Date') | Should -Not -Be $script:OriginalXml.VI_Package_Builder_Settings.GetAttribute('Modified_Date')
+        }
+
+        It 'creates release notes file' {
+            Test-Path $script:ReleaseNotesPath | Should -BeTrue
+        }
+    }
+
+    It 'touches only the targeted nodes' {
+        $updatedDoc = $script:UpdatedDoc
 
         function Reset-NodeValue {
             param(
@@ -105,7 +160,7 @@ Describe 'Update-VipbDisplayInfo.ps1' {
 
         $sanitized = New-Object System.Xml.XmlDocument
         $sanitized.PreserveWhitespace = $true
-        $sanitized.LoadXml($updatedDoc.OuterXml)
+        $sanitized.LoadXml($UpdatedDoc.OuterXml)
 
         $pathsToRestore = @(
             '/VI_Package_Builder_Settings/Library_General_Settings/Product_Name',
@@ -127,9 +182,9 @@ Describe 'Update-VipbDisplayInfo.ps1' {
             Reset-NodeValue -Document $sanitized -Baseline $OriginalXml -XPath $path
         }
 
-        $sanitized.DocumentElement.SetAttribute('ID', $OriginalXml.DocumentElement.GetAttribute('ID'))
-        $sanitized.DocumentElement.SetAttribute('Modified_Date', $OriginalXml.DocumentElement.GetAttribute('Modified_Date'))
+        $sanitized.DocumentElement.SetAttribute('ID', $script:OriginalXml.DocumentElement.GetAttribute('ID'))
+        $sanitized.DocumentElement.SetAttribute('Modified_Date', $script:OriginalXml.DocumentElement.GetAttribute('Modified_Date'))
 
-        $sanitized.OuterXml | Should -Be $OriginalXml.OuterXml
+        $sanitized.OuterXml | Should -Be $script:OriginalXml.OuterXml
     }
 }
