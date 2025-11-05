@@ -20,9 +20,8 @@ param(
   [switch]$RequirePackaging,
   [switch]$RunUnitTests,
   [string]$ResultsRoot,
-  [ValidateSet('gcli','vipm','vipm-cli')]
-  [string]$BuildToolchain = 'vipm-cli',
-  [string]$BuildProvider
+  [ValidateSet('vipm-cli')]
+  [string]$BuildToolchain = 'vipm-cli'
 )
 
 Set-StrictMode -Version Latest
@@ -347,9 +346,6 @@ try {
       '-DisplayInformationJSON', $displayInfoJson,
       '-BuildToolchain', $BuildToolchain
     )
-    if ($BuildProvider) {
-      $vipArguments += @('-BuildProvider', $BuildProvider)
-    }
     Invoke-IconEditorAction `
       -ScriptPath $buildVipScript `
       -Arguments $vipArguments
@@ -464,9 +460,6 @@ try {
 
   $manifest.packaging = [ordered]@{
     requestedToolchain = $BuildToolchain
-  }
-  if ($BuildProvider) {
-    $manifest.packaging.requestedProvider = $BuildProvider
   }
 
   if ($packageSmokeSummary) {

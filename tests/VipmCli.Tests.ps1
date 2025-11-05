@@ -21,8 +21,8 @@ Describe 'VipmCli wrapper' {
                 LabVIEWBitness = '64'
             }
 
-            $result.Provider | Should -Be 'vipmcli'
-            $result.Binary   | Should -Be 'C:\tools\vipm.exe'
+            $result.Toolchain | Should -Be 'vipm-cli'
+            $result.Binary    | Should -Be 'C:\tools\vipm.exe'
             $result.Arguments | Should -Be @(
                 'install',
                 (Resolve-Path -LiteralPath $vipcPath).ProviderPath,
@@ -47,8 +47,8 @@ Describe 'VipmCli wrapper' {
                 LvprojTarget        = 'My Computer'
             }
 
-            $result.Provider | Should -Be 'vipmcli'
-            $result.Binary   | Should -Be 'D:\vipm\vipm.exe'
+            $result.Toolchain | Should -Be 'vipm-cli'
+            $result.Binary    | Should -Be 'D:\vipm\vipm.exe'
             $result.Arguments | Should -Be @(
                 'build',
                 (Resolve-Path -LiteralPath $vipbPath).ProviderPath,

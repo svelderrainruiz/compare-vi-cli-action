@@ -59,7 +59,7 @@ function Get-VipmCliInvocation {
             }
 
             return [pscustomobject]@{
-                Provider  = 'vipmcli'
+                Toolchain = 'vipm-cli'
                 Binary    = $binary
                 Arguments = $arguments
             }
@@ -86,7 +86,7 @@ function Get-VipmCliInvocation {
             }
 
             return [pscustomobject]@{
-                Provider  = 'vipmcli'
+                Toolchain = 'vipm-cli'
                 Binary    = $binary
                 Arguments = $arguments
             }

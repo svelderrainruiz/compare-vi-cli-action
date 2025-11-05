@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Locates a VIPB file stored alongside this script, merges version details into
-    DisplayInformation JSON, and invokes the provider-backed packaging helper
-    (g-cli by default) to create the final VI package.
+    DisplayInformation JSON, and invokes the VIPM CLI-backed packaging helper to
+    create the final VI package.
 
 .PARAMETER SupportedBitness
     LabVIEW bitness for the build ("32" or "64").
@@ -39,10 +39,7 @@
     JSON string representing the VIPB display information to update.
 
 .PARAMETER BuildToolchain
-    Toolchain requested for the package build (`gcli`, `vipm`, or `vipm-cli`). Defaults to `vipm-cli`.
-
-.PARAMETER BuildProvider
-    Optional provider name routed to the selected toolchain (e.g. custom g-cli shim).
+    Toolchain requested for the package build (fixed to `vipm-cli`).
 
 .EXAMPLE
     .\build_vip.ps1 -SupportedBitness "64" -MinimumSupportedLVVersion 2021 -LabVIEWMinorRevision 3 -Major 1 -Minor 0 -Patch 0 -Build 2 -Commit "abcd123" -ReleaseNotesFile "Tooling\deployment\release_notes.md" -DisplayInformationJSON '{"Package Version":{"major":1,"minor":0,"patch":0,"build":2}}'
@@ -63,10 +60,8 @@ param (
     [string]$Commit,
     [string]$ReleaseNotesFile,
 
-    [ValidateSet("gcli","vipm","vipm-cli")]
+    [ValidateSet("vipm-cli")]
     [string]$BuildToolchain = "vipm-cli",
-
-    [string]$BuildProvider,
 
     [Parameter(Mandatory=$true)]
     [string]$DisplayInformationJSON
@@ -142,40 +137,29 @@ else {
 # Re-convert to a JSON string with a comfortable nesting depth
 $UpdatedDisplayInformationJSON = $jsonObj | ConvertTo-Json -Depth 5
 
-# 5) Execute the package build via the provider-aware helper
+# 5) Execute the package build via the toolchain helper
 try {
     Write-Host ("Invoking icon-editor package build via {0} toolchain..." -f $BuildToolchain)
 
-    $buildParams = @{
-        VipbPath                  = $ResolvedVIPBPath
-        Major                     = $Major
-        Minor                     = $Minor
-        Patch                     = $Patch
-        Build                     = $Build
-        SupportedBitness          = [int]$SupportedBitness
-        MinimumSupportedLVVersion = $MinimumSupportedLVVersion
-        LabVIEWMinorRevision      = [int]$LabVIEWMinorRevision
-        ReleaseNotesPath          = $ReleaseNotesFile
-        WorkspaceRoot             = $workspaceRoot
-        Provider                  = $BuildToolchain
-    }
-
-    if ($BuildToolchain -eq 'gcli' -and $BuildProvider) {
-        $buildParams.GCliProviderName = $BuildProvider
-    } elseif ($BuildToolchain -eq 'vipm' -and $BuildProvider) {
-        $buildParams.VipmProviderName = $BuildProvider
-    } elseif ($BuildToolchain -eq 'vipm-cli' -and $BuildProvider) {
-        Write-Warning "BuildProvider parameter is ignored when using vipm-cli."
-    }
-
-    $buildResult = Invoke-IconEditorVipBuild @buildParams
+    $buildResult = Invoke-IconEditorVipBuild `
+        -VipbPath $ResolvedVIPBPath `
+        -Major $Major `
+        -Minor $Minor `
+        -Patch $Patch `
+        -Build $Build `
+        -SupportedBitness ([int]$SupportedBitness) `
+        -MinimumSupportedLVVersion $MinimumSupportedLVVersion `
+        -LabVIEWMinorRevision ([int]$LabVIEWMinorRevision) `
+        -ReleaseNotesPath $ReleaseNotesFile `
+        -WorkspaceRoot $workspaceRoot `
+        -Toolchain $BuildToolchain
 
     if ($buildResult.ReleaseNotes) {
         $ReleaseNotesFile = $buildResult.ReleaseNotes
     }
 
-    if ($buildResult.Provider) {
-        Write-Host ("Resolved provider backend: {0}" -f $buildResult.Provider)
+    if ($buildResult.Toolchain) {
+        Write-Host ("Resolved toolchain backend: {0}" -f $buildResult.Toolchain)
     }
 
     Write-Host "Successfully built VI package: $ResolvedVIPBPath"

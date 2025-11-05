@@ -8,8 +8,6 @@ Describe 'IconEditorPackage helpers' {
         $modulePath = Join-Path $repoRoot 'tools\icon-editor\IconEditorPackage.psm1'
         Import-Module $modulePath -Force
 
-        Import-Module (Join-Path $repoRoot 'tools\GCli.psm1') -Force
-        Import-Module (Join-Path $repoRoot 'tools\Vipm.psm1') -Force
         Import-Module (Join-Path $repoRoot 'tools\VipmCli.psm1') -Force
 
         $script:VipbPath = Join-Path $repoRoot '.github\actions\build-vi-package\NI Icon editor.vipb'
@@ -43,7 +41,7 @@ Describe 'IconEditorPackage helpers' {
     }
 
     Context 'Process helpers' {
-        It 'captures stdout, stderr, and warnings from provider process failure' {
+        It 'captures stdout, stderr, and warnings from build process failure' {
             $scriptPath = Join-Path $TestDrive 'emit-warning.ps1'
             @'
 Write-Output "[WARN] simulated warning"
@@ -63,13 +61,13 @@ exit 42
         It 'reports exit code and warnings for successful runs' {
             $scriptPath = Join-Path $TestDrive 'emit-success.ps1'
             @'
-Write-Output "[WARN] mock provider warning"
+Write-Output "[WARN] mock build warning"
 exit 0
 '@ | Set-Content -LiteralPath $scriptPath -Encoding UTF8
             try {
                 $result = Invoke-IconEditorProcess -Binary (Get-Command pwsh).Source -Arguments @('-NoLogo','-NoProfile','-File',$scriptPath) -Quiet
                 $result.ExitCode | Should -Be 0
-                $result.Warnings | Should -Contain '[WARN] mock provider warning'
+                $result.Warnings | Should -Contain '[WARN] mock build warning'
                 $result.DurationSeconds -ge 0 | Should -BeTrue
             } finally {
                 Remove-Item -LiteralPath $scriptPath -ErrorAction SilentlyContinue
@@ -105,7 +103,7 @@ exit 0
         }
     }
 
-    Context 'Invoke-IconEditorVipBuild provider selection' {
+    Context 'Invoke-IconEditorVipBuild toolchain flow' {
         BeforeAll {
             $script:fakeBuildScript = Join-Path $TestDrive 'fake-build.ps1'
             $fakeScriptContent = @'
@@ -118,7 +116,7 @@ if (-not [string]::IsNullOrWhiteSpace($packagePath)) {
     }
     Set-Content -LiteralPath $packagePath -Value 'mock package' -Encoding UTF8 -Force
 }
-Write-Output "[WARN] mock provider warning"
+Write-Output "[WARN] mock vipm-cli warning"
 exit 0
 '@
             Set-Content -LiteralPath $script:fakeBuildScript -Value $fakeScriptContent -Encoding UTF8
@@ -128,119 +126,7 @@ exit 0
             Remove-Item -LiteralPath $script:fakeBuildScript -ErrorAction SilentlyContinue
         }
 
-        It 'invokes g-cli provider when requested and surfaces provider metadata' {
-            $expected = Get-IconEditorPackagePath -VipbPath $script:VipbPath -Major 0 -Minor 6 -Patch 0 -Build 1300 -WorkspaceRoot $script:WorkspaceRoot
-            $prevEnv = [Environment]::GetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE')
-            try {
-                [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $expected, [System.EnvironmentVariableTarget]::Process)
-
-                Mock -CommandName Get-IconEditorViServerSnapshot -ModuleName IconEditorPackage -MockWith {
-                    [pscustomobject]@{
-                        Version = 2025
-                        Bitness = 64
-                        Status  = 'ok'
-                        ExePath = 'C:\LabVIEW.exe'
-                        IniPath = 'C:\LabVIEW.ini'
-                        Enabled = 'TRUE'
-                        ServerEnabled = $true
-                        Port    = 3368
-                    }
-                } -Verifiable
-
-                Mock -CommandName Get-GCliInvocation -ModuleName IconEditorPackage -MockWith {
-                    [pscustomobject]@{
-                        Provider  = 'mock-gcli'
-                        Binary    = (Get-Command pwsh).Source
-                        Arguments = @('-NoLogo','-NoProfile','-File',$script:fakeBuildScript)
-                    }
-                } -Verifiable
-
-                $result = Invoke-IconEditorVipBuild `
-                    -VipbPath $script:VipbPath `
-                    -Major 0 `
-                    -Minor 6 `
-                    -Patch 0 `
-                    -Build 1300 `
-                    -SupportedBitness 64 `
-                    -MinimumSupportedLVVersion 2025 `
-                    -LabVIEWMinorRevision 3 `
-                    -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
-                    -WorkspaceRoot $script:WorkspaceRoot `
-                    -Provider 'gcli' `
-                    -GCliProviderName 'mock-gcli'
-
-                Assert-MockCalled -CommandName Get-GCliInvocation -ModuleName IconEditorPackage -Times 1
-                Assert-MockCalled -CommandName Get-IconEditorViServerSnapshot -ModuleName IconEditorPackage -Times 1
-            } finally {
-                if ($null -ne $prevEnv) {
-                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $prevEnv, [System.EnvironmentVariableTarget]::Process)
-                } else {
-                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $null, [System.EnvironmentVariableTarget]::Process)
-                }
-            }
-
-            $result.Provider | Should -Be 'mock-gcli'
-            $result.PackagePath | Should -Be $expected
-            Test-Path -LiteralPath $expected | Should -BeTrue
-            $result.Warnings | Should -Not -BeNullOrEmpty
-            $result.ProviderBinary | Should -Be (Get-Command pwsh).Source
-            $result.DurationSeconds -ge 0 | Should -BeTrue
-            $result.PackageSha256 | Should -Be ((Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash)
-            $result.PackageSize | Should -Be ((Get-Item -LiteralPath $expected).Length)
-            if (Test-Path -LiteralPath $expected) {
-                Remove-Item -LiteralPath $expected -Force
-            }
-        }
-
-        It 'invokes VIPM provider when requested and reports provider name' {
-            $expected = Get-IconEditorPackagePath -VipbPath $script:VipbPath -Major 0 -Minor 6 -Patch 0 -Build 1301 -WorkspaceRoot $script:WorkspaceRoot
-            $prevEnv = [Environment]::GetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE')
-            try {
-                [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $expected, [System.EnvironmentVariableTarget]::Process)
-
-                Mock -CommandName Get-VipmInvocation -ModuleName IconEditorPackage -MockWith {
-                    [pscustomobject]@{
-                        Provider  = 'mock-vipm'
-                        Binary    = (Get-Command pwsh).Source
-                        Arguments = @('-NoLogo','-NoProfile','-File',$script:fakeBuildScript)
-                    }
-                } -Verifiable
-
-                $result = Invoke-IconEditorVipBuild `
-                    -VipbPath $script:VipbPath `
-                    -Major 0 `
-                    -Minor 6 `
-                    -Patch 0 `
-                    -Build 1301 `
-                    -SupportedBitness 64 `
-                    -MinimumSupportedLVVersion 2025 `
-                    -LabVIEWMinorRevision 3 `
-                    -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
-                    -WorkspaceRoot $script:WorkspaceRoot `
-                    -Provider 'vipm' `
-                    -VipmProviderName 'mock-vipm'
-
-                Assert-MockCalled -CommandName Get-VipmInvocation -ModuleName IconEditorPackage -Times 1
-            } finally {
-                if ($null -ne $prevEnv) {
-                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $prevEnv, [System.EnvironmentVariableTarget]::Process)
-                } else {
-                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $null, [System.EnvironmentVariableTarget]::Process)
-                }
-            }
-
-            $result.Provider | Should -Be 'mock-vipm'
-            $result.PackagePath | Should -Be $expected
-            Test-Path -LiteralPath $expected | Should -BeTrue
-            $result.ProviderBinary | Should -Be (Get-Command pwsh).Source
-            $result.PackageSha256 | Should -Be ((Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash)
-            $result.PackageSize | Should -Be ((Get-Item -LiteralPath $expected).Length)
-            if (Test-Path -LiteralPath $expected) {
-                Remove-Item -LiteralPath $expected -Force
-            }
-        }
-
-        It 'invokes VIPM CLI when requested and records provider metadata' {
+        It 'invokes vipm-cli toolchain and records metadata' {
             $expected = Get-IconEditorPackagePath -VipbPath $script:VipbPath -Major 0 -Minor 6 -Patch 0 -Build 1302 -WorkspaceRoot $script:WorkspaceRoot
             $prevEnv = [Environment]::GetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE')
             try {
@@ -248,7 +134,7 @@ exit 0
 
                 Mock -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -MockWith {
                     [pscustomobject]@{
-                        Provider  = 'vipm-cli'
+                        Toolchain = 'vipm-cli'
                         Binary    = (Get-Command pwsh).Source
                         Arguments = @('-NoLogo','-NoProfile','-File',$script:fakeBuildScript)
                     }
@@ -263,9 +149,9 @@ exit 0
                     -SupportedBitness 64 `
                     -MinimumSupportedLVVersion 2025 `
                     -LabVIEWMinorRevision 3 `
-                    -ReleaseNotesPath (Join-Path $TestDrive 'notes-cli.md') `
+                    -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
                     -WorkspaceRoot $script:WorkspaceRoot `
-                    -Provider 'vipm-cli'
+                    -Toolchain 'vipm-cli'
 
                 Assert-MockCalled -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -Times 1
             } finally {
@@ -276,41 +162,30 @@ exit 0
                 }
             }
 
-            $result.Provider | Should -Be 'vipm-cli'
+            $result.Toolchain | Should -Be 'vipm-cli'
             $result.PackagePath | Should -Be $expected
             Test-Path -LiteralPath $expected | Should -BeTrue
-            $result.ProviderBinary | Should -Be (Get-Command pwsh).Source
+            $result.ToolchainBinary | Should -Be (Get-Command pwsh).Source
+            $result.PackageSha256 | Should -Be ((Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash)
+            $result.PackageSize | Should -Be ((Get-Item -LiteralPath $expected).Length)
             if (Test-Path -LiteralPath $expected) {
                 Remove-Item -LiteralPath $expected -Force
             }
         }
 
-        It 'throws when provider process exits non-zero and includes output' {
-            Mock -CommandName Get-IconEditorViServerSnapshot -ModuleName IconEditorPackage -MockWith {
+        It 'throws when vipm-cli exits non-zero and surfaces stderr' {
+            Mock -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -MockWith {
                 [pscustomobject]@{
-                    Version = 2025
-                    Bitness = 64
-                    Status  = 'ok'
-                    ExePath = 'C:\LabVIEW.exe'
-                    IniPath = 'C:\LabVIEW.ini'
-                    Enabled = 'TRUE'
-                    ServerEnabled = $true
-                    Port    = 3368
-                }
-            }
-
-            Mock -CommandName Get-GCliInvocation -ModuleName IconEditorPackage -MockWith {
-                [pscustomobject]@{
-                    Provider  = 'mock-gcli'
-                    Binary    = 'C:\fake\g-cli.exe'
-                    Arguments = @('--fake')
+                    Toolchain = 'vipm-cli'
+                    Binary    = 'C:\vipm\vipm.exe'
+                    Arguments = @('build','spec.vipb')
                 }
             } -Verifiable
 
             Mock -CommandName Invoke-IconEditorProcess -ModuleName IconEditorPackage -MockWith {
                 [pscustomobject]@{
-                    Binary          = 'C:\fake\g-cli.exe'
-                    Arguments       = @('--fake')
+                    Binary          = 'C:\vipm\vipm.exe'
+                    Arguments       = @('build','spec.vipb')
                     ExitCode        = 1
                     StdOut          = ''
                     StdErr          = 'ERROR: vipb.vi missing'
@@ -324,91 +199,71 @@ exit 0
                 throw 'Confirm-IconEditorPackageArtifact should not be called on failure.'
             }
 
-            $threw = $false
-            $message = $null
-            try {
-                Invoke-IconEditorVipBuild `
-                    -VipbPath $script:VipbPath `
-                    -Major 0 `
-                    -Minor 6 `
-                    -Patch 0 `
-                    -Build 1303 `
-                    -SupportedBitness 64 `
-                    -MinimumSupportedLVVersion 2025 `
-                    -LabVIEWMinorRevision 3 `
-                    -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
-                    -WorkspaceRoot $script:WorkspaceRoot `
-                    -Provider 'gcli'
-            } catch {
-                $threw = $true
-                $message = $_.Exception.Message
-            }
-
-            $threw | Should -BeTrue
-            $message | Should -Match 'vipb\.vi missing'
+            { Invoke-IconEditorVipBuild `
+                -VipbPath $script:VipbPath `
+                -Major 0 `
+                -Minor 6 `
+                -Patch 0 `
+                -Build 1303 `
+                -SupportedBitness 64 `
+                -MinimumSupportedLVVersion 2025 `
+                -LabVIEWMinorRevision 3 `
+                -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
+                -WorkspaceRoot $script:WorkspaceRoot `
+                -Toolchain 'vipm-cli' } | Should -Throw -ErrorId *
 
             Assert-MockCalled -CommandName Invoke-IconEditorProcess -ModuleName IconEditorPackage -Times 1
             Assert-MockCalled -CommandName Confirm-IconEditorPackageArtifact -ModuleName IconEditorPackage -Times 0 -Exactly
         }
 
-        It 'warns when g-cli provider detects disabled VI Server but proceeds' {
-            Mock -CommandName Get-IconEditorViServerSnapshot -ModuleName IconEditorPackage -MockWith {
+        It 'captures vipm-cli warnings emitted during the build' {
+            Mock -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -MockWith {
                 [pscustomobject]@{
-                    Version = 2025
-                    Bitness = 64
-                    Status  = 'ok'
-                    Message = 'LabVIEW VI Server disabled'
-                    ExePath = 'C:\LabVIEW.exe'
-                    IniPath = 'C:\LabVIEW.ini'
-                    Enabled = 'FALSE'
-                    ServerEnabled = $false
-                    Port    = 3368
-                }
-            }
-
-            Mock -CommandName Get-GCliInvocation -ModuleName IconEditorPackage -MockWith {
-                [pscustomobject]@{
-                    Provider  = 'mock-gcli'
+                    Toolchain = 'vipm-cli'
                     Binary    = (Get-Command pwsh).Source
                     Arguments = @('-NoLogo','-NoProfile','-File',$script:fakeBuildScript)
                 }
             } -Verifiable
 
-            Mock -CommandName Write-Warning -ModuleName IconEditorPackage -MockWith { param($Message) }
+            Mock -CommandName Invoke-IconEditorProcess -ModuleName IconEditorPackage -MockWith {
+                [pscustomobject]@{
+                    Binary          = (Get-Command pwsh).Source
+                    Arguments       = @('-NoLogo','-NoProfile','-File',$script:fakeBuildScript)
+                    ExitCode        = 0
+                    StdOut          = ''
+                    StdErr          = ''
+                    Output          = ''
+                    DurationSeconds = 0.2
+                    Warnings        = @('[WARN] mock vipm-cli warning')
+                }
+            } -Verifiable
 
-            $expected = Get-IconEditorPackagePath -VipbPath $script:VipbPath -Major 0 -Minor 6 -Patch 0 -Build 1302 -WorkspaceRoot $script:WorkspaceRoot
-            $prevEnv = [Environment]::GetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE')
-            try {
-                [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $expected, [System.EnvironmentVariableTarget]::Process)
-
-                $result = Invoke-IconEditorVipBuild `
-                    -VipbPath $script:VipbPath `
-                    -Major 0 `
-                    -Minor 6 `
-                    -Patch 0 `
-                    -Build 1302 `
-                    -SupportedBitness 64 `
-                    -MinimumSupportedLVVersion 2025 `
-                    -LabVIEWMinorRevision 3 `
-                    -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
-                    -WorkspaceRoot $script:WorkspaceRoot `
-                    -Provider 'gcli' `
-                    -GCliProviderName 'mock-gcli'
-            } finally {
-                if ($null -ne $prevEnv) {
-                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $prevEnv, [System.EnvironmentVariableTarget]::Process)
-                } else {
-                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $null, [System.EnvironmentVariableTarget]::Process)
+            Mock -CommandName Confirm-IconEditorPackageArtifact -ModuleName IconEditorPackage -MockWith {
+                [pscustomobject]@{
+                    PackagePath       = 'C:\packages\icon.vip'
+                    Sha256            = 'abc'
+                    SizeBytes         = 100
+                    LastWriteTimeUtc  = (Get-Date).ToUniversalTime()
                 }
             }
 
-            $result.Provider | Should -Be 'mock-gcli'
-            Test-Path -LiteralPath $expected | Should -BeTrue
-            Assert-MockCalled -CommandName Write-Warning -ModuleName IconEditorPackage -Times 1 -ParameterFilter { $Message -like '*appears disabled*' }
-            ($result.Warnings -join ' ') | Should -Match 'appears disabled'
-            if (Test-Path -LiteralPath $expected) {
-                Remove-Item -LiteralPath $expected -Force
-            }
+            $result = Invoke-IconEditorVipBuild `
+                -VipbPath $script:VipbPath `
+                -Major 0 `
+                -Minor 6 `
+                -Patch 0 `
+                -Build 1304 `
+                -SupportedBitness 64 `
+                -MinimumSupportedLVVersion 2025 `
+                -LabVIEWMinorRevision 3 `
+                -ReleaseNotesPath 'Tooling/deployment/release_notes.md' `
+                -WorkspaceRoot $script:WorkspaceRoot `
+                -Toolchain 'vipm-cli'
+
+            Assert-MockCalled -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -Times 1
+            Assert-MockCalled -CommandName Invoke-IconEditorProcess -ModuleName IconEditorPackage -Times 1
+            $result.Warnings | Should -Contain '[WARN] mock vipm-cli warning'
         }
     }
 }
+

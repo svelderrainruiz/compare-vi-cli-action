@@ -24,7 +24,7 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **ok** (VIPs: 1)
-- Report generated: `11/5/2025 8:26:36 AM`
+- Report generated: `11/5/2025 11:15:27 AM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 6.04 MB (`dde3bede1bc6a3f797ed5402975bbe437dd46125b8003c129767f706b2f71dbe`)
   - ni_icon_editor_system-1.4.1.948.vip - 5.97 MB (`e9cee3d119bbeebee74d7c23b15b7129b9961f5f565e69a06149f529a7b36838`)
@@ -36,7 +36,7 @@ carries the actual LabVIEW payload.
 - Smoke status: **ok**
 - Runner dependencies: mismatch
 - Custom actions: 4 entries (all match: False)
-- Fixture-only assets discovered: 313
+- Fixture-only assets discovered: 2
 
 ## Comparison with repository sources
 
@@ -52,31 +52,23 @@ carries the actual LabVIEW payload.
 
 ## Fixture-only assets
 
-- resource (313 entries)
+- resource (2 entries)
   - plugins\lv_icon_x64.lvlibp (075d8806e1caecc45e0f33e68a05fb45232235c13ca13e47eccb3840d9b89e9a)
   - plugins\lv_icon_x86.lvlibp (4e7cac24d986eef833b7bdcf463c7f1754ee189f0a51b3bed70b494cc8b0657b)
-  - plugins\lv_icon.vi (af6be82644d7b0d9252bb5188847a161c641653a38f664bddcacc75bbc6b0b51)
-  - plugins\lv_icon.vit (c74159e8f4e16d1881359dae205e71fdee6131020c7c735440697138eec0c0dd)
-  - plugins\lv_IconEditor.lvlib (a2721f0b8aea3c32a00d0b148f24bdeee05201b41cffbaa212dbe325fdd4f3f7)
-  - ... 308 more
 
 ## Fixture-only manifest delta
 
-- Added: 313, Removed: 311, Changed: 0
+- Added: 2, Removed: 313, Changed: 0
 - Added:
-  - `resource:tests\plugins\niiconeditor\miscellaneous\icon editor\alignment value change.vi`
-  - `resource:tests\plugins\niiconeditor\miscellaneous\graphics\refreshanimation.mng`
-  - `resource:tests\plugins\niiconeditor\miscellaneous\icon editor\change behavior ie window.vi`
-  - `resource:tests\plugins\niiconeditor\controls\selection.ctl`
-  - `resource:tests\plugins\niiconeditor\class\fakedarray\set\set_data.vi`
-  - (+308 more)
+  - `resource:tests\plugins\lv_icon_x64.lvlibp`
+  - `resource:tests\plugins\lv_icon_x86.lvlibp`
 - Removed:
+  - `resource:resource\plugins\lv_icon_x64.lvlibp`
+  - `resource:resource\plugins\lv_icon_x86.lvlibp`
   - `resource:resource\plugins\lv_icon.vi`
   - `resource:resource\plugins\lv_icon.vit`
   - `resource:resource\plugins\lv_iconeditor.lvlib`
-  - `resource:resource\plugins\niiconeditor\class\ants\ants.lvclass`
-  - `resource:resource\plugins\niiconeditor\class\ants\get\get_antsline.vi`
-  - (+306 more)
+  - (+308 more)
 
 ## Changed VI comparison (requests)
 
@@ -397,14 +389,11 @@ The helper:
 Pass `-LogPath path\to\log.txt` when you already have the log, and `-DownloadArtifacts`
 to pull the upstream PPLs automatically before the build.
 
-To experiment with alternate backends, supply `-BuildToolchain gcli` to route the
-package step through the legacy g-cli provider or `-BuildToolchain vipm` to exercise
-the classic VIPM file handler. You can still pass `-BuildProvider <name>` to request a
-specific provider registration (for example, a custom g-cli shim). The summary emitted
-by the script now records both the toolchain and resolved provider so you can confirm
-which backend executed the build. The generated `icon-editor/build@v1` manifest records
-the requested backend under `packaging.requestedToolchain` (and `packaging.requestedProvider`
-when supplied) so downstream diagnostics stay transparent.
+Packaging replays now run exclusively through the VIPM CLI. The `-BuildToolchain`
+switch remains for forward compatibility but currently only accepts `vipm-cli`;
+the replay summary and generated `icon-editor/build@v1` manifest record the selected
+toolchain under `packaging.requestedToolchain` so you can confirm which backend
+executed the build.
 
 When dependency application is the failing stage, replay it via:
 

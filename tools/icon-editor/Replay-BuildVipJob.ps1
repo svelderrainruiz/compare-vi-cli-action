@@ -47,12 +47,7 @@
     resource/plugins folder.
 
 .PARAMETER BuildToolchain
-    Toolchain used to rebuild the VIP. Defaults to 'vipm-cli'; pass 'gcli' to exercise
-    the legacy g-cli backend or 'vipm' to route through the classic VIPM handler.
-
-.PARAMETER BuildProvider
-    Optional provider name forwarded to the selected toolchain (for example, a
-    specific g-cli or VIPM backend).
+    Toolchain used to rebuild the VIP. Defaults to 'vipm-cli' and is the only supported option.
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Default')]
@@ -76,10 +71,8 @@ param(
     [switch]$DownloadArtifacts,
     [string]$DownloadDir = (Join-Path ([System.IO.Path]::GetTempPath()) ('replay-build-vip-' + [guid]::NewGuid().ToString('n'))),
 
-    [ValidateSet('gcli','vipm','vipm-cli')]
+    [ValidateSet('vipm-cli')]
     [string]$BuildToolchain = 'vipm-cli',
-
-    [string]$BuildProvider,
 
     [switch]$Local,
 
@@ -166,8 +159,8 @@ $script:buildOutput = $null
 $script:buildWarnings = @()
 $script:viServerSnapshots = @()
 $script:packagePath = $null
-$script:buildProviderName = $null
 $script:buildToolchain = $BuildToolchain
+$script:resolvedToolchain = $null
 
 $iconEditorModulePath = Join-Path $workspaceRoot 'tools\icon-editor\IconEditorPackage.psm1'
 if (-not (Test-Path -LiteralPath $iconEditorModulePath -PathType Leaf)) {
@@ -446,45 +439,24 @@ try {
     if (-not $SkipBuild) {
         Write-Host ("Running Invoke-IconEditorVipBuild via {0} toolchain to produce VI Package" -f $BuildToolchain)
 
-        $buildParams = @{
-            VipbPath                  = $vipbFullPath
-            Major                     = $intMajor
-            Minor                     = $intMinor
-            Patch                     = $intPatch
-            Build                     = $intBuild
-            SupportedBitness          = $PackageSupportedBitness
-            MinimumSupportedLVVersion = $PackageMinimumSupportedLVVersion
-            LabVIEWMinorRevision      = $PackageLabVIEWMinorRevision
-            ReleaseNotesPath          = $releaseNotesFull
-            WorkspaceRoot             = $workspaceRoot
-            Provider                  = $BuildToolchain
-        }
-
-        switch ($BuildToolchain) {
-            'gcli' {
-                if ($BuildProvider) {
-                    $buildParams.GCliProviderName = $BuildProvider
-                }
-            }
-            'vipm' {
-                if ($BuildProvider) {
-                    $buildParams.VipmProviderName = $BuildProvider
-                }
-            }
-            'vipm-cli' {
-                if ($BuildProvider) {
-                    Write-Warning "BuildProvider parameter is ignored when using vipm-cli."
-                }
-            }
-        }
-
-        $buildResult = Invoke-IconEditorVipBuild @buildParams
+        $buildResult = Invoke-IconEditorVipBuild `
+            -VipbPath $vipbFullPath `
+            -Major $intMajor `
+            -Minor $intMinor `
+            -Patch $intPatch `
+            -Build $intBuild `
+            -SupportedBitness $PackageSupportedBitness `
+            -MinimumSupportedLVVersion $PackageMinimumSupportedLVVersion `
+            -LabVIEWMinorRevision $PackageLabVIEWMinorRevision `
+            -ReleaseNotesPath $releaseNotesFull `
+            -WorkspaceRoot $workspaceRoot `
+            -Toolchain $BuildToolchain
 
         $script:buildOutput = $buildResult.Output
         $script:buildWarnings = $buildResult.Warnings
         if ($buildResult.RemovedExisting) { $script:removedPackage = $true }
         if ($buildResult.PackagePath) { $script:packagePath = $buildResult.PackagePath }
-        if ($buildResult.Provider) { $script:buildProviderName = $buildResult.Provider }
+        if ($buildResult.Toolchain) { $script:resolvedToolchain = $buildResult.Toolchain }
     }
 
     if ($CloseLabVIEW) {
@@ -508,10 +480,8 @@ Write-Host "Replay completed."
 Write-Host " VIPB updated at $(Join-Path $workspaceRoot $vipbRelative)"
 Write-Host " Release notes path: $releaseNotesFull"
 Write-Host (" Build toolchain: {0}" -f $script:buildToolchain)
-if ($script:buildProviderName) {
-    Write-Host (" Provider backend: {0}" -f $script:buildProviderName)
-} elseif ($BuildProvider) {
-    Write-Host (" Provider backend: {0}" -f $BuildProvider)
+if ($script:resolvedToolchain) {
+    Write-Host (" Toolchain backend: {0}" -f $script:resolvedToolchain)
 }
 if ($stagedArtifacts.Count -gt 0) {
     Write-Host " Staged artifacts copied to resource/plugins:"
@@ -522,13 +492,13 @@ if ($script:removedPackage) {
 }
 if ($script:buildOutput) {
     if ($script:buildWarnings.Count -gt 0) {
-        Write-Warning "g-cli emitted warnings during build:"
+        Write-Warning "vipm-cli emitted warnings during build:"
         $script:buildWarnings | ForEach-Object { Write-Warning "  $_" }
         $logHint = Join-Path $env:USERPROFILE 'Documents\LabVIEW Data\Logs'
         if (-not (Test-Path -LiteralPath $logHint -PathType Container)) {
             $logHint = '%USERPROFILE%\Documents\LabVIEW Data\Logs'
         }
-        Write-Host " Hint: g-cli reported transient comms errors; if the build still completes you can proceed. Otherwise rerun or inspect LabVIEW logs at $logHint."
+        Write-Host " Hint: vipm-cli reported warnings; if the build still completes you can proceed. Otherwise rerun or inspect LabVIEW logs at $logHint."
         if ($script:viServerSnapshots.Count -gt 0) {
             Write-Host " VI Server ports (LabVIEW.ini snapshot):"
             foreach ($snapshot in $script:viServerSnapshots) {

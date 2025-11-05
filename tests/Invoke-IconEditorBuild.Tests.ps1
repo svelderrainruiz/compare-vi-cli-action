@@ -153,7 +153,6 @@ param(
   [string]$Commit,
   [string]$ReleaseNotesFile,
   [string]$BuildToolchain,
-  [string]$BuildProvider,
   [string]$DisplayInformationJSON
 )
 $iconRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -401,8 +400,8 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $manifest.packagingRequested | Should -BeTrue
     $manifest.dependenciesApplied | Should -BeTrue
     $manifest.developmentMode.toggled | Should -BeTrue
-    $manifest.packaging.requestedToolchain | Should -Be 'gcli'
-    [string]::IsNullOrEmpty($manifest.packaging.requestedProvider) | Should -BeTrue
+    $manifest.packaging.requestedToolchain | Should -Be 'vipm-cli'
+    $manifest.packaging.PSObject.Properties['requestedProvider'] | Should -Be $null
     @($manifest.artifacts | Where-Object { $_.kind -eq 'vip' }).Count | Should -BeGreaterThan 0
     $manifest.packageSmoke.status | Should -Be 'ok'
     $manifest.packageSmoke.vipCount | Should -Be 1
@@ -436,7 +435,7 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
 
     $manifest = Get-Content -LiteralPath (Join-Path $script:resultsRoot 'manifest.json') -Raw | ConvertFrom-Json
     $manifest.packagingRequested | Should -BeFalse
-    $manifest.packaging.requestedToolchain | Should -Be 'gcli'
+    $manifest.packaging.requestedToolchain | Should -Be 'vipm-cli'
     @($manifest.artifacts | Where-Object { $_.kind -eq 'vip' }).Count | Should -Be 0
     $manifest.packageSmoke.status | Should -Be 'skipped'
   }
@@ -519,12 +518,11 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     ($enableCall.Arguments.Bitness -join ',')  | Should -Be '64'
   }
 
-  It 'forwards toolchain overrides to the build script and manifest' {
+  It 'forwards the vipm-cli toolchain to the build script and manifest' {
     { & $script:scriptPath `
         -IconEditorRoot $script:iconRoot `
         -ResultsRoot $script:resultsRoot `
-        -BuildToolchain 'vipm' `
-        -BuildProvider 'vipm-custom' `
+        -BuildToolchain 'vipm-cli' `
         -Commit 'vipmtest'
     } | Should -Not -Throw
 
@@ -538,11 +536,10 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
       $argMap[$key] = $value
     }
 
-    $argMap['BuildToolchain'] | Should -Be 'vipm'
-    $argMap['BuildProvider']  | Should -Be 'vipm-custom'
+    $argMap['BuildToolchain'] | Should -Be 'vipm-cli'
 
     $manifest = Get-Content -LiteralPath (Join-Path $script:resultsRoot 'manifest.json') -Raw | ConvertFrom-Json
-    $manifest.packaging.requestedToolchain | Should -Be 'vipm'
-    $manifest.packaging.requestedProvider  | Should -Be 'vipm-custom'
+    $manifest.packaging.requestedToolchain | Should -Be 'vipm-cli'
+    $manifest.packaging.PSObject.Properties['requestedProvider'] | Should -Be $null
   }
 }

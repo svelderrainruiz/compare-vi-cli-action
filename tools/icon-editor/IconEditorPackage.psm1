@@ -4,8 +4,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:VendorToolsImported = $false
-$script:GCliImported = $false
-$script:VipmImported = $false
 $script:VipmCliImported = $false
 
 function Invoke-IconEditorVendorToolsImport {
@@ -35,64 +33,6 @@ function Invoke-IconEditorVendorToolsImport {
     }
 
     return $script:VendorToolsImported
-}
-
-function Invoke-IconEditorGCliImport {
-    param([string]$WorkspaceRoot)
-
-    if ($script:GCliImported) { return $true }
-
-    $candidatePaths = New-Object System.Collections.Generic.List[string]
-    if ($WorkspaceRoot) {
-        $candidatePaths.Add((Join-Path $WorkspaceRoot 'tools\GCli.psm1')) | Out-Null
-    }
-
-    $locationCandidate = Join-Path (Get-Location).Path 'tools\GCli.psm1'
-    if (-not $candidatePaths.Contains($locationCandidate)) {
-        $candidatePaths.Add($locationCandidate) | Out-Null
-    }
-
-    foreach ($path in $candidatePaths) {
-        if ([string]::IsNullOrWhiteSpace($path)) { continue }
-        try {
-            if (Test-Path -LiteralPath $path -PathType Leaf) {
-                Import-Module $path -Force -ErrorAction Stop | Out-Null
-                $script:GCliImported = $true
-                return $true
-            }
-        } catch {}
-    }
-
-    return $script:GCliImported
-}
-
-function Invoke-IconEditorVipmImport {
-    param([string]$WorkspaceRoot)
-
-    if ($script:VipmImported) { return $true }
-
-    $candidatePaths = New-Object System.Collections.Generic.List[string]
-    if ($WorkspaceRoot) {
-        $candidatePaths.Add((Join-Path $WorkspaceRoot 'tools\Vipm.psm1')) | Out-Null
-    }
-
-    $locationCandidate = Join-Path (Get-Location).Path 'tools\Vipm.psm1'
-    if (-not $candidatePaths.Contains($locationCandidate)) {
-        $candidatePaths.Add($locationCandidate) | Out-Null
-    }
-
-    foreach ($path in $candidatePaths) {
-        if ([string]::IsNullOrWhiteSpace($path)) { continue }
-        try {
-            if (Test-Path -LiteralPath $path -PathType Leaf) {
-                Import-Module $path -Force -ErrorAction Stop | Out-Null
-                $script:VipmImported = $true
-                return $true
-            }
-        } catch {}
-    }
-
-    return $script:VipmImported
 }
 
 function Invoke-IconEditorVipmCliImport {
@@ -206,11 +146,11 @@ function Invoke-IconEditorProcess {
   try {
     $process = [System.Diagnostics.Process]::Start($psi)
   } catch {
-    throw "Failed to start provider process '$Binary': $($_.Exception.Message)"
+  throw "Failed to start build process '$Binary': $($_.Exception.Message)"
   }
 
   if (-not $process) {
-    throw "Failed to start provider process '$Binary'."
+    throw "Failed to start build process '$Binary'."
   }
 
   $stdout = $process.StandardOutput.ReadToEnd()
@@ -287,23 +227,21 @@ function Invoke-IconEditorVipBuild {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory)][string]$VipbPath,
-        [Parameter(Mandatory)][int]$Major,
-        [Parameter(Mandatory)][int]$Minor,
-        [Parameter(Mandatory)][int]$Patch,
-        [Parameter(Mandatory)][int]$Build,
-        [Parameter()][ValidateSet(32,64)][int]$SupportedBitness = 64,
-        [Parameter()][int]$MinimumSupportedLVVersion = 2025,
-        [Parameter()][ValidateSet(0,3)][int]$LabVIEWMinorRevision = 3,
-        [Parameter(Mandatory)][string]$ReleaseNotesPath,
-        [string]$WorkspaceRoot,
-        [string]$OutputDirectory = '.github/builds/VI Package',
-        [ValidateSet('gcli','vipm','vipm-cli')][string]$Provider = 'gcli',
-        [string]$GCliProviderName,
-        [string]$VipmProviderName,
-        [int]$TimeoutSeconds = 300,
-        [switch]$PreserveExisting,
-        [switch]$Quiet
-    )
+    [Parameter(Mandatory)][int]$Major,
+    [Parameter(Mandatory)][int]$Minor,
+    [Parameter(Mandatory)][int]$Patch,
+    [Parameter(Mandatory)][int]$Build,
+    [Parameter()][ValidateSet(32,64)][int]$SupportedBitness = 64,
+    [Parameter()][int]$MinimumSupportedLVVersion = 2025,
+    [Parameter()][ValidateSet(0,3)][int]$LabVIEWMinorRevision = 3,
+    [Parameter(Mandatory)][string]$ReleaseNotesPath,
+    [string]$WorkspaceRoot,
+    [string]$OutputDirectory = '.github/builds/VI Package',
+    [ValidateSet('vipm-cli')][string]$Toolchain = 'vipm-cli',
+    [int]$TimeoutSeconds = 300,
+    [switch]$PreserveExisting,
+    [switch]$Quiet
+  )
 
     $vipbFull = (Resolve-Path -LiteralPath $VipbPath -ErrorAction Stop).ProviderPath
 
@@ -319,40 +257,8 @@ function Invoke-IconEditorVipBuild {
 
     $preflightWarnings = New-Object System.Collections.Generic.List[string]
 
-    $providerKey = $Provider.ToLowerInvariant()
-    switch ($providerKey) {
-        'gcli' {
-            if (-not (Invoke-IconEditorGCliImport -WorkspaceRoot $WorkspaceRoot)) {
-                throw 'Unable to import g-cli provider module (tools/GCli.psm1).'
-            }
-
-            $snapshot = Get-IconEditorViServerSnapshot -Version $MinimumSupportedLVVersion -Bitness $SupportedBitness -WorkspaceRoot $WorkspaceRoot
-            if (-not $snapshot) {
-                throw "Unable to verify LabVIEW VI Server configuration for $MinimumSupportedLVVersion ($SupportedBitness-bit)."
-            }
-            if ($snapshot.Status -ne 'ok') {
-                $detail = if ($snapshot.Message) { $snapshot.Message } else { 'LabVIEW VI Server (server.tcp.enabled) must be TRUE before invoking g-cli.' }
-                throw $detail
-            }
-            if ($snapshot.PSObject.Properties.Name -contains 'ServerEnabled' -and -not $snapshot.ServerEnabled) {
-                $serverWarning = "LabVIEW VI Server appears disabled for $MinimumSupportedLVVersion ($SupportedBitness-bit); continuing because LabVIEW.ini is present."
-                Write-Warning $serverWarning
-                $preflightWarnings.Add($serverWarning) | Out-Null
-            }
-        }
-        'vipm' {
-            if (-not (Invoke-IconEditorVipmImport -WorkspaceRoot $WorkspaceRoot)) {
-                throw 'Unable to import VIPM provider module (tools/Vipm.psm1).'
-            }
-        }
-        'vipm-cli' {
-            if (-not (Invoke-IconEditorVipmCliImport -WorkspaceRoot $WorkspaceRoot)) {
-                throw 'Unable to import VIPM CLI module (tools/VipmCli.psm1).'
-            }
-        }
-        default {
-            throw "Unsupported provider '$Provider'."
-        }
+    if (-not (Invoke-IconEditorVipmCliImport -WorkspaceRoot $WorkspaceRoot)) {
+        throw 'Unable to import VIPM CLI module (tools/VipmCli.psm1).'
     }
 
     $releaseNotesFull = if ([System.IO.Path]::IsPathRooted($ReleaseNotesPath)) {
@@ -383,57 +289,13 @@ function Invoke-IconEditorVipBuild {
 
     $versionString = '{0}.{1}.{2}.{3}' -f $Major, $Minor, $Patch, $Build
 
-    switch ($providerKey) {
-        'gcli' {
-            $operationParams = @{
-                labviewVersion   = $MinimumSupportedLVVersion.ToString()
-                architecture     = $SupportedBitness.ToString()
-                buildSpecPath    = $vipbFull
-                buildVersion     = $versionString
-                releaseNotesPath = $releaseNotesFull
-                timeoutSeconds   = $TimeoutSeconds.ToString()
-            }
-
-            $invocationArgs = @{
-                Operation = 'VipbBuild'
-                Params    = $operationParams
-            }
-            if ($GCliProviderName) {
-                $invocationArgs.ProviderName = $GCliProviderName
-            }
-
-            $invocation = Get-GCliInvocation @invocationArgs
-        }
-        'vipm' {
-            $operationParams = @{
-                vipbPath        = $vipbFull
-                outputDirectory = $expectedDir
-                buildVersion    = $versionString
-            }
-
-            $invocationArgs = @{
-                Operation = 'BuildVip'
-                Params    = $operationParams
-            }
-            if ($VipmProviderName) {
-                $invocationArgs.ProviderName = $VipmProviderName
-            }
-
-            $invocation = Get-VipmInvocation @invocationArgs
-        }
-        'vipm-cli' {
-            $operationParams = @{
-                BuildSpec       = $vipbFull
-                LabVIEWVersion  = $MinimumSupportedLVVersion.ToString()
-                LabVIEWBitness  = $SupportedBitness.ToString()
-            }
-
-            $invocation = Get-VipmCliInvocation -Operation 'BuildVip' -Params $operationParams
-        }
-        default {
-            throw "Unsupported provider '$Provider'."
-        }
+    $operationParams = @{
+        BuildSpec      = $vipbFull
+        LabVIEWVersion = $MinimumSupportedLVVersion.ToString()
+        LabVIEWBitness = $SupportedBitness.ToString()
     }
+
+    $invocation = Get-VipmCliInvocation -Operation 'BuildVip' -Params $operationParams
 
     $processResult = Invoke-IconEditorProcess `
         -Binary $invocation.Binary `
@@ -442,7 +304,8 @@ function Invoke-IconEditorVipBuild {
         -Quiet:$Quiet
 
     if ($processResult.ExitCode -ne 0) {
-        $errorMessage = ("Provider '{0}' exited with code {1}." -f $invocation.Provider, $processResult.ExitCode)
+        $toolchainName = if ($invocation.PSObject.Properties['Toolchain']) { $invocation.Toolchain } else { 'vipm-cli' }
+        $errorMessage = ("Toolchain '{0}' exited with code {1}." -f $toolchainName, $processResult.ExitCode)
         if ($processResult.Output) {
             $errorMessage = $errorMessage + " Output:`n{0}" -f $processResult.Output
         }
@@ -472,8 +335,8 @@ function Invoke-IconEditorVipBuild {
         PackageTimestampUtc = $artifact.LastWriteTimeUtc
         RemovedExisting     = $removedPackage
         ReleaseNotes        = $releaseNotesFull
-        Provider            = $invocation.Provider
-        ProviderBinary      = $invocation.Binary
+        Toolchain           = $invocation.Toolchain
+        ToolchainBinary     = $invocation.Binary
     }
 }
 

@@ -1,18 +1,18 @@
 {
-  "number": 588,
-  "title": "Decouple icon editor build steps into composite actions",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/588",
+  "number": 591,
+  "title": "Produce real Icon Editor VI package (non-simulated)",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/591",
   "state": "OPEN",
   "labels": [
     "standing-priority"
   ],
   "assignees": [],
-  "milestone": null,
-  "commentCount": 6,
-  "lastSeenUpdatedAt": "2025-11-04T04:06:28Z",
-  "issueDigest": "74eda9ff3d7fdd8090dbcfb37d98dabeeb6ec60f51fa8c5b8dee6ac4036bb737",
-  "bodyDigest": "6b5e2727553071ff27094be41e6f6a290074db2dfbe813fdc8d7209e6ce7e55d",
-  "cachedAtUtc": "2025-11-04T07:14:08.556Z",
+  "milestone": "Produce real Icon Editor VI package",
+  "commentCount": 1,
+  "lastSeenUpdatedAt": "2025-11-05T03:23:59Z",
+  "issueDigest": "e0156a134230ffbb53cb338c772c4201852bbea761173609fafb3379940d3c92",
+  "bodyDigest": "540f65ad3bed78659c76ac5e1b14f38fe22bf97c4453c9edf596f155adf8908b",
+  "cachedAtUtc": "2025-11-05T17:29:15.947Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
