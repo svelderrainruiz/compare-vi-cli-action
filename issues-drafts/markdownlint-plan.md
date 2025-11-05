@@ -70,7 +70,7 @@
 ### Hook parity stabilization (2025-11-05)
 - Windows hook parity failed because the PowerShell wrapper reported `fixtureAssetCategoryCounts` of 313 (counting the manifest delta) while the shell wrapper reported the real fixture-only asset count of 2.
 - Updated `tools/PrePush-Checks.ps1` to derive category counts by explicitly tallying `fixtureReport.fixtureOnlyAssets` per category instead of relying on `Group-Object`, which was sensitive to the manifest delta on the hosted runner.
-- Local `node tools/hooks/core/run-multi.mjs` now reports matching summaries across shell/pwsh; need a fresh Validate run to confirm the fix on `windows-latest`.
+- Local `node tools/hooks/core/run-multi.mjs` now reports matching summaries across shell/pwsh; Validate run 19111757284 confirmed the fix on `windows-latest`.
 
 ## Next actions (self-prioritized)
 1. **High** - Publish updated guidance (developer docs / CLI-lints readme) explaining the link checker guard and fixture exclusion so contributors know what changed.
