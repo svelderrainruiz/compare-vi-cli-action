@@ -48,7 +48,7 @@
 
 .PARAMETER BuildToolchain
     Toolchain used to rebuild the VIP. Defaults to 'gcli'; pass 'vipm' to route
-    through the VIPM provider.
+    through the legacy VIPM provider or 'vipm-cli' to use the new CLI backend.
 
 .PARAMETER BuildProvider
     Optional provider name forwarded to the selected toolchain (for example, a
@@ -74,8 +74,9 @@ param(
     [switch]$SkipBuild,
     [switch]$CloseLabVIEW,
     [switch]$DownloadArtifacts,
+    [string]$DownloadDir = (Join-Path ([System.IO.Path]::GetTempPath()) ('replay-build-vip-' + [guid]::NewGuid().ToString('n'))),
 
-    [ValidateSet('gcli','vipm')]
+    [ValidateSet('gcli','vipm','vipm-cli')]
     [string]$BuildToolchain = 'gcli',
 
     [string]$BuildProvider,
@@ -459,10 +460,22 @@ try {
             Provider                  = $BuildToolchain
         }
 
-        if ($BuildToolchain -eq 'gcli' -and $BuildProvider) {
-            $buildParams.GCliProviderName = $BuildProvider
-        } elseif ($BuildToolchain -eq 'vipm' -and $BuildProvider) {
-            $buildParams.VipmProviderName = $BuildProvider
+        switch ($BuildToolchain) {
+            'gcli' {
+                if ($BuildProvider) {
+                    $buildParams.GCliProviderName = $BuildProvider
+                }
+            }
+            'vipm' {
+                if ($BuildProvider) {
+                    $buildParams.VipmProviderName = $BuildProvider
+                }
+            }
+            'vipm-cli' {
+                if ($BuildProvider) {
+                    Write-Warning "BuildProvider parameter is ignored when using vipm-cli."
+                }
+            }
         }
 
         $buildResult = Invoke-IconEditorVipBuild @buildParams
@@ -549,3 +562,4 @@ if ($finalPackagePath -and (Test-Path -LiteralPath $finalPackagePath)) {
 } else {
     Write-Warning "Unable to locate the generated .vip. Inspect build logs above."
 }
+

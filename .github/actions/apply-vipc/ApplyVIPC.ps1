@@ -14,7 +14,7 @@ Param (
     [string]$SupportedBitness,
     [string]$RelativePath,
     [string]$VIPCPath,
-    [ValidateSet('auto','gcli','vipm')]
+    [ValidateSet('auto','gcli','vipm','vipm-cli')]
     [string]$Toolchain = 'auto'
 )
 
@@ -112,9 +112,17 @@ function Invoke-ProcessInvocation {
 }
 
 $selectedToolchain = switch ($Toolchain.ToLowerInvariant()) {
-    'gcli' { 'gcli' }
-    'vipm' { 'vipm' }
-    default { 'gcli' }
+    'gcli'     { 'gcli' }
+    'vipm'     { 'vipm' }
+    'vipm-cli' { 'vipm-cli' }
+    default {
+        if (Get-Command -Name 'vipm' -ErrorAction SilentlyContinue) {
+            'vipm-cli'
+        } else {
+            Write-Warning "VIPM CLI ('vipm') not detected on PATH. Falling back to g-cli; pass -Toolchain gcli to suppress this warning."
+            'gcli'
+        }
+    }
 }
 
 try {
@@ -160,6 +168,28 @@ try {
                 Write-Output ("Executing VIPM provider [{0}]: {1} {2}" -f $invocation.Provider, $invocation.Binary, ($invocation.Arguments -join ' '))
                 Invoke-ProcessInvocation -Invocation $invocation -WorkingDirectory (Split-Path -Parent $ResolvedVIPCPath)
             }
+        }
+        'vipm-cli' {
+            $vipmCliModulePath = Join-Path $ResolvedRelativePath 'tools' 'VipmCli.psm1'
+            if (-not (Test-Path -LiteralPath $vipmCliModulePath -PathType Leaf)) {
+                throw "VIPM CLI module not found at '$vipmCliModulePath'."
+            }
+            Import-Module $vipmCliModulePath -Force
+
+            foreach ($version in $uniqueVersions) {
+                Write-Output ("Applying dependencies via VIPM CLI for LabVIEW {0} ({1}-bit)..." -f $version, $SupportedBitness)
+                $params = @{
+                    VipcPath       = $ResolvedVIPCPath
+                    LabVIEWVersion = $version
+                    LabVIEWBitness = $SupportedBitness
+                }
+                $invocation = Get-VipmCliInvocation -Operation 'InstallVipc' -Params $params
+                Write-Output ("Executing VIPM CLI [{0}]: {1} {2}" -f $invocation.Provider, $invocation.Binary, ($invocation.Arguments -join ' '))
+                Invoke-ProcessInvocation -Invocation $invocation -WorkingDirectory (Split-Path -Parent $ResolvedVIPCPath)
+            }
+        }
+        Default {
+            throw "Unsupported toolchain '$selectedToolchain'."
         }
     }
 } catch {

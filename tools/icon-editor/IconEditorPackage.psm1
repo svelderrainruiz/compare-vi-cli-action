@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 $script:VendorToolsImported = $false
 $script:GCliImported = $false
 $script:VipmImported = $false
+$script:VipmCliImported = $false
 
 function Invoke-IconEditorVendorToolsImport {
     param([string]$WorkspaceRoot)
@@ -92,6 +93,35 @@ function Invoke-IconEditorVipmImport {
     }
 
     return $script:VipmImported
+}
+
+function Invoke-IconEditorVipmCliImport {
+    param([string]$WorkspaceRoot)
+
+    if ($script:VipmCliImported) { return $true }
+
+    $candidatePaths = New-Object System.Collections.Generic.List[string]
+    if ($WorkspaceRoot) {
+        $candidatePaths.Add((Join-Path $WorkspaceRoot 'tools\VipmCli.psm1')) | Out-Null
+    }
+
+    $locationCandidate = Join-Path (Get-Location).Path 'tools\VipmCli.psm1'
+    if (-not $candidatePaths.Contains($locationCandidate)) {
+        $candidatePaths.Add($locationCandidate) | Out-Null
+    }
+
+    foreach ($path in $candidatePaths) {
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        try {
+            if (Test-Path -LiteralPath $path -PathType Leaf) {
+                Import-Module $path -Force -ErrorAction Stop | Out-Null
+                $script:VipmCliImported = $true
+                return $true
+            }
+        } catch {}
+    }
+
+    return $script:VipmCliImported
 }
 
 function Get-IconEditorPackageName {
@@ -267,7 +297,7 @@ function Invoke-IconEditorVipBuild {
         [Parameter(Mandatory)][string]$ReleaseNotesPath,
         [string]$WorkspaceRoot,
         [string]$OutputDirectory = '.github/builds/VI Package',
-        [ValidateSet('gcli','vipm')][string]$Provider = 'gcli',
+        [ValidateSet('gcli','vipm','vipm-cli')][string]$Provider = 'gcli',
         [string]$GCliProviderName,
         [string]$VipmProviderName,
         [int]$TimeoutSeconds = 300,
@@ -313,6 +343,11 @@ function Invoke-IconEditorVipBuild {
         'vipm' {
             if (-not (Invoke-IconEditorVipmImport -WorkspaceRoot $WorkspaceRoot)) {
                 throw 'Unable to import VIPM provider module (tools/Vipm.psm1).'
+            }
+        }
+        'vipm-cli' {
+            if (-not (Invoke-IconEditorVipmCliImport -WorkspaceRoot $WorkspaceRoot)) {
+                throw 'Unable to import VIPM CLI module (tools/VipmCli.psm1).'
             }
         }
         default {
@@ -385,6 +420,15 @@ function Invoke-IconEditorVipBuild {
             }
 
             $invocation = Get-VipmInvocation @invocationArgs
+        }
+        'vipm-cli' {
+            $operationParams = @{
+                BuildSpec       = $vipbFull
+                LabVIEWVersion  = $MinimumSupportedLVVersion.ToString()
+                LabVIEWBitness  = $SupportedBitness.ToString()
+            }
+
+            $invocation = Get-VipmCliInvocation -Operation 'BuildVip' -Params $operationParams
         }
         default {
             throw "Unsupported provider '$Provider'."

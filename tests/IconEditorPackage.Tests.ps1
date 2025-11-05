@@ -10,6 +10,7 @@ Describe 'IconEditorPackage helpers' {
 
         Import-Module (Join-Path $repoRoot 'tools\GCli.psm1') -Force
         Import-Module (Join-Path $repoRoot 'tools\Vipm.psm1') -Force
+        Import-Module (Join-Path $repoRoot 'tools\VipmCli.psm1') -Force
 
         $script:VipbPath = Join-Path $repoRoot '.github\actions\build-vi-package\NI Icon editor.vipb'
         if (-not (Test-Path -LiteralPath $script:VipbPath -PathType Leaf)) {
@@ -234,6 +235,51 @@ exit 0
             $result.ProviderBinary | Should -Be (Get-Command pwsh).Source
             $result.PackageSha256 | Should -Be ((Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash)
             $result.PackageSize | Should -Be ((Get-Item -LiteralPath $expected).Length)
+            if (Test-Path -LiteralPath $expected) {
+                Remove-Item -LiteralPath $expected -Force
+            }
+        }
+
+        It 'invokes VIPM CLI when requested and records provider metadata' {
+            $expected = Get-IconEditorPackagePath -VipbPath $script:VipbPath -Major 0 -Minor 6 -Patch 0 -Build 1302 -WorkspaceRoot $script:WorkspaceRoot
+            $prevEnv = [Environment]::GetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE')
+            try {
+                [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $expected, [System.EnvironmentVariableTarget]::Process)
+
+                Mock -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -MockWith {
+                    [pscustomobject]@{
+                        Provider  = 'vipm-cli'
+                        Binary    = (Get-Command pwsh).Source
+                        Arguments = @('-NoLogo','-NoProfile','-File',$script:fakeBuildScript)
+                    }
+                } -Verifiable
+
+                $result = Invoke-IconEditorVipBuild `
+                    -VipbPath $script:VipbPath `
+                    -Major 0 `
+                    -Minor 6 `
+                    -Patch 0 `
+                    -Build 1302 `
+                    -SupportedBitness 64 `
+                    -MinimumSupportedLVVersion 2025 `
+                    -LabVIEWMinorRevision 3 `
+                    -ReleaseNotesPath (Join-Path $TestDrive 'notes-cli.md') `
+                    -WorkspaceRoot $script:WorkspaceRoot `
+                    -Provider 'vipm-cli'
+
+                Assert-MockCalled -CommandName Get-VipmCliInvocation -ModuleName IconEditorPackage -Times 1
+            } finally {
+                if ($null -ne $prevEnv) {
+                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $prevEnv, [System.EnvironmentVariableTarget]::Process)
+                } else {
+                    [Environment]::SetEnvironmentVariable('ICON_EDITOR_EXPECTED_PACKAGE', $null, [System.EnvironmentVariableTarget]::Process)
+                }
+            }
+
+            $result.Provider | Should -Be 'vipm-cli'
+            $result.PackagePath | Should -Be $expected
+            Test-Path -LiteralPath $expected | Should -BeTrue
+            $result.ProviderBinary | Should -Be (Get-Command pwsh).Source
             if (Test-Path -LiteralPath $expected) {
                 Remove-Item -LiteralPath $expected -Force
             }
