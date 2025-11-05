@@ -62,12 +62,16 @@
 - Implemented option 1 on 2025-11-05; local scan now reports `FixtureIncluded=0` (490 authored markdown files remain in scope), so fixture placeholders no longer affect the checker.
 
 ## Next actions (self-prioritized)
-1. **Blocker** - Dispatch a fresh Validate run (or targeted lint replay) to confirm the guard behaves on CI, then capture the outcome.
-2. **High** - Assess whether we still need a supplemental, non-blocking fixture-doc scan now that fixtures are excluded from the main checker.
-3. **Medium** - Finish cataloging lint guardrails vs. non-lint notices and fold the summary into developer docs so contributors know which failures to prioritize.
-4. **Low** - Continue trimming relaxed markdownlint glob false negatives (measure whether TROUBLESHOOTING/DEVELOPER_GUIDE still need manual overrides after the next Validate cycle).
+1. **High** - Publish updated guidance (developer docs / CLI-lints readme) explaining the link checker guard and fixture exclusion so contributors know what changed.
+2. **Medium** - Finish cataloging lint guardrails vs. non-lint notices and fold the summary into developer docs so contributors know which failures to prioritize.
+3. **Low** - Continue trimming relaxed markdownlint glob false negatives (measure whether TROUBLESHOOTING/DEVELOPER_GUIDE still need manual overrides after the next Validate cycle).
+
+### 2025-11-05 Validate replay (run 19111229037)
+- `Validate / lint` finished cleanly: the link checker printed “Intra-repo markdown links OK.” and no longer crashes on fixture placeholders.
+- The overall workflow failed later in `hook-parity (windows-latest)` (known pending work) but that doesn’t impact the lint verification.
+- Decision for now: rely on the existing fixture validation flows (fixtures job + replay tools). Revisit a dedicated notice-only scan only if fixture diffs begin slipping through.
 
 ## Notes
 - TODO: quantify how often `docs/TROUBLESHOOTING.md` still fails after the relaxed glob expansion.
 - TODO: decide whether the docs link checker stays in CLI lints or moves to a scheduled/non-blocking workflow.
-- TODO: Kick off a Validate replay once the workflow change merges and capture the lint job result in this log.
+- DONE: Kicked off Validate run 19111229037; lint pass confirmed the guard and fixture filter.
