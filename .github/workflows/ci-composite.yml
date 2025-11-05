@@ -68,6 +68,13 @@ jobs:
           vip_lv_version:               ${{ matrix['lv-version'] }}
           supported_bitness:            ${{ matrix.bitness }}
           relative_path:                ${{ github.workspace }}
+      - name: Enable dev mode for LabVIEW ${{ matrix['lv-version'] }} (${{ matrix.bitness }}-bit)
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File tools/icon-editor/Enable-DevMode.ps1 `
+            -Versions ${{ matrix['lv-version'] }} `
+            -Bitness ${{ matrix.bitness }} `
+            -Operation BuildPackage
       - name: Assert dev-mode token present (${{ matrix['lv-version'] }} x ${{ matrix.bitness }})
         shell: pwsh
         run: |
