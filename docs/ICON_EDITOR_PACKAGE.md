@@ -391,14 +391,15 @@ The helper:
    (optionally) fetches the packaged `lv_icon_*.lvlibp` artifacts.
 2. Regenerates release notes and updates the VIPB metadata with the new PowerShell
    helper.
-3. Rebuilds the VI package via `Invoke-IconEditorVipBuild` (g-cli toolchain by
+3. Rebuilds the VI package via `Invoke-IconEditorVipBuild` (vipm-cli toolchain by
    default) so the replay path matches the CI job.
 
 Pass `-LogPath path\to\log.txt` when you already have the log, and `-DownloadArtifacts`
 to pull the upstream PPLs automatically before the build.
 
-To experiment with alternate backends, supply `-BuildToolchain vipm` to route the
-package step through the VIPM provider, or pass `-BuildProvider <name>` to request a
+To experiment with alternate backends, supply `-BuildToolchain gcli` to route the
+package step through the legacy g-cli provider or `-BuildToolchain vipm` to exercise
+the classic VIPM file handler. You can still pass `-BuildProvider <name>` to request a
 specific provider registration (for example, a custom g-cli shim). The summary emitted
 by the script now records both the toolchain and resolved provider so you can confirm
 which backend executed the build. The generated `icon-editor/build@v1` manifest records
@@ -412,7 +413,7 @@ pwsh tools/icon-editor/Replay-ApplyVipcJob.ps1 -RunId <workflow-run-id> -JobName
 ```
 
 The script resolves the LabVIEW version/bitness from the matrix entry (or accepts them
-explicitly), reruns `.github/actions/apply-vipc/ApplyVIPC.ps1` using the VIPM provider,
+explicitly), reruns `.github/actions/apply-vipc/ApplyVIPC.ps1` using the VIPM CLI provider,
 and surfaces the same telemetry locally so you can investigate VIPM prompts or missing
 paths without re-queuing a self-hosted runner. Pass `-SkipExecution` to inspect the
 replay command without running it, or reuse `-LogPath` when you already downloaded the

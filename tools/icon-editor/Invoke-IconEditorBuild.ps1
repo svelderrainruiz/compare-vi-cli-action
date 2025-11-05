@@ -21,7 +21,7 @@ param(
   [switch]$RunUnitTests,
   [string]$ResultsRoot,
   [ValidateSet('gcli','vipm','vipm-cli')]
-  [string]$BuildToolchain = 'gcli',
+  [string]$BuildToolchain = 'vipm-cli',
   [string]$BuildProvider
 )
 

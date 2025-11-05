@@ -39,7 +39,7 @@
     JSON string representing the VIPB display information to update.
 
 .PARAMETER BuildToolchain
-    Toolchain requested for the package build (`gcli` or `vipm`). Defaults to `gcli`.
+    Toolchain requested for the package build (`gcli`, `vipm`, or `vipm-cli`). Defaults to `vipm-cli`.
 
 .PARAMETER BuildProvider
     Optional provider name routed to the selected toolchain (e.g. custom g-cli shim).
@@ -63,8 +63,8 @@ param (
     [string]$Commit,
     [string]$ReleaseNotesFile,
 
-    [ValidateSet("gcli","vipm")]
-    [string]$BuildToolchain = "gcli",
+    [ValidateSet("gcli","vipm","vipm-cli")]
+    [string]$BuildToolchain = "vipm-cli",
 
     [string]$BuildProvider,
 
@@ -164,6 +164,8 @@ try {
         $buildParams.GCliProviderName = $BuildProvider
     } elseif ($BuildToolchain -eq 'vipm' -and $BuildProvider) {
         $buildParams.VipmProviderName = $BuildProvider
+    } elseif ($BuildToolchain -eq 'vipm-cli' -and $BuildProvider) {
+        Write-Warning "BuildProvider parameter is ignored when using vipm-cli."
     }
 
     $buildResult = Invoke-IconEditorVipBuild @buildParams

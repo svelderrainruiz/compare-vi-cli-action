@@ -22,7 +22,8 @@ runs:
           -Build ${{ inputs.build }} `
           -Commit "${{ inputs.commit }}" `
           -ReleaseNotesFile "${{ inputs.release_notes_file }}" `
-          -DisplayInformationJSON '${{ inputs.display_information_json }}'
+          -DisplayInformationJSON '${{ inputs.display_information_json }}' `
+          -BuildToolchain "${{ inputs.toolchain }}"
 
     - name: Upload release notes
       uses: actions/upload-artifact@v4
@@ -62,3 +63,7 @@ inputs:
   display_information_json:
     description: 'DisplayInformation JSON string'
     required: true
+  toolchain:
+    description: 'Toolchain for the VI package build (gcli, vipm, vipm-cli)'
+    required: false
+    default: 'vipm-cli'

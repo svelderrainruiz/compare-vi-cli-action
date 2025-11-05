@@ -47,8 +47,8 @@
     resource/plugins folder.
 
 .PARAMETER BuildToolchain
-    Toolchain used to rebuild the VIP. Defaults to 'gcli'; pass 'vipm' to route
-    through the legacy VIPM provider or 'vipm-cli' to use the new CLI backend.
+    Toolchain used to rebuild the VIP. Defaults to 'vipm-cli'; pass 'gcli' to exercise
+    the legacy g-cli backend or 'vipm' to route through the classic VIPM handler.
 
 .PARAMETER BuildProvider
     Optional provider name forwarded to the selected toolchain (for example, a
@@ -77,7 +77,7 @@ param(
     [string]$DownloadDir = (Join-Path ([System.IO.Path]::GetTempPath()) ('replay-build-vip-' + [guid]::NewGuid().ToString('n'))),
 
     [ValidateSet('gcli','vipm','vipm-cli')]
-    [string]$BuildToolchain = 'gcli',
+    [string]$BuildToolchain = 'vipm-cli',
 
     [string]$BuildProvider,
 

@@ -68,6 +68,7 @@ jobs:
           vip_lv_version:               ${{ matrix['lv-version'] }}
           supported_bitness:            ${{ matrix.bitness }}
           relative_path:                ${{ github.workspace }}
+          toolchain:                    vipm-cli
       - name: Enable dev mode for LabVIEW ${{ matrix['lv-version'] }} (${{ matrix.bitness }}-bit)
         shell: pwsh
         run: |
@@ -327,6 +328,7 @@ jobs:
           commit: ${{ github.sha }}
           release_notes_file: ${{ github.workspace }}/Tooling/deployment/release_notes.md
           display_information_json: ${{ steps.display-info.outputs.json }}
+          toolchain: vipm-cli
       - uses: ./.github/actions/close-labview
         with:
           minimum_supported_lv_version: 2025
