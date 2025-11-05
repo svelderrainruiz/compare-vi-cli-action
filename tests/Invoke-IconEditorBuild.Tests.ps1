@@ -4,6 +4,13 @@ Describe 'Invoke-IconEditorBuild.ps1' -Tag 'IconEditor','Build','Unit' {
   BeforeAll {
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
     $script:scriptPath = Join-Path $script:repoRoot 'tools' 'icon-editor' 'Invoke-IconEditorBuild.ps1'
+    $script:targetsLocalPath = Join-Path $script:repoRoot 'configs' 'labview-targets.local.json'
+    $script:hadExistingTargetsLocal = Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf
+    if ($script:hadExistingTargetsLocal) {
+      $script:existingTargetsLocal = Get-Content -LiteralPath $script:targetsLocalPath -Raw
+    } else {
+      $script:existingTargetsLocal = $null
+    }
 
     Import-Module (Join-Path $script:repoRoot 'tools' 'VendorTools.psm1') -Force
     Import-Module (Join-Path $script:repoRoot 'tools' 'icon-editor' 'IconEditorDevMode.psm1') -Force
@@ -14,12 +21,23 @@ Describe 'Invoke-IconEditorBuild.ps1' -Tag 'IconEditor','Build','Unit' {
     Remove-Module IconEditorDevMode -Force -ErrorAction SilentlyContinue
     Remove-Module VendorTools -Force -ErrorAction SilentlyContinue
     Remove-Module IconEditorPackage -Force -ErrorAction SilentlyContinue
+    if ($script:hadExistingTargetsLocal) {
+      Set-Content -LiteralPath $script:targetsLocalPath -Value $script:existingTargetsLocal -Encoding utf8
+    } else {
+      if (Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf) {
+        Remove-Item -LiteralPath $script:targetsLocalPath -Force
+      }
+    }
   }
 
   BeforeEach {
     $workRoot = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString())
     $script:iconRoot = Join-Path $workRoot 'icon'
     $script:resultsRoot = Join-Path $workRoot 'results'
+
+    if (Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf) {
+      Remove-Item -LiteralPath $script:targetsLocalPath -Force
+    }
 
     $null = New-Item -ItemType Directory -Path $script:iconRoot -Force
     $null = New-Item -ItemType Directory -Path $script:resultsRoot -Force
@@ -152,6 +170,28 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $global:IconBuildRecorded = New-Object System.Collections.Generic.List[object]
 
     Mock Resolve-GCliPath { 'C:\Program Files\G-CLI\bin\g-cli.exe' }
+
+    Mock Assert-IconEditorDevelopmentToken {
+      param(
+        [int[]]$Versions,
+        [int[]]$Bitness,
+        [string]$RepoRoot,
+        [string]$IconEditorRoot,
+        [string]$Operation
+      )
+      $global:IconBuildRecorded.Add([pscustomobject]@{
+        Script    = 'AssertToken'
+        Arguments = [ordered]@{
+          Versions  = $Versions
+          Bitness   = $Bitness
+          Operation = $Operation
+        }
+      }) | Out-Null
+      return [pscustomobject]@{
+        Active  = $true
+        Entries = @()
+      }
+    }
 
     Mock -CommandName Get-IconEditorViServerSnapshot -ModuleName IconEditorPackage -MockWith {
       param([int]$Version, [int]$Bitness, [string]$WorkspaceRoot)
@@ -317,6 +357,9 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
   }
 
   AfterEach {
+    if (Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf) {
+      Remove-Item -LiteralPath $script:targetsLocalPath -Force
+    }
     Remove-Variable -Name IconBuildRecorded -Scope Global -ErrorAction SilentlyContinue
     Remove-Variable -Name IconBuildDevModeState -Scope Global -ErrorAction SilentlyContinue
   }
@@ -396,6 +439,84 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $manifest.packaging.requestedToolchain | Should -Be 'gcli'
     @($manifest.artifacts | Where-Object { $_.kind -eq 'vip' }).Count | Should -Be 0
     $manifest.packageSmoke.status | Should -Be 'skipped'
+  }
+
+  It 'honors labview-targets overrides for build and packaging targets' {
+    @'
+{
+  "schema": "labview/targets@v1",
+  "operations": {
+    "iconEditorBuildPackedLibs": [
+      { "version": 2023, "bitness": 64 }
+    ],
+    "iconEditorPackageVip": [
+      { "version": 2023, "bitness": 64 }
+    ]
+  }
+}
+'@ | Set-Content -LiteralPath $script:targetsLocalPath -Encoding utf8
+
+    { & $script:scriptPath `
+        -IconEditorRoot $script:iconRoot `
+        -ResultsRoot $script:resultsRoot `
+        -Major 2 -Minor 0 -Patch 0 -Build 1 -Commit 'cfgtest'
+    } | Should -Not -Throw
+
+    $buildCalls = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'Build_lvlibp.ps1' }
+    $buildCalls.Count | Should -Be 1
+    $buildArgs = @{}
+    for ($i = 0; $i -lt $buildCalls[0].Arguments.Count; $i += 2) {
+      $key = $buildCalls[0].Arguments[$i].TrimStart('-')
+      $value = if ($i + 1 -lt $buildCalls[0].Arguments.Count) { $buildCalls[0].Arguments[$i + 1] } else { $null }
+      $buildArgs[$key] = $value
+    }
+    $buildArgs['MinimumSupportedLVVersion'] | Should -Be '2023'
+    $buildArgs['SupportedBitness'] | Should -Be '64'
+
+    $closeCalls = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'Close_LabVIEW.ps1' }
+    $closeCalls.Count | Should -Be 2
+
+    $packageCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'build_vip.ps1' } | Select-Object -Last 1
+    $packageArgs = @{}
+    for ($i = 0; $i -lt $packageCall.Arguments.Count; $i += 2) {
+      $key = $packageCall.Arguments[$i].TrimStart('-')
+      $value = if ($i + 1 -lt $packageCall.Arguments.Count) { $packageCall.Arguments[$i + 1] } else { $null }
+      $packageArgs[$key] = $value
+    }
+    $packageArgs['MinimumSupportedLVVersion'] | Should -Be '2023'
+    $packageArgs['SupportedBitness'] | Should -Be '64'
+
+    Test-Path -LiteralPath (Join-Path $script:resultsRoot 'lv_icon_x64.lvlibp') | Should -BeTrue
+    Test-Path -LiteralPath (Join-Path $script:resultsRoot 'lv_icon_x86.lvlibp') | Should -BeFalse
+  }
+
+  It 'honors explicit build target override parameters' {
+    { & $script:scriptPath `
+        -IconEditorRoot $script:iconRoot `
+        -ResultsRoot $script:resultsRoot `
+        -BuildVersions 2023 `
+        -BuildBitness 64 `
+        -SkipPackaging
+    } | Should -Not -Throw
+
+    $buildCalls = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'Build_lvlibp.ps1' }
+    $buildCalls.Count | Should -Be 1
+    $buildArgs = @{}
+    for ($i = 0; $i -lt $buildCalls[0].Arguments.Count; $i += 2) {
+      $key = $buildCalls[0].Arguments[$i].TrimStart('-')
+      $value = if ($i + 1 -lt $buildCalls[0].Arguments.Count) { $buildCalls[0].Arguments[$i + 1] } else { $null }
+      $buildArgs[$key] = $value
+    }
+    $buildArgs['MinimumSupportedLVVersion'] | Should -Be '2023'
+    $buildArgs['SupportedBitness'] | Should -Be '64'
+
+    Test-Path -LiteralPath (Join-Path $script:resultsRoot 'lv_icon_x64.lvlibp') | Should -BeTrue
+    Test-Path -LiteralPath (Join-Path $script:resultsRoot 'lv_icon_x86.lvlibp') | Should -BeFalse
+
+    $enableCall = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'EnableDevMode' } | Select-Object -Last 1
+    $enableCall | Should -Not -BeNullOrEmpty
+    ($enableCall.Arguments.Versions -join ',') | Should -Be '2023'
+    ($enableCall.Arguments.Bitness -join ',')  | Should -Be '64'
   }
 
   It 'forwards toolchain overrides to the build script and manifest' {

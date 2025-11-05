@@ -78,7 +78,25 @@ param(
     [ValidateSet('gcli','vipm')]
     [string]$BuildToolchain = 'gcli',
 
-    [string]$BuildProvider
+    [string]$BuildProvider,
+
+    [switch]$Local,
+
+    [int]$VersionMajor,
+    [int]$VersionMinor,
+    [int]$VersionPatch,
+    [int]$VersionBuild,
+    [string]$VersionCommit,
+
+    [int]$PackedLibMinimumSupportedLVVersion = 2021,
+    [int[]]$PackedLibBitness = @(32, 64),
+    [switch]$SkipPackedLibRebuild,
+
+    [int]$PackageMinimumSupportedLVVersion = 2025,
+    [int]$PackageLabVIEWMinorRevision = 3,
+    [int]$PackageSupportedBitness = 64,
+
+    [switch]$SkipDevModeCheck
 )
 
 Set-StrictMode -Version Latest
@@ -156,6 +174,17 @@ if (-not (Test-Path -LiteralPath $iconEditorModulePath -PathType Leaf)) {
 }
 Import-Module $iconEditorModulePath -Force
 
+$devModeModulePath = Join-Path $workspaceRoot 'tools\icon-editor\IconEditorDevMode.psm1'
+if (-not (Test-Path -LiteralPath $devModeModulePath -PathType Leaf)) {
+    throw "IconEditorDevMode module not found at '$devModeModulePath'."
+}
+Import-Module $devModeModulePath -Force
+
+$iconEditorRoot = Join-Path $workspaceRoot 'vendor/icon-editor'
+if (-not (Test-Path -LiteralPath $iconEditorRoot -PathType Container)) {
+    throw "Icon editor root not found at '$iconEditorRoot'."
+}
+
 if ($IsWindows) {
     try {
         $script:viServerSnapshots = Get-IconEditorViServerSnapshots -Version 2021 -Bitness @(32, 64) -WorkspaceRoot $workspaceRoot
@@ -163,6 +192,13 @@ if ($IsWindows) {
         Write-Verbose ("Unable to capture VI Server snapshot: {0}" -f $_.Exception.Message)
         $script:viServerSnapshots = @()
     }
+}
+
+if ($Local -and ($RunId -or $LogPath)) {
+    throw 'When using -Local, omit -RunId and -LogPath.'
+}
+if ($Local -and $DownloadArtifacts) {
+    throw 'DownloadArtifacts is not supported when using -Local.'
 }
 
 if ($RunId) {
@@ -215,47 +251,147 @@ if ($RunId) {
         }
     }
 }
+$displayInfo = $null
+$intMajor = $null
+$intMinor = $null
+$intPatch = $null
+$intBuild = $null
+$effectiveCommit = $null
 
-if (-not $LogPath) {
-    throw "A log file is required. Provide -RunId or -LogPath."
+if (-not $Local) {
+    if (-not $LogPath) {
+        throw "A log file is required. Provide -RunId or -LogPath."
+    }
+
+    if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+        throw "Log file '$LogPath' does not exist."
+    }
+
+    $logLines = Get-Content -LiteralPath $LogPath
+
+    function Remove-AnsiEscapes {
+        param([string]$Text)
+        return ([regex]::Replace($Text, '\x1B\[[0-9;]*[A-Za-z]', ''))
+    }
+
+    $sanitizedLines = $logLines | ForEach-Object { Remove-AnsiEscapes $_ }
+    $jsonLine = $sanitizedLines | Where-Object { $_ -match 'DisplayInformationJSON' -or $_ -match 'display_information_json' } | Select-Object -Last 1
+    if (-not $jsonLine) {
+        throw "Could not find the display-information payload in '$LogPath'."
+    }
+
+    $jsonMatch = [regex]::Match($jsonLine, "-DisplayInformationJSON\s+'(?<payload>\{.+\})'")
+    if (-not $jsonMatch.Success) {
+        $jsonMatch = [regex]::Match($jsonLine, "display_information_json:\s+(?<payload>\{.+\})")
+    }
+    if (-not $jsonMatch.Success) {
+        throw "Failed to parse display-information JSON from '$jsonLine'."
+    }
+
+    $displayInfo = $jsonMatch.Groups['payload'].Value | ConvertFrom-Json
+
+    $packageVersion = $displayInfo.'Package Version'
+    if (-not $packageVersion) {
+        throw "DisplayInformation JSON did not contain 'Package Version'."
+    }
+
+    $intMajor = [int]$packageVersion.major
+    $intMinor = [int]$packageVersion.minor
+    $intPatch = [int]$packageVersion.patch
+    $intBuild = [int]$packageVersion.build
+
+    if (-not $PSBoundParameters.ContainsKey('VersionMajor')) { $VersionMajor = $intMajor }
+    if (-not $PSBoundParameters.ContainsKey('VersionMinor')) { $VersionMinor = $intMinor }
+    if (-not $PSBoundParameters.ContainsKey('VersionPatch')) { $VersionPatch = $intPatch }
+    if (-not $PSBoundParameters.ContainsKey('VersionBuild')) { $VersionBuild = $intBuild }
+
+    $effectiveCommit = if ($VersionCommit) { $VersionCommit } elseif ($runInfo -and $runInfo.PSObject.Properties['headSha']) { $runInfo.headSha } elseif ($RunId) { $RunId } else { 'replay' }
+} else {
+    foreach ($name in 'VersionMajor','VersionMinor','VersionPatch','VersionBuild') {
+        $value = Get-Variable -Name $name -ValueOnly
+        if ($null -eq $value) {
+            throw "Parameter '$name' is required when -Local is used."
+        }
+    }
+
+    $intMajor = [int]$VersionMajor
+    $intMinor = [int]$VersionMinor
+    $intPatch = [int]$VersionPatch
+    $intBuild = [int]$VersionBuild
+
+    $effectiveCommit = if ($VersionCommit) { $VersionCommit } else { 'local-replay' }
+
+    $displayInfo = [ordered]@{
+        'Package Version' = [ordered]@{
+            major = $intMajor
+            minor = $intMinor
+            patch = $intPatch
+            build = $intBuild
+        }
+        'Product Name' = ''
+        'Company Name' = ''
+        'Author Name (Person or Company)' = ''
+        'Product Homepage (URL)' = ''
+        'Legal Copyright' = ''
+        'License Agreement Name' = ''
+        'Product Description Summary' = ''
+        'Product Description' = ''
+        'Release Notes - Change Log' = ''
+    } | ConvertTo-Json -Depth 5 | ConvertFrom-Json
 }
 
-if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
-    throw "Log file '$LogPath' does not exist."
+if ($PSBoundParameters.ContainsKey('VersionCommit')) {
+    $effectiveCommit = $VersionCommit
 }
 
-$logLines = Get-Content -LiteralPath $LogPath
-
-function Remove-AnsiEscapes {
-    param([string]$Text)
-    return ([regex]::Replace($Text, '\x1B\[[0-9;]*[A-Za-z]', ''))
+if (-not $SkipDevModeCheck) {
+    Assert-IconEditorDevelopmentToken `
+        -RepoRoot $workspaceRoot `
+        -IconEditorRoot $iconEditorRoot `
+        -Versions @([int]$PackageMinimumSupportedLVVersion) `
+        -Bitness @([int]$PackageSupportedBitness) `
+        -Operation 'Replay-BuildVip' | Out-Null
 }
 
-$sanitizedLines = $logLines | ForEach-Object { Remove-AnsiEscapes $_ }
-$jsonLine = $sanitizedLines | Where-Object { $_ -match 'DisplayInformationJSON' -or $_ -match 'display_information_json' } | Select-Object -Last 1
-if (-not $jsonLine) {
-    throw "Could not find the display-information payload in '$LogPath'."
-}
+if ($Local -and -not $SkipPackedLibRebuild) {
+    $replayPacked = Join-Path $workspaceRoot 'tools/icon-editor/Replay-BuildLvlibpJob.ps1'
+    if (-not (Test-Path -LiteralPath $replayPacked -PathType Leaf)) {
+        throw "Replay-BuildLvlibpJob.ps1 not found at '$replayPacked'."
+    }
 
-$jsonMatch = [regex]::Match($jsonLine, "-DisplayInformationJSON\s+'(?<payload>\{.+\})'")
-if (-not $jsonMatch.Success) {
-    $jsonMatch = [regex]::Match($jsonLine, "display_information_json:\s+(?<payload>\{.+\})")
-}
-if (-not $jsonMatch.Success) {
-    throw "Failed to parse display-information JSON from '$jsonLine'."
-}
+    if (-not $SkipDevModeCheck) {
+        Assert-IconEditorDevelopmentToken `
+            -RepoRoot $workspaceRoot `
+            -IconEditorRoot $iconEditorRoot `
+            -Versions @([int]$PackedLibMinimumSupportedLVVersion) `
+            -Bitness ($PackedLibBitness | ForEach-Object { [int]$_ }) `
+            -Operation 'Replay-BuildLvlibp' | Out-Null
+    }
 
-$displayInfo = $jsonMatch.Groups['payload'].Value | ConvertFrom-Json
+    foreach ($bit in $PackedLibBitness) {
+        $args = @(
+            '-NoLogo','-NoProfile','-File',$replayPacked,
+            '-Local',
+            '-Bitness', "$bit",
+            '-MinimumSupportedLVVersion', "$PackedLibMinimumSupportedLVVersion",
+            '-Major', "$intMajor",
+            '-Minor', "$intMinor",
+            '-Patch', "$intPatch",
+            '-Build', "$intBuild",
+            '-Commit', $effectiveCommit
+        )
+        $replayResult = Invoke-ExternalPwsh -Arguments $args
+        if ($replayResult.ExitCode -ne 0) {
+            throw "Packed library replay for {0}-bit failed:`n{1}{2}" -f $bit, $replayResult.StdOut, $replayResult.StdErr
+        }
 
-$packageVersion = $displayInfo.'Package Version'
-if (-not $packageVersion) {
-    throw "DisplayInformation JSON did not contain 'Package Version'."
+        $suffix = if ($bit -eq 32) { 'x86' } else { 'x64' }
+        $artifactPath = Join-Path $workspaceRoot ("vendor/icon-editor/resource/plugins/lv_icon_{0}.lvlibp" -f $suffix)
+        if (Test-Path -LiteralPath $artifactPath) {
+            $script:stagedArtifacts.Add($artifactPath) | Out-Null
+        }
+    }
 }
-
-$intMajor = [int]$packageVersion.major
-$intMinor = [int]$packageVersion.minor
-$intPatch = [int]$packageVersion.patch
-$intBuild = [int]$packageVersion.build
 
 Push-Location $workspaceRoot
 try {
@@ -287,16 +423,16 @@ try {
         Write-Host "Updating VIPB metadata via PowerShell helper"
         $updateResult = Invoke-ExternalPwsh -Arguments @(
             '-NoLogo','-NoProfile','-File','.github/actions/modify-vipb-display-info/Update-VipbDisplayInfo.ps1',
-            '-SupportedBitness','64',
+            '-SupportedBitness',"$PackageSupportedBitness",
             '-RelativePath',(Get-Location).Path,
             '-VIPBPath',$vipbRelative,
-            '-MinimumSupportedLVVersion','2025',
-            '-LabVIEWMinorRevision','3',
+            '-MinimumSupportedLVVersion',"$PackageMinimumSupportedLVVersion",
+            '-LabVIEWMinorRevision',"$PackageLabVIEWMinorRevision",
             '-Major',$intMajor,
             '-Minor',$intMinor,
             '-Patch',$intPatch,
             '-Build',$intBuild,
-            '-Commit',($RunId ?? 'local-replay'),
+            '-Commit',$effectiveCommit,
             '-ReleaseNotesFile',$releaseNotesArgument,
             '-DisplayInformationJSON',($displayInfo | ConvertTo-Json -Depth 5)
         )
@@ -315,9 +451,9 @@ try {
             Minor                     = $intMinor
             Patch                     = $intPatch
             Build                     = $intBuild
-            SupportedBitness          = 64
-            MinimumSupportedLVVersion = 2025
-            LabVIEWMinorRevision      = 3
+            SupportedBitness          = $PackageSupportedBitness
+            MinimumSupportedLVVersion = $PackageMinimumSupportedLVVersion
+            LabVIEWMinorRevision      = $PackageLabVIEWMinorRevision
             ReleaseNotesPath          = $releaseNotesFull
             WorkspaceRoot             = $workspaceRoot
             Provider                  = $BuildToolchain
@@ -339,11 +475,11 @@ try {
     }
 
     if ($CloseLabVIEW) {
-        Write-Host "Closing LabVIEW 2025 (64-bit)"
+        Write-Host ("Closing LabVIEW {0} ({1}-bit)" -f $PackageMinimumSupportedLVVersion, $PackageSupportedBitness)
         $closeResult = Invoke-ExternalPwsh -Arguments @(
             '-NoLogo','-NoProfile','-File','.github/actions/close-labview/Close_LabVIEW.ps1',
-            '-MinimumSupportedLVVersion','2025',
-            '-SupportedBitness','64'
+            '-MinimumSupportedLVVersion',"$PackageMinimumSupportedLVVersion",
+            '-SupportedBitness',"$PackageSupportedBitness"
         )
         if ($closeResult.ExitCode -ne 0) {
             Write-Warning "close-labview script reported an error:`n$($closeResult.StdOut)$($closeResult.StdErr)"

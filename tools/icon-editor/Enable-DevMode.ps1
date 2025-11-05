@@ -32,7 +32,19 @@ if ($Operation) {
   $invokeParams.Operation = $Operation
 }
 
-$state = Enable-IconEditorDevelopmentMode @invokeParams
+$stateResult = Enable-IconEditorDevelopmentMode @invokeParams
+
+if ($stateResult -is [System.Array]) {
+  $state = $stateResult |
+    Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('Path').Count -gt 0 } |
+    Select-Object -Last 1
+} else {
+  $state = $stateResult
+}
+
+if (-not $state -or -not ($state.PSObject.Properties.Match('Path').Count -gt 0)) {
+  throw 'Enable-IconEditorDevelopmentMode did not return a dev-mode state payload.'
+}
 
 Write-Host "Icon editor development mode enabled."
 Write-Host ("State file: {0}" -f $state.Path)

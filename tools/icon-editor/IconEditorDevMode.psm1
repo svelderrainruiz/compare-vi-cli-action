@@ -403,6 +403,13 @@ function Enable-IconEditorDevelopmentMode {
     }
   }
 
+  Assert-IconEditorDevelopmentToken `
+    -RepoRoot $RepoRoot `
+    -IconEditorRoot $IconEditorRoot `
+    -Versions $versionList `
+    -Bitness $bitnessList `
+    -Operation $Operation | Out-Null
+
   return Set-IconEditorDevModeState -RepoRoot $RepoRoot -Active $true -Source ("Enable-IconEditorDevelopmentMode:{0}" -f $Operation)
 }
 
@@ -615,6 +622,53 @@ function Test-IconEditorDevelopmentMode {
   }
 }
 
+function Assert-IconEditorDevelopmentToken {
+  param(
+    [string]$RepoRoot,
+    [string]$IconEditorRoot,
+    [int[]]$Versions,
+    [int[]]$Bitness,
+    [string]$Operation = 'BuildPackage'
+  )
+
+  if (-not $Versions -or $Versions.Count -eq 0) {
+    throw 'No LabVIEW versions supplied for the development-mode token check.'
+  }
+  if (-not $Bitness -or $Bitness.Count -eq 0) {
+    throw 'No LabVIEW bitness values supplied for the development-mode token check.'
+  }
+
+  $check = Test-IconEditorDevelopmentMode `
+    -RepoRoot $RepoRoot `
+    -IconEditorRoot $IconEditorRoot `
+    -Versions $Versions `
+    -Bitness $Bitness
+
+  $missingInstalls = @($check.Entries | Where-Object { -not $_.Present })
+  if ($missingInstalls.Count -gt 0) {
+    $missingText = ($missingInstalls | ForEach-Object {
+        "LabVIEW {0} ({1}-bit)" -f $_.Version, $_.Bitness
+      }) -join ', '
+    throw ("Required LabVIEW installation(s) missing for {0}: {1}. Install the listed versions before continuing." -f $Operation, $missingText)
+  }
+
+  $missingToken = @($check.Entries | Where-Object { $_.Present -and -not $_.ContainsIconEditorPath })
+  if ($missingToken.Count -gt 0) {
+    $details = $missingToken | ForEach-Object {
+      $iniPath = if ($_.LabVIEWIniPath) { $_.LabVIEWIniPath } else { '<unknown ini path>' }
+      "LabVIEW {0} ({1}-bit) – LocalHost.LibraryPaths token missing or does not include the icon-editor root (INI: {2})" -f $_.Version, $_.Bitness, $iniPath
+    }
+    $message = @(
+      'LabVIEW LocalHost.LibraryPaths token not detected for all requested targets.'
+      'Run the dev-mode enable flow (Enable-IconEditorDevelopmentMode or ApplyVIPC) before continuing.'
+      ($details -join [Environment]::NewLine)
+    ) -join [Environment]::NewLine
+    throw $message
+  }
+
+  return $check
+}
+
 Export-ModuleMember -Function `
   Resolve-IconEditorRepoRoot, `
   Resolve-IconEditorRoot, `
@@ -628,4 +682,5 @@ Export-ModuleMember -Function `
   Get-IconEditorDevModePolicy, `
   Get-IconEditorDevModePolicyEntry, `
   Get-IconEditorDevModeLabVIEWTargets, `
-  Test-IconEditorDevelopmentMode
+  Test-IconEditorDevelopmentMode, `
+  Assert-IconEditorDevelopmentToken

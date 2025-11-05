@@ -73,11 +73,16 @@ function Get-LabVIEWOperationTargets {
   if (-not $config) { return @() }
   if (-not $config.PSObject.Properties.Name -contains 'operations') { return @() }
 
-  $operationEntry = $config.operations.$Operation
-  if (-not $operationEntry) { return @() }
+  $operationsNode = $config.operations
+  if (-not $operationsNode) { return @() }
+
+  $operationProperty = $operationsNode.PSObject.Properties | Where-Object { $_.Name -eq $Operation } | Select-Object -First 1
+  if (-not $operationProperty) { return @() }
+
+  $operationEntry = $operationProperty.Value
 
   $targets = New-Object System.Collections.Generic.List[pscustomobject]
-  foreach ($entry in $operationEntry) {
+  foreach ($entry in @($operationEntry)) {
     if (-not $entry) { continue }
     $version = $entry.version
     $bitness = $entry.bitness
