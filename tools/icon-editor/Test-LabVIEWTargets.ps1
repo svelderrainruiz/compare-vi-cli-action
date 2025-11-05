@@ -2,8 +2,7 @@
 
 param(
   [string]$Operation = 'applyVipc',
-  [int]$RequiredVersion,
-  [int]$RequiredBitness
+  [switch]$Require2023x64
 )
 
 Set-StrictMode -Version Latest
@@ -24,21 +23,17 @@ Import-Module $vendorModule -Force
 $targets = Get-LabVIEWOperationTargets -Operation $Operation -RepoRoot $repoRoot
 if (-not $targets -or $targets.Count -eq 0) {
   Write-Warning ("No LabVIEW targets defined for operation '{0}'. Check configs/labview-targets.json." -f $Operation)
-  return
-}
-
-Write-Host ("Targets for '{0}':" -f $Operation) -ForegroundColor Cyan
-$targets | ForEach-Object {
-  Write-Host ("  - Version {0}, {1}-bit" -f $_.Version, $_.Bitness)
-}
-
-if ($PSBoundParameters.ContainsKey('RequiredVersion')) {
-  if (-not $PSBoundParameters.ContainsKey('RequiredBitness')) {
-    throw 'Specify both -RequiredVersion and -RequiredBitness to enforce a target check.'
+} else {
+  Write-Host ("Targets for '{0}':" -f $Operation) -ForegroundColor Cyan
+  $targets | ForEach-Object {
+    Write-Host ("  - Version {0}, {1}-bit" -f $_.Version, $_.Bitness)
   }
 
-  $match = $targets | Where-Object { $_.Version -eq $RequiredVersion -and $_.Bitness -eq $RequiredBitness }
-  if (-not $match) {
-    throw ("Operation '{0}' does not include LabVIEW {1} ({2}-bit). Update configs/labview-targets.json before continuing." -f $Operation, $RequiredVersion, $RequiredBitness)
+  if ($Require2023x64.IsPresent) {
+    $hasTarget = $targets | Where-Object { $_.Version -eq 2023 -and $_.Bitness -eq 64 }
+    if (-not $hasTarget) {
+      throw "Operation '$Operation' does not include LabVIEW 2023 (64-bit). Update configs/labview-targets.local.json before continuing."
+    }
   }
 }
+

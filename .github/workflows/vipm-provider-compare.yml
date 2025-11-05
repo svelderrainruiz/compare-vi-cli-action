@@ -6,67 +6,19 @@ on:
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
-    inputs:
-      providers:
-        description: 'Comma-separated provider list (defaults to vipm only)'
-        required: false
-      scenario_file:
-        description: 'JSON scenario file relative to the repo root'
-        required: false
-      skip_missing_providers:
-        description: 'Set to 0/false to record missing providers instead of skipping them'
-        required: false
 
 jobs:
   compare:
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: self-hosted
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Run VIPM provider comparison
         shell: pwsh
-        env:
-          INPUT_PROVIDERS: ${{ github.event.inputs.providers }}
-          INPUT_SCENARIO_FILE: ${{ github.event.inputs.scenario_file }}
-          INPUT_SKIP_MISSING: ${{ github.event.inputs.skip_missing_providers }}
         run: |
-          $scriptPath = Join-Path $PWD 'tools' 'Vipm' 'Invoke-ProviderComparison.ps1'
-          $args = @()
-
-          if ($env:INPUT_PROVIDERS) {
-            $providers = $env:INPUT_PROVIDERS -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-            if ($providers.Count -gt 0) {
-              $args += '-Providers'
-              $args += $providers
-            }
-          }
-
-          if ($env:INPUT_SCENARIO_FILE) {
-            $args += '-ScenarioFile'
-            $args += $env:INPUT_SCENARIO_FILE
-          }
-
-          $skipMissing = $true
-          if ($env:INPUT_SKIP_MISSING) {
-            if ($env:INPUT_SKIP_MISSING -match '^(0|false)$') {
-              $skipMissing = $false
-            }
-          }
-
-          if ($skipMissing) {
-            $args += '-SkipMissingProviders'
-          }
-
-          & pwsh -NoLogo -NoProfile -File $scriptPath @args
+          pwsh -File tools/Vipm/Invoke-ProviderComparison.ps1 -SkipMissingProviders
       - name: Validate telemetry
         shell: pwsh
         run: |
           pwsh -File tools/Vipm/Test-ProviderTelemetry.ps1 -TreatMissingAsWarning
-      - name: Upload provider telemetry
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vipm-provider-telemetry
-          path: tests/results/_agent/vipm-provider-matrix.json
-          if-no-files-found: error
 

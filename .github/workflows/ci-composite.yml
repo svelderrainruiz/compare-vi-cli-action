@@ -85,16 +85,13 @@ jobs:
         shell: pwsh
         run: |
           Import-Module "$PWD\tools\VendorTools.psm1" -Force
-          $baseTargets = @(
-            [pscustomobject]@{ Version = 2021; Bitness = 32 },
-            [pscustomobject]@{ Version = 2021; Bitness = 64 },
-            [pscustomobject]@{ Version = 2025; Bitness = 64 }
-          )
           $targets = Get-LabVIEWOperationTargets -Operation 'applyVipc'
-          if ($targets) {
-            $targets = @($targets + $baseTargets)
-          } else {
-            $targets = $baseTargets
+          if (-not $targets -or $targets.Count -eq 0) {
+            $targets = @(
+              [pscustomobject]@{ Version = 2021; Bitness = 32 },
+              [pscustomobject]@{ Version = 2021; Bitness = 64 },
+              [pscustomobject]@{ Version = 2025; Bitness = 64 }
+            )
           }
           $dedup = @{}
           $include = @()
