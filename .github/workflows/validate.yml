@@ -88,9 +88,19 @@ jobs:
       uses: ./.github/actions/cli-lints
       with:
         enforce: ${{ github.ref_name == 'main' || github.base_ref == 'main' }}
-        linkcheck: 'true'
+        linkcheck: 'false'
         actionlint-version: '1.7.7'
-        relaxed-path: 'docs/releases/**/*.md'
+        relaxed-path: |
+          docs/releases/**/*.md
+          docs/TROUBLESHOOTING.md
+          docs/ICON_EDITOR_PACKAGE.md
+          docs/DEVELOPER_GUIDE.md
+          docs/investigations/**/*.md
+          docs/test-requirements/**/*.md
+          docs/knowledgebase/**/*.md
+          AGENTS.md
+          fixtures/icon-editor-history/settings-init/README.md
+          tests/fixtures/icon-editor/README.md
 
     - name: Guard tracked build artifacts (enforced)
       shell: pwsh

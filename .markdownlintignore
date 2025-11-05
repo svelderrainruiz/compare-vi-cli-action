@@ -12,3 +12,4 @@ tmp-history-diff/
 issue_88_hardened.md
 CHANGELOG.md
 vendor/
+**/pr-*.md

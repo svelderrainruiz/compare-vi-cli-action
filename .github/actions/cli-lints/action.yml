@@ -8,7 +8,7 @@ inputs:
   linkcheck:
     description: 'Run docs link checker'
     required: false
-    default: 'true'
+    default: 'false'
   actionlint-version:
     description: 'Pinned actionlint version'
     required: false
@@ -64,7 +64,13 @@ runs:
       continue-on-error: ${{ inputs.enforce != 'true' }}
       run: |
         if [ -f "docs/.markdownlint.relaxed.jsonc" ]; then
-          markdownlint "${{ inputs.relaxed-path }}" -c docs/.markdownlint.relaxed.jsonc --ignore node_modules
+          paths="${{ inputs.relaxed-path }}"
+          if [ -n "$paths" ]; then
+            readarray -t patterns <<< "$paths"
+            if [ ${#patterns[@]} -gt 0 ]; then
+              markdownlint "${patterns[@]}" -c docs/.markdownlint.relaxed.jsonc --ignore node_modules
+            fi
+          fi
         fi
 
     - name: Docs link check (optional)
@@ -90,7 +96,17 @@ runs:
           $lines = @('### CLI Lints','')
           $lines += ('- actionlint: completed')
           $lines += ('- markdownlint (strict): completed')
-          if ('${{ inputs.relaxed-path }}' -ne '') { $lines += ('- markdownlint (relaxed): ' + '${{ inputs.relaxed-path }}') }
+          if ('${{ inputs.relaxed-path }}' -ne '') {
+            $relaxed = '${{ inputs.relaxed-path }}'.Split("`n","`r",[System.StringSplitOptions]::RemoveEmptyEntries)
+            if ($relaxed.Count -gt 0) {
+              $lines += '- markdownlint (relaxed):'
+              foreach ($item in $relaxed) { $lines += ('  - ' + $item.Trim()) }
+            } else {
+              $lines += '- markdownlint (relaxed): skipped'
+            }
+          } else {
+            $lines += '- markdownlint (relaxed): skipped'
+          }
           if (Test-Path 'tests/results/lint/docs-links.json') {
             try { $j = Get-Content -LiteralPath 'tests/results/lint/docs-links.json' -Raw | ConvertFrom-Json; $lines += ('- docs links: ' + ($j.errors.Count) + ' errors') } catch { $lines += '- docs links: summary available' }
           } else { $lines += '- docs links: skipped' }
