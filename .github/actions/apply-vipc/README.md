@@ -1,6 +1,6 @@
 # Apply VIPC Dependencies 📦
 
-Ensure a runner has all required LabVIEW packages installed before building or testing. This composite action calls **`ApplyVIPC.ps1`** to apply a `.vipc` container through **g-cli**. The action automatically detects the `runner_dependencies.vipc` file located in this directory.
+Ensure a runner has all required LabVIEW packages installed before building or testing. This composite action calls **`ApplyVIPC.ps1`** to apply a `.vipc` container through the **VIPM CLI** (`vipm`). The action automatically detects the `runner_dependencies.vipc` file located in this directory.
 
 ---
 
@@ -17,11 +17,10 @@ Ensure a runner has all required LabVIEW packages installed before building or t
 ## Prerequisites
 | Requirement | Notes |
 |-------------|-------|
-| **Windows runner** | LabVIEW and g-cli are Windows only. |
+| **Windows runner** | LabVIEW and the VIPM CLI are Windows only. |
 | **LabVIEW** `>= 2021` | Must match both `minimum_supported_lv_version` and `vip_lv_version`. |
-| **g-cli** in `PATH` | Preferred backend. Install from NI Package Manager or include the executable in the runner image. |
-| **JKI VIPM** | Only required when falling back to the VIPM provider. |
-| **PowerShell 7** | Composite steps use PowerShell Core (`pwsh`). |
+| **VIPM CLI (`vipm`)** | Install VIPM with CLI support and ensure the `vipm` executable is on `PATH`, or set `VIPM_CLI_PATH`. |
+| **PowerShell 7** | Composite steps use PowerShell Core (`pwsh`). |
 
 ---
 
@@ -32,7 +31,7 @@ Ensure a runner has all required LabVIEW packages installed before building or t
 | `vip_lv_version` | **Yes** | `2021` | LabVIEW version used to apply the `.vipc` file. Usually the same as `minimum_supported_lv_version`. |
 | `supported_bitness` | **Yes** | `32` or `64` | LabVIEW bitness to target. |
 | `relative_path` | **Yes** | `${{ github.workspace }}` | Root path of the repository on disk. |
-| `toolchain` | No | `gcli`, `vipm`, `auto` | Chooses the provider (`auto` tries g-cli first, then falls back to VIPM). |
+| `toolchain` | No | `vipm-cli` | Provider to use (fixed to `vipm-cli`). |
 
 ---
 
@@ -58,16 +57,15 @@ The CI pipeline applies these dependencies across multiple LabVIEW versions—20
 ## How it works
 1. **Checkout** – pulls the repository to ensure scripts and the `.vipc` file are present.
 2. **PowerShell wrapper** – executes `ApplyVIPC.ps1` with the provided inputs.
-3. **Provider selection** - `ApplyVIPC.ps1` attempts to apply the `.vipc` container via **g-cli**; if g-cli is unavailable it falls back to the VIPM provider. You can force a specific backend through the `toolchain` input.
-4. **Failure propagation** – any error in path resolution, g-cli, or the script causes the step (and job) to fail.
+3. **Provider selection** - `ApplyVIPC.ps1` invokes the **VIPM CLI** to apply the `.vipc` container. The `toolchain` input is exposed for compatibility but only `vipm-cli` is supported.
+4. **Failure propagation** – any error in path resolution, the VIPM CLI call, or the script causes the step (and job) to fail.
 
 ---
 
 ## Troubleshooting
 | Symptom | Hint |
 |---------|------|
-| *g-cli executable not found* | Ensure g-cli is installed and on `PATH`, or set `toolchain: vipm` to route through VIPM. |
-| *VIPM executable not found* | Set `toolchain: gcli` to bypass VIPM or configure `VIPM_PATH`/`VIPM_EXE_PATH`. |
+| *VIPM CLI executable not found* | Install VIPM (with CLI support) and ensure `vipm` is on `PATH`, or set `VIPM_CLI_PATH` to the executable. |
 | *`.vipc` file not found* | Ensure `runner_dependencies.vipc` exists in this action directory. |
 | *LabVIEW version mismatch* | Make sure the installed LabVIEW version matches both version inputs. |
 
@@ -75,3 +73,5 @@ The CI pipeline applies these dependencies across multiple LabVIEW versions—20
 
 ## License
 This directory inherits the root repository’s license (MIT, unless otherwise noted).
+
+

@@ -31,6 +31,6 @@ inputs:
     description: 'Workspace root path'
     required: true
   toolchain:
-    description: 'Toolchain to apply VIPC dependencies (auto, gcli, vipm, vipm-cli)'
+    description: 'Toolchain to apply VIPC dependencies (vipm-cli only)'
     required: false
-    default: 'auto'
+    default: 'vipm-cli'

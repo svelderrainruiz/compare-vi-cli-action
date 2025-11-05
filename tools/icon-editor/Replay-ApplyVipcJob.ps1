@@ -67,8 +67,8 @@ param(
 
     [int]$SupportedBitness,
 
-    [ValidateSet('auto','gcli','vipm','vipm-cli')]
-    [string]$Toolchain,
+    [ValidateSet('vipm-cli')]
+    [string]$Toolchain = 'vipm-cli',
 
     [switch]$SkipExecution
 )
