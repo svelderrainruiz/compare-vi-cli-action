@@ -14,6 +14,14 @@ Describe 'VendorTools LabVIEW helpers' {
     } else {
       $script:existingLocalConfig = $null
     }
+
+    $script:targetsLocalPath = Join-Path $script:repoRoot 'configs/labview-targets.local.json'
+    $script:hadExistingTargetsLocal = Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf
+    if ($script:hadExistingTargetsLocal) {
+      $script:existingTargetsLocal = Get-Content -LiteralPath $script:targetsLocalPath -Raw
+    } else {
+      $script:existingTargetsLocal = $null
+    }
   }
 
   BeforeEach {
@@ -39,6 +47,9 @@ Describe 'VendorTools LabVIEW helpers' {
     if ($script:localConfigPath -and (Test-Path -LiteralPath $script:localConfigPath -PathType Leaf)) {
       Remove-Item -LiteralPath $script:localConfigPath -Force
     }
+    if ($script:targetsLocalPath -and (Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf)) {
+      Remove-Item -LiteralPath $script:targetsLocalPath -Force
+    }
   }
 
   AfterAll {
@@ -47,6 +58,14 @@ Describe 'VendorTools LabVIEW helpers' {
     } else {
       if ($script:localConfigPath -and (Test-Path -LiteralPath $script:localConfigPath -PathType Leaf)) {
         Remove-Item -LiteralPath $script:localConfigPath -Force
+      }
+    }
+
+    if ($script:hadExistingTargetsLocal) {
+      Set-Content -LiteralPath $script:targetsLocalPath -Value $script:existingTargetsLocal -Encoding utf8
+    } else {
+      if ($script:targetsLocalPath -and (Test-Path -LiteralPath $script:targetsLocalPath -PathType Leaf)) {
+        Remove-Item -LiteralPath $script:targetsLocalPath -Force
       }
     }
   }
@@ -75,6 +94,26 @@ Describe 'VendorTools LabVIEW helpers' {
 
     $sccValue = Get-LabVIEWIniValue -LabVIEWExePath $fakeExe -Key 'SCCUseInLabVIEW'
     $sccValue | Should -Be 'True'
+  }
+
+  It 'reads applyVipc targets from labview-targets config' {
+    $tempConfig = @'
+{
+  "schema": "labview/targets@v1",
+  "operations": {
+    "applyVipc": [
+      { "version": 2023, "bitness": 64 }
+    ]
+  }
+}
+'@
+    Set-Content -LiteralPath $script:targetsLocalPath -Value $tempConfig -Encoding utf8
+
+    $targets = Get-LabVIEWOperationTargets -Operation 'applyVipc' -RepoRoot $script:repoRoot
+    $targets | Should -Not -BeNullOrEmpty
+    $targets.Count | Should -Be 1
+    $targets[0].Version | Should -Be 2023
+    $targets[0].Bitness | Should -Be 64
   }
 
   It 'includes version-scoped executables when present' {

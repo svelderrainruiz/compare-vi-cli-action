@@ -214,18 +214,11 @@ jobs:
 
   apply-deps:
     name: Apply VIPC Dependencies
-    needs: changes
-    if: needs.changes.outputs.vipc == 'true'
+    needs: [changes, apply-deps-matrix]
+    if: needs.changes.outputs.vipc == 'true' && needs.apply-deps-matrix.outputs.matrix != ''
     runs-on: self-hosted-windows-lv
     strategy:
-      matrix:
-        include:
-          - lv-version: "2021"
-            bitness: "32"
-          - lv-version: "2021"
-            bitness: "64"
-          - lv-version: "2025"
-            bitness: "64"
+      matrix: ${{ fromJson(needs.apply-deps-matrix.outputs.matrix) }}
     steps:
       - uses: ./.github/actions/apply-vipc
         with:
@@ -233,6 +226,49 @@ jobs:
           vip_lv_version:               ${{ matrix['lv-version'] }}
           supported_bitness:            ${{ matrix.bitness }}
           relative_path:                ${{ github.workspace }}
+
+  apply-deps-matrix:
+    name: Resolve Apply Targets
+    needs: changes
+    if: needs.changes.outputs.vipc == 'true'
+    runs-on: self-hosted-windows-lv
+    outputs:
+      matrix: ${{ steps.compute.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compute apply-vipc targets
+        id: compute
+        shell: pwsh
+        run: |
+          Import-Module "$PWD\tools\VendorTools.psm1" -Force
+          $targets = Get-LabVIEWOperationTargets -Operation 'applyVipc'
+          if (-not $targets -or $targets.Count -eq 0) {
+            $targets = @(
+              [pscustomobject]@{ Version = 2021; Bitness = 32 },
+              [pscustomobject]@{ Version = 2021; Bitness = 64 },
+              [pscustomobject]@{ Version = 2025; Bitness = 64 }
+            )
+          }
+          $dedup = @{}
+          $include = @()
+          foreach ($target in $targets) {
+            if (-not $target.Version -or -not $target.Bitness) { continue }
+            $key = "{0}-{1}" -f $target.Version,$target.Bitness
+            if ($dedup.ContainsKey($key)) { continue }
+            $dedup[$key] = $true
+            $include += @{
+              "lv-version" = [string]$target.Version
+              "bitness"    = [string]$target.Bitness
+            }
+          }
+          if ($include.Count -eq 0) {
+            $include = @(@{ "lv-version" = "2021"; "bitness" = "64" })
+          }
+          $matrix = @{ include = $include }
+          $json = $matrix | ConvertTo-Json -Compress
+          "matrix=$json" >> $env:GITHUB_OUTPUT
 
   version:
     name: Compute Version

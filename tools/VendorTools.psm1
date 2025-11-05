@@ -28,6 +28,69 @@ function Get-LabVIEWConfigObjects {
   return $configs.ToArray()
 }
 
+function Get-LabVIEWTargetsConfigPath {
+  param([string]$RepoRoot = (Resolve-RepoRoot))
+
+  $base = Join-Path $RepoRoot 'configs'
+  $local = Join-Path $base 'labview-targets.local.json'
+  if (Test-Path -LiteralPath $local -PathType Leaf) { return $local }
+
+  return (Join-Path $base 'labview-targets.json')
+}
+
+function Get-LabVIEWTargetsConfig {
+  param(
+    [string]$RepoRoot = (Resolve-RepoRoot),
+    [switch]$ThrowIfMissing
+  )
+
+  $path = Get-LabVIEWTargetsConfigPath -RepoRoot $RepoRoot
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    if ($ThrowIfMissing) {
+      throw "LabVIEW targets config not found at '$path'."
+    }
+    return $null
+  }
+
+  $json = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+  if ([string]::IsNullOrWhiteSpace($json)) {
+    if ($ThrowIfMissing) {
+      throw "LabVIEW targets config '$path' is empty."
+    }
+    return $null
+  }
+
+  return $json | ConvertFrom-Json -Depth 6
+}
+
+function Get-LabVIEWOperationTargets {
+  param(
+    [Parameter(Mandatory)][string]$Operation,
+    [string]$RepoRoot = (Resolve-RepoRoot)
+  )
+
+  $config = Get-LabVIEWTargetsConfig -RepoRoot $RepoRoot
+  if (-not $config) { return @() }
+  if (-not $config.PSObject.Properties.Name -contains 'operations') { return @() }
+
+  $operationEntry = $config.operations.$Operation
+  if (-not $operationEntry) { return @() }
+
+  $targets = New-Object System.Collections.Generic.List[pscustomobject]
+  foreach ($entry in $operationEntry) {
+    if (-not $entry) { continue }
+    $version = $entry.version
+    $bitness = $entry.bitness
+    if (-not $version -or -not $bitness) { continue }
+    $targets.Add([pscustomobject]@{
+        Version = [int]$version
+        Bitness = [int]$bitness
+    }) | Out-Null
+  }
+
+  return $targets.ToArray()
+}
+
 function Get-VersionedConfigValue {
   param(
     $Config,

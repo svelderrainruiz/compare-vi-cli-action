@@ -45,7 +45,7 @@ Describe 'Update-VipbDisplayInfo.ps1' {
         } | ConvertTo-Json -Depth 5
 
         & $script:ScriptPath `
-            -MinimumSupportedLVVersion 2023 `
+            -MinimumSupportedLVVersion 2025 `
             -LabVIEWMinorRevision 3 `
             -SupportedBitness 64 `
             -Major 9 `
@@ -93,7 +93,7 @@ Describe 'Update-VipbDisplayInfo.ps1' {
         }
 
         It 'updates LabVIEW target' {
-            $script:UpdatedRoot.Library_General_Settings.Package_LabVIEW_Version | Should -Be '23.3 (64-bit)'
+            $script:UpdatedRoot.Library_General_Settings.Package_LabVIEW_Version | Should -Be '25.3 (64-bit)'
         }
     }
 
