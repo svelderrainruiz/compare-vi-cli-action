@@ -162,8 +162,11 @@ if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
     $lvlibpFiles = Get-ChildItem -LiteralPath $resourcePlugins -Filter '*.lvlibp' -File -Recurse -ErrorAction SilentlyContinue
   }
 }
+$missingLvlibp = $false
 if (-not $lvlibpFiles -or $lvlibpFiles.Count -eq 0) {
-  throw "Unable to locate lvlibp artifacts inside system VIP under '$installRoot'."
+  $missingLvlibp = $true
+  Write-Warning "No lvlibp artifacts were discovered in the simulated fixture under '$installRoot'. The manifest will record the VIPs only."
+  $lvlibpFiles = @()
 }
 
 $artifacts = @()
@@ -291,6 +294,13 @@ if ($expectedVersionOrdered) {
 
 foreach ($artifact in $artifacts) {
   $manifest.artifacts += $artifact
+}
+
+if ($missingLvlibp) {
+  if (-not $manifest.Contains('warnings')) {
+    $manifest.warnings = @()
+  }
+  $manifest.warnings += 'lvlibp artifacts not present in the fixture; verify real builds include both bitness variants.'
 }
 
 if ($packageSmokeSummary) {

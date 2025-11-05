@@ -21,7 +21,7 @@ Quick reference for building, testing, and releasing the LVCompare composite act
   `iconEditorPackageVip`), so update that config when you need to target LabVIEW 2023-only environments.
   `Invoke-IconEditorBuild.ps1` validates each configured executable via `Find-LabVIEWVersionExePath` and fails fast
   with a remediation hint when any entry is missing.
-  - Run `pwsh -File tools/icon-editor/Test-LabVIEWTargets.ps1 -Require2023x64` to confirm the runner advertises the
+  - Run `pwsh -File tools/icon-editor/Test-LabVIEWTargets.ps1 -RequiredVersion 2023 -RequiredBitness 64` to confirm the runner advertises the
     expected LabVIEW 2023 x64 target before dispatching apply-VIPC jobs.
   - Need quick feedback without LabVIEW? Set `ICON_EDITOR_BUILD_MODE=simulate`
     (optionally `ICON_EDITOR_SIMULATION_FIXTURE` to override the default VIP)
@@ -55,7 +55,7 @@ Quick reference for building, testing, and releasing the LVCompare composite act
     - Set `VIPM_PROVIDER_COMPARISON=skip` to bypass runs in local environments without VIPM.
     - Results include duration, exit code, warnings, and artifact hashes so discrepancies surface quickly; the script prints a plain-text summary for at-a-glance review.
     - `pwsh -File tools/Vipm/Test-ProviderTelemetry.ps1` validates the aggregated telemetry (failing on non-success scenarios) and is intended for CI gating; the helper supports `-TreatMissingAsWarning` for optional runs.
-    - CI coverage: the **VIPM Provider Comparison** workflow (`.github/workflows/ci-vipm-provider-comparison.yml`) runs on a daily schedule (10:00 UTC) and is also exposed via **Run workflow** for ad hoc matrices (`providers`, `scenario_file`, `skip_missing_providers` inputs). Each execution uploads `vipm-provider-telemetry` containing the refreshed JSON.
+    - CI coverage: the **VIPM Provider Comparison** workflow (`.github/workflows/vipm-provider-compare.yml`) runs on a weekly schedule (Mondays at 06:00 UTC on `[self-hosted, Windows, X64]`) and is also exposed via **Run workflow** with optional inputs (`providers`, `scenario_file`, `skip_missing_providers`). Each execution uploads `vipm-provider-telemetry` containing the refreshed JSON.
 - **Smoke tests**
   - `pwsh -File tools/Test-PRVIStagingSmoke.ps1 -DryRun`
     (planning pass; prints the branch/PR that would be created)

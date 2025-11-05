@@ -33,8 +33,8 @@
 - [x] Add assertions that artifacts match and warn on provider capability gaps (validation script + Pester tests; integrate into CI pipeline).
 
 ## Milestone 4 - CI & telemetry and release cutover
-- [ ] Wire an optional CI job (nightly / on-demand) to execute the comparison harness and publish metrics artifacts.
-- [ ] Add README/docs entry describing provider selection, requirements, and how to trigger the comparison locally (`npm run vipm:compare` or VS Code task).
+- [x] Wire an optional CI job (nightly / on-demand) to execute the comparison harness and publish metrics artifacts.
+- [x] Add README/docs entry describing provider selection, requirements, and how to trigger the comparison locally (`npm run vipm:compare` or VS Code task).
 - [ ] Monitor early runs; set simple thresholds (e.g., flag if provider B is >20% slower or fails).
 - [ ] Tag and publish the next release once full validation (Validate / lint + Pester) passes with providers integrated.
 - [ ] Port the provider stack to the upstream icon-editor repository and cut the matching release there once the action completes its rollout.
