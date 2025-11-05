@@ -48,22 +48,72 @@ Write-Output "PPL Version: $Major.$Minor.$Patch.$Build"
 Write-Output "Commit: $Commit"
 
 # Construct the command
-$script = @"
-g-cli --lv-ver $MinimumSupportedLVVersion --arch $SupportedBitness lvbuildspec -- -v "$Major.$Minor.$Patch.$Build" -p "$RelativePath\lv_icon_editor.lvproj" -b "Editor Packed Library"
-"@
-Write-Output "Executing the following command:"
-Write-Output $script
+$argumentList = @(
+    'lvbuildspec',
+    '--',
+    '-v', ("{0}.{1}.{2}.{3}" -f $Major, $Minor, $Patch, $Build),
+    '-p', (Join-Path $RelativePath 'lv_icon_editor.lvproj'),
+    '-b', 'Editor Packed Library'
+)
 
-# Execute the command
-Invoke-Expression $script
+$binary = 'g-cli'
+$binaryArgs = @(
+    '--lv-ver', $MinimumSupportedLVVersion,
+    '--arch',   $SupportedBitness
+) + $argumentList
 
-# Check the exit code
-if ($LASTEXITCODE -ne 0) {
-    g-cli --lv-ver $MinimumSupportedLVVersion --arch $SupportedBitness QuitLabVIEW
-    Write-Host "Build failed with exit code $LASTEXITCODE."
-    exit 1
-} else {
-    Write-Host "Build succeeded."
-    exit 0
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..\..\..\..')
+$logsRoot = Join-Path $repoRoot 'tests\results\_agent\icon-editor\logs'
+if (-not (Test-Path -LiteralPath $logsRoot -PathType Container)) {
+    New-Item -ItemType Directory -Path $logsRoot -Force | Out-Null
 }
+$timestamp = Get-Date -Format 'yyyyMMddTHHmmssfff'
+$logPath = Join-Path $logsRoot ("gcli-build-{0}-{1}.log" -f $SupportedBitness, $timestamp)
+
+Write-Output "Executing the following command:"
+Write-Output ("{0} {1}" -f $binary, ($binaryArgs -join ' '))
+
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $binary
+foreach ($arg in $binaryArgs) {
+    [void]$psi.ArgumentList.Add($arg)
+}
+$psi.WorkingDirectory = $RelativePath
+$psi.RedirectStandardOutput = $true
+$psi.RedirectStandardError = $true
+$psi.UseShellExecute = $false
+
+$process = [System.Diagnostics.Process]::Start($psi)
+$stdout = $process.StandardOutput.ReadToEnd()
+$stderr = $process.StandardError.ReadToEnd()
+$process.WaitForExit()
+
+$logLines = @(
+    "# g-cli invocation"
+    "Timestamp: $(Get-Date -Format o)"
+    "WorkingDirectory: $($psi.WorkingDirectory)"
+    "Command: $binary $($binaryArgs -join ' ')"
+    "ExitCode: $($process.ExitCode)"
+    "---- STDOUT ----"
+    $stdout
+    "---- STDERR ----"
+    $stderr
+)
+Set-Content -LiteralPath $logPath -Value $logLines -Encoding UTF8
+
+if ($stdout) {
+    Write-Output $stdout
+}
+if ($stderr) {
+    Write-Output $stderr
+}
+
+if ($process.ExitCode -ne 0) {
+    & $binary '--lv-ver' $MinimumSupportedLVVersion '--arch' $SupportedBitness 'QuitLabVIEW' | Out-Null
+    Write-Host "Build failed with exit code $($process.ExitCode). See $logPath for details."
+    exit $process.ExitCode
+}
+
+Write-Host "Build succeeded."
+exit 0
 
