@@ -313,11 +313,15 @@ jobs:
             $path = $_.FullName -replace '\\','/'
             return $path -notmatch '/node_modules/' `
               -and $path -notmatch '/vendor/icon-editor/' `
-              -and $path -notmatch '/tmp/icon-editor/'
+              -and $path -notmatch '/tmp/icon-editor/' `
+              -and $path -notmatch '/tests/results/_agent/'
           }
         $errors = @()
         foreach ($file in $mdFiles) {
           $text = Get-Content -LiteralPath $file.FullName -Raw
+          if ($null -eq $text) {
+            $text = ''
+          }
           $matches = [regex]::Matches($text, '\]\((\.\/?[^)#\s]+)\)')
           foreach ($m in $matches) {
             $rel = $m.Groups[1].Value

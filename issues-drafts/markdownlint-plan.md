@@ -36,6 +36,38 @@
 - Skip fixture doc regeneration during lint when the fixture assets are unchanged; leverage Validate run metadata to short-circuit the rewrite.
 - Evaluate whether any remaining long-form docs need targeted MD013/MD032 overrides beyond the expanded relaxed glob coverage.
 
+### Latest Validate snapshot (run 19110613024)
+- `Validate / lint` failed inside the local link checker: `[regex]::Matches` received a `$null` input because `Get-Content -Raw` on the generated `tests/results/_agent/icon-editor-simulate/__fixture_extract/__system_extract/File Group 0/National Instruments/LabVIEW Icon Editor/empty_pull_request.md` (0 bytes) returns `$null` in pwsh.
+- The watcher summary is saved to `tests/results/_agent/watcher-rest.json` for traceability; the run lives at https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/runs/19110613024.
+- Quick local repro confirms every other markdown file loads fine; only the empty placeholder trips the regex call. Guard the checker so zero-byte files yield an empty string (or skip the file entirely) instead of failing the entire job.
+
+### 2025-11-05 hardening pass
+- Updated `.github/workflows/validate.yml` so the link checker normalizes `$null` inputs from `Get-Content -Raw` to an empty string before running the regex.
+- Ad-hoc repro (temp dir with an empty `.md` plus a referencing link) now exits cleanly (`OK`), proving the guard prevents the prior crash.
+
+### Fixture markdown filter sketch
+- Hot paths today:
+  - `tests/results/_agent/icon-editor-simulate/**/__system_extract/**/empty_pull_request.md` (0-byte placeholder).
+  - `tests/results/_agent/history-stub/history-report.md` (generated report content).
+  - Future replay artefacts will also land under `tests/results/_agent/**`.
+- Filtering ideas:
+  1. **Inline exclusion** – extend the `Where-Object` filter inside the link checker to drop any path containing `/tests/results/_agent/`. Simple, keeps authored docs in scope, and makes the job faster. Add a helper comment so future additions remember why fixtures are skipped.
+  2. **Fixture-only pass** – keep the authored-doc checker as-is, but add a second (non-blocking) step that scans the fixture folder and warns if a link breaks. Useful if we still want visibility into fixture drift without blocking standard lint.
+  3. **Manifest-driven allowlist** – teach the generator to emit a manifest of legit fixture markdown files, then have the checker ignore only those entries. More precise but adds maintenance overhead; probably overkill unless we need finer-grained control.
+- Testing impact:
+  - Option 1 just needs a unit/integration test proving the filter removes fixture files from the candidate set.
+  - Option 2 requires a trimmed-down dataset plus expectations for the non-blocking path (ensure warnings bubble to the summary).
+  - Option 3 would require generator + checker coordination; defer unless the first two options prove insufficient.
+
+- Implemented option 1 on 2025-11-05; local scan now reports `FixtureIncluded=0` (490 authored markdown files remain in scope), so fixture placeholders no longer affect the checker.
+
+## Next actions (self-prioritized)
+1. **Blocker** - Dispatch a fresh Validate run (or targeted lint replay) to confirm the guard behaves on CI, then capture the outcome.
+2. **High** - Assess whether we still need a supplemental, non-blocking fixture-doc scan now that fixtures are excluded from the main checker.
+3. **Medium** - Finish cataloging lint guardrails vs. non-lint notices and fold the summary into developer docs so contributors know which failures to prioritize.
+4. **Low** - Continue trimming relaxed markdownlint glob false negatives (measure whether TROUBLESHOOTING/DEVELOPER_GUIDE still need manual overrides after the next Validate cycle).
+
 ## Notes
 - TODO: quantify how often `docs/TROUBLESHOOTING.md` still fails after the relaxed glob expansion.
 - TODO: decide whether the docs link checker stays in CLI lints or moves to a scheduled/non-blocking workflow.
+- TODO: Kick off a Validate replay once the workflow change merges and capture the lint job result in this log.
