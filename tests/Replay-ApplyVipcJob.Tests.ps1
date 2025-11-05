@@ -49,4 +49,5 @@ Describe 'Replay-ApplyVipcJob helpers' -Tag 'Unit' {
         Test-Path -LiteralPath $params.Workspace | Should -BeTrue
         $params.VipcPath | Should -Be '.github/actions/apply-vipc/runner_dependencies.vipc'
     }
+
 }

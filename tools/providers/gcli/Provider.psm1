@@ -81,6 +81,41 @@ function Get-GCliArgs {
 
             return $args
         }
+        'VipcInstall' {
+            $vipcPath      = $Params.vipcPath
+            $applyVipcPath = $Params.applyVipcPath
+            $targetVersion = $Params.targetVersion
+
+            if ([string]::IsNullOrWhiteSpace($vipcPath)) {
+                throw "VipcInstall requires 'vipcPath'."
+            }
+            if ([string]::IsNullOrWhiteSpace($applyVipcPath)) {
+                throw "VipcInstall requires 'applyVipcPath'."
+            }
+            if ([string]::IsNullOrWhiteSpace($targetVersion)) {
+                throw "VipcInstall requires 'targetVersion'."
+            }
+
+            $lvVersion = if ($Params.ContainsKey('labviewVersion') -and $Params.labviewVersion) {
+                [string]$Params.labviewVersion
+            } else {
+                '2025'
+            }
+            $architecture = if ($Params.ContainsKey('labviewBitness') -and $Params.labviewBitness) {
+                [string]$Params.labviewBitness
+            } else {
+                '64'
+            }
+
+            return @(
+                '--lv-ver', $lvVersion,
+                '--arch', $architecture,
+                '-v', $applyVipcPath,
+                '--',
+                $vipcPath,
+                $targetVersion
+            )
+        }
         default {
             throw "Operation '$Operation' not implemented for g-cli provider."
         }
@@ -93,7 +128,7 @@ function New-GCliProvider {
     $provider | Add-Member ScriptMethod ResolveBinaryPath { Resolve-GCliBinaryPath }
     $provider | Add-Member ScriptMethod Supports {
         param($Operation)
-        return @('VipbBuild') -contains $Operation
+        return @('VipbBuild','VipcInstall') -contains $Operation
     }
     $provider | Add-Member ScriptMethod BuildArgs {
         param($Operation,$Params)

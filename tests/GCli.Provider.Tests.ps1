@@ -68,4 +68,27 @@ Describe 'g-cli provider' -Tag 'Unit' {
             '--timeout','120'
         )
     }
+
+    It 'builds arguments for VipcInstall operation' {
+        $provider = New-GCliProvider
+        if ($null -eq $provider) { throw 'Provider returned null.' }
+        $provider.Supports('VipcInstall') | Should -BeTrue
+
+        $args = $provider.BuildArgs('VipcInstall', @{
+                vipcPath       = 'C:\tooling\bundle.vipc'
+                applyVipcPath  = 'C:\repo\vendor\Applyvipc.vi'
+                targetVersion  = '2025'
+                labviewVersion = '2025'
+                labviewBitness = 64
+        })
+
+        $args | Should -Be @(
+            '--lv-ver','2025',
+            '--arch','64',
+            '-v','C:\repo\vendor\Applyvipc.vi',
+            '--',
+            'C:\tooling\bundle.vipc',
+            '2025'
+        )
+    }
 }

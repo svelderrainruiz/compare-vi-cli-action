@@ -67,6 +67,9 @@ param(
 
     [int]$SupportedBitness,
 
+    [ValidateSet('auto','gcli','vipm')]
+    [string]$Toolchain,
+
     [switch]$SkipExecution
 )
 
@@ -220,6 +223,7 @@ function Invoke-ApplyVipcReplay {
         [Parameter(Mandatory)][pscustomobject]$Resolved,
         [Parameter(Mandatory)][string]$Workspace,
         [Parameter(Mandatory)][string]$VipcPath,
+        [string]$Toolchain,
         [switch]$SkipExecution
     )
 
@@ -260,6 +264,9 @@ function Invoke-ApplyVipcReplay {
         '-VIP_LVVersion', $Resolved.VipVersion,
         '-SupportedBitness', $Resolved.Bitness
     )
+    if ($Toolchain) {
+        $pwshArgs += @('-Toolchain', $Toolchain)
+    }
 
     Write-Host ""
     Write-Host "Invocation:"
@@ -303,7 +310,12 @@ function Invoke-ReplayApplyVipcJob {
         $skipExecutionFlag = [bool]$InitialParameters['SkipExecution']
     }
 
-    Invoke-ApplyVipcReplay -Resolved $resolved -Workspace $InitialParameters.Workspace -VipcPath $InitialParameters.VipcPath -SkipExecution:$skipExecutionFlag
+    $toolchainValue = $null
+    if ($InitialParameters.ContainsKey('Toolchain')) {
+        $toolchainValue = $InitialParameters['Toolchain']
+    }
+
+    Invoke-ApplyVipcReplay -Resolved $resolved -Workspace $InitialParameters.Workspace -VipcPath $InitialParameters.VipcPath -Toolchain $toolchainValue -SkipExecution:$skipExecutionFlag
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
