@@ -4,6 +4,7 @@
 1. Catalog current lint tooling (blocking vs non-blocking).
 2. Document ICON_EDITOR_PACKAGE.md generation flow and failure modes.
 3. Propose consolidation plan for linting and doc stabilization.
+4. Anchor the #591 delivery path: harden Validate guardrails, switch ApplyVIPC/build lanes to the VIPM CLI, and document the end-to-end artifact workflow.
 
 ## Findings
 ### Lint Tooling Inventory
@@ -71,6 +72,7 @@
 - Windows hook parity failed because the PowerShell wrapper reported `fixtureAssetCategoryCounts` of 313 (counting the manifest delta) while the shell wrapper reported the real fixture-only asset count of 2.
 - Updated `tools/PrePush-Checks.ps1` to derive category counts by explicitly tallying `fixtureReport.fixtureOnlyAssets` per category instead of relying on `Group-Object`, which was sensitive to the manifest delta on the hosted runner.
 - Local `node tools/hooks/core/run-multi.mjs` now reports matching summaries across shell/pwsh; Validate run 19111757284 confirmed the fix on `windows-latest`.
+- Remaining VIPM CLI tasks: finalize ApplyVIPC/build integration tests, update developer docs with new CLI usage, and retire legacy provider mentions so the pipeline is single-path.
 
 ## Next actions (self-prioritized)
 1. **High** - Publish updated guidance (developer docs / CLI-lints readme) explaining the link checker guard and fixture exclusion so contributors know what changed.
