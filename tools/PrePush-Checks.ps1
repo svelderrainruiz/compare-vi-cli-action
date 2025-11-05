@@ -185,10 +185,18 @@ if (Test-Path -LiteralPath $updateReportScript -PathType Leaf) {
               hashMatch = [bool]$action.hashMatch
             }
           }
-          foreach ($group in ($fixtureReport.fixtureOnlyAssets | Group-Object category | Sort-Object Name)) {
+          $assetCategories = @()
+          if ($fixtureReport.fixtureOnlyAssets) {
+            $assetCategories = $fixtureReport.fixtureOnlyAssets |
+              ForEach-Object { $_.category } |
+              Where-Object { $_ } |
+              Sort-Object -Unique
+          }
+          foreach ($category in $assetCategories) {
+            $count = ($fixtureReport.fixtureOnlyAssets | Where-Object { $_.category -eq $category }).Count
             $sanitizedSummary.fixtureAssetCategoryCounts += [ordered]@{
-              category = $group.Name
-              count    = $group.Count
+              category = $category
+              count    = $count
             }
           }
           Write-Host '[pre-push] icon-editor fixture summary (sanitized):' -ForegroundColor Cyan

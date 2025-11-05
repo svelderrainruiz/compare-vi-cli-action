@@ -62,15 +62,21 @@
 
 - Implemented option 1 on 2025-11-05; local scan now reports `FixtureIncluded=0` (490 authored markdown files remain in scope), so fixture placeholders no longer affect the checker.
 
+### 2025-11-05 Validate replay (run 19111229037)
+- `Validate / lint` finished cleanly: the link checker printed "Intra-repo markdown links OK." and no longer crashes on fixture placeholders.
+- The overall workflow failed later in `hook-parity (windows-latest)` (known pending work) but that doesn't impact the lint verification.
+- Decision for now: rely on the existing fixture validation flows (fixtures job + replay tools). Revisit a dedicated notice-only scan only if fixture diffs begin slipping through.
+
+### Hook parity stabilization (2025-11-05)
+- Windows hook parity failed because the PowerShell wrapper reported `fixtureAssetCategoryCounts` of 313 (counting the manifest delta) while the shell wrapper reported the real fixture-only asset count of 2.
+- Updated `tools/PrePush-Checks.ps1` to derive category counts by explicitly tallying `fixtureReport.fixtureOnlyAssets` per category instead of relying on `Group-Object`, which was sensitive to the manifest delta on the hosted runner.
+- Local `node tools/hooks/core/run-multi.mjs` now reports matching summaries across shell/pwsh; need a fresh Validate run to confirm the fix on `windows-latest`.
+
 ## Next actions (self-prioritized)
 1. **High** - Publish updated guidance (developer docs / CLI-lints readme) explaining the link checker guard and fixture exclusion so contributors know what changed.
-2. **Medium** - Finish cataloging lint guardrails vs. non-lint notices and fold the summary into developer docs so contributors know which failures to prioritize.
-3. **Low** - Continue trimming relaxed markdownlint glob false negatives (measure whether TROUBLESHOOTING/DEVELOPER_GUIDE still need manual overrides after the next Validate cycle).
-
-### 2025-11-05 Validate replay (run 19111229037)
-- `Validate / lint` finished cleanly: the link checker printed “Intra-repo markdown links OK.” and no longer crashes on fixture placeholders.
-- The overall workflow failed later in `hook-parity (windows-latest)` (known pending work) but that doesn’t impact the lint verification.
-- Decision for now: rely on the existing fixture validation flows (fixtures job + replay tools). Revisit a dedicated notice-only scan only if fixture diffs begin slipping through.
+2. **High** - Dispatch Validate after the parity fix lands to ensure both hook-parity legs succeed.
+3. **Medium** - Finish cataloging lint guardrails vs. non-lint notices and fold the summary into developer docs so contributors know which failures to prioritize.
+4. **Low** - Continue trimming relaxed markdownlint glob false negatives (measure whether TROUBLESHOOTING/DEVELOPER_GUIDE still need manual overrides after the next Validate cycle).
 
 ## Notes
 - TODO: quantify how often `docs/TROUBLESHOOTING.md` still fails after the relaxed glob expansion.
