@@ -68,6 +68,43 @@ jobs:
           vip_lv_version:               ${{ matrix['lv-version'] }}
           supported_bitness:            ${{ matrix.bitness }}
           relative_path:                ${{ github.workspace }}
+      - name: Assert dev-mode token present (${{ matrix['lv-version'] }} x ${{ matrix.bitness }})
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File tools/icon-editor/Test-LabVIEWToken.ps1 `
+            -Version ${{ matrix['lv-version'] }} `
+            -Bitness ${{ matrix.bitness }}
+      - name: Preserve LabVIEW logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $logRoot = Join-Path $Env:RUNNER_TEMP ("lv-logs-{0}-{1}" -f ${{ matrix['lv-version'] }}, ${{ matrix.bitness }})
+          New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+
+          $patterns = @(
+            'LVStatus.txt',
+            'VIPM File Handler_*_log.txt',
+            'VIPM File Handler_*_cur.txt'
+          )
+
+          $collected = @()
+          foreach ($pattern in $patterns) {
+            Get-ChildItem -Path $Env:TEMP -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+              Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $logRoot $_.Name) -Force
+              $collected += $_.Name
+            }
+          }
+
+          if ($collected.Count -eq 0) {
+            'No LabVIEW diagnostic files located under $Env:TEMP.' | Out-File -FilePath (Join-Path $logRoot 'README.txt') -Encoding utf8
+          }
+      - name: Upload LabVIEW diagnostics (failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apply-vipc-logs-${{ matrix['lv-version'] }}-${{ matrix.bitness }}
+          path: ${{ runner.temp }}/lv-logs-${{ matrix['lv-version'] }}-${{ matrix.bitness }}
+          if-no-files-found: warn
 
   apply-deps-matrix:
     name: Resolve Apply Targets
