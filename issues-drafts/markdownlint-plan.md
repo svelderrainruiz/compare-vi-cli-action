@@ -44,6 +44,7 @@
 ### 2025-11-05 hardening pass
 - Updated `.github/workflows/validate.yml` so the link checker normalizes `$null` inputs from `Get-Content -Raw` to an empty string before running the regex.
 - Ad-hoc repro (temp dir with an empty `.md` plus a referencing link) now exits cleanly (`OK`), proving the guard prevents the prior crash.
+- Documented the guard/exclusion behaviour in `docs/DEVELOPER_GUIDE.md` so contributors know the fixture outputs are intentionally skipped.
 
 ### Fixture markdown filter sketch
 - Hot paths today:

@@ -189,6 +189,11 @@ node tools/npm/run-script.mjs lint            # markdownlint + custom checks
 ./tools/PrePush-Checks.ps1  # actionlint, optional YAML round-trip
 ```
 
+The Validate workflow's intra-repo link checker now ignores fixture artefacts under `tests/results/_agent/**` and treats
+zero-byte markdown files as empty strings. Running the same check locally (via `tools/PrePush-Checks.ps1`) should surface
+only actionable link breaks in authored docs; fixture drift is still covered by the fixture validation job and the replay
+helpers.
+
 ## Release checklist
 
 1. Update `CHANGELOG.md`
