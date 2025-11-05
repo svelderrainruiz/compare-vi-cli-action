@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
@@ -303,6 +304,66 @@ export function dispatchValidate({
 
   const message = `[validate] Dispatched Validate on ${slug} @ ${ref}` + (runSummary?.databaseId ? ` (run ${runSummary.databaseId})` : '');
   console.log(message);
+
+  const dispatchedAt = new Date().toISOString();
+  const summarySections = [
+    '### Validate Dispatch',
+    '',
+    `- Repository: ${slug}`,
+    `- Ref: ${ref}`,
+    `- Dispatched at: ${dispatchedAt}`
+  ];
+  if (runSummary?.databaseId) {
+    summarySections.push(
+      `- Run ID: ${runSummary.databaseId}`,
+      `- Status: ${runSummary.status || 'unknown'}`,
+      `- Conclusion: ${runSummary.conclusion || 'pending'}`
+    );
+    if (runSummary.headSha) {
+      summarySections.push(`- Head SHA: ${runSummary.headSha}`);
+    }
+  } else {
+    summarySections.push('- Run ID: pending');
+  }
+  summarySections.push('');
+
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try {
+      fs.appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        `${summarySections.join('\n')}\n`,
+        { encoding: 'utf8' }
+      );
+    } catch (err) {
+      console.warn(`[validate] Warning: unable to append to step summary: ${err.message}`);
+    }
+  }
+
+  try {
+    const agentDir = path.join(repoRoot, 'tests', 'results', '_agent');
+    fs.mkdirSync(agentDir, { recursive: true });
+    const latestPayload = {
+      repo: slug,
+      ref,
+      dispatchedAt,
+      run: runSummary
+        ? {
+            id: runSummary.databaseId ?? null,
+            status: runSummary.status ?? null,
+            conclusion: runSummary.conclusion ?? null,
+            headSha: runSummary.headSha ?? null,
+            createdAt: runSummary.createdAt ?? null
+          }
+        : null
+    };
+    fs.writeFileSync(
+      path.join(agentDir, 'validate-latest.json'),
+      `${JSON.stringify(latestPayload, null, 2)}\n`,
+      { encoding: 'utf8' }
+    );
+  } catch (err) {
+    console.warn(`[validate] Warning: unable to write validate-latest.json: ${err.message}`);
+  }
 
   return {
     dispatched: true,

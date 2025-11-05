@@ -30,6 +30,12 @@ Quick reference for building, testing, and releasing the LVCompare composite act
     and emit the same manifest + package-smoke summary expected from a full build.
     Clear the variable or set it back to `build` before release/sign-off runs so
     the real pipeline executes.
+  - Dispatching `priority:validate` records the latest run metadata in
+    `tests/results/_agent/validate-latest.json` and appends a summary (ref + run ID)
+    to the GitHub Step Summary so you always have a canonical pointer to the run you triggered.
+  - `node tools/priority/get-latest-validate.mjs [--branch <branch>] [--json]`
+    lists the most recent Validate runs for a branch (defaults to your current branch).
+    Use this helper when you need to double-check the run ID or share the workflow link.
   - `pwsh -File tools/icon-editor/Update-IconEditorFixtureReport.ps1` refreshes the fixture report (generates the JSON snapshot and rewrites the section in `docs/ICON_EDITOR_PACKAGE.md`; pre-push guards that it stays current).
   - `npm run icon-editor:dev:on` / `npm run icon-editor:dev:off` toggle LabVIEW development mode using the vendored helpers (`Set_Development_Mode.ps1` / `RevertDevelopmentMode.ps1`) and persist the current state.
   - Validate uploads the `icon-editor-fixture-report` artifact (JSON + Markdown) on each run for stakeholders.
