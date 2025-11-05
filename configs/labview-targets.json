@@ -3,8 +3,7 @@
   "operations": {
     "applyVipc": [
       { "version": 2021, "bitness": 32 },
-      { "version": 2021, "bitness": 64 },
-      { "version": 2025, "bitness": 64 }
+      { "version": 2021, "bitness": 64 }
     ],
     "iconEditorBuildPackedLibs": [
       { "version": 2021, "bitness": 32 },
