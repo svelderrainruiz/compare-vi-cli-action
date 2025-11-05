@@ -1,19 +1,18 @@
 {
-  "number": 575,
-  "title": "Icon-editor: Generate VI Comparison Report for changed VIs",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/575",
+  "number": 588,
+  "title": "Decouple icon editor build steps into composite actions",
+  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/588",
   "state": "OPEN",
   "labels": [
-    "enhancement",
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
-  "commentCount": 0,
-  "lastSeenUpdatedAt": "2025-11-03T21:51:32Z",
-  "issueDigest": "b6478d8125bb43022c3235e5e111df61a7556c6d5b51f6fbfcafd2a5fdc261b1",
-  "bodyDigest": "cbcef8efd6225758792c9862e1603397acafc633d793b8ea59f0d7b32237d11d",
-  "cachedAtUtc": "2025-11-03T21:54:46.715Z",
+  "commentCount": 6,
+  "lastSeenUpdatedAt": "2025-11-04T04:06:28Z",
+  "issueDigest": "74eda9ff3d7fdd8090dbcfb37d98dabeeb6ec60f51fa8c5b8dee6ac4036bb737",
+  "bodyDigest": "6b5e2727553071ff27094be41e6f6a290074db2dfbe813fdc8d7209e6ce7e55d",
+  "cachedAtUtc": "2025-11-04T07:14:08.556Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }

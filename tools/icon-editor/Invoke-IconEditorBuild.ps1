@@ -15,7 +15,10 @@ param(
   [switch]$SkipPackaging,
   [switch]$RequirePackaging,
   [switch]$RunUnitTests,
-  [string]$ResultsRoot
+  [string]$ResultsRoot,
+  [ValidateSet('gcli','vipm')]
+  [string]$BuildToolchain = 'gcli',
+  [string]$BuildProvider
 )
 
 Set-StrictMode -Version Latest
@@ -54,7 +57,7 @@ $previousPath = $env:Path
 $requiredLabVIEW = @(
   @{ Version = 2021; Bitness = 32 },
   @{ Version = 2021; Bitness = 64 },
-  @{ Version = 2023; Bitness = 64 }
+  @{ Version = 2025; Bitness = 64 }
 )
 $missingLabVIEW = @()
 foreach ($requirement in $requiredLabVIEW) {
@@ -231,7 +234,7 @@ try {
         '-SupportedBitness','64',
         '-RelativePath', $IconEditorRoot,
         '-VIPBPath', $vipbRelativePath,
-        '-MinimumSupportedLVVersion','2023',
+        '-MinimumSupportedLVVersion','2025',
         '-LabVIEWMinorRevision', "$LabVIEWMinorRevision",
         '-Major', "$Major",
         '-Minor', "$Minor",
@@ -242,25 +245,30 @@ try {
         '-DisplayInformationJSON', $displayInfoJson
       )
 
+    $vipArguments = @(
+      '-SupportedBitness','64',
+      '-MinimumSupportedLVVersion','2025',
+      '-LabVIEWMinorRevision', "$LabVIEWMinorRevision",
+      '-Major', "$Major",
+      '-Minor', "$Minor",
+      '-Patch', "$Patch",
+      '-Build', "$Build",
+      '-Commit', $Commit,
+      '-ReleaseNotesFile', $releaseNotesPath,
+      '-DisplayInformationJSON', $displayInfoJson,
+      '-BuildToolchain', $BuildToolchain
+    )
+    if ($BuildProvider) {
+      $vipArguments += @('-BuildProvider', $BuildProvider)
+    }
     Invoke-IconEditorAction `
       -ScriptPath $buildVipScript `
-      -Arguments @(
-        '-SupportedBitness','64',
-        '-MinimumSupportedLVVersion','2023',
-        '-LabVIEWMinorRevision', "$LabVIEWMinorRevision",
-        '-Major', "$Major",
-        '-Minor', "$Minor",
-        '-Patch', "$Patch",
-        '-Build', "$Build",
-        '-Commit', $Commit,
-        '-ReleaseNotesFile', $releaseNotesPath,
-        '-DisplayInformationJSON', $displayInfoJson
-      )
+      -Arguments $vipArguments
 
     Invoke-IconEditorAction `
       -ScriptPath $closeLabviewScript `
       -Arguments @(
-        '-MinimumSupportedLVVersion','2023',
+        '-MinimumSupportedLVVersion','2025',
         '-SupportedBitness','64'
       )
 
@@ -322,7 +330,11 @@ try {
 
     Push-Location (Split-Path -Parent $unitTestScript)
     try {
-      & $unitTestScript -MinimumSupportedLVVersion $MinimumSupportedLVVersion -SupportedBitness '64'
+      $unitTestProject = Join-Path $IconEditorRoot 'lv_icon_editor.lvproj'
+      & $unitTestScript `
+        -MinimumSupportedLVVersion $MinimumSupportedLVVersion `
+        -SupportedBitness '64' `
+        -ProjectPath $unitTestProject
     } finally {
       Pop-Location
     }
@@ -359,6 +371,13 @@ try {
     unitTestsRun        = [bool]$RunUnitTests
     packagingRequested  = [bool]$packagingRequested
     artifacts = @()
+  }
+
+  $manifest.packaging = [ordered]@{
+    requestedToolchain = $BuildToolchain
+  }
+  if ($BuildProvider) {
+    $manifest.packaging.requestedProvider = $BuildProvider
   }
 
   if ($packageSmokeSummary) {

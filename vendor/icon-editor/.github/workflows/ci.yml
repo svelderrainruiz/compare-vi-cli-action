@@ -132,7 +132,7 @@ jobs:
             bits: "32"
           - lv: "2021"   # LabVIEW 2021 64-bit
             bits: "64"
-          - lv: "2023"   # LabVIEW 2023 64-bit (for SP1)
+          - lv: "2025"   # LabVIEW 2025 64-bit (for SP1)
             bits: "64"
     steps:
       - uses: LabVIEW-Community-CI-CD/open-source-actions/apply-vipc@v1
@@ -263,7 +263,7 @@ jobs:
           supported_bitness:        64
           relative_path:            ${{ github.workspace }}
           vipb_path:                Tooling/deployment/NI Icon editor.vipb
-          minimum_supported_lv_version: 2023       # target LabVIEW 2023
+          minimum_supported_lv_version: 2025       # target LabVIEW 2025
           # labview_minor_revision is omitted (defaults to 3 for LabVIEW SP1)
           major:  ${{ needs.version.outputs.MAJOR }}
           minor:  ${{ needs.version.outputs.MINOR }}
@@ -275,7 +275,7 @@ jobs:
       - uses: LabVIEW-Community-CI-CD/open-source-actions/build-vi-package@v1
         with:
           supported_bitness:        64
-          minimum_supported_lv_version: 2023
+          minimum_supported_lv_version: 2025
           # labview_minor_revision omitted (uses default = 3)
           major:  ${{ needs.version.outputs.MAJOR }}
           minor:  ${{ needs.version.outputs.MINOR }}
@@ -286,7 +286,7 @@ jobs:
           display_information_json: ${{ steps.display-info.outputs.json }}
       - uses: LabVIEW-Community-CI-CD/open-source-actions/close-labview@v1
         with:
-          minimum_supported_lv_version: 2023
+          minimum_supported_lv_version: 2025
           supported_bitness: 64
       - name: Upload VI Package
         uses: actions/upload-artifact@v4
