@@ -34,5 +34,19 @@ Describe 'Replay-ApplyVipcJob helpers' -Tag 'Unit' {
         $resolved.VipVersion | Should -Be '2021'
         $resolved.Bitness | Should -Be 32
     }
-}
 
+    It 'applies default workspace and vipc path when omitted' {
+        $params = @{
+            MinimumSupportedLVVersion = '2025'
+            VipLabVIEWVersion         = '2025'
+            SupportedBitness          = 64
+            SkipExecution             = $true
+        }
+
+        { Invoke-ReplayApplyVipcJob -InitialParameters $params } | Should -Not -Throw
+        ($params.Keys -contains 'Workspace') | Should -BeTrue
+        ($params.Keys -contains 'VipcPath')  | Should -BeTrue
+        Test-Path -LiteralPath $params.Workspace | Should -BeTrue
+        $params.VipcPath | Should -Be '.github/actions/apply-vipc/runner_dependencies.vipc'
+    }
+}

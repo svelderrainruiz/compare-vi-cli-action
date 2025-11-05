@@ -236,7 +236,15 @@ function Invoke-ApplyVipcReplay {
         throw "VIPC file not found at '$vipcFull'."
     }
 
-    Write-Host "Replaying ${Resolved.DisplayTitle}"
+    $displayTitle = $null
+    if ($Resolved.PSObject.Properties['DisplayTitle']) {
+        $displayTitle = $Resolved.DisplayTitle
+    }
+    if (-not $displayTitle) {
+        $displayTitle = "Apply VIPC Dependencies ($($Resolved.Version), $($Resolved.Bitness))"
+    }
+
+    Write-Host "Replaying $displayTitle"
     Write-Host " LabVIEW version: $($Resolved.Version)"
     Write-Host " VIP LV version : $($Resolved.VipVersion)"
     Write-Host " Bitness        : $($Resolved.Bitness)"
@@ -279,11 +287,25 @@ function Invoke-ReplayApplyVipcJob {
         [hashtable]$InitialParameters
     )
 
+    if (-not $InitialParameters.ContainsKey('JobName') -or [string]::IsNullOrWhiteSpace($InitialParameters['JobName'])) {
+        $InitialParameters['JobName'] = 'Apply VIPC Dependencies (2025, 64)'
+    }
+    if (-not $InitialParameters.ContainsKey('Workspace')) {
+        $InitialParameters['Workspace'] = (Get-Location).Path
+    }
+    if (-not $InitialParameters.ContainsKey('VipcPath')) {
+        $InitialParameters['VipcPath'] = '.github/actions/apply-vipc/runner_dependencies.vipc'
+    }
     $resolved = Resolve-ApplyVipcParameters @InitialParameters
-    Invoke-ApplyVipcReplay -Resolved $resolved -Workspace $InitialParameters.Workspace -VipcPath $InitialParameters.VipcPath -SkipExecution:$InitialParameters.SkipExecution
+
+    $skipExecutionFlag = $false
+    if ($InitialParameters.ContainsKey('SkipExecution')) {
+        $skipExecutionFlag = [bool]$InitialParameters['SkipExecution']
+    }
+
+    Invoke-ApplyVipcReplay -Resolved $resolved -Workspace $InitialParameters.Workspace -VipcPath $InitialParameters.VipcPath -SkipExecution:$skipExecutionFlag
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
     Invoke-ReplayApplyVipcJob -InitialParameters $script:ReplayApplyVipcParameters
 }
-
