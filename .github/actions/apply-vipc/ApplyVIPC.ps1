@@ -111,85 +111,60 @@ function Invoke-ProcessInvocation {
     }
 }
 
-$toolchainOrder = switch ($Toolchain.ToLowerInvariant()) {
-    'gcli' { @('gcli') }
-    'vipm' { @('vipm') }
-    default { @('gcli','vipm') }
+$selectedToolchain = switch ($Toolchain.ToLowerInvariant()) {
+    'gcli' { 'gcli' }
+    'vipm' { 'vipm' }
+    default { 'gcli' }
 }
 
-$applyVipcPath = $null
-$gcliModuleImported = $false
-$vipmModuleImported = $false
-$errors = New-Object System.Collections.Generic.List[string]
-$usedToolchain = $null
-
-foreach ($tool in $toolchainOrder) {
-    try {
-        switch ($tool) {
-            'gcli' {
-                $gcliModulePath = Join-Path $ResolvedRelativePath 'tools' 'GCli.psm1'
-                if (-not (Test-Path -LiteralPath $gcliModulePath -PathType Leaf)) {
-                    throw "g-cli module not found at '$gcliModulePath'."
-                }
-                if (-not $gcliModuleImported) {
-                    Import-Module $gcliModulePath -Force
-                    $gcliModuleImported = $true
-                }
-
-                if (-not $applyVipcPath) {
-                    $applyVipcRelative = 'vendor/icon-editor/Tooling/deployment/Applyvipc.vi'
-                    $applyVipcPath = (Resolve-Path -Path (Join-Path $ResolvedRelativePath $applyVipcRelative) -ErrorAction Stop).ProviderPath
-                }
-
-                foreach ($version in $uniqueVersions) {
-                    Write-Output ("Applying dependencies via g-cli for LabVIEW {0} ({1}-bit)..." -f $version, $SupportedBitness)
-                    $invocation = Get-GCliInvocation -Operation 'VipcInstall' -Params @{
-                        vipcPath       = $ResolvedVIPCPath
-                        labviewVersion = $version
-                        labviewBitness = $SupportedBitness
-                        applyVipcPath  = $applyVipcPath
-                        targetVersion  = $version
-                    }
-                    Write-Output ("Executing g-cli provider [{0}]: {1} {2}" -f $invocation.Provider, $invocation.Binary, ($invocation.Arguments -join ' '))
-                    Invoke-ProcessInvocation -Invocation $invocation -WorkingDirectory (Split-Path -Parent $ResolvedVIPCPath)
-                }
+try {
+    switch ($selectedToolchain) {
+        'gcli' {
+            $gcliModulePath = Join-Path $ResolvedRelativePath 'tools' 'GCli.psm1'
+            if (-not (Test-Path -LiteralPath $gcliModulePath -PathType Leaf)) {
+                throw "g-cli module not found at '$gcliModulePath'."
             }
-            'vipm' {
-                $vipmModulePath = Join-Path $ResolvedRelativePath 'tools' 'Vipm.psm1'
-                if (-not (Test-Path -LiteralPath $vipmModulePath -PathType Leaf)) {
-                    throw "VIPM module not found at '$vipmModulePath'."
-                }
-                if (-not $vipmModuleImported) {
-                    Import-Module $vipmModulePath -Force
-                    $vipmModuleImported = $true
-                }
+            Import-Module $gcliModulePath -Force
 
-                foreach ($version in $uniqueVersions) {
-                    Write-Output ("Applying dependencies via VIPM for LabVIEW {0} ({1}-bit)..." -f $version, $SupportedBitness)
-                    $params = @{
-                        vipcPath       = $ResolvedVIPCPath
-                        labviewVersion = $version
-                        labviewBitness = $SupportedBitness
-                    }
-                    $invocation = Get-VipmInvocation -Operation 'InstallVipc' -Params $params
-                    Write-Output ("Executing VIPM provider [{0}]: {1} {2}" -f $invocation.Provider, $invocation.Binary, ($invocation.Arguments -join ' '))
-                    Invoke-ProcessInvocation -Invocation $invocation -WorkingDirectory (Split-Path -Parent $ResolvedVIPCPath)
+            $applyVipcRelative = 'vendor/icon-editor/Tooling/deployment/Applyvipc.vi'
+            $applyVipcPath = (Resolve-Path -Path (Join-Path $ResolvedRelativePath $applyVipcRelative) -ErrorAction Stop).ProviderPath
+
+            foreach ($version in $uniqueVersions) {
+                Write-Output ("Applying dependencies via g-cli for LabVIEW {0} ({1}-bit)..." -f $version, $SupportedBitness)
+                $invocation = Get-GCliInvocation -Operation 'VipcInstall' -Params @{
+                    vipcPath       = $ResolvedVIPCPath
+                    labviewVersion = $version
+                    labviewBitness = $SupportedBitness
+                    applyVipcPath  = $applyVipcPath
+                    targetVersion  = $version
                 }
+                Write-Output ("Executing g-cli provider [{0}]: {1} {2}" -f $invocation.Provider, $invocation.Binary, ($invocation.Arguments -join ' '))
+                Invoke-ProcessInvocation -Invocation $invocation -WorkingDirectory (Split-Path -Parent $ResolvedVIPCPath)
             }
         }
+        'vipm' {
+            $vipmModulePath = Join-Path $ResolvedRelativePath 'tools' 'Vipm.psm1'
+            if (-not (Test-Path -LiteralPath $vipmModulePath -PathType Leaf)) {
+                throw "VIPM module not found at '$vipmModulePath'."
+            }
+            Import-Module $vipmModulePath -Force
 
-        $usedToolchain = $tool
-        break
-    } catch {
-        $message = "[{0}] {1}" -f $tool, $_.Exception.Message
-        $errors.Add($message) | Out-Null
-        Write-Warning $message
+            foreach ($version in $uniqueVersions) {
+                Write-Output ("Applying dependencies via VIPM for LabVIEW {0} ({1}-bit)..." -f $version, $SupportedBitness)
+                $params = @{
+                    vipcPath       = $ResolvedVIPCPath
+                    labviewVersion = $version
+                    labviewBitness = $SupportedBitness
+                }
+                $invocation = Get-VipmInvocation -Operation 'InstallVipc' -Params $params
+                Write-Output ("Executing VIPM provider [{0}]: {1} {2}" -f $invocation.Provider, $invocation.Binary, ($invocation.Arguments -join ' '))
+                Invoke-ProcessInvocation -Invocation $invocation -WorkingDirectory (Split-Path -Parent $ResolvedVIPCPath)
+            }
+        }
     }
-}
-
-if (-not $usedToolchain) {
-    Write-Error ("Failed to apply VIPC dependencies. Errors:`n{0}" -f ($errors -join [Environment]::NewLine))
+} catch {
+    Write-Error ("Failed to apply VIPC dependencies using {0}: {1}" -f $selectedToolchain, $_.Exception.Message)
     exit 1
 }
 
-Write-Host ("Successfully applied dependencies using {0} provider." -f $usedToolchain)
+Write-Host ("Successfully applied dependencies using {0} provider." -f $selectedToolchain)
