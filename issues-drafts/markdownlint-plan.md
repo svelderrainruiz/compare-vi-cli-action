@@ -73,10 +73,14 @@
 - Updated `tools/PrePush-Checks.ps1` to derive category counts by explicitly tallying `fixtureReport.fixtureOnlyAssets` per category instead of relying on `Group-Object`, which was sensitive to the manifest delta on the hosted runner.
 - Local `node tools/hooks/core/run-multi.mjs` now reports matching summaries across shell/pwsh; Validate run 19111757284 confirmed the fix on `windows-latest`.
 - Remaining VIPM CLI tasks: finalize ApplyVIPC/build integration tests, update developer docs with new CLI usage, and retire legacy provider mentions so the pipeline is single-path.
+  - `.github/actions/apply-vipc/ApplyVIPC.ps1` still defaults to `-Toolchain auto`, falling back to g-cli when `vipm` is missing and exposing both `vipm` and `vipm-cli` modes.
+  - `Replay-ApplyVipcJob.ps1` mirrors the same toolchain set (`auto/gcli/vipm/vipm-cli`), so replays can still exercise the legacy provider.
+  - `IconEditorPackage.psm1` and `Invoke-IconEditorBuild.ps1` accept `gcli`/`vipm`/`vipm-cli` (defaulting to CLI but keeping the older paths), and tests still import `tools/Vipm.psm1`.
+  - Legacy `tools/Vipm.psm1` provider hub remains in-place for comparisons and is imported whenever `vipm` is chosen.
 
 ## Next actions (self-prioritized)
 1. **High** - Publish updated guidance (developer docs / CLI-lints readme) explaining the link checker guard and fixture exclusion so contributors know what changed.
-2. **High** - Dispatch Validate after the parity fix lands to ensure both hook-parity legs succeed.
+2. **High** - Lock the pipeline to the VIPM CLI (drop the g-cli/legacy provider fallback, adjust replays/tests, and document the `vipm` requirement explicitly).
 3. **Medium** - Finish cataloging lint guardrails vs. non-lint notices and fold the summary into developer docs so contributors know which failures to prioritize.
 4. **Low** - Continue trimming relaxed markdownlint glob false negatives (measure whether TROUBLESHOOTING/DEVELOPER_GUIDE still need manual overrides after the next Validate cycle).
 
