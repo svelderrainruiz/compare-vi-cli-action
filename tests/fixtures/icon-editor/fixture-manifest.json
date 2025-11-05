@@ -1,7 +1,21 @@
 {
   "schema": "icon-editor/fixture-manifest@v1",
-  "generatedAt": "2025-11-04T14:11:31.3407768-08:00",
+  "generatedAt": "2025-11-05T08:26:37.8672605-08:00",
   "entries": [
+    {
+      "key": "resource:resource\\plugins\\lv_icon_x64.lvlibp",
+      "category": "resource",
+      "path": "resource\\plugins\\lv_icon_x64.lvlibp",
+      "sizeBytes": 2990080,
+      "hash": "075d8806e1caecc45e0f33e68a05fb45232235c13ca13e47eccb3840d9b89e9a"
+    },
+    {
+      "key": "resource:resource\\plugins\\lv_icon_x86.lvlibp",
+      "category": "resource",
+      "path": "resource\\plugins\\lv_icon_x86.lvlibp",
+      "sizeBytes": 2985984,
+      "hash": "4e7cac24d986eef833b7bdcf463c7f1754ee189f0a51b3bed70b494cc8b0657b"
+    },
     {
       "key": "resource:resource\\plugins\\lv_icon.vi",
       "category": "resource",
