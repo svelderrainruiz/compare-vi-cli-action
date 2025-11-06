@@ -1,12 +1,12 @@
 # Build VI Package 📦
 
-Runs **`build_vip.ps1`** to update a `.vipb` file's display info and build the VI Package via g-cli.
+Runs **`build_vip.ps1`** to update a `.vipb` file's display info and build the VI Package via the VIPM CLI.
 
 ## Inputs
 | Name | Required | Example | Description |
 |------|----------|---------|-------------|
 | `supported_bitness` | **Yes** | `64` | Target LabVIEW bitness. |
-| `minimum_supported_lv_version` | **Yes** | `2021` | LabVIEW major version. |
+| `minimum_supported_lv_version` | **Yes** | `2026` | LabVIEW major version used for packaging. |
 | `labview_minor_revision` | No (defaults to `3`) | `3` | LabVIEW minor revision. |
 | `major` | **Yes** | `1` | Major version component. |
 | `minor` | **Yes** | `0` | Minor version component. |
@@ -23,7 +23,7 @@ Runs **`build_vip.ps1`** to update a `.vipb` file's display info and build the V
 - uses: ./.github/actions/build-vi-package
   with:
     supported_bitness: 64
-    minimum_supported_lv_version: 2024
+    minimum_supported_lv_version: 2026
     major: 1
     minor: 0
     patch: 0

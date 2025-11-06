@@ -24,29 +24,21 @@
 - [ ] Stage a working directory for build artifacts (default `.github/builds/VI Package`) and ensure sufficient disk space.
 
 ## Execution Plan (Real VIP Build)
-1. Prep dependencies (applies `runner_dependencies.vipc` so g-cli can find LabVIEW project references):
+1. Invoke the one-shot helper (runs rogue detection, close, vendor sync, dual VIPC apply, and build):
    ```powershell
-   $iconRoot = (Resolve-Path 'vendor/icon-editor').Path
-   $applyVipc = Join-Path $iconRoot '.github\actions\apply-vipc\ApplyVIPC.ps1'
-   pwsh -File $applyVipc -MinimumSupportedLVVersion 2023 -SupportedBitness 32 -RelativePath $iconRoot -Toolchain vipm
-   pwsh -File $applyVipc -MinimumSupportedLVVersion 2023 -SupportedBitness 64 -RelativePath $iconRoot -Toolchain vipm
+   pwsh -File tools/icon-editor/Invoke-VipmCliBuild.ps1 `
+     -RepoSlug 'LabVIEW-Community-CI-CD/labview-icon-editor' `
+     -MinimumSupportedLVVersion 2023 `
+     -ResultsRoot tests/results/_agent/icon-editor/vipm-cli-build
    ```
-2. Ensure vendor helper modules forward to the repo implementations (wrappers added at `vendor/icon-editor/tools/{GCli,Vipm}.psm1`).
-3. From repo root, run (note: supply an absolute `-IconEditorRoot` to avoid relative-path issues):
-   ```powershell
-   $iconRoot = (Resolve-Path 'vendor/icon-editor').Path
-   pwsh -File tools/icon-editor/Invoke-IconEditorBuild.ps1 `
-     -IconEditorRoot $iconRoot `
-     -ResultsRoot tests/results/_agent/icon-editor/build `
-     -Major 1 -Minor 4 -Patch 1 -Build (Get-Date -Format yyyyMMdd)
-   ```
-   Adjust version numbers if packaging a release cut.
-4. After completion, capture:
+   The helper re-creates the vendor module wrappers and calls the vendored `ApplyVIPC.ps1`, which now shells directly into the VIPM CLI.
+2. After completion, capture:
    - `manifest.json` path + checksum
    - VIP files emitted under `.github/builds/VI Package`
    - `package-smoke-summary.json`
-5. Record the run in issue #593 (brief note + SHA256 of the generated VIP).
-6. Drop artifacts (manifest + summary + vip hashes) under `tests/results/_agent/icon-editor/` or attach to the issue for review.
+   - Any diagnostic artifacts (`logs/gcli-*.log`, `missing-items.json`)
+3. Record the run in issue #593 (brief note + SHA256 of the generated VIP).
+4. Drop artifacts (manifest + summary + vip hashes) under `tests/results/_agent/icon-editor/` or attach to the issue for review.
 
 ## Open Questions / Blockers
 - Does the current machine have LabVIEW 2026 beta + VIPM CLI installed? If not, who owns the install?

@@ -93,7 +93,7 @@ carries the actual LabVIEW payload.
 ## Development mode targets
 
 - LabVIEW targets are now managed in `configs/icon-editor/dev-mode-targets.json` (schema `icon-editor/dev-mode-targets@v1`). Each operation maps to the LabVIEW version/bitness it needs; the defaults ship with:
-  - `BuildPackage` → LabVIEW 2021 (32-bit and 64-bit) for VIP builds.
+  - `BuildPackage` – LabVIEW 2023 (32-bit and 64-bit) for lvlibp builds; LabVIEW 2026 (64-bit) is enabled automatically when the packaging step runs.
   - `Compare` → LabVIEW 2025 (64-bit) for VI comparison/report helpers.
 - `Enable-IconEditorDevelopmentMode` and `Disable-IconEditorDevelopmentMode` accept an `-Operation` switch so callers do not have to repeat version/bitness lists. Examples:
 
@@ -111,7 +111,7 @@ carries the actual LabVIEW payload.
     -IconEditorRoot vendor/icon-editor `
     -Operation Compare
 
-  # Enable development mode for packaging/build flows (LabVIEW 2021 32/64)
+# Enable development mode for packaging/build flows (LabVIEW 2023 32/64 + 2026 x64 packaging)
   pwsh -File tools/icon-editor/Enable-DevMode.ps1 `
     -RepoRoot . `
     -IconEditorRoot vendor/icon-editor `
@@ -279,8 +279,8 @@ carries the actual LabVIEW payload.
   - `-SourcePath` reuses an existing tree. Pair it with `Prepare-OverlayFromRepo.ps1` to limit the snapshot to just the changed resources/tests.
   - `-SkipValidate` prevents `Invoke-ValidateLocal` from running; the helper still emits the manifest/report.
   - `-DryRun` automatically sets `-SkipLVCompare` for the validate step so LVCompare stays offline.
-  - `-DevModeVersions` / `-DevModeBitness` let you override the LabVIEW version/bitness used when toggling development mode (defaults to 2025 / 64-bit). Use `-SkipDevMode` to bypass the toggle entirely if you have already prepared the environment.
-  - When not specified, the helper inspects the local LabVIEW installations via `Get-IconEditorDevModeLabVIEWTargets` and prefers LabVIEW 2025 x64 when present, falling back to any available LabVIEW 2025 bitness (or the newest detected version).
+  - `-DevModeVersions` / `-DevModeBitness` let you override the LabVIEW version/bitness used when toggling development mode (defaults to 2023 / 64-bit). Use `-SkipDevMode` to bypass the toggle entirely if you have already prepared the environment.
+  - When not specified, the helper inspects the local LabVIEW installations via `Get-IconEditorDevModeLabVIEWTargets` and prefers LabVIEW 2023 x64 when present, falling back to any available LabVIEW 2023 bitness (or the newest detected version).
   - `-SkipBootstrapForValidate` passes through to `Invoke-ValidateLocal` when `priority/bootstrap.ps1` already ran.
 - Pair with `Sync-IconEditorFork.ps1` when you want a long-lived mirror under `vendor/icon-editor/`, or use this helper to stage ad-hoc “fake PR” heads before pushing upstream.
 - For quick diffs without editing the VI in LabVIEW, mirror the resource tree into a disposable overlay, swap in a substitute VI, then stage the snapshot:
@@ -338,7 +338,7 @@ carries the actual LabVIEW payload.
 
 - Flags roll up to the underlying helpers:
   - `-SkipValidate`, `-SkipLVCompare` → forwarded to `Invoke-VIComparisonFromCommit.ps1` when comparisons still run.
-  - `-LabVIEWExePath` → overrides the auto-resolved LabVIEW 2025 64-bit binary.
+  - `-LabVIEWExePath` → overrides the auto-resolved LabVIEW 2023 64-bit binary.
 - `-EventsPath` controls where heuristic decisions are logged (`compare-events.ndjson` style). Omit to use the default under `tests/results/_agent/icon-editor/vi-diff/`.
 - `-CachePath` stores per-commit decisions so re-running the sweep can fast-path previously triaged commits.
 - Heuristic tuning (size delta threshold, compare throttling, prefix allow/deny rules) lives in `configs/icon-editor/vi-diff-heuristics.json`. Set `ICON_EDITOR_VI_DIFF_RULES` to point at an alternate JSON file while experimenting locally. `maxComparePerCommit` limits how many VI paths a single commit can send to LVCompare; overflow paths are skipped with a `compare-throttle` reason so you can follow up manually.
@@ -404,11 +404,12 @@ by the script now records both the toolchain and resolved provider so you can co
 which backend executed the build. The generated `icon-editor/build@v1` manifest records
 the requested backend under `packaging.requestedToolchain` (and `packaging.requestedProvider`
 when supplied) so downstream diagnostics stay transparent.
+The manifest also tracks `packaging.packedLibVersion` and `packaging.packagingLabviewVersion` so reviewers can confirm the lvlibp build and packaging LabVIEW versions.
 
 When dependency application is the failing stage, replay it via:
 
 ```powershell
-pwsh tools/icon-editor/Replay-ApplyVipcJob.ps1 -RunId <workflow-run-id> -JobName 'Apply VIPC Dependencies (2025, 64)'
+pwsh tools/icon-editor/Replay-ApplyVipcJob.ps1 -RunId <workflow-run-id> -JobName 'Apply VIPC Dependencies (2023, 64)'
 ```
 
 The script resolves the LabVIEW version/bitness from the matrix entry (or accepts them
@@ -417,4 +418,8 @@ and surfaces the same telemetry locally so you can investigate VIPM prompts or m
 paths without re-queuing a self-hosted runner. Pass `-SkipExecution` to inspect the
 replay command without running it, or reuse `-LogPath` when you already downloaded the
 job log (`gh run view … --log`).
+
+
+
+
 
