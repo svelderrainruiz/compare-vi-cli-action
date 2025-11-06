@@ -240,7 +240,7 @@ jobs:
           commit: ${{ github.sha }}
           release_notes_file: ${{ github.workspace }}/Tooling/deployment/release_notes.md
           display_information_json: ${{ steps.display-info.outputs.json }}
-      - id: run-vipm-build
+      - id: run_vipm_build
         uses: ./.github/actions/build-vi-package
         with:
           supported_bitness: 64
@@ -254,13 +254,13 @@ jobs:
           release_notes_file: ${{ github.workspace }}/Tooling/deployment/release_notes.md
           display_information_json: ${{ steps.display-info.outputs.json }}
       - name: Upload VIPM build logs
-        if: ${{ steps.run-vipm-build.outputs.vipm_build_log != '' }}
+        if: ${{ steps.run_vipm_build.outputs.vipm_build_log != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: vipm-build-logs
           path: |
-            ${{ steps.run-vipm-build.outputs.vipm_build_log }}
-            ${{ steps.run-vipm-build.outputs.vipm_build_metadata }}
+            ${{ steps.run_vipm_build.outputs.vipm_build_log }}
+            ${{ steps.run_vipm_build.outputs.vipm_build_metadata }}
       - uses: ./.github/actions/close-labview
         with:
           minimum_supported_lv_version: 2026
