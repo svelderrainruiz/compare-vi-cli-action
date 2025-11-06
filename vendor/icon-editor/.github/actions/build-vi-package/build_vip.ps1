@@ -67,8 +67,8 @@ $ErrorActionPreference = 'Stop'
 
 # Resolve repository roots for shared tooling
 $actionRoot      = $PSScriptRoot
-$iconEditorRoot  = (Resolve-Path (Join-Path $actionRoot '..\..\..')).ProviderPath
 $repoRoot        = (Resolve-Path (Join-Path $actionRoot '..\..\..\..\..')).ProviderPath
+$iconEditorRoot  = (Resolve-Path (Join-Path $repoRoot 'vendor' 'icon-editor')).ProviderPath
 $toolsRoot       = Join-Path $repoRoot 'tools'
 $vipmModulePath  = Join-Path $iconEditorRoot 'tools' 'Vipm.psm1'
 $packageModule   = Join-Path $toolsRoot 'icon-editor' 'IconEditorPackage.psm1'
@@ -190,5 +190,37 @@ catch {
     }
     $errorObject | ConvertTo-Json -Depth 10
     exit 1
+}
+
+# 6) Persist VIPM build diagnostics
+$logRoot = Join-Path $iconEditorRoot 'tests\results\_agent\icon-editor\vipm-cli-build'
+if (-not (Test-Path -LiteralPath $logRoot -PathType Container)) {
+    New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+}
+$timestamp = Get-Date -Format 'yyyyMMddTHHmmssfff'
+$logPath = Join-Path $logRoot ("vipm-build-{0}.log" -f $timestamp)
+$metadataPath = Join-Path $logRoot ("vipm-build-{0}.json" -f $timestamp)
+
+$logLines = @()
+$logLines += "VIPM Build Invocation"
+$logLines += "Timestamp (UTC): {0}" -f (Get-Date -Format 'u')
+$logLines += "Provider: {0}" -f $result.Provider
+$logLines += "ProviderBinary: {0}" -f $result.ProviderBinary
+$logLines += "PackagePath: {0}" -f $result.PackagePath
+$logLines += "DurationSeconds: {0}" -f $result.DurationSeconds
+$logLines += "Warnings: {0}" -f (($result.Warnings -join '; ') ?? '')
+$logLines += "---- StdOut ----"
+if ($result.StdOut) { $logLines += $result.StdOut } else { $logLines += '<empty>' }
+$logLines += "---- StdErr ----"
+if ($result.StdErr) { $logLines += $result.StdErr } else { $logLines += '<empty>' }
+
+Set-Content -LiteralPath $logPath -Value $logLines -Encoding UTF8
+$result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+
+if ($Env:GITHUB_OUTPUT) {
+    $relativeLog = [System.IO.Path]::GetRelativePath($repoRoot, (Resolve-Path -LiteralPath $logPath).ProviderPath).Replace('\','/')
+    $relativeMetadata = [System.IO.Path]::GetRelativePath($repoRoot, (Resolve-Path -LiteralPath $metadataPath).ProviderPath).Replace('\','/')
+    "vipm_build_log=$relativeLog" >> $Env:GITHUB_OUTPUT
+    "vipm_build_metadata=$relativeMetadata" >> $Env:GITHUB_OUTPUT
 }
 

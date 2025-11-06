@@ -18,6 +18,13 @@ Runs **`build_vip.ps1`** to update a `.vipb` file's display info and build the V
 
 > **Note:** The action automatically uses the first `.vipb` file located in this directory.
 
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| `vipm_build_log` | Relative path to the VIPM CLI stdout/stderr log for the build. |
+| `vipm_build_metadata` | Relative path to the structured JSON metadata captured from the VIPM build invocation. |
+
 ## Quick-start
 ```yaml
 - uses: ./.github/actions/build-vi-package
@@ -31,7 +38,8 @@ Runs **`build_vip.ps1`** to update a `.vipb` file's display info and build the V
     commit: ${{ github.sha }}
     release_notes_file: Tooling/deployment/release_notes.md
     display_information_json: '{}'
+  # outputs available as steps.<id>.outputs.vipm_build_log, etc.
 ```
 
 ## License
-This directory inherits the root repository’s license (MIT, unless otherwise noted).
+This directory inherits the root repository's license (MIT, unless otherwise noted).
