@@ -24,19 +24,17 @@ carries the actual LabVIEW payload.
 - Fixture version `1.4.1.948` (system `1.4.1.948`), license `MIT`.
 - Fixture path: `tests\fixtures\icon-editor\ni_icon_editor-1.4.1.948.vip`
 - Package smoke status: **fail** (VIPs: 1)
-- Report generated: `11/4/2025 2:11:28 PM`
+- Report generated: `11/5/2025 5:27:07 PM`
 - Artifacts:
   - ni_icon_editor-1.4.1.948.vip - 0.35 MB (`919104d1e35405e40862776f853cc6b9c23b87121d4b717fcbd06742e937e75e`)
   - ni_icon_editor_system-1.4.1.948.vip - 0.28 MB (`8181b37939ed27faa0fdf5f87c881e1cc0b2fe4edecee4384a10c04b9b9af03a`)
-  - lv_icon_x64.lvlibp - 2.85 MB (`e851ac8d296e78f4ed1fd66af576c50ae5ff48caf18775ac3d4085c29d4bd013`)
-  - lv_icon_x86.lvlibp - 2.85 MB (`8a3d07791c5f03d11bddfb32d25fd5d7c933a2950d96b5668cc5837fe7dece23`)
 
 ## Stakeholder summary
 
 - Smoke status: **fail**
 - Runner dependencies: mismatch
 - Custom actions: 4 entries (all match: False)
-- Fixture-only assets discovered: 311
+- Fixture-only assets discovered: 0
 
 ## Comparison with repository sources
 
@@ -52,31 +50,11 @@ carries the actual LabVIEW payload.
 
 ## Fixture-only assets
 
-- resource (311 entries)
-  - plugins\lv_icon.vi (af6be82644d7b0d9252bb5188847a161c641653a38f664bddcacc75bbc6b0b51)
-  - plugins\lv_icon.vit (c74159e8f4e16d1881359dae205e71fdee6131020c7c735440697138eec0c0dd)
-  - plugins\lv_IconEditor.lvlib (a2721f0b8aea3c32a00d0b148f24bdeee05201b41cffbaa212dbe325fdd4f3f7)
-  - plugins\NIIconEditor\Class\Ants\Ants.lvclass (650baef4cded7115e549f0f99258884c43185f88b6a082b1629e0fa72406f176)
-  - plugins\NIIconEditor\Class\Ants\GET\GET_AntsLine.vi (794dfcbf2ed7ff560f2346ba51c840d00dc22e58098c9f4a76cdeb370b9c9df9)
-  - ... 306 more
+- None detected.
 
 ## Fixture-only manifest delta
 
-- Added: 311, Removed: 311, Changed: 0
-- Added:
-  - `resource:tests\plugins\niiconeditor\class\fakedarray\misc\updatevisibledata.vi`
-  - `resource:tests\plugins\niiconeditor\controls\draw.ctl`
-  - `resource:tests\plugins\niiconeditor\controls\user event communication enum.ctl`
-  - `resource:tests\plugins\niiconeditor\miscellaneous\icon editor\mousemove.vi`
-  - `resource:tests\plugins\lv_icon.vit`
-  - (+306 more)
-- Removed:
-  - `resource:resource\plugins\lv_icon.vi`
-  - `resource:resource\plugins\lv_icon.vit`
-  - `resource:resource\plugins\lv_iconeditor.lvlib`
-  - `resource:resource\plugins\niiconeditor\class\ants\ants.lvclass`
-  - `resource:resource\plugins\niiconeditor\class\ants\get\get_antsline.vi`
-  - (+306 more)
+- Added: 0, Removed: 0, Changed: 0
 
 ## Changed VI comparison (requests)
 
@@ -418,8 +396,4 @@ and surfaces the same telemetry locally so you can investigate VIPM prompts or m
 paths without re-queuing a self-hosted runner. Pass `-SkipExecution` to inspect the
 replay command without running it, or reuse `-LogPath` when you already downloaded the
 job log (`gh run view … --log`).
-
-
-
-
 
