@@ -50,4 +50,20 @@ Describe 'Replay-ApplyVipcJob helpers' -Tag 'Unit' {
         $params.VipcPath | Should -Be '.github/actions/apply-vipc/runner_dependencies.vipc'
     }
 
+    It 'routes apply replay through vipm toolchain by default' {
+        $params = @{
+            MinimumSupportedLVVersion = '2023'
+            VipLabVIEWVersion         = '2026'
+            SupportedBitness          = 64
+        }
+
+        Mock -CommandName Invoke-ApplyVipcReplay {
+            param($Resolved,$Workspace,$VipcPath,$Toolchain,$SkipExecution)
+        }
+
+        Invoke-ReplayApplyVipcJob -InitialParameters $params
+
+        Assert-MockCalled Invoke-ApplyVipcReplay -Times 1 -ParameterFilter { $Toolchain -eq 'vipm' }
+    }
+
 }

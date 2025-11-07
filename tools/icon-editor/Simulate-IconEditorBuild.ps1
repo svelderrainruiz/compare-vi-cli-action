@@ -39,11 +39,15 @@ function Convert-ToOrderedHashtable {
 $repoRoot = Resolve-RepoRoot
 
 if (-not $FixturePath) {
-  $FixturePath = Join-Path $repoRoot 'tests' 'fixtures' 'icon-editor' 'ni_icon_editor-1.4.1.948.vip'
+  $FixturePath = [System.Environment]::GetEnvironmentVariable('ICON_EDITOR_FIXTURE_PATH')
+}
+
+if (-not $FixturePath) {
+  throw "Fixture VI Package path not provided. Pass -FixturePath or set ICON_EDITOR_FIXTURE_PATH."
 }
 
 if (-not (Test-Path -LiteralPath $FixturePath -PathType Leaf)) {
-  throw "Fixture VI Package not found at '$FixturePath'. Ensure the repository fixture exists or supply -FixturePath."
+  throw "Fixture VI Package not found at '$FixturePath'. Ensure the fixture exists or supply a valid -FixturePath."
 }
 
 if (-not $ResultsRoot) {

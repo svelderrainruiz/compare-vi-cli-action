@@ -67,8 +67,8 @@ param(
 
     [int]$SupportedBitness,
 
-    [ValidateSet('auto','gcli','vipm')]
-    [string]$Toolchain,
+    [ValidateSet('gcli','vipm')]
+    [string]$Toolchain = 'vipm',
 
     [switch]$SkipExecution
 )
@@ -258,7 +258,7 @@ function Invoke-ApplyVipcReplay {
 
     $pwshArgs = @(
         '-NoLogo','-NoProfile','-File',$applyScript,
-        '-RelativePath', $workspaceRoot,
+        '-IconEditorRoot', $workspaceRoot,
         '-VIPCPath', $vipcRelative,
         '-MinimumSupportedLVVersion', $Resolved.Version,
         '-VIP_LVVersion', $Resolved.VipVersion,
@@ -310,8 +310,8 @@ function Invoke-ReplayApplyVipcJob {
         $skipExecutionFlag = [bool]$InitialParameters['SkipExecution']
     }
 
-    $toolchainValue = $null
-    if ($InitialParameters.ContainsKey('Toolchain')) {
+    $toolchainValue = 'vipm'
+    if ($InitialParameters.ContainsKey('Toolchain') -and $null -ne $InitialParameters['Toolchain']) {
         $toolchainValue = $InitialParameters['Toolchain']
     }
 

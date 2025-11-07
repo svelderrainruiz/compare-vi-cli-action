@@ -141,13 +141,6 @@ Invoke-Step -Name 'Sync icon-editor vendor snapshot' -Action {
 
     Ensure-VendorModule -FileName 'GCli.psm1' -Content ($wrapperTemplate -f 'GCli.psm1', 'GCli')
     Ensure-VendorModule -FileName 'Vipm.psm1' -Content ($wrapperTemplate -f 'Vipm.psm1', 'Vipm')
-
-    $restoreScript = Join-Path $RepoRoot 'tools\icon-editor\Restore-VendorAssets.ps1'
-    if (Test-Path -LiteralPath $restoreScript -PathType Leaf) {
-        pwsh -NoLogo -NoProfile -File $restoreScript | Out-Null
-    } else {
-        Write-Warning "Restore-VendorAssets.ps1 not found at $restoreScript."
-    }
 }
 
 Invoke-Step -Name 'Apply runner dependencies via VIPM (32/64-bit)' -Action {
@@ -178,7 +171,7 @@ Invoke-Step -Name 'Apply runner dependencies via VIPM (32/64-bit)' -Action {
         pwsh -NoLogo -NoProfile -File $applyScript `
             -MinimumSupportedLVVersion $target.Version `
             -SupportedBitness $target.Bitness `
-            -RelativePath $IconEditorRoot `
+            -IconEditorRoot $IconEditorRoot `
             -VIP_LVVersion $target.VipVersion | Out-Null
         Invoke-CloseLabVIEWBitness -Bitness $target.Bitness -Version $target.Version
     }

@@ -14,6 +14,7 @@ Describe 'Invoke-IconEditorBuild.ps1' -Tag 'IconEditor','Build','Unit' {
     Remove-Module IconEditorDevMode -Force -ErrorAction SilentlyContinue
     Remove-Module VendorTools -Force -ErrorAction SilentlyContinue
     Remove-Module IconEditorPackage -Force -ErrorAction SilentlyContinue
+    Remove-Module PackedLibraryBuild -Force -ErrorAction SilentlyContinue
   }
 
   BeforeEach {
@@ -29,10 +30,11 @@ Describe 'Invoke-IconEditorBuild.ps1' -Tag 'IconEditor','Build','Unit' {
     $null = New-Item -ItemType Directory -Path (Join-Path $script:iconRoot 'resource\plugins') -Force
     $null = New-Item -ItemType Directory -Path (Join-Path $script:iconRoot 'Tooling\deployment') -Force
     $null = New-Item -ItemType File -Path (Join-Path $script:iconRoot 'Tooling\deployment\NI Icon editor.vipb') -Force
+    $null = New-Item -ItemType File -Path (Join-Path $script:iconRoot 'lv_icon_editor.lvproj') -Force
 
     function New-StubScript {
-      param([string]$RelativePath, [string]$Content)
-      $scriptPath = Join-Path $actionsRoot $RelativePath
+      param([string]$ActionRelativePath, [string]$Content)
+      $scriptPath = Join-Path $actionsRoot $ActionRelativePath
       $null = New-Item -ItemType Directory -Path (Split-Path -Parent $scriptPath) -Force
       Set-Content -LiteralPath $scriptPath -Value $Content -Encoding utf8
     }
@@ -41,14 +43,14 @@ Describe 'Invoke-IconEditorBuild.ps1' -Tag 'IconEditor','Build','Unit' {
 param(
   [string]$MinimumSupportedLVVersion,
   [string]$SupportedBitness,
-  [string]$RelativePath,
+  [string]$IconEditorRoot,
   [int]$Major,
   [int]$Minor,
   [int]$Patch,
   [int]$Build,
   [string]$Commit
 )
-$target = Join-Path $RelativePath 'resource\plugins\lv_icon.lvlibp'
+$target = Join-Path $IconEditorRoot 'resource\plugins\lv_icon.lvlibp'
 New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
 "build-$SupportedBitness-$Major.$Minor.$Patch.$Build" | Set-Content -LiteralPath $target -Encoding utf8
 '@
@@ -73,7 +75,7 @@ Rename-Item -LiteralPath $CurrentFilename -NewName $NewFilename -Force
 param(
   [string]$MinimumSupportedLVVersion,
   [string]$SupportedBitness,
-  [string]$RelativePath
+  [string]$IconEditorRoot
 )
 "token:$MinimumSupportedLVVersion-$SupportedBitness" | Out-Null
 '@
@@ -82,11 +84,11 @@ param(
 param(
   [string]$MinimumSupportedLVVersion,
   [string]$SupportedBitness,
-  [string]$RelativePath,
+  [string]$IconEditorRoot,
   [string]$LabVIEW_Project,
   [string]$Build_Spec
 )
-$prepFlag = Join-Path $RelativePath 'Tooling\deployment\prepare-flag.txt'
+$prepFlag = Join-Path $IconEditorRoot 'Tooling\deployment\prepare-flag.txt'
 "prepared:$MinimumSupportedLVVersion-$SupportedBitness" | Set-Content -LiteralPath $prepFlag -Encoding utf8
 '@
 
@@ -102,23 +104,30 @@ param(
   [int]$Patch,
   [int]$Build,
   [string]$Commit,
-  [string]$RelativePath,
+  [string]$IconEditorRoot,
   [string]$VIPBPath,
   [string]$ReleaseNotesFile,
   [string]$DisplayInformationJSON
 )
-$infoPath = Join-Path $RelativePath 'Tooling\deployment\display-info.json'
+$infoPath = Join-Path $IconEditorRoot 'Tooling\deployment\display-info.json'
 Set-Content -LiteralPath $infoPath -Value $DisplayInformationJSON -Encoding utf8
 if (-not (Test-Path -LiteralPath $ReleaseNotesFile -PathType Leaf)) {
   New-Item -ItemType File -Path $ReleaseNotesFile -Force | Out-Null
 }
 '@ | Set-Content -LiteralPath $updateVipbPath -Encoding utf8
 
+    $unitReadyHelper = Join-Path $TestDrive 'UnitTestReady.ps1'
+    $env:ICON_EDITOR_UNIT_READY_HELPER = $unitReadyHelper
+    @'
+param([switch]$Validate)
+"unit-ready" | Out-File (Join-Path $env:TEMP 'unit-ready.log')
+'@ | Set-Content -LiteralPath $unitReadyHelper -Encoding utf8
+
     New-StubScript 'restore-setup-lv-source/RestoreSetupLVSource.ps1' @'
 param(
   [string]$MinimumSupportedLVVersion,
   [string]$SupportedBitness,
-  [string]$RelativePath,
+  [string]$IconEditorRoot,
   [string]$LabVIEW_Project,
   [string]$Build_Spec
 )
@@ -143,6 +152,24 @@ param(
 $iconRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
 "vip-$SupportedBitness" | Set-Content -LiteralPath $vipOut -Encoding utf8
+'@
+
+    New-StubScript 'missing-in-project/Invoke-MissingInProjectCLI.ps1' @'
+param(
+  [string]$LVVersion,
+  [string]$Arch,
+  [string]$ProjectFile
+)
+'@
+
+    New-StubScript 'run-unit-tests/RunUnitTests.ps1' @'
+param(
+  [string]$MinimumSupportedLVVersion,
+  [string]$SupportedBitness,
+  [string]$ProjectPath
+)
+$reportPath = Join-Path $PSScriptRoot 'UnitTestReport.xml'
+"<Report lv='$MinimumSupportedLVVersion' arch='$SupportedBitness' />" | Set-Content -LiteralPath $reportPath -Encoding utf8
 '@
 
     $global:IconBuildDevModeState = [pscustomobject]@{
@@ -263,9 +290,9 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
 
       switch ($scriptName) {
         'Build_lvlibp.ps1' {
-          $relativePath = $argsMap['RelativePath']
-          if ($relativePath) {
-            $target = Join-Path $relativePath 'resource\plugins\lv_icon.lvlibp'
+          $IconEditorRoot = $argsMap['IconEditorRoot']
+          if ($IconEditorRoot) {
+            $target = Join-Path $IconEditorRoot 'resource\plugins\lv_icon.lvlibp'
             New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
             "build-$($argsMap['SupportedBitness'])" | Set-Content -LiteralPath $target -Encoding utf8
           }
@@ -276,9 +303,9 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
           }
         }
         'Update-VipbDisplayInfo.ps1' {
-          $relativePath = $argsMap['RelativePath']
-          if ($relativePath) {
-            $infoPath = Join-Path $relativePath 'Tooling\deployment\display-info.json'
+          $IconEditorRoot = $argsMap['IconEditorRoot']
+          if ($IconEditorRoot) {
+            $infoPath = Join-Path $IconEditorRoot 'Tooling\deployment\display-info.json'
             $argsMap['DisplayInformationJSON'] | Set-Content -LiteralPath $infoPath -Encoding utf8
           }
           if ($argsMap['ReleaseNotesFile'] -and -not (Test-Path -LiteralPath $argsMap['ReleaseNotesFile'] -PathType Leaf)) {
@@ -313,6 +340,19 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
           Compress-Archive -Path (Join-Path $tempRoot '*') -DestinationPath $vipOut -Force
           Remove-Item -LiteralPath $tempRoot -Recurse -Force
         }
+        'Invoke-MissingInProjectCLI.ps1' {
+          $resultsDir = Join-Path $RepoRoot 'tests\results\_agent\missing-in-project'
+          New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null
+          $payload = [ordered]@{
+            schema       = 'test/missing-in-project'
+            generatedAt  = (Get-Date).ToString('o')
+            lvVersion    = $argsMap['LVVersion']
+            arch         = $argsMap['Arch']
+            missingFiles = @()
+            passed       = $true
+          }
+          $payload | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $resultsDir 'last-run.json') -Encoding utf8
+        }
         default { }
       }
     }
@@ -322,6 +362,11 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     Remove-Variable -Name IconBuildRecorded -Scope Global -ErrorAction SilentlyContinue
     Remove-Variable -Name IconBuildDevModeState -Scope Global -ErrorAction SilentlyContinue
     Remove-Item Env:ICON_EDITOR_UPDATE_VIPB_HELPER -ErrorAction SilentlyContinue
+    Remove-Item Env:ICON_EDITOR_UNIT_READY_HELPER -ErrorAction SilentlyContinue
+    $missingTelemetry = Join-Path $script:repoRoot 'tests\results\_agent\missing-in-project\last-run.json'
+    if (Test-Path -LiteralPath $missingTelemetry -PathType Leaf) {
+      Remove-Item -LiteralPath $missingTelemetry -Force -ErrorAction SilentlyContinue
+    }
   }
 
   It 'runs full build and packaging flow' {
@@ -440,5 +485,36 @@ $vipOut = Join-Path $iconRoot 'Tooling\deployment\IconEditor_Test.vip'
     $manifest = Get-Content -LiteralPath (Join-Path $script:resultsRoot 'manifest.json') -Raw | ConvertFrom-Json
     $manifest.packaging.requestedToolchain | Should -Be 'vipm'
     $manifest.packaging.requestedProvider  | Should -Be 'vipm-custom'
+  }
+
+  It 'runs missing-in-project checks before executing unit tests' {
+    { & $script:scriptPath `
+        -IconEditorRoot $script:iconRoot `
+        -ResultsRoot $script:resultsRoot `
+        -SkipPackaging `
+        -RunUnitTests `
+        -Commit 'unittest' } | Should -Not -Throw
+
+    $missingCalls = $global:IconBuildRecorded | Where-Object { $_.Script -eq 'Invoke-MissingInProjectCLI.ps1' }
+    $missingCalls.Count | Should -Be 2
+
+    $arches = @()
+    foreach ($call in $missingCalls) {
+      $map = @{}
+      for ($i = 0; $i -lt $call.Arguments.Count; $i += 2) {
+        $key = $call.Arguments[$i].TrimStart('-')
+        $value = if ($i + 1 -lt $call.Arguments.Count) { $call.Arguments[$i + 1] } else { $null }
+        $map[$key] = $value
+      }
+      $map['LVVersion'] | Should -Be '2023'
+      $arches += $map['Arch']
+    }
+    (($arches | Sort-Object -Unique) -join ',') | Should -Be '32,64'
+
+    $telemetryPath = Join-Path $script:repoRoot 'tests\results\_agent\missing-in-project\last-run.json'
+    Test-Path -LiteralPath $telemetryPath | Should -BeTrue
+
+    $unitReport = Join-Path $script:resultsRoot 'UnitTestReport.xml'
+    Test-Path -LiteralPath $unitReport | Should -BeTrue
   }
 }

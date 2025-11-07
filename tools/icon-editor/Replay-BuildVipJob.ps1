@@ -293,7 +293,7 @@ try {
         $updateResult = Invoke-ExternalPwsh -Arguments @(
             '-NoLogo','-NoProfile','-File','.github/actions/modify-vipb-display-info/Update-VipbDisplayInfo.ps1',
             '-SupportedBitness',"$packagingSupportedBitness",
-            '-RelativePath',(Get-Location).Path,
+            '-IconEditorRoot',(Get-Location).Path,
             '-VIPBPath',$vipbRelative,
             '-MinimumSupportedLVVersion',"$packedLibLabVIEWVersion",
             '-LabVIEWMinorRevision',"$packedLibLabVIEWMinorRevision",

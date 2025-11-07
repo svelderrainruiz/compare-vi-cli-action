@@ -1,42 +1,37 @@
 <#
 .SYNOPSIS
-    Applies the icon editor runner dependencies using the VIPM CLI.
+    Applies a .vipc file to a given LabVIEW version/bitness.
+    This version includes additional debug/verbose output.
 
 .EXAMPLE
-    .\ApplyVIPC.ps1 -MinimumSupportedLVVersion 2023 -SupportedBitness 64 -RelativePath vendor\icon-editor -VIP_LVVersion 2026
+    .\applyvipc.ps1 -MinimumSupportedLVVersion "2021" -SupportedBitness "64" -RelativePath "C:\release\labview-icon-editor-fork" -VIP_LVVersion "2021" -Verbose
 #>
 
-[CmdletBinding()]
-param(
-    [int]$MinimumSupportedLVVersion,
-    [int]$VIP_LVVersion,
-    [ValidateSet('32','64')][string]$SupportedBitness,
+[CmdletBinding()]  # Enables -Verbose and other common parameters
+Param (
+    [string]$MinimumSupportedLVVersion,
+    [string]$VIP_LVVersion,
+    [string]$SupportedBitness,
     [string]$RelativePath,
     [string]$VIPCPath
 )
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-$iconEditorRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).ProviderPath
-$vipmModule = Join-Path $iconEditorRoot 'tools\Vipm.psm1'
-if (-not (Test-Path -LiteralPath $vipmModule -PathType Leaf)) {
-    throw "Vipm module not found at '$vipmModule'."
-}
-Import-Module $vipmModule -Force
-
+# Auto-detect the VIPC file if one isn't provided
 if (-not $VIPCPath) {
-    $vipcFiles = Get-ChildItem -Path $PSScriptRoot -Filter '*.vipc'
+    $vipcFiles = Get-ChildItem -Path $PSScriptRoot -Filter *.vipc
     if ($vipcFiles.Count -eq 0) {
-        throw "No .vipc file found in '$PSScriptRoot'."
+        Write-Error "No .vipc file found in '$PSScriptRoot'."
+        exit 1
     }
     if ($vipcFiles.Count -gt 1) {
-        throw "Multiple .vipc files found in '$PSScriptRoot'. Specify -VIPCPath."
+        Write-Error "Multiple .vipc files found in '$PSScriptRoot'. Specify -VIPCPath."
+        exit 1
     }
     $VIPCPath = $vipcFiles[0].FullName
     Write-Verbose "Auto-detected VIPCPath: $VIPCPath"
 }
 
+Write-Verbose "Script Name: $($MyInvocation.MyCommand.Definition)"
 Write-Verbose "Parameters provided:"
 Write-Verbose " - MinimumSupportedLVVersion: $MinimumSupportedLVVersion"
 Write-Verbose " - VIP_LVVersion:             $VIP_LVVersion"
@@ -44,50 +39,109 @@ Write-Verbose " - SupportedBitness:          $SupportedBitness"
 Write-Verbose " - RelativePath:              $RelativePath"
 Write-Verbose " - VIPCPath:                  $VIPCPath"
 
+# -------------------------
+# 1) Resolve Paths & Validate
+# -------------------------
 try {
-    $resolvedWorkspace = if ($RelativePath) {
-        (Resolve-Path -Path $RelativePath -ErrorAction Stop).ProviderPath
-    } else {
-        $iconEditorRoot
-    }
+    Write-Verbose "Attempting to resolve the 'RelativePath'..."
+    $ResolvedRelativePath = Resolve-Path -Path $RelativePath -ErrorAction Stop
+    Write-Verbose "ResolvedRelativePath: $ResolvedRelativePath"
 
+    Write-Verbose "Building full path for the .vipc file..."
     if ([System.IO.Path]::IsPathRooted($VIPCPath)) {
-        $resolvedVipcPath = (Resolve-Path -Path $VIPCPath -ErrorAction Stop).ProviderPath
+        $ResolvedVIPCPath = Resolve-Path -Path $VIPCPath -ErrorAction Stop
     } else {
-        $resolvedVipcPath = (Resolve-Path -Path (Join-Path $resolvedWorkspace $VIPCPath) -ErrorAction Stop).ProviderPath
+        $ResolvedVIPCPath = Resolve-Path -Path (Join-Path -Path $ResolvedRelativePath -ChildPath $VIPCPath) -ErrorAction Stop
     }
-} catch {
-    throw "Error resolving paths. Ensure RelativePath/VIPCPath are valid. Details: $($_.Exception.Message)"
+    Write-Verbose "ResolvedVIPCPath:     $ResolvedVIPCPath"
+
+    # Verify that the .vipc file actually exists
+    Write-Verbose "Checking if the .vipc file exists at the resolved path..."
+    if (-not (Test-Path $ResolvedVIPCPath)) {
+        Write-Error "The .vipc file does not exist at '$ResolvedVIPCPath'."
+        exit 1
+    }
+    Write-Verbose "The .vipc file was found successfully."
+}
+catch {
+    Write-Error "Error resolving paths. Ensure RelativePath and VIPCPath are valid. Details: $($_.Exception.Message)"
+    exit 1
 }
 
-if (-not (Test-Path -LiteralPath $resolvedVipcPath -PathType Leaf)) {
-    throw "The .vipc file does not exist at '$resolvedVipcPath'."
-}
-
-Write-Host ("Applying dependencies for LabVIEW {0} ({1}-bit) via VIPM CLI..." -f $VIP_LVVersion, $SupportedBitness)
-
-$invocation = Get-VipmInvocation -Operation 'InstallVipc' -Params @{
-    vipcPath       = $resolvedVipcPath
-    labviewVersion = $VIP_LVVersion.ToString()
-    labviewBitness = $SupportedBitness
-}
-
-Write-Host ("Executing: {0} {1}" -f $invocation.Binary, ($invocation.Arguments -join ' '))
-$output = & $invocation.Binary @($invocation.Arguments) 2>&1
-$exitCode = $LASTEXITCODE
-
-if ($output) {
-    $output | ForEach-Object {
-        if ($_ -match '^\s*\[WARN\]') {
-            Write-Warning $_
-        } else {
-            Write-Output $_
-        }
+# -------------------------
+# 2) Build LabVIEW Version Strings
+# -------------------------
+Write-Verbose "Determining LabVIEW version strings..."
+switch ("$VIP_LVVersion-$SupportedBitness") {
+    "2021-64" { $VIP_LVVersion_A = "21.0 (64-bit)" }
+    "2021-32" { $VIP_LVVersion_A = "21.0" }
+    "2022-64" { $VIP_LVVersion_A = "22.3 (64-bit)" }
+    "2022-32" { $VIP_LVVersion_A = "22.3" }
+    "2023-64" { $VIP_LVVersion_A = "23.3 (64-bit)" }
+    "2023-32" { $VIP_LVVersion_A = "23.3" }
+    "2024-64" { $VIP_LVVersion_A = "24.3 (64-bit)" }
+    "2024-32" { $VIP_LVVersion_A = "24.3" }
+    "2025-64" { $VIP_LVVersion_A = "25.3 (64-bit)" }
+    "2025-32" { $VIP_LVVersion_A = "25.3" }
+    default {
+        Write-Error "Unsupported VIP_LVVersion or SupportedBitness for VIP_LVVersion_A."
+        exit 1
     }
 }
 
-if ($exitCode -ne 0) {
-    throw "VIPM CLI exited with code $exitCode while applying '$resolvedVipcPath' for LabVIEW $VIP_LVVersion ($SupportedBitness-bit)."
+switch ("$MinimumSupportedLVVersion-$SupportedBitness") {
+    "2021-64" { $VIP_LVVersion_B = "21.0 (64-bit)" }
+    "2021-32" { $VIP_LVVersion_B = "21.0" }
+    "2022-64" { $VIP_LVVersion_B = "22.3 (64-bit)" }
+    "2022-32" { $VIP_LVVersion_B = "22.3" }
+    "2023-64" { $VIP_LVVersion_B = "23.3 (64-bit)" }
+    "2023-32" { $VIP_LVVersion_B = "23.3" }
+    "2024-64" { $VIP_LVVersion_B = "24.3 (64-bit)" }
+    "2024-32" { $VIP_LVVersion_B = "24.3" }
+    "2025-64" { $VIP_LVVersion_B = "25.3 (64-bit)" }
+    "2025-32" { $VIP_LVVersion_B = "25.3" }
+    default {
+        Write-Error "Unsupported MinimumSupportedLVVersion or SupportedBitness for VIP_LVVersion_B."
+        exit 1
+    }
 }
 
-Write-Host ("Successfully applied dependencies to LabVIEW {0} ({1}-bit)." -f $VIP_LVVersion, $SupportedBitness)
+Write-Output "Applying dependencies for LabVIEW $VIP_LVVersion_B..."
+Write-Verbose "VIP_LVVersion_A (for primary LVVersion): $VIP_LVVersion_A"
+Write-Verbose "VIP_LVVersion_B (for minimum LVVersion): $VIP_LVVersion_B"
+
+# -------------------------
+# 3) Construct the Script to Execute
+# -------------------------
+Write-Verbose "Constructing the g-cli command script..."
+$script = @"
+g-cli --lv-ver $MinimumSupportedLVVersion --arch $SupportedBitness -v "$($ResolvedRelativePath)\Tooling\Deployment\Applyvipc.vi" -- "$ResolvedVIPCPath" "$VIP_LVVersion_B"
+"@
+
+if ($VIP_LVVersion -ne $MinimumSupportedLVVersion) {
+    Write-Verbose "VIP_LVVersion and MinimumSupportedLVVersion differ; adding commands for $VIP_LVVersion..."
+    $script += @"
+g-cli vipc -- -t 3000 -v "$VIP_LVVersion" "$ResolvedVIPCPath"
+"@
+}
+
+# -------------------------
+# 4) Output the script for debugging
+# -------------------------
+Write-Output "Executing the following commands:"
+Write-Output $script
+Write-Verbose "Full script content (for debugging): `n$script"
+
+# -------------------------
+# 5) Execute the Script & Handle Errors (Try/Catch with Invoke-Expression)
+# -------------------------
+try {
+    Write-Verbose "Starting Invoke-Expression to run g-cli commands..."
+    Invoke-Expression $script
+    Write-Host "Successfully applied dependencies to LabVIEW: $VIP_LVVersion_B" `
+        " (and potentially $VIP_LVVersion_A if switched)."
+}
+catch {
+    Write-Error "An error occurred while applying the .vipc dependencies. Details: $($_.Exception.Message)"
+    exit 1
+}

@@ -55,3 +55,4 @@
 2. Invoke a missing-items helper when lvlibp builds exit non-zero, writing `missing-items.json` alongside the build manifest.
 3. Bubble the log + missing-items summary into the packaging failure exception and reference both artifacts here.
 
+\n### Local artifact publishing\n- Run build via one-shot task (fast or robust).\n- Use new VS Code task 'IconEditor: Publish Local Artifacts' to zip outputs and optionally upload via gh release.\n- Artifacts remain in tests/results/_agent/icon-editor and are not checked into git.\n

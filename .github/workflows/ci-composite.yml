@@ -37,9 +37,11 @@ on:
   workflow_dispatch: # manual trigger
 
 jobs:
+
   # Detect if VIPC files changed to decide whether dependencies must be installed
   changes:
     name: Detect VIPC changes
+
     runs-on: ubuntu-latest
     outputs:
       vipc: ${{ steps.filter.outputs.vipc }}
@@ -57,6 +59,7 @@ jobs:
   apply-deps:
     name: Apply VIPC Dependencies
     needs: changes
+
     runs-on: [self-hosted, Windows, X64]
     strategy:
       matrix:
@@ -77,9 +80,13 @@ jobs:
 
   enable-dev-mode:
     name: Enable Icon Editor Dev Mode
+
     needs: apply-deps
+
+    if: ${{ needs.apply-deps.result == 'success' || needs.apply-deps.result == 'skipped' }}
     runs-on: [self-hosted, Windows, X64]
     strategy:
+      fail-fast: false
       matrix:
         include:
           - lv-version: "2023"
@@ -103,6 +110,7 @@ jobs:
 
   version:
     name: Compute Version
+
     runs-on: [self-hosted, Windows, X64]
     outputs:
       VERSION:       ${{ steps.compute.outputs.VERSION }}
@@ -152,6 +160,7 @@ jobs:
         with:
           minimum_supported_lv_version: ${{ matrix['lv-version'] }}
           supported_bitness:            ${{ matrix.bitness }}
+
           project-file:                 vendor/icon-editor/lv_icon_editor.lvproj
 
   build-ppl:
@@ -196,7 +205,9 @@ jobs:
   build-vi-package:
     name: Build VI Package
     needs: [apply-deps, build-ppl, version, enable-dev-mode]
+
     if: ${{ needs.apply-deps.result == 'success' || needs.apply-deps.result == 'skipped' }}
+
     runs-on: [self-hosted, Windows, X64]
     permissions:
       contents: read
@@ -213,6 +224,7 @@ jobs:
           path: resource/plugins
           pattern: lv_icon_*.lvlibp
           merge-multiple: true
+
       - name: Report VIPM CLI version
         shell: pwsh
         run: |
@@ -229,6 +241,7 @@ jobs:
           } catch {
             Write-Warning "Unable to query VIPM CLI version: $($_.Exception.Message)"
           }
+
       - name: Generate display information JSON
         id: display-info
         shell: pwsh
@@ -266,8 +279,10 @@ jobs:
           commit: ${{ github.sha }}
           release_notes_file: ${{ github.workspace }}/Tooling/deployment/release_notes.md
           display_information_json: ${{ steps.display-info.outputs.json }}
+
       - id: run_vipm_build
         uses: ./.github/actions/build-vi-package
+
         with:
           supported_bitness: 64
           minimum_supported_lv_version: 2026
@@ -279,6 +294,7 @@ jobs:
           commit: ${{ github.sha }}
           release_notes_file: ${{ github.workspace }}/Tooling/deployment/release_notes.md
           display_information_json: ${{ steps.display-info.outputs.json }}
+
       - name: Upload VIPM build logs
         if: ${{ steps.run_vipm_build.outputs.vipm_build_log != '' }}
         uses: actions/upload-artifact@v4
@@ -287,6 +303,7 @@ jobs:
           path: |
             ${{ steps.run_vipm_build.outputs.vipm_build_log }}
             ${{ steps.run_vipm_build.outputs.vipm_build_metadata }}
+
       - uses: ./.github/actions/close-labview
         with:
           minimum_supported_lv_version: 2026
@@ -302,9 +319,10 @@ jobs:
     needs:
       - enable-dev-mode
       - build-vi-package
-    if: ${{ always() }}
+    if: ${{ always() && (needs.enable-dev-mode.result == 'success' || needs.enable-dev-mode.result == 'skipped') }}
     runs-on: [self-hosted, Windows, X64]
     strategy:
+      fail-fast: false
       matrix:
         include:
           - lv-version: "2023"
