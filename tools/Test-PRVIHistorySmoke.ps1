@@ -28,6 +28,18 @@ Selects which synthetic change set to exercise.
 
 .PARAMETER MaxPairs
 Optional override for the `max_pairs` workflow input. Defaults to `6`.
+
+.PARAMETER CompareBaseRef
+Optional compare-window base ref passed to `pr-vi-history.yml` dispatch (`base_ref`).
+Defaults to the smoke `BaseBranch`.
+
+.PARAMETER CompareHeadRef
+Optional compare-window head ref passed to `pr-vi-history.yml` dispatch (`head_ref`).
+Defaults to the generated scratch branch.
+
+.PARAMETER IncludeMergeParents
+When present, dispatches `include_merge_parents=true` so merge-parent lineage is
+included in history traversal.
 #>
 [CmdletBinding()]
 param(
@@ -36,7 +48,10 @@ param(
     [switch]$DryRun,
     [ValidateSet('attribute', 'sequential', 'sequential-multi-vi', 'signal-masscompile')]
     [string]$Scenario = 'attribute',
-    [int]$MaxPairs = 6
+    [int]$MaxPairs = 6,
+    [string]$CompareBaseRef,
+    [string]$CompareHeadRef,
+    [switch]$IncludeMergeParents
 )
 
 Set-StrictMode -Version Latest
@@ -558,6 +573,9 @@ Write-Verbose "KeepBranch: $KeepBranch"
 Write-Verbose "DryRun: $DryRun"
 Write-Verbose "Scenario: $Scenario"
 Write-Verbose "MaxPairs: $MaxPairs"
+Write-Verbose "CompareBaseRef: $CompareBaseRef"
+Write-Verbose "CompareHeadRef: $CompareHeadRef"
+Write-Verbose "IncludeMergeParents: $IncludeMergeParents"
 
 $repoInfo = Get-RepoInfo
 $initialBranch = Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD') | Select-Object -First 1
@@ -635,7 +653,7 @@ $planSteps.Add("- Fetch origin/$BaseBranch") | Out-Null
 $planSteps.Add("- Create branch $branchName from origin/$BaseBranch") | Out-Null
 $planSteps.Add($scenarioPlanHint) | Out-Null
 $planSteps.Add("- Push scratch branch and create draft PR") | Out-Null
-$planSteps.Add("- Dispatch pr-vi-history.yml with PR input (max_pairs=$MaxPairs)") | Out-Null
+$planSteps.Add("- Dispatch pr-vi-history.yml with PR input (max_pairs=$MaxPairs, base_ref=<effective>, head_ref=<effective>, include_merge_parents=$IncludeMergeParents)") | Out-Null
 $planSteps.Add("- Wait for workflow completion and verify PR comment") | Out-Null
 if ($scenarioNeedsArtifactValidation) {
     $planSteps.Add("- Download workflow artifact and validate diff/comparison counts") | Out-Null
@@ -674,6 +692,9 @@ $scratchContext = [ordered]@{
     mobilePreviewImageCount = 0
     mobilePreviewCommentFound = $false
     NetDiffAnchored = $false
+    CompareBaseRef = $null
+    CompareHeadRef = $null
+    IncludeMergeParents = [bool]$IncludeMergeParents
 }
 
 $commitSummaries = @()
@@ -750,6 +771,16 @@ try {
         }
     }
     $scratchContext.CommitCount = $commitSummaries.Count
+    $effectiveCompareBaseRef = if ([string]::IsNullOrWhiteSpace($CompareBaseRef)) { $BaseBranch } else { $CompareBaseRef.Trim() }
+    $effectiveCompareHeadRef = if ([string]::IsNullOrWhiteSpace($CompareHeadRef)) { $branchName } else { $CompareHeadRef.Trim() }
+    if ([string]::IsNullOrWhiteSpace($effectiveCompareBaseRef) -or [string]::IsNullOrWhiteSpace($effectiveCompareHeadRef)) {
+        throw 'Effective compare refs cannot be empty.'
+    }
+    if ([string]::Equals($effectiveCompareBaseRef, $effectiveCompareHeadRef, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Effective compare refs must differ.'
+    }
+    $scratchContext.CompareBaseRef = $effectiveCompareBaseRef
+    $scratchContext.CompareHeadRef = $effectiveCompareHeadRef
 
     Invoke-Git -Arguments @('push', '-u', 'origin', $branchName) | Out-Null
 
@@ -795,8 +826,11 @@ try {
     $dispatchBody = @{
         ref    = $branchName
         inputs = @{
-            pr        = $scratchContext.PrNumber.ToString()
-            max_pairs = $MaxPairs.ToString()
+            pr                    = $scratchContext.PrNumber.ToString()
+            max_pairs             = $MaxPairs.ToString()
+            base_ref              = $effectiveCompareBaseRef
+            head_ref              = $effectiveCompareHeadRef
+            include_merge_parents = if ($IncludeMergeParents.IsPresent) { 'true' } else { 'false' }
         }
     } | ConvertTo-Json -Depth 4
     Write-Host 'Triggering pr-vi-history workflow via dispatch API...'

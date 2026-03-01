@@ -9,6 +9,16 @@ on:
       pr:
         description: 'Pull request number'
         required: true
+      base_ref:
+        description: 'Optional base ref override for compare window (branch/tag/SHA)'
+        required: false
+      head_ref:
+        description: 'Optional head ref override for compare window (branch/tag/SHA)'
+        required: false
+      include_merge_parents:
+        description: 'Include merge-parent lineage comparisons (true/false, default false)'
+        required: false
+        default: 'false'
       fetch_depth:
         description: 'Depth used when fetching the PR head (default 20)'
         required: false
@@ -43,18 +53,36 @@ jobs:
       NOTE: ${{ inputs.note }}
       MAX_PAIRS: ${{ inputs.max_pairs || '6' }}
       FETCH_DEPTH: ${{ github.event.inputs.fetch_depth || '20' }}
+      INCLUDE_MERGE_PARENTS: ${{ github.event.inputs.include_merge_parents || 'false' }}
     steps:
       - name: Resolve pull request metadata
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_PR: ${{ inputs.pr }}
+          INPUT_BASE_REF: ${{ github.event.inputs.base_ref || inputs.base_ref }}
+          INPUT_HEAD_REF: ${{ github.event.inputs.head_ref || inputs.head_ref }}
           COMMENT_PR: ${{ github.event.issue.number }}
           REPO_SLUG: ${{ github.repository }}
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+
+          function Resolve-RefSha {
+            param(
+              [Parameter(Mandatory)][string]$RepoSlug,
+              [Parameter(Mandatory)][string]$Ref,
+              [Parameter(Mandatory)][string]$Description
+            )
+
+            $escapedRef = [System.Uri]::EscapeDataString($Ref)
+            $sha = gh api ("repos/{0}/commits/{1}" -f $RepoSlug, $escapedRef) --jq '.sha'
+            if ([string]::IsNullOrWhiteSpace($sha)) {
+              throw ("Unable to resolve {0} ref '{1}' to a commit SHA." -f $Description, $Ref)
+            }
+            return $sha.Trim()
+          }
 
           $prNumber = if ($env:INPUT_PR) { $env:INPUT_PR } elseif ($env:COMMENT_PR) { $env:COMMENT_PR } else { '' }
           if (-not $prNumber) { throw 'A pull request number is required.' }
@@ -70,6 +98,15 @@ jobs:
           $headSha = $info.headRefOid
           $baseRef = $info.baseRefName
           $headRef = $info.headRefName
+          $baseRefOverride = if ($env:INPUT_BASE_REF) { $env:INPUT_BASE_REF.Trim() } else { '' }
+          $headRefOverride = if ($env:INPUT_HEAD_REF) { $env:INPUT_HEAD_REF.Trim() } else { '' }
+          if ($baseRefOverride -and $headRefOverride -and [string]::Equals($baseRefOverride, $headRefOverride, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "base_ref and head_ref must differ when both overrides are provided."
+          }
+          $effectiveBaseRef = if ($baseRefOverride) { $baseRefOverride } else { $baseRef }
+          $effectiveHeadRef = if ($headRefOverride) { $headRefOverride } else { $headRef }
+          $effectiveBaseSha = if ($baseRefOverride) { Resolve-RefSha -RepoSlug $repoSlug -Ref $effectiveBaseRef -Description 'base' } else { $baseSha }
+          $effectiveHeadSha = if ($headRefOverride) { Resolve-RefSha -RepoSlug $repoSlug -Ref $effectiveHeadRef -Description 'head' } else { $headSha }
 
           $ownerLogin = $info.headRepositoryOwner?.login
           $repoName = $info.headRepository?.name
@@ -95,16 +132,21 @@ jobs:
 
           "pr_number=$prNumber" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
           "pr_url=$($info.url)" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "base_sha=$baseSha" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "head_sha=$headSha" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "base_ref=$baseRef" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "head_ref=$headRef" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "base_sha=$effectiveBaseSha" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "head_sha=$effectiveHeadSha" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "base_ref=$effectiveBaseRef" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "head_ref=$effectiveHeadRef" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "base_ref_override=$baseRefOverride" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "head_ref_override=$headRefOverride" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
           "head_repo=$headRepo" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Checkout pull request head
         shell: pwsh
         env:
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          HEAD_REF_OVERRIDE: ${{ steps.pr.outputs.head_ref_override }}
           FETCH_DEPTH: ${{ env.FETCH_DEPTH }}
         run: |
           Set-StrictMode -Version Latest
@@ -114,9 +156,21 @@ jobs:
           }
 
           $fetchDepth = if ($env:FETCH_DEPTH) { [int]$env:FETCH_DEPTH } else { 20 }
-          git fetch --no-tags --depth=$fetchDepth origin ("pull/{0}/head:pr-{0}-head" -f $env:PR_NUMBER)
-          git checkout --detach ("pr-{0}-head" -f $env:PR_NUMBER)
-          git branch -D ("pr-{0}-head" -f $env:PR_NUMBER) 2>$null | Out-Null
+          if ($env:HEAD_REF_OVERRIDE) {
+            git fetch --no-tags --depth=$fetchDepth origin ("{0}:pr-history-head" -f $env:HEAD_REF_OVERRIDE)
+          } else {
+            git fetch --no-tags --depth=$fetchDepth origin ("pull/{0}/head:pr-history-head" -f $env:PR_NUMBER)
+          }
+
+          if ($env:BASE_SHA) {
+            git fetch --no-tags --depth=$fetchDepth origin $env:BASE_SHA
+          }
+          if ($env:HEAD_SHA) {
+            git fetch --no-tags --depth=$fetchDepth origin $env:HEAD_SHA
+          }
+
+          git checkout --detach pr-history-head
+          git branch -D pr-history-head 2>$null | Out-Null
 
       - name: Generate VI manifest
         id: manifest
@@ -163,6 +217,9 @@ jobs:
           RESULTS_ROOT: ${{ github.workspace }}\tests\results\pr-vi-history
           MAX_PAIRS: ${{ env.MAX_PAIRS }}
           MANIFEST_PATH: ${{ steps.manifest.outputs.manifest_path }}
+          START_REF: ${{ steps.pr.outputs.head_sha }}
+          END_REF: ${{ steps.pr.outputs.base_sha }}
+          INCLUDE_MERGE_PARENTS: ${{ env.INCLUDE_MERGE_PARENTS }}
           PR_VI_HISTORY_NOISE_POLICY: 'include'
           PR_VI_HISTORY_EXTRACT_REPORT_IMAGES: '1'
         run: |
@@ -181,6 +238,19 @@ jobs:
           if ($env:MAX_PAIRS) {
             $args += '-MaxPairs'
             $args += $env:MAX_PAIRS
+          }
+          if ($env:START_REF) {
+            $args += '-StartRef'
+            $args += $env:START_REF
+          }
+          if ($env:END_REF) {
+            $args += '-EndRef'
+            $args += $env:END_REF
+          }
+          $includeMergeParents = $false
+          [void][bool]::TryParse(($env:INCLUDE_MERGE_PARENTS ?? ''), [ref]$includeMergeParents)
+          if ($includeMergeParents) {
+            $args += '-IncludeMergeParents'
           }
 
           pwsh -NoLogo -NoProfile @args
@@ -235,6 +305,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           PR_URL: ${{ steps.pr.outputs.pr_url }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+          INCLUDE_MERGE_PARENTS: ${{ env.INCLUDE_MERGE_PARENTS }}
           PAIR_COUNT: ${{ steps.manifest.outputs.pair_count }}
           SUMMARY_PATH: ${{ steps.history.outputs.summary_path }}
           MARKDOWN_ENCODED: ${{ steps.summarize.outputs.markdown }}
@@ -271,6 +344,14 @@ jobs:
             $bodyLines.Add("No VI changes with both base/head paths were detected for this pull request.") | Out-Null
           } elseif ($markdown) {
             $bodyLines.Add([string]::Format('- Compared VIs: **{0}**', $pairCount)) | Out-Null
+            if ($env:BASE_REF -and $env:HEAD_REF) {
+              $bodyLines.Add([string]::Format('- Compare window: `{0}..{1}`', $env:BASE_REF, $env:HEAD_REF)) | Out-Null
+            }
+            $includeMergeParents = $false
+            [void][bool]::TryParse(($env:INCLUDE_MERGE_PARENTS ?? ''), [ref]$includeMergeParents)
+            if ($includeMergeParents) {
+              $bodyLines.Add('- Merge-parent lineage: **included**') | Out-Null
+            }
             $bodyLines.Add("") | Out-Null
             $bodyLines.Add($markdown) | Out-Null
           } else {
