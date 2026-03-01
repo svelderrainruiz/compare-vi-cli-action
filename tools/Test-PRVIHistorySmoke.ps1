@@ -24,6 +24,7 @@ Selects which synthetic change set to exercise.
 - `attribute`: legacy single-commit attr diff.
 - `sequential`: one target VI, multi-commit fixture replay.
 - `sequential-multi-vi`: two target VIs changed in each sequential commit.
+- `signal-masscompile`: one real VI change and one masscompile-only VI change in the same commit.
 
 .PARAMETER MaxPairs
 Optional override for the `max_pairs` workflow input. Defaults to `6`.
@@ -33,7 +34,7 @@ param(
     [string]$BaseBranch = 'develop',
     [switch]$KeepBranch,
     [switch]$DryRun,
-    [ValidateSet('attribute', 'sequential', 'sequential-multi-vi')]
+    [ValidateSet('attribute', 'sequential', 'sequential-multi-vi', 'signal-masscompile')]
     [string]$Scenario = 'attribute',
     [int]$MaxPairs = 6
 )
@@ -173,6 +174,29 @@ function Copy-VIContent {
     }
 
     [System.IO.File]::Copy($Source, $Destination, $true)
+}
+
+function Get-ChangedWorkingTreePaths {
+    $statusLines = @(Invoke-Git -Arguments @('status', '--porcelain'))
+    if ($statusLines.Count -eq 1 -and [string]::IsNullOrWhiteSpace($statusLines[0])) {
+        return @()
+    }
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    foreach ($lineRaw in $statusLines) {
+        if ([string]::IsNullOrWhiteSpace($lineRaw)) { continue }
+        if ($lineRaw.Length -lt 4) { continue }
+        $pathPart = $lineRaw.Substring(3).Trim()
+        if ([string]::IsNullOrWhiteSpace($pathPart)) { continue }
+        if ($pathPart -like '* -> *') {
+            $pathPart = ($pathPart -split '\s+->\s+')[-1]
+        }
+        if (-not [string]::IsNullOrWhiteSpace($pathPart)) {
+            $paths.Add($pathPart) | Out-Null
+        }
+    }
+
+    return @($paths | Select-Object -Unique)
 }
 
 $script:HistoryTrackingFlags = [ordered]@{
@@ -346,6 +370,100 @@ function Invoke-AttributeHistoryCommit {
     )
 }
 
+function Invoke-SignalMassCompileHistoryCommit {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SignalTargetVi,
+        [Parameter(Mandatory)]
+        [string]$MassCompileTargetVi
+    )
+
+    $signalSource = 'fixtures/vi-stage/control-rename/Head.vi'
+    Write-Host ("Applying signal change: {0} <= {1}" -f $SignalTargetVi, $signalSource)
+    Copy-VIContent -Source $signalSource -Destination $SignalTargetVi
+    $signalStatus = @(Invoke-Git -Arguments @('status', '--porcelain', '--', $SignalTargetVi))
+    if ($signalStatus.Count -eq 0) {
+        throw ("Signal step produced no delta for target: {0}" -f $SignalTargetVi)
+    }
+
+    $repoRoot = Invoke-Git -Arguments @('rev-parse', '--show-toplevel') | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+        throw 'Unable to resolve repository root for masscompile step.'
+    }
+
+    $massCompileTargetResolved = if ([System.IO.Path]::IsPathRooted($MassCompileTargetVi)) {
+        $MassCompileTargetVi
+    } else {
+        Join-Path $repoRoot $MassCompileTargetVi
+    }
+    if (-not (Test-Path -LiteralPath $massCompileTargetResolved -PathType Leaf)) {
+        throw ("Masscompile target not found: {0}" -f $MassCompileTargetVi)
+    }
+
+    $labviewCliModulePath = Join-Path $repoRoot 'tools' 'LabVIEWCli.psm1'
+    if (-not (Test-Path -LiteralPath $labviewCliModulePath -PathType Leaf)) {
+        throw ("LabVIEW CLI module not found: {0}" -f $labviewCliModulePath)
+    }
+
+    try {
+        Import-Module -Name $labviewCliModulePath -Force -ErrorAction Stop
+    } catch {
+        throw ("Failed to import LabVIEW CLI module: {0}" -f $_.Exception.Message)
+    }
+
+    $massCompileLogPath = Join-Path $env:TEMP ("compare-vi-history-smoke-masscompile-{0}.log" -f (Get-Date).ToString('yyyyMMddHHmmss'))
+    Write-Host ("Running LabVIEW masscompile on {0}" -f $MassCompileTargetVi)
+    try {
+        $massCompileResult = Invoke-LVMassCompile `
+            -DirectoryToCompile $massCompileTargetResolved `
+            -MassCompileLogFile $massCompileLogPath `
+            -Provider 'auto'
+    } catch {
+        throw ("Masscompile operation failed for {0}: {1}" -f $MassCompileTargetVi, $_.Exception.Message)
+    }
+
+    if ($massCompileResult -and $massCompileResult.PSObject.Properties['exitCode']) {
+        $massCompileExitCode = [int]$massCompileResult.exitCode
+        if ($massCompileExitCode -ne 0) {
+            throw ("Masscompile returned non-zero exit code {0} for target {1}." -f $massCompileExitCode, $MassCompileTargetVi)
+        }
+    }
+
+    $massCompileStatus = @(Invoke-Git -Arguments @('status', '--porcelain', '--', $MassCompileTargetVi))
+    if ($massCompileStatus.Count -eq 0) {
+        throw ("Masscompile completed but produced no tracked delta for {0}. Use a VI that rewrites on compile for this scenario." -f $MassCompileTargetVi)
+    }
+
+    $changedPaths = @(Get-ChangedWorkingTreePaths)
+    if ($changedPaths.Count -eq 0) {
+        throw 'Working tree has no modified paths after mixed signal+masscompile step.'
+    }
+
+    $nonViPaths = @($changedPaths | Where-Object { $_ -notlike '*.vi' })
+    if ($nonViPaths.Count -gt 0) {
+        throw ("Unexpected non-VI changes detected after masscompile step: {0}" -f ($nonViPaths -join ', '))
+    }
+
+    $changedViPaths = @($changedPaths | Where-Object { $_ -like '*.vi' } | Select-Object -Unique)
+    if ($changedViPaths.Count -lt 2) {
+        throw ("Expected at least two changed VI paths (signal + masscompile), but found: {0}" -f ($changedViPaths -join ', '))
+    }
+
+    $addArgs = @('add', '-f') + $changedViPaths
+    Invoke-Git -Arguments $addArgs | Out-Null
+    $commitMessage = 'chore: mixed signal + masscompile same-commit history step'
+    Invoke-Git -Arguments @('commit', '-m', $commitMessage) | Out-Null
+
+    return @(
+        [pscustomobject]@{
+            Title   = 'Signal + Masscompile (same commit)'
+            Source  = "$signalSource + masscompile:$MassCompileTargetVi"
+            Targets = $changedViPaths
+            Message = $commitMessage
+        }
+    )
+}
+
 function Invoke-SequentialHistoryCommits {
     param(
         [Parameter(Mandatory)]
@@ -447,6 +565,9 @@ $initialBranch = Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD') | 
 Ensure-CleanWorkingTree
 
 $scenarioKey = $Scenario.ToLowerInvariant()
+$scenarioTargetMinDiffs = @{}
+$scenarioDiffStatusRequiredTargets = @()
+$scenarioRequireMobilePreview = $false
 switch ($scenarioKey) {
     'attribute' {
         $scenarioBranchSuffix = 'attr'
@@ -463,6 +584,9 @@ switch ($scenarioKey) {
         $scenarioPlanHint     = '- Apply sequential fixture commits from fixtures/vi-history/sequential.json (attribute, front panel, connector pane, control rename, block diagram cosmetic)'
         $scenarioNeedsArtifactValidation = $true
         $scenarioTargetPaths = @('fixtures/vi-attr/Head.vi')
+        $scenarioTargetMinDiffs = @{ 'fixtures/vi-attr/Head.vi' = 1 }
+        $scenarioDiffStatusRequiredTargets = @('fixtures/vi-attr/Head.vi')
+        $scenarioRequireMobilePreview = $true
     }
     'sequential-multi-vi' {
         $scenarioBranchSuffix = 'sequential-multi-vi'
@@ -471,6 +595,26 @@ switch ($scenarioKey) {
         $scenarioPlanHint     = '- Apply sequential fixture commits to fixtures/vi-attr/Head.vi and fixtures/vi-attr/Base.vi in each commit'
         $scenarioNeedsArtifactValidation = $true
         $scenarioTargetPaths = @('fixtures/vi-attr/Head.vi', 'fixtures/vi-attr/Base.vi')
+        $scenarioTargetMinDiffs = @{
+            'fixtures/vi-attr/Head.vi' = 1
+            'fixtures/vi-attr/Base.vi' = 1
+        }
+        $scenarioDiffStatusRequiredTargets = @('fixtures/vi-attr/Head.vi', 'fixtures/vi-attr/Base.vi')
+        $scenarioRequireMobilePreview = $true
+    }
+    'signal-masscompile' {
+        $scenarioBranchSuffix = 'signal-masscompile'
+        $scenarioDescription  = 'same-commit mixed signal + masscompile change'
+        $scenarioExpectation  = '`/vi-history` workflow itemizes both targets and reports at least one strict signal diff'
+        $scenarioPlanHint     = '- Apply one real VI change + one LabVIEW masscompile rewrite in the same commit'
+        $scenarioNeedsArtifactValidation = $true
+        $scenarioTargetPaths = @('fixtures/vi-attr/Head.vi', 'fixtures/vi-attr/Base.vi')
+        $scenarioTargetMinDiffs = @{
+            'fixtures/vi-attr/Head.vi' = 1
+            'fixtures/vi-attr/Base.vi' = 0
+        }
+        $scenarioDiffStatusRequiredTargets = @('fixtures/vi-attr/Head.vi')
+        $scenarioRequireMobilePreview = $true
     }
     default {
         throw "Unsupported scenario: $Scenario"
@@ -601,6 +745,9 @@ try {
                 $scratchContext.NetDiffAnchored = $true
             }
         }
+        'signal-masscompile' {
+            $commitSummaries = Invoke-SignalMassCompileHistoryCommit -SignalTargetVi $targetPaths[0] -MassCompileTargetVi $targetPaths[1]
+        }
     }
     $scratchContext.CommitCount = $commitSummaries.Count
 
@@ -704,7 +851,7 @@ try {
     $scratchContext.mobilePreviewImageCount = $mobilePreviewImageMatches.Count
 
     $expectedRowTargets = @()
-    if ($scenarioKey -eq 'sequential' -or $scenarioKey -eq 'sequential-multi-vi') {
+    if ($scenarioNeedsArtifactValidation) {
         $expectedRowTargets = @($scenarioTargetPaths)
     } else {
         $expectedRowTargets = @('fixtures/vi-attr/Head.vi')
@@ -732,7 +879,7 @@ try {
         Write-Warning 'Unable to parse comparison/diff counts from the history comment.'
     }
 
-    if ($scenarioKey -eq 'sequential' -or $scenarioKey -eq 'sequential-multi-vi') {
+    if ($scenarioNeedsArtifactValidation) {
         if ($rowMatches.Count -lt $expectedRowTargets.Count) {
             $missingTargets = @($expectedRowTargets | Where-Object {
                 $target = $_
@@ -745,18 +892,19 @@ try {
             if ($row.comparisons -lt [Math]::Max(1, $commitSummaries.Count)) {
                 throw ("Expected at least {0} comparisons for {1}, but comment reported {2}." -f [Math]::Max(1, $commitSummaries.Count), $row.targetPath, $row.comparisons)
             }
-            if ($row.diffs -lt 1) {
-                throw ("Sequential history comment should report at least one diff for {0}." -f $row.targetPath)
+            $minDiffs = if ($scenarioTargetMinDiffs.ContainsKey($row.targetPath)) { [int]$scenarioTargetMinDiffs[$row.targetPath] } else { 1 }
+            if ($row.diffs -lt $minDiffs) {
+                throw ("History comment should report at least {0} diff(s) for {1}." -f $minDiffs, $row.targetPath)
             }
-            if ($row.status -notlike '*diff*') {
+            if ($scenarioDiffStatusRequiredTargets -contains $row.targetPath -and $row.status -notlike '*diff*') {
                 throw ("Expected status column to mark diff for {0} but saw '{1}'." -f $row.targetPath, $row.status)
             }
         }
 
-        if (-not $mobilePreviewHeaderMatch.Success) {
+        if ($scenarioRequireMobilePreview -and -not $mobilePreviewHeaderMatch.Success) {
             throw 'Sequential history comment is missing the `### Mobile Preview` section.'
         }
-        if ($mobilePreviewImageMatches.Count -lt 1) {
+        if ($scenarioRequireMobilePreview -and $mobilePreviewImageMatches.Count -lt 1) {
             throw 'Sequential history comment did not include preview image tags (`history-image-*`).'
         }
 
@@ -788,8 +936,9 @@ try {
             if ($artifactComparisons -lt [Math]::Max(1, $commitSummaries.Count)) {
                 throw ("Summary JSON reported {0} comparisons for {1}; expected at least {2}." -f $artifactComparisons, $expectedTarget, [Math]::Max(1, $commitSummaries.Count))
             }
-            if ($artifactDiffs -lt 1) {
-                throw ("Summary JSON should report at least one diff for {0} in sequential history smoke." -f $expectedTarget)
+            $artifactMinDiffs = if ($scenarioTargetMinDiffs.ContainsKey($expectedTarget)) { [int]$scenarioTargetMinDiffs[$expectedTarget] } else { 1 }
+            if ($artifactDiffs -lt $artifactMinDiffs) {
+                throw ("Summary JSON should report at least {0} diff(s) for {1} in history smoke." -f $artifactMinDiffs, $expectedTarget)
             }
         }
 
