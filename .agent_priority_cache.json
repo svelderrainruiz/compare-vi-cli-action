@@ -1,18 +1,18 @@
 {
-  "number": 588,
-  "title": "Decouple icon editor build steps into composite actions",
-  "url": "https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/issues/588",
+  "number": 25,
+  "title": "PR VI History: sequential multi-VI commit timeline + image-first PR UX",
+  "url": "https://github.com/svelderrainruiz/compare-vi-cli-action/issues/25",
   "state": "OPEN",
   "labels": [
     "standing-priority"
   ],
   "assignees": [],
   "milestone": null,
-  "commentCount": 6,
-  "lastSeenUpdatedAt": "2025-11-04T04:06:28Z",
-  "issueDigest": "74eda9ff3d7fdd8090dbcfb37d98dabeeb6ec60f51fa8c5b8dee6ac4036bb737",
-  "bodyDigest": "6b5e2727553071ff27094be41e6f6a290074db2dfbe813fdc8d7209e6ce7e55d",
-  "cachedAtUtc": "2025-11-04T07:14:08.556Z",
+  "commentCount": 0,
+  "lastSeenUpdatedAt": "2026-03-01T19:06:03Z",
+  "issueDigest": "ad1e0bb3816284213fbc34124edd737b28ee29bc7e27365a55ca35a01b3a1ffd",
+  "bodyDigest": "32d2310b23e3b6fcc23f40cd79d92600d99502b6c0e58d0b3335ae19298f7f9d",
+  "cachedAtUtc": "2026-03-01T19:06:27.288Z",
   "lastFetchSource": "live",
   "lastFetchError": null
 }
