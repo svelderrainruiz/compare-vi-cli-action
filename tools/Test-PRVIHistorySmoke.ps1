@@ -313,18 +313,34 @@ function Invoke-AttributeHistoryCommit {
         [string]$TargetVi
     )
 
-    $sourceVi = 'fixtures/vi-attr/Base.vi'
-    Write-Host "Applying synthetic history change: $TargetVi <= $sourceVi"
-    Copy-VIContent -Source $sourceVi -Destination $TargetVi
-    $statusAfterPrep = Invoke-Git -Arguments @('status', '--short', $TargetVi)
-    Write-Host ("Post-change status for {0}: {1}" -f $TargetVi, ($statusAfterPrep -join ' '))
+    $candidateSources = @(
+        'fixtures/vi-attr/Base.vi',
+        'fixtures/vi-attr/attr/HeadAttr.vi',
+        'fixtures/vi-stage/fp-cosmetic/Head.vi'
+    )
+    $selectedSource = $null
+    foreach ($candidate in $candidateSources) {
+        Write-Host "Applying synthetic history change candidate: $TargetVi <= $candidate"
+        Copy-VIContent -Source $candidate -Destination $TargetVi
+        $statusAfterCandidate = @(Invoke-Git -Arguments @('status', '--porcelain', '--', $TargetVi))
+        Write-Host ("Post-candidate status for {0}: {1}" -f $TargetVi, ($statusAfterCandidate -join ' '))
+        if ($statusAfterCandidate.Count -gt 0) {
+            $selectedSource = $candidate
+            break
+        }
+    }
+
+    if (-not $selectedSource) {
+        throw 'Attribute scenario produced no target delta across all candidate fixture sources.'
+    }
+
     Invoke-Git -Arguments @('add', '-f', $TargetVi) | Out-Null
     Invoke-Git -Arguments @('commit', '-m', 'chore: synthetic VI attr diff for history smoke') | Out-Null
 
     return @(
         [pscustomobject]@{
             Title   = 'VI Attribute'
-            Source  = $sourceVi
+            Source  = $selectedSource
             Message = 'chore: synthetic VI attr diff for history smoke'
         }
     )
