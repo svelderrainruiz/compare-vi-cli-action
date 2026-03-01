@@ -992,6 +992,7 @@ function Invoke-LVMassCompile {
     [switch]$AppendToMassCompileLog,
     [int]$NumOfVIsToCache,
     [switch]$ReloadLVSBs,
+    [string]$LabVIEWPath,
     [string]$Provider = 'auto',
     [switch]$Preview
   )
@@ -1001,6 +1002,7 @@ function Invoke-LVMassCompile {
   if ($PSBoundParameters.ContainsKey('AppendToMassCompileLog')) { $params.appendToMassCompileLog = $AppendToMassCompileLog.IsPresent }
   if ($PSBoundParameters.ContainsKey('NumOfVIsToCache')) { $params.numOfVIsToCache = $NumOfVIsToCache }
   if ($PSBoundParameters.ContainsKey('ReloadLVSBs')) { $params.reloadLVSBs = $ReloadLVSBs.IsPresent }
+  if ($PSBoundParameters.ContainsKey('LabVIEWPath') -and $LabVIEWPath) { $params.labviewPath = $LabVIEWPath }
 
   Invoke-LVOperation -Operation 'MassCompile' -Params $params -Provider $Provider -Preview:$Preview
 }

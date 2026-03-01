@@ -427,14 +427,44 @@ function Invoke-SignalMassCompileHistoryCommit {
     }
 
     $massCompileLogPath = Join-Path $env:TEMP ("compare-vi-history-smoke-masscompile-{0}.log" -f (Get-Date).ToString('yyyyMMddHHmmss'))
+    $massCompileLabVIEWPath = $null
+    $massCompilePathOverrides = @(
+        [System.Environment]::GetEnvironmentVariable('PR_VI_HISTORY_MASSCOMPILE_LABVIEW_PATH', 'Process'),
+        [System.Environment]::GetEnvironmentVariable('LABVIEW_PATH', 'Process')
+    )
+    foreach ($override in $massCompilePathOverrides) {
+        if ([string]::IsNullOrWhiteSpace($override)) { continue }
+        $massCompileLabVIEWPath = $override.Trim()
+        break
+    }
     Write-Host ("Running LabVIEW masscompile on {0}" -f $MassCompileTargetVi)
     try {
+        $massCompileParams = @{
+            DirectoryToCompile = $massCompileTargetResolved
+            MassCompileLogFile = $massCompileLogPath
+            Provider           = 'auto'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($massCompileLabVIEWPath)) {
+            $massCompileParams['LabVIEWPath'] = $massCompileLabVIEWPath
+            Write-Host ("Masscompile LabVIEWPath override: {0}" -f $massCompileLabVIEWPath)
+        }
         $massCompileResult = Invoke-LVMassCompile `
-            -DirectoryToCompile $massCompileTargetResolved `
-            -MassCompileLogFile $massCompileLogPath `
-            -Provider 'auto'
+            @massCompileParams `
+            
     } catch {
-        throw ("Masscompile operation failed for {0}: {1}" -f $MassCompileTargetVi, $_.Exception.Message)
+        $massCompileError = $_.Exception.Message
+        if (
+            $massCompileError -match '(?i)Open/Create/Replace File' -and
+            $massCompileError -match '(?i)LabVIEW\.ini'
+        ) {
+            $overrideHint = if ([string]::IsNullOrWhiteSpace($massCompileLabVIEWPath)) {
+                'Set PR_VI_HISTORY_MASSCOMPILE_LABVIEW_PATH (or LABVIEW_PATH) to an explicit LabVIEW executable path (for example LabVIEW 2026) and retry.'
+            } else {
+                ("Current override: {0}" -f $massCompileLabVIEWPath)
+            }
+            throw ("Masscompile blocked by LabVIEW.ini write failure ({0}). {1}" -f $MassCompileTargetVi, $overrideHint)
+        }
+        throw ("Masscompile operation failed for {0}: {1}" -f $MassCompileTargetVi, $massCompileError)
     }
 
     if ($massCompileResult -and $massCompileResult.PSObject.Properties['exitCode']) {

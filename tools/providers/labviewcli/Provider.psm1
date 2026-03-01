@@ -212,6 +212,10 @@ function Get-LabVIEWCliArgs {
         '-OperationName','MassCompile',
         '-DirectoryToCompile', $Params.directoryToCompile
       )
+      $resolvedLvPath = Resolve-LabVIEWPathFromParams -Params $Params
+      if ($resolvedLvPath) {
+        $args += @('-LabVIEWPath', $resolvedLvPath)
+      }
       if ($Params.ContainsKey('massCompileLogFile') -and $Params.massCompileLogFile) {
         $args += @('-MassCompileLogFile', $Params.massCompileLogFile)
       }
