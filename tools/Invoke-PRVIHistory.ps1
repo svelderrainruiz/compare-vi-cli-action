@@ -25,6 +25,11 @@
   Optional Compare-VIHistory mode list (for example `default`, `attributes`).
   Forwarded directly to the history helper.
 
+.PARAMETER NoisePolicy
+  Optional Compare-VIHistory noise policy (`include`, `collapse`, `skip`).
+  Defaults to `include` when not explicitly supplied so metadata remains
+  available for downstream summarization and preview extraction.
+
 .PARAMETER SkipRenderReport
   When present, do not request the Markdown/HTML report from Compare-VIHistory.
 
@@ -56,6 +61,9 @@ param(
 
     [string[]]$Mode,
 
+    [ValidateSet('include','collapse','skip')]
+    [string]$NoisePolicy,
+
     [switch]$SkipRenderReport,
 
     [switch]$DryRun,
@@ -76,6 +84,30 @@ $ErrorActionPreference = 'Stop'
 
 $maxPairsValue = if ($PSBoundParameters.ContainsKey('MaxPairs')) { $MaxPairs } else { $null }
 $maxPairsRequested = ($null -ne $maxPairsValue) -and ($maxPairsValue -gt 0)
+
+$noisePolicyValue = $null
+if ($PSBoundParameters.ContainsKey('NoisePolicy') -and -not [string]::IsNullOrWhiteSpace($NoisePolicy)) {
+    $noisePolicyValue = $NoisePolicy.Trim().ToLowerInvariant()
+}
+if ([string]::IsNullOrWhiteSpace($noisePolicyValue)) {
+    $noisePolicySources = @(
+        [System.Environment]::GetEnvironmentVariable('PR_VI_HISTORY_NOISE_POLICY', 'Process'),
+        [System.Environment]::GetEnvironmentVariable('VI_HISTORY_NOISE_POLICY', 'Process')
+    )
+    foreach ($rawNoisePolicy in $noisePolicySources) {
+        if ([string]::IsNullOrWhiteSpace($rawNoisePolicy)) { continue }
+        $candidateNoisePolicy = $rawNoisePolicy.Trim().ToLowerInvariant()
+        if ($candidateNoisePolicy -in @('include','collapse','skip')) {
+            $noisePolicyValue = $candidateNoisePolicy
+            break
+        }
+        Write-Warning ("Ignoring unsupported noise policy override '{0}'. Supported values: include, collapse, skip." -f $rawNoisePolicy)
+    }
+}
+if ([string]::IsNullOrWhiteSpace($noisePolicyValue)) {
+    # Keep metadata-rich history details by default for downstream report/comment contracts.
+    $noisePolicyValue = 'include'
+}
 
 function Resolve-ExistingFile {
     param(
@@ -479,6 +511,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
     Write-Verbose ("[{0}/{1}] Target '{2}' (origin: {3}) -> compare path '{4}'" -f ($i + 1), $targets.Count, $repoPath, $target.origin, $effectiveTargetPath)
     if ($maxPairsRequested) { $compareArgs.MaxPairs = $maxPairsValue }
     if ($Mode) { $compareArgs.Mode = $Mode }
+    if ($noisePolicyValue) { $compareArgs.NoisePolicy = $noisePolicyValue }
     if (-not [string]::IsNullOrWhiteSpace($StartRef)) { $compareArgs.StartRef = $StartRef }
     if (-not [string]::IsNullOrWhiteSpace($EndRef)) { $compareArgs.EndRef = $EndRef }
     if (-not $SkipRenderReport.IsPresent) { $compareArgs.RenderReport = $true }

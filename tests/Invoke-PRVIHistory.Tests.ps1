@@ -97,6 +97,7 @@ Describe 'Invoke-PRVIHistory.ps1' {
         $invocations[0].FlagNoFpPos | Should -BeFalse
         $invocations[0].FlagNoBdCosm | Should -BeFalse
         $invocations[0].ForceNoBd | Should -BeFalse
+        $invocations[0].NoisePolicy | Should -Be 'include'
         $invocations[0].ContainsKey('ReplaceFlags') | Should -BeFalse
         $invocations[0].ContainsKey('AdditionalFlags') | Should -BeFalse
         $invocations[0].ContainsKey('LvCompareArgs') | Should -BeFalse
@@ -194,6 +195,7 @@ Describe 'Invoke-PRVIHistory.ps1' {
 
         $invocations.Count | Should -Be 1
         $invocations[0].ContainsKey('MaxPairs') | Should -BeFalse
+        $invocations[0].NoisePolicy | Should -Be 'include'
 
         $result.maxPairs | Should -BeNullOrEmpty
         $result.targets | Should -Not -BeNullOrEmpty
