@@ -112,6 +112,8 @@ Describe 'Invoke-PRVIHistory.ps1' {
         $target.status | Should -Be 'completed'
         $target.stats.processed | Should -Be 3
         $target.stats.diffs | Should -Be 1
+        $target.stats.durationSeconds | Should -Be 0
+        $target.stats.durationSamples | Should -Be 0
         $target.reportImages.status | Should -Be 'completed'
         $target.reportImages.exportedImageCount | Should -Be 1
         $target.reportImages.sourceImageCount | Should -Be 1
@@ -120,6 +122,8 @@ Describe 'Invoke-PRVIHistory.ps1' {
         Test-Path -LiteralPath $result.resultsRoot -PathType Container | Should -BeTrue
         Test-Path -LiteralPath $result.targets[0].manifest -PathType Leaf | Should -BeTrue
         Test-Path -LiteralPath $result.targets[0].reportMd -PathType Leaf | Should -BeTrue
+        $result.totals.durationSeconds | Should -Be 0
+        $result.totals.durationSamples | Should -Be 0
     }
 
     It 'omits MaxPairs when no cap is provided and records null in the summary' {
@@ -203,6 +207,8 @@ Describe 'Invoke-PRVIHistory.ps1' {
         $result.targets[0].stats.processed | Should -Be 2
         $result.targets[0].reportImages.status | Should -Be 'no-html-report'
         $result.targets[0].reportImages.exportedImageCount | Should -Be 0
+        $result.targets[0].stats.durationSeconds | Should -Be 0
+        $result.targets[0].stats.durationSamples | Should -Be 0
 
         Test-Path -LiteralPath $result.targets[0].manifest -PathType Leaf | Should -BeTrue
     }

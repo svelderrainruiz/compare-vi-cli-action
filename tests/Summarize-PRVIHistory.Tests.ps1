@@ -53,8 +53,11 @@ Describe 'Summarize-PRVIHistory.ps1' {
                     status      = 'completed'
                     changeTypes = @('modified','renamed')
                     stats       = [ordered]@{
-                        processed = 4
-                        diffs     = 2
+                        processed          = 4
+                        diffs              = 2
+                        durationSeconds    = 12.5
+                        durationSamples    = 4
+                        durationAvgSeconds = 3.125
                     }
                     reportMd   = $reportMd
                     reportHtml = $reportHtml
@@ -88,12 +91,15 @@ Describe 'Summarize-PRVIHistory.ps1' {
         $result.totals.targets | Should -Be 2
         $result.totals.diffs | Should -Be 2
         $result.totals.comparisons | Should -Be 4
+        $result.totals.durationSeconds | Should -Be 12.5
+        $result.totals.durationSamples | Should -Be 4
         $result.totals.previewImages | Should -Be 1
         $result.totals.markdownTruncated | Should -BeFalse
         $result.previews.Count | Should -Be 1
         $result.markdown | Should -Match 'fixtures/Example.vi'
         $result.markdown | Should -Match 'diff'
         $result.markdown | Should -Match 'missing path'
+        $result.markdown | Should -Match 'time: 12\.50s total'
         $result.markdown | Should -Match '### Mobile Preview'
         $result.markdown | Should -Match 'history-image-000.png'
 

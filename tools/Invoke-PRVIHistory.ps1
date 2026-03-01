@@ -309,6 +309,66 @@ function Sanitize-Token {
     return $token
 }
 
+function Get-HistoryTimingStats {
+    param([object]$AggregateManifest)
+
+    $totalSeconds = 0.0
+    $samples = 0
+
+    if (-not $AggregateManifest -or -not $AggregateManifest.PSObject.Properties['modes']) {
+        return [pscustomobject]@{
+            totalSeconds = 0.0
+            samples      = 0
+            avgSeconds   = $null
+        }
+    }
+
+    foreach ($mode in @($AggregateManifest.modes)) {
+        if (-not $mode) { continue }
+        $modeManifestPath = if ($mode.PSObject.Properties['manifestPath']) { [string]$mode.manifestPath } else { $null }
+        if ([string]::IsNullOrWhiteSpace($modeManifestPath)) { continue }
+        if (-not (Test-Path -LiteralPath $modeManifestPath -PathType Leaf)) { continue }
+
+        $modeManifest = $null
+        try {
+            $modeManifest = Get-Content -LiteralPath $modeManifestPath -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 8 -ErrorAction Stop
+        } catch {
+            Write-Verbose ("Skipping timing parse for mode manifest '{0}': {1}" -f $modeManifestPath, $_.Exception.Message)
+            continue
+        }
+        if (-not $modeManifest -or -not $modeManifest.PSObject.Properties['comparisons']) { continue }
+
+        foreach ($comparison in @($modeManifest.comparisons)) {
+            if (-not $comparison -or -not $comparison.PSObject.Properties['result']) { continue }
+            $resultNode = $comparison.result
+            if (-not $resultNode -or -not $resultNode.PSObject.Properties['duration_s']) { continue }
+
+            $durationSeconds = 0.0
+            $parsed = [double]::TryParse(
+                [string]$resultNode.duration_s,
+                [System.Globalization.NumberStyles]::Float,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [ref]$durationSeconds
+            )
+            if (-not $parsed -or $durationSeconds -lt 0) { continue }
+
+            $totalSeconds += $durationSeconds
+            $samples++
+        }
+    }
+
+    $avgSeconds = $null
+    if ($samples -gt 0) {
+        $avgSeconds = ($totalSeconds / [double]$samples)
+    }
+
+    return [pscustomobject]@{
+        totalSeconds = [Math]::Round($totalSeconds, 6)
+        samples      = $samples
+        avgSeconds   = if ($avgSeconds -ne $null) { [Math]::Round($avgSeconds, 6) } else { $null }
+    }
+}
+
 $resolvedManifest = Resolve-ExistingFile -Path $ManifestPath -Description 'Manifest'
 $manifestRaw = Get-Content -LiteralPath $resolvedManifest -Raw -ErrorAction Stop
 if ([string]::IsNullOrWhiteSpace($manifestRaw)) {
@@ -488,6 +548,8 @@ $diffTargetCount = 0
 $reportImageTargetCount = 0
 $reportImageExportedCount = 0
 $reportImageExtractionErrors = 0
+$totalTimingSeconds = 0.0
+$totalTimingSamples = 0
 
 for ($i = 0; $i -lt $targets.Count; $i++) {
     $target = $targets[$i]
@@ -591,9 +653,15 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
     $processed = if ($stats -and $stats.PSObject.Properties['processed']) { [int]$stats.processed } else { 0 }
     $diffs = if ($stats -and $stats.PSObject.Properties['diffs']) { [int]$stats.diffs } else { 0 }
     $missing = if ($stats -and $stats.PSObject.Properties['missing']) { [int]$stats.missing } else { 0 }
+    $timingStats = Get-HistoryTimingStats -AggregateManifest $aggregate
+    $timingTotalSeconds = if ($timingStats -and $timingStats.PSObject.Properties['totalSeconds']) { [double]$timingStats.totalSeconds } else { 0.0 }
+    $timingSamples = if ($timingStats -and $timingStats.PSObject.Properties['samples']) { [int]$timingStats.samples } else { 0 }
+    $timingAverageSeconds = if ($timingStats -and $timingStats.PSObject.Properties['avgSeconds']) { $timingStats.avgSeconds } else { $null }
 
     $totalComparisons += $processed
     $totalDiffs += $diffs
+    $totalTimingSeconds += $timingTotalSeconds
+    $totalTimingSamples += $timingSamples
     $completedCount++
     if ($diffs -gt 0) { $diffTargetCount++ }
 
@@ -671,9 +739,12 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
         reportHtml  = $reportHtml
         reportImages= [pscustomobject]$reportImages
         stats       = [pscustomobject]@{
-            processed = $processed
-            diffs     = $diffs
-            missing   = $missing
+            processed          = $processed
+            diffs              = $diffs
+            missing            = $missing
+            durationSeconds    = [Math]::Round($timingTotalSeconds, 6)
+            durationSamples    = $timingSamples
+            durationAvgSeconds = $timingAverageSeconds
         }
     }) | Out-Null
 }
@@ -707,6 +778,8 @@ $summary = [pscustomobject]@{
         imageTargets     = $reportImageTargetCount
         extractedImages  = $reportImageExportedCount
         imageErrors      = $reportImageExtractionErrors
+        durationSeconds  = [Math]::Round($totalTimingSeconds, 6)
+        durationSamples  = $totalTimingSamples
     }
     targets     = $summaryTargets
 }
