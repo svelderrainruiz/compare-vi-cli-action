@@ -1064,6 +1064,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
                 $cliImageCandidates = @(Get-ChildItem -LiteralPath $targetResultsDir -Recurse -File -ErrorAction SilentlyContinue |
                     Where-Object { $_.Name -like 'cli-image-*' -and $_.FullName -match '[\\/]+cli-images[\\/]' } |
                     Sort-Object FullName)
+                Write-Host ("[report-images] fallback scan for '{0}' found {1} CLI image candidate(s)." -f $repoPath, $cliImageCandidates.Count)
                 if ($cliImageCandidates.Count -gt 0) {
                     $imageOutputDir = Join-Path $targetResultsDir 'previews'
                     $imageIndexPath = Join-Path $targetResultsDir 'vi-history-image-index.json'
@@ -1121,6 +1122,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
                     if ($copiedCount -gt 0) {
                         $reportImageTargetCount++
                     }
+                    Write-Host ("[report-images] fallback exported {0} preview image(s) for '{1}'." -f $copiedCount, $repoPath)
                 }
             } catch {
                 Write-Warning ("Failed CLI-image fallback extraction for '{0}': {1}" -f $repoPath, $_.Exception.Message)
