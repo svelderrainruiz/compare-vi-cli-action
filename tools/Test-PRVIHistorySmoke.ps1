@@ -1059,8 +1059,8 @@ try {
             }
         }
 
-        $imageIndexFiles = Get-ChildItem -LiteralPath $artifactDir -Recurse -Filter 'vi-history-image-index.json' -File
-        if (-not $imageIndexFiles -or $imageIndexFiles.Count -lt 1) {
+        $imageIndexFiles = @(Get-ChildItem -LiteralPath $artifactDir -Recurse -Filter 'vi-history-image-index.json' -File)
+        if ($imageIndexFiles.Count -lt 1) {
             throw 'vi-history-image-index.json not found in downloaded artifact.'
         }
         $previewImageFiles = Get-ChildItem -LiteralPath $artifactDir -Recurse -File |
