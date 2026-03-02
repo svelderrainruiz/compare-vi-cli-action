@@ -602,6 +602,12 @@ function Invoke-LabVIEWCLICompare {
       }
     }
   }
+  if ($cliResult -and $cliResult.PSObject.Properties['failureHeuristics'] -and $cliResult.failureHeuristics) {
+    $cliInfoOrdered.failureHeuristics = $cliResult.failureHeuristics
+  }
+  if ($cliResult -and $cliResult.PSObject.Properties['startupMitigation'] -and $cliResult.startupMitigation) {
+    $cliInfoOrdered.startupMitigation = $cliResult.startupMitigation
+  }
 
   if ($cliResult -and $cliResult.PSObject.Properties['skipped'] -and $cliResult.skipped) {
     $cliInfoOrdered.skipped = $true
@@ -649,6 +655,12 @@ function Invoke-LabVIEWCLICompare {
     command   = $cliResult.command
     stdout    = $null
     stderr    = $null
+  }
+  if ($cliResult -and $cliResult.PSObject.Properties['startupMitigation'] -and $cliResult.startupMitigation) {
+    $capture | Add-Member -NotePropertyName startupMitigation -NotePropertyValue $cliResult.startupMitigation -Force
+  }
+  if ($cliResult -and $cliResult.PSObject.Properties['failureHeuristics'] -and $cliResult.failureHeuristics) {
+    $capture | Add-Member -NotePropertyName failureHeuristics -NotePropertyValue $cliResult.failureHeuristics -Force
   }
   $capture | Add-Member -NotePropertyName environment -NotePropertyValue $envBlock -Force
   $capture | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $capPath -Encoding utf8

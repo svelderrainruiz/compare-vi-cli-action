@@ -189,4 +189,122 @@ Describe 'LabVIEW CLI PID tracker integration' -Tag 'Unit' {
     $outcome.Payload.final.context.stage | Should -Be 'labview-cli:error'
     $outcome.Payload.final.context.error | Should -Match 'headless guard failure'
   }
+
+  It 'retries CreateComparisonReport once on startup connectivity failures and succeeds' {
+    $result = InModuleScope LabVIEWCli {
+      param($testDrivePath)
+
+      $originalRoot = $script:RepoRoot
+      $script:RepoRoot = $testDrivePath
+      $providerName = 'pester-cli-retry'
+      $provider = New-Object psobject
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name Name -Value { 'pester-cli-retry' }
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name ResolveBinaryPath -Value {
+        (Get-Command -Name node -ErrorAction Stop).Source
+      }
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name Supports -Value {
+        param($operation)
+        return $true
+      }
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name BuildArgs -Value {
+        param($operation, $params)
+        @(
+          '-e',
+          "const fs=require('fs');const p=process.env.LVCLI_RETRY_STATE;let n=0;if(fs.existsSync(p)){n=parseInt(fs.readFileSync(p,'utf8')||'0',10)||0;}n++;fs.writeFileSync(p,String(n));if(n===1){console.error('Error code : -350000');console.error('An error occurred while running the LabVIEW CLI');process.exit(1);}console.log('CreateComparisonReport completed with diff.');process.exit(0);"
+        )
+      }
+
+      $statePath = Join-Path $testDrivePath 'retry-state.txt'
+      $previousRetryCount = [System.Environment]::GetEnvironmentVariable('LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT', 'Process')
+      $previousRetryDelay = [System.Environment]::GetEnvironmentVariable('LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS', 'Process')
+      $previousPrelaunch = [System.Environment]::GetEnvironmentVariable('LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED', 'Process')
+      $previousState = [System.Environment]::GetEnvironmentVariable('LVCLI_RETRY_STATE', 'Process')
+      try {
+        if ($script:Providers.ContainsKey($providerName.ToLowerInvariant())) {
+          $script:Providers.Remove($providerName.ToLowerInvariant()) | Out-Null
+        }
+        Register-LVProvider -Provider $provider
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT', '1', 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS', '0', 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED', '0', 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_RETRY_STATE', $statePath, 'Process')
+        Invoke-LVOperation -Operation 'CreateComparisonReport' -Provider $providerName -TimeoutSeconds 30 -Params @{
+          vi1 = 'C:\repo\Base.vi'
+          vi2 = 'C:\repo\Head.vi'
+          reportPath = (Join-Path $testDrivePath 'compare-report.html')
+        }
+      } finally {
+        if ($script:Providers.ContainsKey($providerName.ToLowerInvariant())) {
+          $script:Providers.Remove($providerName.ToLowerInvariant()) | Out-Null
+        }
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT', $previousRetryCount, 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS', $previousRetryDelay, 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED', $previousPrelaunch, 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_RETRY_STATE', $previousState, 'Process')
+        $script:RepoRoot = $originalRoot
+      }
+    } -ArgumentList $TestDrive
+
+    $result.exitCode | Should -Be 0
+    $result.startupMitigation | Should -Not -BeNullOrEmpty
+    $result.startupMitigation.retryAttempts | Should -Be 2
+    $result.startupMitigation.retryTriggered | Should -BeTrue
+  }
+
+  It 'promotes CreateComparisonReport exit code 1 to failure when CLI error signatures are present' {
+    $result = InModuleScope LabVIEWCli {
+      param($testDrivePath)
+
+      $originalRoot = $script:RepoRoot
+      $script:RepoRoot = $testDrivePath
+      $providerName = 'pester-cli-failure-signature'
+      $provider = New-Object psobject
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name Name -Value { 'pester-cli-failure-signature' }
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name ResolveBinaryPath -Value {
+        (Get-Command -Name node -ErrorAction Stop).Source
+      }
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name Supports -Value {
+        param($operation)
+        return $true
+      }
+      Add-Member -InputObject $provider -MemberType ScriptMethod -Name BuildArgs -Value {
+        param($operation, $params)
+        @(
+          '-e',
+          "console.error('Error code : -350000');console.error('An error occurred while running the LabVIEW CLI');console.error('CreateComparisonReport operation failed.');process.exit(1);"
+        )
+      }
+
+      $previousRetryCount = [System.Environment]::GetEnvironmentVariable('LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT', 'Process')
+      $previousRetryDelay = [System.Environment]::GetEnvironmentVariable('LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS', 'Process')
+      $previousPrelaunch = [System.Environment]::GetEnvironmentVariable('LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED', 'Process')
+      try {
+        if ($script:Providers.ContainsKey($providerName.ToLowerInvariant())) {
+          $script:Providers.Remove($providerName.ToLowerInvariant()) | Out-Null
+        }
+        Register-LVProvider -Provider $provider
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT', '0', 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS', '0', 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED', '0', 'Process')
+        Invoke-LVOperation -Operation 'CreateComparisonReport' -Provider $providerName -TimeoutSeconds 30 -Params @{
+          vi1 = 'C:\repo\Base.vi'
+          vi2 = 'C:\repo\Head.vi'
+          reportPath = (Join-Path $testDrivePath 'compare-report.html')
+        }
+      } finally {
+        if ($script:Providers.ContainsKey($providerName.ToLowerInvariant())) {
+          $script:Providers.Remove($providerName.ToLowerInvariant()) | Out-Null
+        }
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT', $previousRetryCount, 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS', $previousRetryDelay, 'Process')
+        [System.Environment]::SetEnvironmentVariable('LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED', $previousPrelaunch, 'Process')
+        $script:RepoRoot = $originalRoot
+      }
+    } -ArgumentList $TestDrive
+
+    $result.exitCode | Should -Be 2
+    $result.failureHeuristics | Should -Not -BeNullOrEmpty
+    $result.failureHeuristics.cliFailure | Should -BeTrue
+    $result.failureHeuristics.startupConnectivity | Should -BeTrue
+  }
 }

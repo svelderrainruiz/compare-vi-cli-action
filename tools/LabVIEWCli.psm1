@@ -289,6 +289,190 @@ function Touch-CompareCliSentinel {
   } catch {}
 }
 
+function Get-LVIntFromEnvValue {
+  param(
+    [string[]]$Names,
+    [int]$Default,
+    [int]$Min = 0,
+    [int]$Max = 2147483647
+  )
+
+  foreach ($name in @($Names)) {
+    if ([string]::IsNullOrWhiteSpace($name)) { continue }
+    $raw = [System.Environment]::GetEnvironmentVariable($name, 'Process')
+    if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+    $parsed = 0
+    if ([int]::TryParse($raw.Trim(), [ref]$parsed)) {
+      if ($parsed -lt $Min) { $parsed = $Min }
+      if ($parsed -gt $Max) { $parsed = $Max }
+      return $parsed
+    }
+  }
+
+  return $Default
+}
+
+function Get-LVBoolFromEnvValue {
+  param(
+    [string[]]$Names,
+    [bool]$Default = $false
+  )
+
+  foreach ($name in @($Names)) {
+    if ([string]::IsNullOrWhiteSpace($name)) { continue }
+    $raw = [System.Environment]::GetEnvironmentVariable($name, 'Process')
+    if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+    switch ($raw.Trim().ToLowerInvariant()) {
+      '1' { return $true }
+      'true' { return $true }
+      'yes' { return $true }
+      'on' { return $true }
+      '0' { return $false }
+      'false' { return $false }
+      'no' { return $false }
+      'off' { return $false }
+    }
+  }
+
+  return $Default
+}
+
+function Set-LVIniToken {
+  param(
+    [Parameter(Mandatory)][string]$Path,
+    [Parameter(Mandatory)][string]$Key,
+    [Parameter(Mandatory)][string]$Value
+  )
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+  $content = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+  if ($null -eq $content) { $content = '' }
+
+  if ($content -match ("(?m)^\s*{0}\s*=" -f [regex]::Escape($Key))) {
+    $updated = [regex]::Replace($content, ("(?m)^\s*{0}\s*=.*$" -f [regex]::Escape($Key)), ("{0}={1}" -f $Key, $Value))
+  } else {
+    $updated = ($content.TrimEnd() + [Environment]::NewLine + ("{0}={1}" -f $Key, $Value) + [Environment]::NewLine)
+  }
+
+  Set-Content -LiteralPath $Path -Value $updated -Encoding utf8
+}
+
+function Set-LVCreateComparisonCliTimeoutTokens {
+  param(
+    [int]$OpenTimeoutSeconds,
+    [int]$AfterLaunchTimeoutSeconds
+  )
+
+  $candidates = @(
+    "C:\ProgramData\National Instruments\LabVIEW CLI\LabVIEWCLI.ini",
+    "C:\ProgramData\National Instruments\LabVIEWCLI\LabVIEWCLI.ini",
+    "C:\Program Files\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.ini",
+    "C:\Program Files (x86)\National Instruments\Shared\LabVIEW CLI\LabVIEWCLI.ini"
+  )
+  $iniPath = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+  if (-not $iniPath) { return $null }
+
+  Set-LVIniToken -Path $iniPath -Key 'OpenAppReferenceTimeoutInSecond' -Value ([string]$OpenTimeoutSeconds)
+  Set-LVIniToken -Path $iniPath -Key 'AfterLaunchOpenAppReferenceTimeoutInSecond' -Value ([string]$AfterLaunchTimeoutSeconds)
+  return $iniPath
+}
+
+function Test-LVCreateComparisonCliFailureSignature {
+  param(
+    [AllowNull()][AllowEmptyString()][string]$StdOut,
+    [AllowNull()][AllowEmptyString()][string]$StdErr
+  )
+
+  $combined = @($StdErr, $StdOut) -join "`n"
+  if ([string]::IsNullOrWhiteSpace($combined)) {
+    return $false
+  }
+
+  return (
+    $combined -match 'Error code\s*:' -or
+    $combined -match 'An error occurred while running the LabVIEW CLI' -or
+    $combined -match 'CreateComparisonReport operation failed' -or
+    $combined -match 'Report path already exists' -or
+    $combined -match 'overwrite existing report'
+  )
+}
+
+function Test-LVCreateComparisonStartupConnectivitySignature {
+  param(
+    [AllowNull()][AllowEmptyString()][string]$StdOut,
+    [AllowNull()][AllowEmptyString()][string]$StdErr
+  )
+
+  $combined = @($StdErr, $StdOut) -join "`n"
+  if ([string]::IsNullOrWhiteSpace($combined)) {
+    return $false
+  }
+
+  return (
+    $combined -match '-350000' -or
+    $combined -match '(?i)failed to establish a connection with labview' -or
+    $combined -match '(?i)openappreference' -or
+    $combined -match '(?i)afterlaunchopenappreference' -or
+    $combined -match '(?i)vi server'
+  )
+}
+
+function Get-LVCreateComparisonStartupPolicy {
+  param(
+    [Parameter(Mandatory)][hashtable]$Normalized
+  )
+
+  $retryCount = Get-LVIntFromEnvValue -Names @(
+    'LVCLI_CREATECOMPARISON_STARTUP_RETRY_COUNT',
+    'PR_VI_HISTORY_COMPARE_STARTUP_RETRY_COUNT',
+    'COMPARE_STARTUP_RETRY_COUNT'
+  ) -Default 1 -Min 0 -Max 10
+  $retryDelaySeconds = Get-LVIntFromEnvValue -Names @(
+    'LVCLI_CREATECOMPARISON_RETRY_DELAY_SECONDS',
+    'PR_VI_HISTORY_COMPARE_RETRY_DELAY_SECONDS',
+    'COMPARE_RETRY_DELAY_SECONDS'
+  ) -Default 8 -Min 0 -Max 120
+  $prelaunchEnabled = Get-LVBoolFromEnvValue -Names @(
+    'LVCLI_CREATECOMPARISON_PRELAUNCH_ENABLED',
+    'PR_VI_HISTORY_COMPARE_PRELAUNCH_ENABLED',
+    'COMPARE_PRELAUNCH_ENABLED'
+  ) -Default $true
+  $prelaunchWaitSeconds = Get-LVIntFromEnvValue -Names @(
+    'LVCLI_CREATECOMPARISON_PRELAUNCH_WAIT_SECONDS',
+    'PR_VI_HISTORY_COMPARE_PRELAUNCH_WAIT_SECONDS',
+    'COMPARE_PRELAUNCH_WAIT_SECONDS'
+  ) -Default 8 -Min 0 -Max 120
+  $openTimeout = Get-LVIntFromEnvValue -Names @(
+    'LVCLI_CREATECOMPARISON_OPENAPP_TIMEOUT',
+    'PR_VI_HISTORY_COMPARE_OPEN_APP_TIMEOUT',
+    'COMPARE_OPEN_APP_TIMEOUT'
+  ) -Default 180 -Min 1 -Max 3600
+  $afterLaunchTimeout = Get-LVIntFromEnvValue -Names @(
+    'LVCLI_CREATECOMPARISON_AFTERLAUNCH_TIMEOUT',
+    'PR_VI_HISTORY_COMPARE_AFTER_LAUNCH_TIMEOUT',
+    'COMPARE_AFTER_LAUNCH_TIMEOUT'
+  ) -Default 180 -Min 1 -Max 3600
+
+  $lvPath = $null
+  if ($Normalized.ContainsKey('labviewPath') -and -not [string]::IsNullOrWhiteSpace([string]$Normalized.labviewPath)) {
+    $lvPath = [string]$Normalized.labviewPath
+  } elseif (-not [string]::IsNullOrWhiteSpace($env:LABVIEW_PATH)) {
+    $lvPath = [string]$env:LABVIEW_PATH
+  } elseif (-not [string]::IsNullOrWhiteSpace($env:LABVIEW_EXE_PATH)) {
+    $lvPath = [string]$env:LABVIEW_EXE_PATH
+  }
+
+  return [pscustomobject]@{
+    maxAttempts        = [Math]::Max(1, $retryCount + 1)
+    retryDelaySeconds  = $retryDelaySeconds
+    prelaunchEnabled   = [bool]$prelaunchEnabled
+    prelaunchWaitSeconds = $prelaunchWaitSeconds
+    openTimeout        = $openTimeout
+    afterLaunchTimeout = $afterLaunchTimeout
+    labviewPath        = $lvPath
+  }
+}
+
 function Select-LVProvider {
   param(
     [Parameter(Mandatory)][string]$Operation,
@@ -707,6 +891,10 @@ function Invoke-LVOperation {
 
   $spec = Get-LVOperationSpec -Operation $Operation
   $normalized = Resolve-LVNormalizedParams -OperationSpec $spec -Params $Params
+  if ($Operation -eq 'CreateComparisonReport' -and -not $normalized.ContainsKey('headless')) {
+    # Host compare lanes are non-interactive; enforce headless for deterministic behavior.
+    $normalized['headless'] = $true
+  }
   $selection = Select-LVProvider -Operation $Operation -RequestedProvider $Provider
   $provider = $selection.Provider
   $providerObject = $selection.Provider
@@ -768,6 +956,12 @@ function Invoke-LVOperation {
     return [pscustomobject]$result
   }
 
+  $isCreateComparisonOperation = ($Operation -eq 'CreateComparisonReport')
+  $startupPolicy = $null
+  if ($isCreateComparisonOperation) {
+    $startupPolicy = Get-LVCreateComparisonStartupPolicy -Normalized $normalized
+  }
+
   Initialize-LabVIEWCliPidTracker
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -789,21 +983,116 @@ function Invoke-LVOperation {
   $finalizeSource = 'labview-cli:operation'
   $errorMessage = $null
   $trackerElapsed = $null
+  $startupMitigation = $null
+  $cliFailureHeuristic = $false
+  $startupConnectivityHeuristic = $false
 
   try {
     $guard = Set-LVHeadlessEnv
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     try {
-      $process = [System.Diagnostics.Process]::Start($psi)
-      if (-not $process) { throw "Failed to start process '$binary'." }
-      if (-not $process.WaitForExit([Math]::Max(1,$TimeoutSeconds) * 1000)) {
-        $timedOut = $true
-        try { $process.Kill($true) } catch {}
-        throw "Operation '$Operation' timed out after $TimeoutSeconds second(s)."
+      $maxAttempts = 1
+      $retryDelaySeconds = 0
+      if ($isCreateComparisonOperation -and $startupPolicy) {
+        $maxAttempts = [Math]::Max(1, [int]$startupPolicy.maxAttempts)
+        $retryDelaySeconds = [Math]::Max(0, [int]$startupPolicy.retryDelaySeconds)
+        $startupMitigation = [ordered]@{
+          retryAttempts       = 0
+          retryTriggered      = $false
+          maxAttempts         = $maxAttempts
+          prelaunchAttempted  = $false
+          prelaunchLabVIEWPath= $startupPolicy.labviewPath
+          prelaunchWaitSeconds= [int]$startupPolicy.prelaunchWaitSeconds
+          iniPath             = $null
+          openTimeout         = [int]$startupPolicy.openTimeout
+          afterLaunchTimeout  = [int]$startupPolicy.afterLaunchTimeout
+        }
+
+        $iniPath = Set-LVCreateComparisonCliTimeoutTokens `
+          -OpenTimeoutSeconds ([int]$startupPolicy.openTimeout) `
+          -AfterLaunchTimeoutSeconds ([int]$startupPolicy.afterLaunchTimeout)
+        if (-not [string]::IsNullOrWhiteSpace($iniPath)) {
+          $startupMitigation.iniPath = $iniPath
+        }
+
+        if (
+          [bool]$startupPolicy.prelaunchEnabled -and
+          -not [string]::IsNullOrWhiteSpace([string]$startupPolicy.labviewPath) -and
+          (Test-Path -LiteralPath $startupPolicy.labviewPath -PathType Leaf)
+        ) {
+          try {
+            Start-Process -FilePath $startupPolicy.labviewPath -ArgumentList '--headless' -WindowStyle Hidden | Out-Null
+            $startupMitigation.prelaunchAttempted = $true
+            if ([int]$startupPolicy.prelaunchWaitSeconds -gt 0) {
+              Start-Sleep -Seconds ([int]$startupPolicy.prelaunchWaitSeconds)
+            }
+          } catch {
+            Write-Verbose ("LabVIEW CLI startup prelaunch skipped: {0}" -f $_.Exception.Message)
+          }
+        }
       }
-      $stdout = $process.StandardOutput.ReadToEnd()
-      $stderr = $process.StandardError.ReadToEnd()
-      $exitCode = $process.ExitCode
+
+      $attempt = 0
+      while ($attempt -lt $maxAttempts) {
+        $attempt++
+        if ($startupMitigation) {
+          $startupMitigation.retryAttempts = $attempt
+        }
+
+        $process = $null
+        try {
+          $process = [System.Diagnostics.Process]::Start($psi)
+          if (-not $process) { throw "Failed to start process '$binary'." }
+          if (-not $process.WaitForExit([Math]::Max(1,$TimeoutSeconds) * 1000)) {
+            $timedOut = $true
+            try { $process.Kill($true) } catch {}
+            throw "Operation '$Operation' timed out after $TimeoutSeconds second(s)."
+          }
+          $stdout = $process.StandardOutput.ReadToEnd()
+          $stderr = $process.StandardError.ReadToEnd()
+          $exitCode = $process.ExitCode
+        } finally {
+          if ($process) {
+            $process.Dispose()
+            $process = $null
+          }
+        }
+
+        if (-not $isCreateComparisonOperation) {
+          break
+        }
+
+        $cliFailureHeuristic = Test-LVCreateComparisonCliFailureSignature -StdOut $stdout -StdErr $stderr
+        $startupConnectivityHeuristic = Test-LVCreateComparisonStartupConnectivitySignature -StdOut $stdout -StdErr $stderr
+
+        if ($exitCode -eq 0) {
+          break
+        }
+        if ($exitCode -eq 1 -and -not $cliFailureHeuristic) {
+          break
+        }
+
+        if ($startupConnectivityHeuristic -and $attempt -lt $maxAttempts) {
+          if ($startupMitigation) {
+            $startupMitigation.retryTriggered = $true
+          }
+          if ($retryDelaySeconds -gt 0) {
+            Start-Sleep -Seconds $retryDelaySeconds
+          }
+          continue
+        }
+        break
+      }
+
+      if ($isCreateComparisonOperation) {
+        $cliFailureHeuristic = Test-LVCreateComparisonCliFailureSignature -StdOut $stdout -StdErr $stderr
+        $startupConnectivityHeuristic = Test-LVCreateComparisonStartupConnectivitySignature -StdOut $stdout -StdErr $stderr
+        if ($exitCode -eq 1 -and $cliFailureHeuristic) {
+          # Preserve diff-as-exit-1 semantics unless positive failure heuristics match.
+          $exitCode = 2
+        }
+      }
+
       if ($sw) { $elapsedSeconds = [Math]::Round($sw.Elapsed.TotalSeconds,3) }
     } catch {
       $errorMessage = $_.Exception.Message
@@ -864,6 +1153,15 @@ function Invoke-LVOperation {
   $result.stdout = $stdout
   $result.stderr = $stderr
   $result.ok = (-not $timedOut -and $exitCode -eq 0)
+  if ($isCreateComparisonOperation) {
+    $result.failureHeuristics = [pscustomobject]@{
+      cliFailure = [bool]$cliFailureHeuristic
+      startupConnectivity = [bool]$startupConnectivityHeuristic
+    }
+    if ($startupMitigation) {
+      $result.startupMitigation = [pscustomobject]$startupMitigation
+    }
+  }
 
   # Update sentinel timestamp after a successful run (for duplicate suppression windows)
   if ($Operation -eq 'CreateComparisonReport' -and $normalized -and $normalized.ContainsKey('vi1') -and $normalized.ContainsKey('vi2')) {
