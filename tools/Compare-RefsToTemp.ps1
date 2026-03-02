@@ -18,6 +18,7 @@ param(
   [switch]$LeakCheck,
   [double]$LeakGraceSeconds = 1.5,
   [string]$LeakJsonPath,
+  [Nullable[int]]$TimeoutSeconds,
   [switch]$FailOnDiff
 )
 
@@ -65,6 +66,19 @@ function Normalize-ExistingPath {
   param([string]$Candidate)
   if ([string]::IsNullOrWhiteSpace($Candidate)) { return $null }
   try { return (Resolve-Path -LiteralPath $Candidate -ErrorAction Stop).Path } catch { return $Candidate }
+}
+
+function Get-PositiveIntFromEnv {
+  param([string[]]$Names)
+  foreach ($name in @($Names | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+    $raw = [System.Environment]::GetEnvironmentVariable($name, 'Process')
+    if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+    $parsed = 0
+    if ([int]::TryParse($raw.Trim(), [ref]$parsed) -and $parsed -gt 0) {
+      return [int]$parsed
+    }
+  }
+  return $null
 }
 
 function Get-IncludedAttributesFromReport {
@@ -241,7 +255,21 @@ if ($RenderReport.IsPresent -and $reportFormatEffective -ne 'html') {
 }
 $renderReportRequested = ($reportFormatEffective -eq 'html')
 $detailRequested = $Detailed.IsPresent -or $renderReportRequested -or ($reportFormatEffective -ne 'html')
-Write-Host ("[Debug] detailRequested={0} renderReportRequested={1} reportFormat={2}" -f $detailRequested, $renderReportRequested, $reportFormatEffective)
+$timeoutSecondsEffective = $null
+if ($PSBoundParameters.ContainsKey('TimeoutSeconds') -and $TimeoutSeconds -gt 0) {
+  $timeoutSecondsEffective = [int]$TimeoutSeconds
+} else {
+  $timeoutSecondsEffective = Get-PositiveIntFromEnv -Names @(
+    'PR_VI_HISTORY_COMPARE_TIMEOUT_SECONDS',
+    'VI_HISTORY_COMPARE_TIMEOUT_SECONDS',
+    'COMPAREVI_TIMEOUT_SECONDS'
+  )
+}
+if (($timeoutSecondsEffective -eq $null -or $timeoutSecondsEffective -le 0) -and $detailRequested) {
+  # Report generation can exceed the default 300s under real fixture load.
+  $timeoutSecondsEffective = 900
+}
+Write-Host ("[Debug] detailRequested={0} renderReportRequested={1} reportFormat={2} timeoutSeconds={3}" -f $detailRequested, $renderReportRequested, $reportFormatEffective, ($timeoutSecondsEffective ?? 'default'))
 $scriptsRoot = Resolve-CompareVIScriptsRoot -PrimaryRoot $repoRoot
 $flagTokens = Split-ArgString -Value $LvCompareArgs
 $customInvokeProvided = -not [string]::IsNullOrWhiteSpace($InvokeScriptPath)
@@ -323,6 +351,10 @@ $includedAttributes = @()
 if ($detailRequested) {
   $invokeArgs = @('-NoLogo','-NoProfile','-File', $invokeScriptResolved, '-BaseVi', $base, '-HeadVi', $head, '-OutputDir', $artifactDir, '-NoiseProfile', 'full', '-Quiet')
   if ($renderReportRequested) { $invokeArgs += '-RenderReport' }
+  if ($timeoutSecondsEffective -and $timeoutSecondsEffective -gt 0) {
+    $invokeArgs += '-TimeoutSeconds'
+    $invokeArgs += [string]$timeoutSecondsEffective
+  }
   if ($lvComparePathResolved) { $invokeArgs += '-LVComparePath'; $invokeArgs += $lvComparePathResolved }
   if ($labviewExeResolved) { $invokeArgs += '-LabVIEWExePath'; $invokeArgs += $labviewExeResolved }
   if ($customInvokeProvided -and $invokeFlagTokens -and $invokeFlagTokens.Length -gt 0) {
@@ -498,6 +530,7 @@ if ($detailRequested) {
     cwd         = $repoRoot
     duration_s  = $cliDurationSeconds
     duration_ns = $cliDurationNanoseconds
+    timeoutSeconds = $timeoutSecondsEffective
     base        = $capture.base
     head        = $capture.head
   }

@@ -31,6 +31,10 @@ Optional override for the `max_pairs` workflow input. Defaults to `6`.
 .PARAMETER WorkflowTimeoutMinutes
 Optional override for the `history_timeout_minutes` workflow input used by
 `pr-vi-history.yml`. Defaults to `25` for smoke evidence runs.
+
+.PARAMETER CompareTimeoutSeconds
+Optional override for the `compare_timeout_seconds` workflow input used by
+`pr-vi-history.yml`. Defaults to `900` for smoke evidence runs.
 #>
 [CmdletBinding()]
 param(
@@ -40,7 +44,8 @@ param(
     [ValidateSet('attribute', 'sequential', 'mixed-same-commit')]
     [string]$Scenario = 'attribute',
     [int]$MaxPairs = 6,
-    [int]$WorkflowTimeoutMinutes = 25
+    [int]$WorkflowTimeoutMinutes = 25,
+    [int]$CompareTimeoutSeconds = 900
 )
 
 Set-StrictMode -Version Latest
@@ -48,6 +53,9 @@ $ErrorActionPreference = 'Stop'
 
 if ($WorkflowTimeoutMinutes -lt 1) {
     throw 'WorkflowTimeoutMinutes must be greater than zero.'
+}
+if ($CompareTimeoutSeconds -lt 1) {
+    throw 'CompareTimeoutSeconds must be greater than zero.'
 }
 
 function Invoke-Git {
@@ -690,7 +698,7 @@ $planSteps.Add("- Fetch origin/$BaseBranch") | Out-Null
 $planSteps.Add("- Create branch $branchName from origin/$BaseBranch") | Out-Null
 $planSteps.Add($scenarioPlanHint) | Out-Null
 $planSteps.Add("- Push scratch branch and create draft PR") | Out-Null
-$planSteps.Add("- Dispatch pr-vi-history.yml with PR input (max_pairs=$effectiveMaxPairs, history_timeout_minutes=$WorkflowTimeoutMinutes)") | Out-Null
+$planSteps.Add("- Dispatch pr-vi-history.yml with PR input (max_pairs=$effectiveMaxPairs, history_timeout_minutes=$WorkflowTimeoutMinutes, compare_timeout_seconds=$CompareTimeoutSeconds)") | Out-Null
 $planSteps.Add("- Wait for workflow completion and verify PR comment") | Out-Null
 if ($scenarioNeedsArtifactValidation) {
     $planSteps.Add("- Download workflow artifact and validate diff/comparison counts") | Out-Null
@@ -736,6 +744,7 @@ $scratchContext = [ordered]@{
     MaxPairsRequested = $MaxPairs
     MaxPairsEffective = $effectiveMaxPairs
     WorkflowTimeoutMinutes = $WorkflowTimeoutMinutes
+    CompareTimeoutSeconds = $CompareTimeoutSeconds
     MobilePreviewRequired = $scenarioRequiresMobilePreview
 }
 
@@ -869,6 +878,7 @@ try {
             pr                      = $scratchContext.PrNumber.ToString()
             max_pairs               = $effectiveMaxPairs.ToString()
             history_timeout_minutes = $WorkflowTimeoutMinutes.ToString()
+            compare_timeout_seconds = $CompareTimeoutSeconds.ToString()
         }
     } | ConvertTo-Json -Depth 4
     $dispatchStartedAtUtc = (Get-Date).ToUniversalTime()
