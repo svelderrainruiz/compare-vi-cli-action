@@ -58,6 +58,12 @@ if (-not (Test-Path -LiteralPath $policyHelperPath -PathType Leaf)) {
 }
 . $policyHelperPath
 
+$pairTimelineHelperPath = Join-Path $PSScriptRoot 'Get-VIHistoryPairTimeline.ps1'
+if (-not (Test-Path -LiteralPath $pairTimelineHelperPath -PathType Leaf)) {
+    throw "Pair timeline helper not found: $pairTimelineHelperPath"
+}
+. $pairTimelineHelperPath
+
 if ($WorkflowTimeoutMinutes -lt 1) {
     throw 'WorkflowTimeoutMinutes must be greater than zero.'
 }
@@ -986,6 +992,14 @@ $scratchContext = [ordered]@{
             warnings = @()
         }
     }
+    PairTimeline = @()
+    PairClassification = [ordered]@{}
+    PairTiming = [ordered]@{
+        comparisonCount = 0
+        totalSeconds = 0
+        p50Seconds = $null
+        p95Seconds = $null
+    }
     MaxPairsRequested = $MaxPairs
     MaxPairsEffective = $effectiveMaxPairs
     WorkflowTimeoutMinutes = $WorkflowTimeoutMinutes
@@ -1325,6 +1339,19 @@ try {
             throw 'Summary JSON not found in downloaded artifact.'
         }
         $summaryData = Get-Content -LiteralPath $summaryFile.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $pairInsight = Get-VIHistoryPairTimeline -Summary $summaryData
+        $scratchContext.PairTimeline = @($pairInsight.rows)
+        $scratchContext.PairClassification = if ($pairInsight.classificationCounts) { $pairInsight.classificationCounts } else { [ordered]@{} }
+        $scratchContext.PairTiming = if ($pairInsight.timing) {
+            $pairInsight.timing
+        } else {
+            [ordered]@{
+                comparisonCount = 0
+                totalSeconds = 0
+                p50Seconds = $null
+                p95Seconds = $null
+            }
+        }
         $targetSummaries = @($summaryData.targets)
         if ($targetSummaries.Count -eq 0) {
             throw 'Summary JSON does not contain target entries.'
