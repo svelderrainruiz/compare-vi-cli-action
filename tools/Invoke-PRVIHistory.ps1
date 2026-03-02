@@ -1058,6 +1058,74 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
                 Write-Warning ("Failed to extract report images for '{0}': {1}" -f $repoPath, $_.Exception.Message)
             }
         }
+
+        if ($reportImages.status -eq 'completed' -and [int]$reportImages.exportedImageCount -le 0) {
+            try {
+                $cliImageCandidates = @(Get-ChildItem -LiteralPath $targetResultsDir -Recurse -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -like 'cli-image-*' -and $_.FullName -match '[\\/]+cli-images[\\/]' } |
+                    Sort-Object FullName)
+                if ($cliImageCandidates.Count -gt 0) {
+                    $imageOutputDir = Join-Path $targetResultsDir 'previews'
+                    $imageIndexPath = Join-Path $targetResultsDir 'vi-history-image-index.json'
+                    New-Item -ItemType Directory -Path $imageOutputDir -Force | Out-Null
+
+                    $fallbackImages = New-Object System.Collections.Generic.List[object]
+                    $copiedCount = 0
+                    foreach ($candidate in $cliImageCandidates) {
+                        if (-not $candidate) { continue }
+                        $extension = $candidate.Extension
+                        if ([string]::IsNullOrWhiteSpace($extension)) {
+                            $extension = '.png'
+                        }
+                        $extension = $extension.Trim().TrimStart('.').ToLowerInvariant()
+                        if ([string]::IsNullOrWhiteSpace($extension)) {
+                            $extension = 'png'
+                        }
+
+                        $fileName = ('history-image-{0:D3}.{1}' -f $copiedCount, $extension)
+                        $destinationPath = Join-Path $imageOutputDir $fileName
+                        Copy-Item -LiteralPath $candidate.FullName -Destination $destinationPath -Force
+                        $resolvedSavedPath = (Resolve-Path -LiteralPath $destinationPath).Path
+                        $fallbackImages.Add([pscustomobject]@{
+                            index      = $copiedCount
+                            source     = $candidate.FullName
+                            sourceType = 'cli-images'
+                            alt        = 'VI diff preview'
+                            fileName   = $fileName
+                            savedPath  = $resolvedSavedPath
+                            byteLength = [int64]$candidate.Length
+                            status     = 'saved'
+                        }) | Out-Null
+                        $copiedCount++
+                    }
+
+                    $resolvedOutputDir = (Resolve-Path -LiteralPath $imageOutputDir).Path
+                    $fallbackIndex = [pscustomobject]@{
+                        schema             = 'pr-vi-history-image-index@v1'
+                        generatedAt        = (Get-Date).ToString('o')
+                        reportPath         = $reportHtml
+                        outputDir          = $resolvedOutputDir
+                        sourceImageCount   = $cliImageCandidates.Count
+                        exportedImageCount = $copiedCount
+                        images             = @($fallbackImages)
+                    }
+                    $fallbackIndex | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $imageIndexPath -Encoding utf8
+
+                    $reportImages.sourceImageCount = [int]$cliImageCandidates.Count
+                    $reportImages.exportedImageCount = [int]$copiedCount
+                    $reportImages.indexPath = (Resolve-Path -LiteralPath $imageIndexPath).Path
+                    $reportImages.outputDir = $resolvedOutputDir
+                    $reportImages.source = 'cli-images-fallback'
+
+                    $reportImageExportedCount += [int]$copiedCount
+                    if ($copiedCount -gt 0) {
+                        $reportImageTargetCount++
+                    }
+                }
+            } catch {
+                Write-Warning ("Failed CLI-image fallback extraction for '{0}': {1}" -f $repoPath, $_.Exception.Message)
+            }
+        }
     }
 
     $targetTimeline = Get-TargetPairTimeline `
