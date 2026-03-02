@@ -53,6 +53,7 @@ param(
     [string]$ResultsRoot = 'tests/results/pr-vi-history',
 
     [Nullable[int]]$MaxPairs,
+    [Nullable[int]]$CompareTimeoutSeconds,
 
     [string[]]$Mode,
 
@@ -76,6 +77,23 @@ $ErrorActionPreference = 'Stop'
 
 $maxPairsValue = if ($PSBoundParameters.ContainsKey('MaxPairs')) { $MaxPairs } else { $null }
 $maxPairsRequested = ($null -ne $maxPairsValue) -and ($maxPairsValue -gt 0)
+$compareTimeoutValue = if ($PSBoundParameters.ContainsKey('CompareTimeoutSeconds')) { $CompareTimeoutSeconds } else { $null }
+if ($null -eq $compareTimeoutValue -or $compareTimeoutValue -le 0) {
+    $timeoutSources = @(
+        [System.Environment]::GetEnvironmentVariable('PR_VI_HISTORY_COMPARE_TIMEOUT_SECONDS', 'Process'),
+        [System.Environment]::GetEnvironmentVariable('VI_HISTORY_COMPARE_TIMEOUT_SECONDS', 'Process'),
+        [System.Environment]::GetEnvironmentVariable('COMPAREVI_TIMEOUT_SECONDS', 'Process')
+    )
+    foreach ($rawTimeout in $timeoutSources) {
+        if ([string]::IsNullOrWhiteSpace($rawTimeout)) { continue }
+        $parsedTimeout = 0
+        if ([int]::TryParse($rawTimeout.Trim(), [ref]$parsedTimeout) -and $parsedTimeout -gt 0) {
+            $compareTimeoutValue = [int]$parsedTimeout
+            break
+        }
+    }
+}
+$compareTimeoutRequested = ($null -ne $compareTimeoutValue) -and ($compareTimeoutValue -gt 0)
 
 function Resolve-ExistingFile {
     param(
@@ -885,6 +903,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
     }
     Write-Verbose ("[{0}/{1}] Target '{2}' (origin: {3}) -> compare path '{4}'" -f ($i + 1), $targets.Count, $repoPath, $target.origin, $effectiveTargetPath)
     if ($maxPairsRequested) { $compareArgs.MaxPairs = $maxPairsValue }
+    if ($compareTimeoutRequested) { $compareArgs.CompareTimeoutSeconds = [int]$compareTimeoutValue }
     if ($Mode) { $compareArgs.Mode = $Mode }
     if (-not [string]::IsNullOrWhiteSpace($StartRef)) { $compareArgs.StartRef = $StartRef }
     if (-not [string]::IsNullOrWhiteSpace($EndRef)) { $compareArgs.EndRef = $EndRef }
