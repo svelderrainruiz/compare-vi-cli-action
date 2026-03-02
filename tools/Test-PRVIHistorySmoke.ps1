@@ -1002,12 +1002,16 @@ try {
 
     if ($scenarioNeedsArtifactValidation) {
         if ($scenarioKey -eq 'sequential') {
+            $expectedSequentialComparisons = [Math]::Max(1, $commitSummaries.Count)
+            if ($effectiveMaxPairs -gt 0) {
+                $expectedSequentialComparisons = [Math]::Max(1, [Math]::Min($expectedSequentialComparisons, $effectiveMaxPairs))
+            }
             $sequentialTarget = $targetValidations | Where-Object { $_.repoPath -eq 'fixtures/vi-attr/Head.vi' } | Select-Object -First 1
             if (-not $sequentialTarget) {
                 $sequentialTarget = $targetValidations | Select-Object -First 1
             }
-            if ($sequentialTarget.comparisons -lt [Math]::Max(1, $commitSummaries.Count)) {
-                throw ("Expected at least {0} comparisons for sequential scenario, but comment reported {1}." -f [Math]::Max(1, $commitSummaries.Count), $sequentialTarget.comparisons)
+            if ($sequentialTarget.comparisons -lt $expectedSequentialComparisons) {
+                throw ("Expected at least {0} comparisons for sequential scenario, but comment reported {1}." -f $expectedSequentialComparisons, $sequentialTarget.comparisons)
             }
         }
         $artifactDir = Join-Path $summaryDir ("artifact-$timestamp")
@@ -1044,8 +1048,14 @@ try {
             if ([bool]$expectedTarget.requireDiff -and $artifactDiffs -lt $requiredDiffs) {
                 throw ("Summary JSON target '{0}' expected at least {1} diff(s) but saw {2}." -f $expectedTarget.repoPath, $requiredDiffs, $artifactDiffs)
             }
-            if ($scenarioKey -eq 'sequential' -and $summaryTarget.repoPath -eq 'fixtures/vi-attr/Head.vi' -and $artifactComparisons -lt [Math]::Max(1, $commitSummaries.Count)) {
-                throw ("Summary JSON reported {0} comparisons for sequential target; expected at least {1}." -f $artifactComparisons, [Math]::Max(1, $commitSummaries.Count))
+            if ($scenarioKey -eq 'sequential' -and $summaryTarget.repoPath -eq 'fixtures/vi-attr/Head.vi') {
+                $expectedSequentialComparisons = [Math]::Max(1, $commitSummaries.Count)
+                if ($effectiveMaxPairs -gt 0) {
+                    $expectedSequentialComparisons = [Math]::Max(1, [Math]::Min($expectedSequentialComparisons, $effectiveMaxPairs))
+                }
+                if ($artifactComparisons -lt $expectedSequentialComparisons) {
+                    throw ("Summary JSON reported {0} comparisons for sequential target; expected at least {1}." -f $artifactComparisons, $expectedSequentialComparisons)
+                }
             }
         }
 
