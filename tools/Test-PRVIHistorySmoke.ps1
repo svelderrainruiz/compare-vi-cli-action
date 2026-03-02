@@ -175,15 +175,39 @@ function Wait-WorkflowRunCompletion {
     $auth = Get-GitHubAuth
     $uri = "https://api.github.com/repos/$($Repo.Slug)/actions/runs/$RunId"
     $deadline = (Get-Date).ToUniversalTime().AddMinutes([Math]::Max(1, $TimeoutMinutes))
+    $lastPollError = $null
     do {
-        $run = Invoke-RestMethod -Uri $uri -Headers $auth.Headers -Method Get -ErrorAction Stop
-        if ($run.status -eq 'completed') {
-            return $run
+        try {
+            $run = Invoke-RestMethod -Uri $uri -Headers $auth.Headers -Method Get -ErrorAction Stop
+            $lastPollError = $null
+            if ($run.status -eq 'completed') {
+                return $run
+            }
+        } catch {
+            $lastPollError = $_
+            $errorText = if ($_.Exception -and $_.Exception.Message) { $_.Exception.Message } else { [string]$_ }
+            $compactError = ($errorText -replace '\s+', ' ').Trim()
+            $isTransient = $compactError -match '(?i)(unicorn|issues producing the response|502|503|504|gateway|temporar|timeout|timed out)'
+            if (-not $isTransient) {
+                throw
+            }
+            if ($compactError.Length -gt 220) {
+                $compactError = $compactError.Substring(0, 220) + '...'
+            }
+            Write-Warning ("Transient workflow polling error for run {0}; retrying: {1}" -f $RunId, $compactError)
         }
         Start-Sleep -Seconds ([Math]::Max(1, $PollSeconds))
     } while ((Get-Date).ToUniversalTime() -lt $deadline)
 
-    throw ("Timed out waiting for workflow run {0} to complete after {1} minute(s)." -f $RunId, $TimeoutMinutes)
+    $timeoutMessage = "Timed out waiting for workflow run $RunId to complete after $TimeoutMinutes minute(s)."
+    if ($lastPollError -and $lastPollError.Exception -and $lastPollError.Exception.Message) {
+        $lastMessage = ($lastPollError.Exception.Message -replace '\s+', ' ').Trim()
+        if ($lastMessage.Length -gt 220) {
+            $lastMessage = $lastMessage.Substring(0, 220) + '...'
+        }
+        $timeoutMessage = "$timeoutMessage Last polling error: $lastMessage"
+    }
+    throw $timeoutMessage
 }
 
 function Ensure-CleanWorkingTree {
