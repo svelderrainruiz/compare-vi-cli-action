@@ -1108,7 +1108,7 @@ for ($i = 0; $i -lt $targets.Count; $i++) {
                         outputDir          = $resolvedOutputDir
                         sourceImageCount   = $cliImageCandidates.Count
                         exportedImageCount = $copiedCount
-                        images             = @($fallbackImages)
+                        images             = @($fallbackImages.ToArray())
                     }
                     $fallbackIndex | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $imageIndexPath -Encoding utf8
 
