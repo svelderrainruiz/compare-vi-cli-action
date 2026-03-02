@@ -426,11 +426,26 @@ if ($detailRequested) {
           $images = @()
           foreach ($img in @($prop.Value)) {
             if (-not $img) { continue }
+            $imgIndex = $null
+            $imgMimeType = $null
+            $imgByteLength = $null
+            $imgSavedPath = $null
+            if ($img -is [string]) {
+              $imgSavedPath = [string]$img
+            } elseif ($img.PSObject) {
+              if ($img.PSObject.Properties['index']) { $imgIndex = $img.index }
+              if ($img.PSObject.Properties['mimeType']) { $imgMimeType = $img.mimeType }
+              elseif ($img.PSObject.Properties['mime']) { $imgMimeType = $img.mime }
+              if ($img.PSObject.Properties['byteLength']) { $imgByteLength = $img.byteLength }
+              elseif ($img.PSObject.Properties['bytes']) { $imgByteLength = $img.bytes }
+              if ($img.PSObject.Properties['savedPath']) { $imgSavedPath = $img.savedPath }
+              elseif ($img.PSObject.Properties['path']) { $imgSavedPath = $img.path }
+            }
             $images += [ordered]@{
-              index      = $img.index
-              mimeType   = $img.mimeType
-              byteLength = $img.byteLength
-              savedPath  = $img.savedPath
+              index      = $imgIndex
+              mimeType   = $imgMimeType
+              byteLength = $imgByteLength
+              savedPath  = $imgSavedPath
             }
           }
           if ($images.Count -gt 0) { $artifactSummary.images = $images }
