@@ -341,6 +341,8 @@ $cliCommand = $null
 $cliPath = $null
 $cliDurationSeconds = $null
 $cliDurationNanoseconds = $null
+$cliArtifactImageCount = 0
+$cliArtifactReportSizeBytes = 0
 $cliArgsRecorded = @()
 $cliArtifacts = $null
 $cliHighlights = @()
@@ -405,6 +407,9 @@ if ($detailRequested) {
 
   $cliExit = if ($capture.exitCode -ne $null) { [int]$capture.exitCode } else { [int]$invokeResult.ExitCode }
   $cliDiff = ($cliExit -eq 1)
+  if (-not $cliDiff -and $capture.PSObject.Properties['diff']) {
+    try { $cliDiff = [bool]$capture.diff } catch {}
+  }
   $cliCommand = if ($capture.command) { [string]$capture.command } else { $null }
   $cliPath = if ($capture.cliPath) { [string]$capture.cliPath } else { $lvComparePathResolved }
   if ($capture.seconds -ne $null) {
@@ -422,6 +427,11 @@ if ($detailRequested) {
     if ($cliNode.PSObject.Properties['artifacts'] -and $cliNode.artifacts) {
       $artifactSummary = [ordered]@{}
       foreach ($prop in $cliNode.artifacts.PSObject.Properties) {
+        if ($prop.Name -eq 'imageCount' -and $prop.Value -ne $null) {
+          try { $cliArtifactImageCount = [Math]::Max([int]$prop.Value, 0) } catch {}
+        } elseif ($prop.Name -eq 'reportSizeBytes' -and $prop.Value -ne $null) {
+          try { $cliArtifactReportSizeBytes = [Math]::Max([int64]$prop.Value, 0) } catch {}
+        }
         if ($prop.Name -eq 'images' -and $prop.Value) {
           $images = @()
           foreach ($img in @($prop.Value)) {
@@ -448,12 +458,25 @@ if ($detailRequested) {
               savedPath  = $imgSavedPath
             }
           }
+          if ($images.Count -gt $cliArtifactImageCount) {
+            $cliArtifactImageCount = $images.Count
+          }
           if ($images.Count -gt 0) { $artifactSummary.images = $images }
         } else {
           $artifactSummary[$prop.Name] = $prop.Value
         }
       }
       if ($artifactSummary.Count -gt 0) { $cliArtifacts = [pscustomobject]$artifactSummary }
+    }
+  }
+
+  if (-not $cliDiff -and $expectDiff) {
+    if ($cliArtifactImageCount -gt 0) {
+      $cliDiff = $true
+      Write-Verbose ("Treating compare as diff based on artifact image evidence (imageCount={0})." -f $cliArtifactImageCount)
+    } elseif ($cliArtifactReportSizeBytes -gt 0) {
+      $cliDiff = $true
+      Write-Verbose ("Treating compare as diff based on non-empty report artifact (reportSizeBytes={0})." -f $cliArtifactReportSizeBytes)
     }
   }
 
