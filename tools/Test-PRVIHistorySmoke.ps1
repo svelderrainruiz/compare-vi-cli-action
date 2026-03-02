@@ -1362,7 +1362,15 @@ try {
             $artifactComparisons = if ($summaryTarget -and $summaryTarget.stats) { [int]$summaryTarget.stats.processed } else { 0 }
             $artifactDiffs = if ($summaryTarget -and $summaryTarget.stats) { [int]$summaryTarget.stats.diffs } else { 0 }
             $requiredDiffs = [Math]::Max(0, [int]$expectedTarget.minDiffs)
-            $artifactStatus = if ($summaryTarget -and $summaryTarget.PSObject.Properties['status']) { [string]$summaryTarget.status } else { 'missing' }
+            $artifactStatus = if (-not $summaryTarget) {
+                'missing'
+            } elseif ($artifactDiffs -gt 0) {
+                'diff'
+            } elseif ($artifactComparisons -gt 0) {
+                'match'
+            } else {
+                'missing'
+            }
             $artifactDecision = Resolve-VIHistoryPolicyDecision `
                 -TargetPath ([string]$expectedTarget.repoPath) `
                 -RequireDiff ([bool]$expectedTarget.requireDiff) `
