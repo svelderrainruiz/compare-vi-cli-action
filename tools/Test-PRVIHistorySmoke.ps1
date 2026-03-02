@@ -467,6 +467,57 @@ function Get-HistorySummaryRowsFromComment {
     return @($rows)
 }
 
+function Get-LvCliFailureSignals {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ArtifactDir
+    )
+
+    $signals = [ordered]@{
+        totalStderrFiles       = 0
+        connectivity350000Hits = 0
+        timeoutHits            = 0
+        toolFailureHits        = 0
+        sampleMessages         = @()
+    }
+
+    $stderrFiles = @(Get-ChildItem -LiteralPath $ArtifactDir -Recurse -Filter 'lvcli-stderr.txt' -File -ErrorAction SilentlyContinue)
+    $signals.totalStderrFiles = $stderrFiles.Count
+
+    foreach ($stderrFile in $stderrFiles) {
+        $raw = $null
+        try {
+            $raw = Get-Content -LiteralPath $stderrFile.FullName -Raw -ErrorAction Stop
+        } catch {
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($raw)) {
+            continue
+        }
+        $normalized = $raw.ToLowerInvariant()
+        if ($normalized -match 'error code\s*:\s*-350000' -or $normalized -match 'failed to establish a connection with labview') {
+            $signals.connectivity350000Hits += 1
+            if ($signals.sampleMessages.Count -lt 3) {
+                $signals.sampleMessages += ("{0}: startup/connectivity failure (-350000)" -f $stderrFile.Name)
+            }
+        }
+        if ($normalized -match 'timed out' -or $normalized -match 'timeout') {
+            $signals.timeoutHits += 1
+            if ($signals.sampleMessages.Count -lt 3) {
+                $signals.sampleMessages += ("{0}: timeout signature" -f $stderrFile.Name)
+            }
+        }
+        if ($normalized -match 'operation failed' -or $normalized -match 'an error occurred while running the labview cli') {
+            $signals.toolFailureHits += 1
+            if ($signals.sampleMessages.Count -lt 3) {
+                $signals.sampleMessages += ("{0}: CLI operation failure signature" -f $stderrFile.Name)
+            }
+        }
+    }
+
+    return [pscustomobject]$signals
+}
+
 function Invoke-AttributeHistoryCommit {
     param(
         [Parameter(Mandatory)]
@@ -966,8 +1017,15 @@ try {
         $previewImageFiles = Get-ChildItem -LiteralPath $artifactDir -Recurse -File |
             Where-Object { $_.Name -like 'history-image-*' -and $_.FullName -match '[\\/]+previews[\\/]' }
         $previewImageCount = if ($previewImageFiles) { @($previewImageFiles).Count } else { 0 }
+        $lvcliSignals = Get-LvCliFailureSignals -ArtifactDir $artifactDir
+        if ($lvcliSignals) {
+            $scratchContext.LvCliSignals = $lvcliSignals
+        }
         if ($scenarioRequiresMobilePreview) {
             if ($previewImageCount -lt 1) {
+                if ($lvcliSignals.connectivity350000Hits -gt 0) {
+                    throw ("Scenario '{0}' produced no preview images because LV CLI startup/connectivity failures (-350000) were detected in {1} artifact stderr file(s)." -f $scenarioKey, $lvcliSignals.connectivity350000Hits)
+                }
                 throw ("Scenario '{0}' expected preview image files (`previews/history-image-*`) but none were found." -f $scenarioKey)
             }
             if (-not $mobilePreviewHeaderMatch.Success) {
