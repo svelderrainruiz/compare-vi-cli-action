@@ -39,6 +39,7 @@ jobs:
         contains('OWNER,MEMBER,COLLABORATOR', github.event.comment.author_association)
       )
     runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 35
     env:
       NOTE: ${{ inputs.note }}
       MAX_PAIRS: ${{ inputs.max_pairs || '6' }}
@@ -164,6 +165,13 @@ jobs:
           MAX_PAIRS: ${{ env.MAX_PAIRS }}
           MANIFEST_PATH: ${{ steps.manifest.outputs.manifest_path }}
           PR_VI_HISTORY_EXTRACT_REPORT_IMAGES: '1'
+          # Fail fast on persistent startup/connectivity instability to keep PR runs bounded.
+          PR_VI_HISTORY_COMPARE_STARTUP_RETRY_COUNT: '0'
+          PR_VI_HISTORY_COMPARE_OPEN_APP_TIMEOUT: '45'
+          PR_VI_HISTORY_COMPARE_AFTER_LAUNCH_TIMEOUT: '45'
+          PR_VI_HISTORY_COMPARE_RETRY_DELAY_SECONDS: '3'
+          PR_VI_HISTORY_COMPARE_PRELAUNCH_ENABLED: '1'
+          PR_VI_HISTORY_COMPARE_PRELAUNCH_WAIT_SECONDS: '5'
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
