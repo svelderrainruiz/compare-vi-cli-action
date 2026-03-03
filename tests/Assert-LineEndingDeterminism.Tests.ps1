@@ -71,4 +71,47 @@ Describe 'Assert-LineEndingDeterminism.ps1' {
       Pop-Location
     }
   }
+
+  It 'skips tracked-file fallback on GitHub Actions when no files are reported as changed' {
+    $repoPath = Join-Path $TestDrive 'eol-ci-no-changes'
+    $toolsPath = Join-Path $repoPath 'tools'
+    New-Item -ItemType Directory -Path $toolsPath -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'docs') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'tests/results/lint') -Force | Out-Null
+
+    Copy-Item -LiteralPath $script:GuardScript -Destination (Join-Path $toolsPath 'Assert-LineEndingDeterminism.ps1') -Force
+    @'
+*.md text eol=lf
+'@ | Set-Content -LiteralPath (Join-Path $repoPath '.gitattributes') -Encoding ascii
+    [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/good.md'), [byte[]][char[]]"# Good`r`n")
+
+    Push-Location $repoPath
+    $oldGitHubActions = $env:GITHUB_ACTIONS
+    $oldGitHubBaseRef = $env:GITHUB_BASE_REF
+    try {
+      git init | Out-Null
+      git config core.autocrlf false
+      git config user.email eol-tests@example.com
+      git config user.name eol-tests
+      git add .gitattributes docs/good.md tools/Assert-LineEndingDeterminism.ps1
+      git commit -m 'init' | Out-Null
+
+      $env:GITHUB_ACTIONS = 'true'
+      $env:GITHUB_BASE_REF = 'develop'
+      $reportPath = Join-Path $repoPath 'tests/results/lint/line-ending-drift.json'
+
+      & pwsh -NoLogo -NoProfile -File (Join-Path $repoPath 'tools/Assert-LineEndingDeterminism.ps1')
+      $LASTEXITCODE | Should -Be 0
+      Test-Path -LiteralPath $reportPath | Should -BeTrue
+
+      $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+      $report.changedCount | Should -Be 0
+      $report.checkedCount | Should -Be 0
+      $report.violationCount | Should -Be 0
+    } finally {
+      $env:GITHUB_ACTIONS = $oldGitHubActions
+      $env:GITHUB_BASE_REF = $oldGitHubBaseRef
+      Pop-Location
+    }
+  }
 }

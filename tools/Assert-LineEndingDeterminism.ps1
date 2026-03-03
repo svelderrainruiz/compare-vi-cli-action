@@ -37,12 +37,15 @@ function Resolve-ChangedFiles {
   $stagedFiles = & git diff --name-only --cached --diff-filter=ACMRTUXB 2>$null
   foreach ($item in $stagedFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
 
+  $statusFiles = @()
   if ($files.Count -eq 0) {
-    $statusFiles = Resolve-StatusChangedFiles
+    $statusFiles = @(Resolve-StatusChangedFiles)
     foreach ($item in $statusFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
   }
 
-  if ($files.Count -eq 0) {
+  $isGitHubActions = -not [string]::IsNullOrWhiteSpace($env:GITHUB_ACTIONS)
+  $allowTrackedFallback = (-not $isGitHubActions) -or ($statusFiles.Count -gt 0)
+  if ($files.Count -eq 0 -and $allowTrackedFallback) {
     # Fallback for pure line-ending drift that may not appear in `git diff --name-only`.
     $trackedEolFiles = Resolve-TrackedEolFiles
     foreach ($item in $trackedEolFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
@@ -116,6 +119,13 @@ if ($env:GITHUB_BASE_REF) { $candidateRefs += "origin/$($env:GITHUB_BASE_REF)" }
 $candidateRefs += @('origin/develop', 'origin/main', 'HEAD~1')
 
 $mergeBase = Resolve-MergeBase -Candidates $candidateRefs
+if (-not $mergeBase -and -not [string]::IsNullOrWhiteSpace($env:GITHUB_BASE_REF)) {
+  $baseRef = $env:GITHUB_BASE_REF.Trim()
+  $remoteRef = "refs/remotes/origin/$baseRef"
+  $fetchRefSpec = "+refs/heads/${baseRef}:$remoteRef"
+  & git fetch --no-tags --depth=200 origin $fetchRefSpec 2>$null | Out-Null
+  $mergeBase = Resolve-MergeBase -Candidates @($remoteRef, "origin/$baseRef", 'origin/develop', 'origin/main', 'HEAD~1')
+}
 $changedFiles = @(Resolve-ChangedFiles -MergeBase $mergeBase)
 
 $violations = New-Object System.Collections.Generic.List[object]
