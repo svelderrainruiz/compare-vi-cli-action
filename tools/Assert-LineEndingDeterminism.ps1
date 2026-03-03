@@ -25,14 +25,58 @@ function Resolve-MergeBase {
   return $null
 }
 
+function Resolve-PullRequestRangeFromEvent {
+  if ([string]::IsNullOrWhiteSpace($env:GITHUB_EVENT_PATH)) { return $null }
+  if (-not (Test-Path -LiteralPath $env:GITHUB_EVENT_PATH -PathType Leaf)) { return $null }
+  try {
+    $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json -Depth 40
+  } catch {
+    return $null
+  }
+  if (-not $event.pull_request) { return $null }
+
+  $baseSha = [string]$event.pull_request.base.sha
+  $headSha = [string]$event.pull_request.head.sha
+  if ([string]::IsNullOrWhiteSpace($baseSha) -or [string]::IsNullOrWhiteSpace($headSha)) {
+    return $null
+  }
+
+  return [pscustomobject]@{
+    BaseSha = $baseSha.Trim()
+    HeadSha = $headSha.Trim()
+  }
+}
+
+function Ensure-CommitAvailable {
+  param([string]$Sha)
+  if ([string]::IsNullOrWhiteSpace($Sha)) { return $false }
+
+  & git cat-file -e "${Sha}^{commit}" 2>$null
+  if ($LASTEXITCODE -eq 0) { return $true }
+
+  & git fetch --no-tags --depth=1 origin $Sha 2>$null | Out-Null
+  & git cat-file -e "${Sha}^{commit}" 2>$null
+  return ($LASTEXITCODE -eq 0)
+}
+
 function Resolve-ChangedFiles {
   param([string]$MergeBase)
   $files = New-Object System.Collections.Generic.List[string]
 
+  $prRange = Resolve-PullRequestRangeFromEvent
+  if ($env:GITHUB_ACTIONS -and $prRange) {
+    $baseReady = Ensure-CommitAvailable -Sha $prRange.BaseSha
+    $headReady = Ensure-CommitAvailable -Sha $prRange.HeadSha
+    if ($baseReady -and $headReady) {
+      $eventRangeFiles = & git diff --name-only --diff-filter=ACMRTUXB "$($prRange.BaseSha)..$($prRange.HeadSha)" 2>$null
+      foreach ($item in $eventRangeFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
+    }
+  }
+
   $firstParent = (& git rev-parse --verify HEAD^1 2>$null | Select-Object -First 1)
   $secondParent = (& git rev-parse --verify HEAD^2 2>$null | Select-Object -First 1)
   $hasMergeParents = -not [string]::IsNullOrWhiteSpace($firstParent) -and -not [string]::IsNullOrWhiteSpace($secondParent)
-  if ($env:GITHUB_ACTIONS -and $hasMergeParents) {
+  if ($files.Count -eq 0 -and $env:GITHUB_ACTIONS -and $hasMergeParents) {
     # On PR checks, GitHub checks out a synthetic merge commit. Diffing against HEAD^1
     # isolates only PR-head changes and avoids unrelated base-branch churn.
     $prMergeFiles = & git diff --name-only --diff-filter=ACMRTUXB "HEAD^1..HEAD" 2>$null
@@ -55,7 +99,7 @@ function Resolve-ChangedFiles {
   }
 
   $isGitHubActions = -not [string]::IsNullOrWhiteSpace($env:GITHUB_ACTIONS)
-  $allowTrackedFallback = (-not $isGitHubActions) -or ($statusFiles.Count -gt 0)
+  $allowTrackedFallback = -not $isGitHubActions
   if ($files.Count -eq 0 -and $allowTrackedFallback) {
     # Fallback for pure line-ending drift that may not appear in `git diff --name-only`.
     $trackedEolFiles = Resolve-TrackedEolFiles

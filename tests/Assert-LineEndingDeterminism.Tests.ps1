@@ -130,6 +130,7 @@ Describe 'Assert-LineEndingDeterminism.ps1' {
 
     Push-Location $repoPath
     $oldGitHubActions = $env:GITHUB_ACTIONS
+    $oldGitHubEventPath = $env:GITHUB_EVENT_PATH
     try {
       git init | Out-Null
       git branch -M main | Out-Null
@@ -143,16 +144,28 @@ Describe 'Assert-LineEndingDeterminism.ps1' {
       [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/a.md'), [byte[]][char[]]"# A feature`n")
       git add docs/a.md
       git commit -m 'feature change' | Out-Null
+      $headSha = (& git rev-parse HEAD).Trim()
 
       git checkout main | Out-Null
       # Introduce a base-only mixed-ending file to verify merge-parent scoping.
       [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/base-only.md'), [byte[]][char[]]"# Base`r`n")
       git add docs/base-only.md
       git commit -m 'base only mixed file' | Out-Null
+      $baseSha = (& git rev-parse HEAD).Trim()
 
       git merge --no-ff feature/one -m 'merge feature' | Out-Null
 
+      $eventPath = Join-Path $repoPath 'event.json'
+      $eventPayload = [ordered]@{
+        pull_request = @{
+          base = @{ sha = $baseSha }
+          head = @{ sha = $headSha }
+        }
+      }
+      $eventPayload | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $eventPath -Encoding utf8
+
       $env:GITHUB_ACTIONS = 'true'
+      $env:GITHUB_EVENT_PATH = $eventPath
       $reportPath = Join-Path $repoPath 'tests/results/lint/line-ending-drift.json'
 
       & pwsh -NoLogo -NoProfile -File (Join-Path $repoPath 'tools/Assert-LineEndingDeterminism.ps1')
@@ -161,10 +174,11 @@ Describe 'Assert-LineEndingDeterminism.ps1' {
 
       $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
       $report.violationCount | Should -Be 0
-      $report.changedCount | Should -BeGreaterThan 0
-      $report.checkedCount | Should -BeGreaterThan 0
+      $report.changedCount | Should -Be 1
+      $report.checkedCount | Should -Be 1
     } finally {
       $env:GITHUB_ACTIONS = $oldGitHubActions
+      $env:GITHUB_EVENT_PATH = $oldGitHubEventPath
       Pop-Location
     }
   }
