@@ -114,4 +114,58 @@ Describe 'Assert-LineEndingDeterminism.ps1' {
       Pop-Location
     }
   }
+
+  It 'uses merge-parent diff scope on synthetic merge commits in GitHub Actions' {
+    $repoPath = Join-Path $TestDrive 'eol-gha-merge-scope'
+    $toolsPath = Join-Path $repoPath 'tools'
+    New-Item -ItemType Directory -Path $toolsPath -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'docs') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'tests/results/lint') -Force | Out-Null
+
+    Copy-Item -LiteralPath $script:GuardScript -Destination (Join-Path $toolsPath 'Assert-LineEndingDeterminism.ps1') -Force
+    @'
+*.md text eol=lf
+'@ | Set-Content -LiteralPath (Join-Path $repoPath '.gitattributes') -Encoding ascii
+    [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/a.md'), [byte[]][char[]]"# A`n")
+
+    Push-Location $repoPath
+    $oldGitHubActions = $env:GITHUB_ACTIONS
+    try {
+      git init | Out-Null
+      git branch -M main | Out-Null
+      git config core.autocrlf false
+      git config user.email eol-tests@example.com
+      git config user.name eol-tests
+      git add .gitattributes docs/a.md tools/Assert-LineEndingDeterminism.ps1
+      git commit -m 'init' | Out-Null
+
+      git checkout -b feature/one | Out-Null
+      [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/a.md'), [byte[]][char[]]"# A feature`n")
+      git add docs/a.md
+      git commit -m 'feature change' | Out-Null
+
+      git checkout main | Out-Null
+      # Introduce a base-only mixed-ending file to verify merge-parent scoping.
+      [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/base-only.md'), [byte[]][char[]]"# Base`r`n")
+      git add docs/base-only.md
+      git commit -m 'base only mixed file' | Out-Null
+
+      git merge --no-ff feature/one -m 'merge feature' | Out-Null
+
+      $env:GITHUB_ACTIONS = 'true'
+      $reportPath = Join-Path $repoPath 'tests/results/lint/line-ending-drift.json'
+
+      & pwsh -NoLogo -NoProfile -File (Join-Path $repoPath 'tools/Assert-LineEndingDeterminism.ps1')
+      $LASTEXITCODE | Should -Be 0
+      Test-Path -LiteralPath $reportPath | Should -BeTrue
+
+      $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+      $report.violationCount | Should -Be 0
+      $report.changedCount | Should -BeGreaterThan 0
+      $report.checkedCount | Should -BeGreaterThan 0
+    } finally {
+      $env:GITHUB_ACTIONS = $oldGitHubActions
+      Pop-Location
+    }
+  }
 }
