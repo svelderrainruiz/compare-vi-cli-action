@@ -29,7 +29,9 @@ function Resolve-ChangedFiles {
   param([string]$MergeBase)
   $files = New-Object System.Collections.Generic.List[string]
 
-  if ($env:GITHUB_ACTIONS -and $env:GITHUB_EVENT_NAME -eq 'pull_request') {
+  $eventName = $env:GITHUB_EVENT_NAME
+  $isPullRequestEvent = -not [string]::IsNullOrWhiteSpace($eventName) -and $eventName.StartsWith('pull_request')
+  if ($env:GITHUB_ACTIONS -and $isPullRequestEvent) {
     # On PR checks, GitHub checks out a synthetic merge commit. Diffing against HEAD^1
     # isolates only PR-head changes and avoids unrelated base-branch churn.
     $prMergeFiles = & git diff --name-only --diff-filter=ACMRTUXB "HEAD^1..HEAD" 2>$null
