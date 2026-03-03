@@ -124,6 +124,25 @@ function Resolve-PullRequestFilesFromApi {
   return @($paths | Sort-Object -Unique)
 }
 
+function Resolve-PullRequestFilesFromRefs {
+  if (-not $env:GITHUB_ACTIONS) { return @() }
+  if ([string]::IsNullOrWhiteSpace($env:GITHUB_BASE_REF)) { return @() }
+  if ([string]::IsNullOrWhiteSpace($env:GITHUB_HEAD_REF)) { return @() }
+
+  $baseRef = $env:GITHUB_BASE_REF.Trim()
+  $headRef = $env:GITHUB_HEAD_REF.Trim()
+  $remoteBase = "refs/remotes/origin/$baseRef"
+  $remoteHead = "refs/remotes/origin/$headRef"
+
+  $fetchBase = "+refs/heads/${baseRef}:$remoteBase"
+  $fetchHead = "+refs/heads/${headRef}:$remoteHead"
+  & git fetch --no-tags --depth=200 origin $fetchBase 2>$null | Out-Null
+  & git fetch --no-tags --depth=200 origin $fetchHead 2>$null | Out-Null
+
+  $rangeFiles = & git diff --name-only --diff-filter=ACMRTUXB "$remoteBase..$remoteHead" 2>$null
+  return @($rangeFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+}
+
 function Ensure-CommitAvailable {
   param([string]$Sha)
   if ([string]::IsNullOrWhiteSpace($Sha)) { return $false }
@@ -142,6 +161,11 @@ function Resolve-ChangedFiles {
 
   $apiFiles = @(Resolve-PullRequestFilesFromApi)
   foreach ($item in $apiFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
+
+  if ($files.Count -eq 0) {
+    $refFiles = @(Resolve-PullRequestFilesFromRefs)
+    foreach ($item in $refFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
+  }
 
   $prRange = Resolve-PullRequestRangeFromEvent
   if ($files.Count -eq 0 -and $env:GITHUB_ACTIONS -and $prRange) {
