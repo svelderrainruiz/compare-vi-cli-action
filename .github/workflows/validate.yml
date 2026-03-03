@@ -338,6 +338,8 @@ jobs:
 
     - name: Line ending drift guard
       shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         pwsh -NoLogo -NoProfile -File tools/Assert-LineEndingDeterminism.ps1 `
           -GitHubOutputPath $env:GITHUB_OUTPUT `
