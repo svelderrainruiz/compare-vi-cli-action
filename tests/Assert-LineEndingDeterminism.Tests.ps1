@@ -1,0 +1,74 @@
+Set-StrictMode -Version Latest
+
+Describe 'Assert-LineEndingDeterminism.ps1' {
+  BeforeAll {
+    $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $script:GuardScript = Join-Path $script:RepoRoot 'tools' 'Assert-LineEndingDeterminism.ps1'
+    if (-not (Test-Path -LiteralPath $script:GuardScript -PathType Leaf)) {
+      throw "Guard script not found: $script:GuardScript"
+    }
+  }
+
+  It 'passes when changed files match declared EOL attributes' {
+    $repoPath = Join-Path $TestDrive 'eol-pass'
+    $toolsPath = Join-Path $repoPath 'tools'
+    New-Item -ItemType Directory -Path $toolsPath -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'docs') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'tests/results/lint') -Force | Out-Null
+
+    Copy-Item -LiteralPath $script:GuardScript -Destination (Join-Path $toolsPath 'Assert-LineEndingDeterminism.ps1') -Force
+    @'
+*.md text eol=lf
+'@ | Set-Content -LiteralPath (Join-Path $repoPath '.gitattributes') -Encoding ascii
+    [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/good.md'), [byte[]][char[]]"# Good`n")
+
+    Push-Location $repoPath
+    try {
+      git init | Out-Null
+      git config core.autocrlf false
+      git config user.email eol-tests@example.com
+      git config user.name eol-tests
+      git add .gitattributes docs/good.md tools/Assert-LineEndingDeterminism.ps1
+      git commit -m 'init' | Out-Null
+
+      [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/good.md'), [byte[]][char[]]"# Good Updated`n")
+      $reportPath = Join-Path $repoPath 'tests/results/lint/line-ending-drift.json'
+      & pwsh -NoLogo -NoProfile -File (Join-Path $repoPath 'tools/Assert-LineEndingDeterminism.ps1')
+      $LASTEXITCODE | Should -Be 0
+      Test-Path -LiteralPath $reportPath | Should -BeTrue
+    } finally {
+      Pop-Location
+    }
+  }
+
+  It 'fails when working tree line endings drift from declared attributes' {
+    $repoPath = Join-Path $TestDrive 'eol-fail'
+    $toolsPath = Join-Path $repoPath 'tools'
+    New-Item -ItemType Directory -Path $toolsPath -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'docs') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repoPath 'tests/results/lint') -Force | Out-Null
+
+    Copy-Item -LiteralPath $script:GuardScript -Destination (Join-Path $toolsPath 'Assert-LineEndingDeterminism.ps1') -Force
+    @'
+*.md text eol=lf
+'@ | Set-Content -LiteralPath (Join-Path $repoPath '.gitattributes') -Encoding ascii
+    [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/good.md'), [byte[]][char[]]"# Good`n")
+
+    Push-Location $repoPath
+    try {
+      git init | Out-Null
+      git config core.autocrlf false
+      git config user.email eol-tests@example.com
+      git config user.name eol-tests
+      git add .gitattributes docs/good.md tools/Assert-LineEndingDeterminism.ps1
+      git commit -m 'init' | Out-Null
+
+      # Force CRLF to violate the eol=lf contract.
+      [System.IO.File]::WriteAllBytes((Join-Path $repoPath 'docs/good.md'), [byte[]][char[]]"# Good`r`n")
+      & pwsh -NoLogo -NoProfile -File (Join-Path $repoPath 'tools/Assert-LineEndingDeterminism.ps1') 2>&1 | Out-Null
+      $LASTEXITCODE | Should -Not -Be 0
+    } finally {
+      Pop-Location
+    }
+  }
+}
