@@ -28,7 +28,15 @@ function Resolve-MergeBase {
 function Resolve-ChangedFiles {
   param([string]$MergeBase)
   $files = New-Object System.Collections.Generic.List[string]
-  if ($MergeBase) {
+
+  if ($env:GITHUB_ACTIONS -and $env:GITHUB_EVENT_NAME -eq 'pull_request') {
+    # On PR checks, GitHub checks out a synthetic merge commit. Diffing against HEAD^1
+    # isolates only PR-head changes and avoids unrelated base-branch churn.
+    $prMergeFiles = & git diff --name-only --diff-filter=ACMRTUXB "HEAD^1..HEAD" 2>$null
+    foreach ($item in $prMergeFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
+  }
+
+  if ($files.Count -eq 0 -and $MergeBase) {
     $rangeFiles = & git diff --name-only --diff-filter=ACMRTUXB "$MergeBase..HEAD" 2>$null
     foreach ($item in $rangeFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
   }
