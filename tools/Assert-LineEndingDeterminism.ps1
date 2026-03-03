@@ -47,6 +47,83 @@ function Resolve-PullRequestRangeFromEvent {
   }
 }
 
+function Resolve-PullRequestFilesFromApi {
+  if (-not $env:GITHUB_ACTIONS) { return @() }
+  if ([string]::IsNullOrWhiteSpace($env:GITHUB_EVENT_PATH)) { return @() }
+  if (-not (Test-Path -LiteralPath $env:GITHUB_EVENT_PATH -PathType Leaf)) { return @() }
+
+  try {
+    $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json -Depth 40
+  } catch {
+    return @()
+  }
+
+  $prNumber = $null
+  if ($event.PSObject.Properties.Name -contains 'pull_request' -and $event.pull_request) {
+    if ($event.pull_request.PSObject.Properties.Name -contains 'number') {
+      $prNumber = $event.pull_request.number
+    }
+  }
+  if (-not $prNumber) { return @() }
+
+  $repository = if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_REPOSITORY)) {
+    $env:GITHUB_REPOSITORY
+  } elseif (
+    ($event.PSObject.Properties.Name -contains 'repository') -and
+    $event.repository -and
+    ($event.repository.PSObject.Properties.Name -contains 'full_name') -and
+    $event.repository.full_name
+  ) {
+    [string]$event.repository.full_name
+  } else {
+    ''
+  }
+  if ([string]::IsNullOrWhiteSpace($repository)) { return @() }
+
+  $token = if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+    $env:GITHUB_TOKEN
+  } elseif (-not [string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
+    $env:GH_TOKEN
+  } else {
+    ''
+  }
+  if ([string]::IsNullOrWhiteSpace($token)) { return @() }
+
+  $apiBase = if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_API_URL)) {
+    $env:GITHUB_API_URL.TrimEnd('/')
+  } else {
+    'https://api.github.com'
+  }
+
+  $headers = @{
+    Authorization          = "Bearer $token"
+    Accept                 = 'application/vnd.github+json'
+    'X-GitHub-Api-Version' = '2022-11-28'
+  }
+
+  $paths = New-Object System.Collections.Generic.List[string]
+  $page = 1
+  while ($true) {
+    $uri = "{0}/repos/{1}/pulls/{2}/files?per_page=100&page={3}" -f $apiBase, $repository, $prNumber, $page
+    try {
+      $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop
+    } catch {
+      break
+    }
+    if (-not $response) { break }
+    foreach ($entry in $response) {
+      $filename = [string]$entry.filename
+      if (-not [string]::IsNullOrWhiteSpace($filename)) {
+        $paths.Add($filename.Trim()) | Out-Null
+      }
+    }
+    if ($response.Count -lt 100) { break }
+    $page++
+  }
+
+  return @($paths | Sort-Object -Unique)
+}
+
 function Ensure-CommitAvailable {
   param([string]$Sha)
   if ([string]::IsNullOrWhiteSpace($Sha)) { return $false }
@@ -63,8 +140,11 @@ function Resolve-ChangedFiles {
   param([string]$MergeBase)
   $files = New-Object System.Collections.Generic.List[string]
 
+  $apiFiles = @(Resolve-PullRequestFilesFromApi)
+  foreach ($item in $apiFiles) { if ($item) { $files.Add([string]$item) | Out-Null } }
+
   $prRange = Resolve-PullRequestRangeFromEvent
-  if ($env:GITHUB_ACTIONS -and $prRange) {
+  if ($files.Count -eq 0 -and $env:GITHUB_ACTIONS -and $prRange) {
     $baseReady = Ensure-CommitAvailable -Sha $prRange.BaseSha
     $headReady = Ensure-CommitAvailable -Sha $prRange.HeadSha
     if ($baseReady -and $headReady) {
