@@ -19,6 +19,7 @@ function makeCommit({
     sha,
     url: `https://github.com/example/repo/commit/${sha}`,
     messageHeadline: `commit-${sha}`,
+    trailers: [{ key: 'Issue', value: '#770' }],
     verified,
     verificationReason: reason,
     verificationSignaturePresent: verified,
@@ -59,17 +60,42 @@ test('commit integrity report schema validates generated report payload', async 
       path: path.join(repoRoot, 'tools', 'policy', 'commit-integrity-policy.json'),
       failOnUnverified: true,
       checks: {
+        requireBotAllowlist: true,
         requireAuthorAttribution: true,
         requireCommitterAttribution: true,
         requireKnownReasonForUnverified: true,
+        requireSignatureVerificationAvailable: true,
         requireUniqueShas: true,
         requireNonEmptyHeadline: true,
         maxHeadlineLength: 120,
-        requireSignatureMaterialForVerified: false
+        requireSignatureMaterialForVerified: false,
+        requireRequiredTrailer: true,
+        requiredTrailerRules: [
+          { key: 'Issue', keyLower: 'issue', valuePattern: '^#\\d+$', valueRegex: /^#\d+$/ },
+          { key: 'Refs', keyLower: 'refs', valuePattern: '^#\\d+$', valueRegex: /^#\d+$/ }
+        ],
+        allowedBotLogins: ['dependabot[bot]', 'github-actions[bot]'],
+        allowedBotEmailPatterns: [
+          '^[0-9]+\\+dependabot\\[bot\\]@users\\.noreply\\.github\\.com$',
+          '^41898282\\+github-actions\\[bot\\]@users\\.noreply\\.github\\.com$'
+        ]
       },
       sourceResolution: {
         botLoginRegexes: [/\[bot\]$/i],
         botEmailRegexes: [/\[bot\]@users\.noreply\.github\.com$/i]
+      },
+      botIdentityPolicy: {
+        allowedBotLogins: ['dependabot[bot]', 'github-actions[bot]'],
+        allowedBotEmailPatterns: [
+          '^[0-9]+\\+dependabot\\[bot\\]@users\\.noreply\\.github\\.com$',
+          '^41898282\\+github-actions\\[bot\\]@users\\.noreply\\.github\\.com$'
+        ]
+      },
+      trailerContract: {
+        requiredAny: [
+          { key: 'Issue', valuePattern: '^#\\d+$' },
+          { key: 'Refs', valuePattern: '^#\\d+$' }
+        ]
       }
     },
     observeOnly: false,

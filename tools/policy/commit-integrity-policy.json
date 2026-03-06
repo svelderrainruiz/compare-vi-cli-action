@@ -10,6 +10,19 @@
       "@users\\.noreply\\.github\\.com$"
     ]
   },
+  "bot_identity_policy": {
+    "require_allowlist_for_bot_commits": true,
+    "allowed_bot_logins": [
+      "dependabot[bot]",
+      "github-actions[bot]",
+      "github-merge-queue[bot]"
+    ],
+    "allowed_bot_email_patterns": [
+      "^[0-9]+\\+dependabot\\[bot\\]@users\\.noreply\\.github\\.com$",
+      "^41898282\\+github-actions\\[bot\\]@users\\.noreply\\.github\\.com$",
+      "^[0-9]+\\+github-merge-queue\\[bot\\]@users\\.noreply\\.github\\.com$"
+    ]
+  },
   "verification": {
     "fail_on_unverified": true
   },
@@ -17,9 +30,23 @@
     "require_author_attribution": true,
     "require_committer_attribution": true,
     "require_non_unknown_reason_for_unverified": true,
+    "require_signature_verification_available": true,
     "require_unique_shas": true,
     "require_non_empty_headline": true,
     "max_headline_length": 120,
-    "require_signature_material_for_verified": false
+    "require_signature_material_for_verified": false,
+    "require_required_trailer": true
+  },
+  "trailer_contract": {
+    "required_any": [
+      {
+        "key": "Issue",
+        "value_pattern": "^#\\d+$"
+      },
+      {
+        "key": "Refs",
+        "value_pattern": "^#\\d+$"
+      }
+    ]
   }
 }

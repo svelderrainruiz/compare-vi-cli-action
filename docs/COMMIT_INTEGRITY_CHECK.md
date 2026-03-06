@@ -1,6 +1,6 @@
 # Commit Integrity Check
 
-Issue: `#743`
+Issues: `#743`, `#774`
 
 This document defines the `commit-integrity` contract used to evaluate commit trust posture for PR/queue scopes.
 
@@ -11,6 +11,10 @@ This document defines the `commit-integrity` contract used to evaluate commit tr
 - Deterministic artifact:
   - `tests/results/_agent/commit-integrity/commit-integrity-report.json`
   - Uploaded on every run via `if: always()`
+- Drift monitor workflow: `.github/workflows/commit-integrity-drift-monitor.yml`
+  - Deterministic artifact:
+    - `tests/results/_agent/commit-integrity/commit-integrity-drift-report.json`
+  - Runs every 6 hours and on manual dispatch.
 
 ## Validation Coverage
 
@@ -20,6 +24,11 @@ The checker evaluates all commits in scope and emits explicit violation categori
   - Fails when `commit.verification.verified != true`.
 - `unknown-unverified-reason`
   - Fails when an unverified commit has reason `unknown` and the policy toggle is enabled.
+- `signature-verification-unavailable`
+  - Fails when GitHub reports signature verification service unavailability (`gpgverify_error`,
+    `gpgverify_unavailable`) and strict availability is enabled.
+- `unauthorized-bot-identity`
+  - Fails when a bot-authored commit does not match the configured bot allowlist.
 - `missing-author-attribution`
   - Fails when both author login and author email are absent and the policy toggle is enabled.
 - `missing-committer-attribution`
@@ -32,6 +41,10 @@ The checker evaluates all commits in scope and emits explicit violation categori
   - Fails when commit headline length exceeds policy maximum.
 - `missing-signature-material`
   - Optional strict mode: fails when a commit is marked verified but signature/payload fields are absent.
+- `missing-required-trailer`
+  - Fails when no required trailer (for example `Issue: #<n>` or `Refs: #<n>`) is present.
+- `invalid-required-trailer-format`
+  - Fails when a required trailer key is present but its value does not match the configured pattern.
 
 The report emits deterministic commit ordering (`sha-asc`) so repeated runs over the same commit set preserve output
 shape and pass/fail decisions.
@@ -45,13 +58,23 @@ Policy file: `tools/policy/commit-integrity-policy.json`
   - `source_resolution.bot_login_patterns`
   - `source_resolution.bot_email_patterns`
 - Additional coverage toggles:
+  - `checks.require_bot_allowlist`
   - `checks.require_author_attribution`
   - `checks.require_committer_attribution`
   - `checks.require_non_unknown_reason_for_unverified`
+  - `checks.require_signature_verification_available`
   - `checks.require_unique_shas`
   - `checks.require_non_empty_headline`
   - `checks.max_headline_length`
   - `checks.require_signature_material_for_verified`
+  - `checks.require_required_trailer`
+- Trailer schema contract:
+  - `trailer_contract.required_any[].key`
+  - `trailer_contract.required_any[].value_pattern`
+- Bot identity allowlist contract:
+  - `bot_identity_policy.require_allowlist_for_bot_commits`
+  - `bot_identity_policy.allowed_bot_logins[]`
+  - `bot_identity_policy.allowed_bot_email_patterns[]`
 
 ## Drift Guard
 
@@ -81,3 +104,15 @@ node tools/npm/run-script.mjs priority:commit-integrity -- --pr 744 --observe-on
 ```bash
 node tools/npm/run-script.mjs priority:commit-integrity -- --pr 744
 ```
+
+```bash
+node tools/npm/run-script.mjs priority:commit-integrity:drift
+```
+
+## Drift + SLO Monitoring
+
+- Drift/SLO report source: `tools/priority/slo-metrics.mjs` (workflow scoped to `commit-integrity.yml`).
+- Report includes pass/fail/skip telemetry plus MTTR/staleness/gate-regression metrics.
+- Breach routing:
+  - opens/comments an issue with labels `slo`, `ci`, `governance`, `supply-chain`
+  - title prefix: `[SLO] Commit integrity breach`

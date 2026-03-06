@@ -15,14 +15,63 @@ const DEFAULT_REPORT_PATH = path.join(
 );
 const DEFAULT_POLICY_PATH = path.join('tools', 'policy', 'commit-integrity-policy.json');
 const DEFAULT_POLICY_CHECKS = Object.freeze({
+  requireBotAllowlist: false,
+  allowedBotLogins: Object.freeze([]),
+  allowedBotEmailPatterns: Object.freeze([]),
   requireAuthorAttribution: true,
   requireCommitterAttribution: true,
   requireKnownReasonForUnverified: true,
+  requireSignatureVerificationAvailable: true,
   requireUniqueShas: true,
   requireNonEmptyHeadline: true,
   maxHeadlineLength: 120,
-  requireSignatureMaterialForVerified: false
+  requireSignatureMaterialForVerified: false,
+  requireRequiredTrailer: false,
+  requiredTrailerRules: Object.freeze([])
 });
+const SIGNATURE_UNAVAILABLE_REASONS = new Set(['gpgverify_error', 'gpgverify_unavailable']);
+
+function extractCommitTrailers(message) {
+  const normalizedMessage = normalizeOptionalString(message) ?? '';
+  if (!normalizedMessage) {
+    return [];
+  }
+  const lines = normalizedMessage.split(/\r?\n/);
+  if (lines.length < 2) {
+    return [];
+  }
+
+  let index = lines.length - 1;
+  while (index >= 0 && !lines[index].trim()) {
+    index -= 1;
+  }
+  if (index < 0) {
+    return [];
+  }
+
+  const trailers = [];
+  while (index >= 0 && lines[index].trim()) {
+    const line = lines[index].trim();
+    const match = line.match(/^([A-Za-z0-9-]+):\s*(.+)$/);
+    if (!match) {
+      return [];
+    }
+    trailers.unshift({
+      key: match[1],
+      value: match[2].trim()
+    });
+    index -= 1;
+  }
+
+  if (trailers.length === 0) {
+    return [];
+  }
+  // Require the trailer block to be separated from body/headline by a blank line.
+  if (index < 0 || lines[index].trim() !== '') {
+    return [];
+  }
+  return trailers;
+}
 
 function printUsage() {
   console.log('Usage: node tools/priority/commit-integrity.mjs [options]');
@@ -322,12 +371,14 @@ export function normalizeCommitRecord(rawRecord, sourceResolution) {
   }
 
   const commit = rawRecord?.commit ?? {};
+  const fullMessage = normalizeOptionalString(commit?.message) ?? '';
   const verification = commit?.verification ?? {};
   const verificationReason = normalizeOptionalString(verification?.reason) ?? 'unknown';
   const normalized = {
     sha,
     url: normalizeOptionalString(rawRecord?.html_url),
-    messageHeadline: firstLine(commit?.message),
+    messageHeadline: firstLine(fullMessage),
+    trailers: extractCommitTrailers(fullMessage),
     verified: verification?.verified === true,
     verificationReason,
     verificationSignaturePresent: Boolean(normalizeOptionalString(verification?.signature)),
@@ -372,7 +423,66 @@ function normalizeChecks(checks = {}) {
     Number.isInteger(rawMaxHeadlineLength) && rawMaxHeadlineLength > 0
       ? rawMaxHeadlineLength
       : DEFAULT_POLICY_CHECKS.maxHeadlineLength;
+
+  const normalizedRequiredTrailerRules = [];
+  for (const [index, rawRule] of (Array.isArray(checks.requiredTrailerRules) ? checks.requiredTrailerRules : []).entries()) {
+    const key = normalizeOptionalString(rawRule?.key);
+    const valuePattern = normalizeOptionalString(rawRule?.valuePattern);
+    if (!key || !valuePattern) {
+      continue;
+    }
+    try {
+      normalizedRequiredTrailerRules.push({
+        key,
+        keyLower: key.toLowerCase(),
+        valuePattern,
+        valueRegex: new RegExp(valuePattern)
+      });
+    } catch (error) {
+      throw new Error(`Invalid trailer rule at index ${index}: ${error.message}`);
+    }
+  }
+
+  const normalizedAllowedBotLogins = Array.from(
+    new Set(
+      (Array.isArray(checks.allowedBotLogins) ? checks.allowedBotLogins : [])
+        .map((entry) => normalizeOptionalString(entry)?.toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+  const normalizedAllowedBotEmailPatterns = [];
+  const normalizedAllowedBotEmailRegexes = [];
+  for (const [index, rawPattern] of (Array.isArray(checks.allowedBotEmailPatterns) ? checks.allowedBotEmailPatterns : []).entries()) {
+    const pattern = normalizeOptionalString(rawPattern);
+    if (!pattern) {
+      continue;
+    }
+    try {
+      normalizedAllowedBotEmailPatterns.push(pattern);
+      normalizedAllowedBotEmailRegexes.push(new RegExp(pattern, 'i'));
+    } catch (error) {
+      throw new Error(`Invalid bot email pattern at index ${index}: ${error.message}`);
+    }
+  }
+
   return {
+    requireBotAllowlist:
+      checks.requireBotAllowlist !== undefined
+        ? Boolean(checks.requireBotAllowlist)
+        : DEFAULT_POLICY_CHECKS.requireBotAllowlist,
+    allowedBotLogins:
+      normalizedAllowedBotLogins.length > 0
+        ? normalizedAllowedBotLogins
+        : DEFAULT_POLICY_CHECKS.allowedBotLogins,
+    allowedBotEmailPatterns:
+      normalizedAllowedBotEmailPatterns.length > 0
+        ? normalizedAllowedBotEmailPatterns
+        : DEFAULT_POLICY_CHECKS.allowedBotEmailPatterns,
+    allowedBotEmailRegexes:
+      normalizedAllowedBotEmailRegexes.length > 0
+        ? normalizedAllowedBotEmailRegexes
+        : [],
     requireAuthorAttribution:
       checks.requireAuthorAttribution !== undefined
         ? Boolean(checks.requireAuthorAttribution)
@@ -385,6 +495,10 @@ function normalizeChecks(checks = {}) {
       checks.requireKnownReasonForUnverified !== undefined
         ? Boolean(checks.requireKnownReasonForUnverified)
         : DEFAULT_POLICY_CHECKS.requireKnownReasonForUnverified,
+    requireSignatureVerificationAvailable:
+      checks.requireSignatureVerificationAvailable !== undefined
+        ? Boolean(checks.requireSignatureVerificationAvailable)
+        : DEFAULT_POLICY_CHECKS.requireSignatureVerificationAvailable,
     requireUniqueShas:
       checks.requireUniqueShas !== undefined
         ? Boolean(checks.requireUniqueShas)
@@ -397,7 +511,15 @@ function normalizeChecks(checks = {}) {
     requireSignatureMaterialForVerified:
       checks.requireSignatureMaterialForVerified !== undefined
         ? Boolean(checks.requireSignatureMaterialForVerified)
-        : DEFAULT_POLICY_CHECKS.requireSignatureMaterialForVerified
+        : DEFAULT_POLICY_CHECKS.requireSignatureMaterialForVerified,
+    requireRequiredTrailer:
+      checks.requireRequiredTrailer !== undefined
+        ? Boolean(checks.requireRequiredTrailer)
+        : DEFAULT_POLICY_CHECKS.requireRequiredTrailer,
+    requiredTrailerRules:
+      normalizedRequiredTrailerRules.length > 0
+        ? normalizedRequiredTrailerRules
+        : DEFAULT_POLICY_CHECKS.requiredTrailerRules
   };
 }
 
@@ -419,6 +541,74 @@ function addViolation(violations, commit, category, reason) {
     authorLogin: commit.authorLogin,
     committerLogin: commit.committerLogin
   });
+}
+
+function evaluateBotIdentityAllowlist(commit, checks) {
+  if (!checks.requireBotAllowlist || commit.sourceKind !== 'bot') {
+    return {
+      passed: true,
+      reason: null
+    };
+  }
+
+  const loginCandidates = [commit.authorLogin, commit.committerLogin]
+    .map((entry) => normalizeOptionalString(entry)?.toLowerCase())
+    .filter(Boolean);
+  const emailCandidates = [commit.authorEmail, commit.committerEmail]
+    .map((entry) => normalizeOptionalString(entry))
+    .filter(Boolean);
+
+  const loginAllowed = loginCandidates.some((entry) => checks.allowedBotLogins.includes(entry));
+  const emailAllowed = emailCandidates.some((entry) => checks.allowedBotEmailRegexes.some((regex) => regex.test(entry)));
+  if (loginAllowed || emailAllowed) {
+    return {
+      passed: true,
+      reason: null
+    };
+  }
+
+  return {
+    passed: false,
+    reason: `bot identity not allowlisted (logins=${loginCandidates.join('|') || 'none'}, emails=${emailCandidates.join('|') || 'none'})`
+  };
+}
+
+function evaluateRequiredTrailer(commit, requiredTrailerRules) {
+  const trailers = Array.isArray(commit?.trailers) ? commit.trailers : [];
+  if (!Array.isArray(requiredTrailerRules) || requiredTrailerRules.length === 0) {
+    return {
+      passed: false,
+      category: 'required-trailer-rules-empty',
+      reason: 'required trailer rules are empty'
+    };
+  }
+
+  for (const rule of requiredTrailerRules) {
+    const matchingKey = trailers.filter((entry) => String(entry?.key || '').toLowerCase() === rule.keyLower);
+    if (matchingKey.some((entry) => rule.valueRegex.test(String(entry.value ?? '')))) {
+      return {
+        passed: true,
+        category: null,
+        reason: null
+      };
+    }
+  }
+
+  const hasRequiredKey = trailers.some((entry) =>
+    requiredTrailerRules.some((rule) => String(entry?.key || '').toLowerCase() === rule.keyLower)
+  );
+  if (hasRequiredKey) {
+    return {
+      passed: false,
+      category: 'invalid-required-trailer-format',
+      reason: 'required trailer present but value does not match policy'
+    };
+  }
+  return {
+    passed: false,
+    category: 'missing-required-trailer',
+    reason: 'required trailer not found'
+  };
 }
 
 export function evaluateCommitIntegrity(commits, { checks = {} } = {}) {
@@ -444,7 +634,15 @@ export function evaluateCommitIntegrity(commits, { checks = {} } = {}) {
     }
   }
 
+  if (effectiveChecks.requireRequiredTrailer && effectiveChecks.requiredTrailerRules.length === 0) {
+    issues.push('required-trailer-rules-empty');
+  }
+
   for (const commit of list) {
+    const botAllowlistEvaluation = evaluateBotIdentityAllowlist(commit, effectiveChecks);
+    if (!botAllowlistEvaluation.passed) {
+      addViolation(violations, commit, 'unauthorized-bot-identity', botAllowlistEvaluation.reason);
+    }
     if (effectiveChecks.requireNonEmptyHeadline && !commit.messageHeadline) {
       addViolation(violations, commit, 'empty-headline', 'commit headline is empty');
     }
@@ -465,6 +663,12 @@ export function evaluateCommitIntegrity(commits, { checks = {} } = {}) {
     }
     if (!commit.verified) {
       addViolation(violations, commit, 'unverified-commit', commit.verificationReason);
+      if (
+        effectiveChecks.requireSignatureVerificationAvailable &&
+        SIGNATURE_UNAVAILABLE_REASONS.has(commit.verificationReason)
+      ) {
+        addViolation(violations, commit, 'signature-verification-unavailable', commit.verificationReason);
+      }
       if (effectiveChecks.requireKnownReasonForUnverified && commit.verificationReason === 'unknown') {
         addViolation(violations, commit, 'unknown-unverified-reason', 'unknown verification reason');
       }
@@ -474,6 +678,12 @@ export function evaluateCommitIntegrity(commits, { checks = {} } = {}) {
     }
     if (effectiveChecks.requireCommitterAttribution && !hasCommitterAttribution(commit)) {
       addViolation(violations, commit, 'missing-committer-attribution', 'committer login/email missing');
+    }
+    if (effectiveChecks.requireRequiredTrailer && effectiveChecks.requiredTrailerRules.length > 0) {
+      const trailerEvaluation = evaluateRequiredTrailer(commit, effectiveChecks.requiredTrailerRules);
+      if (!trailerEvaluation.passed) {
+        addViolation(violations, commit, trailerEvaluation.category, trailerEvaluation.reason);
+      }
     }
   }
 
@@ -494,6 +704,22 @@ export function evaluateCommitIntegrity(commits, { checks = {} } = {}) {
       !effectiveChecks.requireKnownReasonForUnverified ||
       !violations.some((violation) => violation.category === 'unknown-unverified-reason'),
     failureCount: violations.filter((violation) => violation.category === 'unknown-unverified-reason').length
+  });
+  checkResults.push({
+    name: 'signature-verification-unavailable',
+    enabled: effectiveChecks.requireSignatureVerificationAvailable,
+    passed:
+      !effectiveChecks.requireSignatureVerificationAvailable ||
+      !violations.some((violation) => violation.category === 'signature-verification-unavailable'),
+    failureCount: violations.filter((violation) => violation.category === 'signature-verification-unavailable').length
+  });
+  checkResults.push({
+    name: 'bot-identity-allowlist',
+    enabled: effectiveChecks.requireBotAllowlist,
+    passed:
+      !effectiveChecks.requireBotAllowlist ||
+      !violations.some((violation) => violation.category === 'unauthorized-bot-identity'),
+    failureCount: violations.filter((violation) => violation.category === 'unauthorized-bot-identity').length
   });
   checkResults.push({
     name: 'author-attribution',
@@ -542,6 +768,25 @@ export function evaluateCommitIntegrity(commits, { checks = {} } = {}) {
       !effectiveChecks.requireSignatureMaterialForVerified ||
       !violations.some((violation) => violation.category === 'missing-signature-material'),
     failureCount: violations.filter((violation) => violation.category === 'missing-signature-material').length
+  });
+  checkResults.push({
+    name: 'required-trailer',
+    enabled: effectiveChecks.requireRequiredTrailer,
+    passed:
+      !effectiveChecks.requireRequiredTrailer ||
+      (
+        !violations.some(
+          (violation) =>
+            violation.category === 'missing-required-trailer' ||
+            violation.category === 'invalid-required-trailer-format'
+        ) && !issues.includes('required-trailer-rules-empty')
+      ),
+    failureCount:
+      violations.filter(
+        (violation) =>
+          violation.category === 'missing-required-trailer' ||
+          violation.category === 'invalid-required-trailer-format'
+      ).length + (issues.includes('required-trailer-rules-empty') ? 1 : 0)
   });
 
   const summary = {
@@ -615,18 +860,32 @@ async function loadPolicy(policyPath) {
 
   const sourceResolution = parsed?.source_resolution ?? {};
   const checkSettings = parsed?.checks ?? {};
+  const botIdentityPolicy = parsed?.bot_identity_policy ?? {};
+  const trailerContract = parsed?.trailer_contract ?? {};
+  const requiredAnyTrailers = Array.isArray(trailerContract.required_any)
+    ? trailerContract.required_any.map((entry) => ({
+      key: entry?.key,
+      valuePattern: entry?.value_pattern
+    }))
+    : [];
   const policy = {
     path: resolved,
     schema: normalizeOptionalString(parsed?.schema) ?? 'commit-integrity-policy/v1',
     failOnUnverified: parsed?.verification?.fail_on_unverified !== false,
     checks: normalizeChecks({
+      requireBotAllowlist: botIdentityPolicy.require_allowlist_for_bot_commits,
+      allowedBotLogins: botIdentityPolicy.allowed_bot_logins,
+      allowedBotEmailPatterns: botIdentityPolicy.allowed_bot_email_patterns,
       requireAuthorAttribution: checkSettings.require_author_attribution,
       requireCommitterAttribution: checkSettings.require_committer_attribution,
       requireKnownReasonForUnverified: checkSettings.require_non_unknown_reason_for_unverified,
+      requireSignatureVerificationAvailable: checkSettings.require_signature_verification_available,
       requireUniqueShas: checkSettings.require_unique_shas,
       requireNonEmptyHeadline: checkSettings.require_non_empty_headline,
       maxHeadlineLength: checkSettings.max_headline_length,
-      requireSignatureMaterialForVerified: checkSettings.require_signature_material_for_verified
+      requireSignatureMaterialForVerified: checkSettings.require_signature_material_for_verified,
+      requireRequiredTrailer: checkSettings.require_required_trailer,
+      requiredTrailerRules: requiredAnyTrailers
     }),
     sourceResolution: {
       botLoginRegexes: compileRegexList(sourceResolution.bot_login_patterns, {
@@ -675,17 +934,30 @@ function buildReport({
       path: policy.path,
       failOnUnverified: policy.failOnUnverified,
       checks: {
+        requireBotAllowlist: policy.checks.requireBotAllowlist,
         requireAuthorAttribution: policy.checks.requireAuthorAttribution,
         requireCommitterAttribution: policy.checks.requireCommitterAttribution,
         requireKnownReasonForUnverified: policy.checks.requireKnownReasonForUnverified,
+        requireSignatureVerificationAvailable: policy.checks.requireSignatureVerificationAvailable,
         requireUniqueShas: policy.checks.requireUniqueShas,
         requireNonEmptyHeadline: policy.checks.requireNonEmptyHeadline,
         maxHeadlineLength: policy.checks.maxHeadlineLength,
-        requireSignatureMaterialForVerified: policy.checks.requireSignatureMaterialForVerified
+        requireSignatureMaterialForVerified: policy.checks.requireSignatureMaterialForVerified,
+        requireRequiredTrailer: policy.checks.requireRequiredTrailer
       },
       sourceResolution: {
         botLoginPatternCount: policy.sourceResolution.botLoginRegexes.length,
         botEmailPatternCount: policy.sourceResolution.botEmailRegexes.length
+      },
+      botIdentityPolicy: {
+        allowedBotLogins: policy.checks.allowedBotLogins,
+        allowedBotEmailPatterns: policy.checks.allowedBotEmailPatterns
+      },
+      trailerContract: {
+        requiredAny: policy.checks.requiredTrailerRules.map((rule) => ({
+          key: rule.key,
+          valuePattern: rule.valuePattern
+        }))
       }
     },
     enforcement: {
@@ -774,24 +1046,34 @@ export async function runCommitIntegrity({
           baseSha: null,
           headSha: null
         },
-        policy: {
-          schema: 'commit-integrity-policy/v1',
-          path: path.resolve(options.policyPath ?? DEFAULT_POLICY_PATH),
-          failOnUnverified: true,
-          checks: {
+      policy: {
+        schema: 'commit-integrity-policy/v1',
+        path: path.resolve(options.policyPath ?? DEFAULT_POLICY_PATH),
+        failOnUnverified: true,
+        checks: {
+          requireBotAllowlist: DEFAULT_POLICY_CHECKS.requireBotAllowlist,
             requireAuthorAttribution: DEFAULT_POLICY_CHECKS.requireAuthorAttribution,
             requireCommitterAttribution: DEFAULT_POLICY_CHECKS.requireCommitterAttribution,
-            requireKnownReasonForUnverified: DEFAULT_POLICY_CHECKS.requireKnownReasonForUnverified,
-            requireUniqueShas: DEFAULT_POLICY_CHECKS.requireUniqueShas,
-            requireNonEmptyHeadline: DEFAULT_POLICY_CHECKS.requireNonEmptyHeadline,
-            maxHeadlineLength: DEFAULT_POLICY_CHECKS.maxHeadlineLength,
-            requireSignatureMaterialForVerified: DEFAULT_POLICY_CHECKS.requireSignatureMaterialForVerified
-          },
-          sourceResolution: {
-            botLoginPatternCount: 0,
-            botEmailPatternCount: 0
-          }
+          requireKnownReasonForUnverified: DEFAULT_POLICY_CHECKS.requireKnownReasonForUnverified,
+          requireSignatureVerificationAvailable: DEFAULT_POLICY_CHECKS.requireSignatureVerificationAvailable,
+          requireUniqueShas: DEFAULT_POLICY_CHECKS.requireUniqueShas,
+          requireNonEmptyHeadline: DEFAULT_POLICY_CHECKS.requireNonEmptyHeadline,
+          maxHeadlineLength: DEFAULT_POLICY_CHECKS.maxHeadlineLength,
+          requireSignatureMaterialForVerified: DEFAULT_POLICY_CHECKS.requireSignatureMaterialForVerified,
+          requireRequiredTrailer: DEFAULT_POLICY_CHECKS.requireRequiredTrailer
         },
+        sourceResolution: {
+          botLoginPatternCount: 0,
+          botEmailPatternCount: 0
+        },
+        botIdentityPolicy: {
+          allowedBotLogins: [],
+          allowedBotEmailPatterns: []
+        },
+        trailerContract: {
+          requiredAny: []
+        }
+      },
         enforcement: {
           observeOnly: Boolean(options.observeOnly),
           blocking: true

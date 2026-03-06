@@ -35,6 +35,15 @@ const sourceResolution = {
   botLoginRegexes: [/\[bot\]$/i],
   botEmailRegexes: [/\[bot\]@users\.noreply\.github\.com$/i]
 };
+const requiredTrailerRules = [
+  { key: 'Issue', valuePattern: '^#\\d+$' },
+  { key: 'Refs', valuePattern: '^#\\d+$' }
+];
+const allowedBotLogins = ['dependabot[bot]', 'github-actions[bot]'];
+const allowedBotEmailPatterns = [
+  '^[0-9]+\\+dependabot\\[bot\\]@users\\.noreply\\.github\\.com$',
+  '^41898282\\+github-actions\\[bot\\]@users\\.noreply\\.github\\.com$'
+];
 
 test('parseArgs supports observe-only and pull-request selection', () => {
   const options = parseArgs([
@@ -88,6 +97,38 @@ test('evaluateCommitIntegrity fails on unverified commits with explicit categori
   assert.equal(evaluation.result, 'fail');
   assert.ok(
     evaluation.violations.some((violation) => violation.category === 'unverified-commit' && violation.reason === 'unsigned')
+  );
+});
+
+test('evaluateCommitIntegrity covers verified, unsigned, unknown, and signature-unavailable reasons', () => {
+  const commits = normalizeCommitRecords(
+    [
+      createRawCommit({ sha: 'sig1', verified: true, reason: 'valid', message: 'feat: verified\n\nIssue: #771' }),
+      createRawCommit({ sha: 'sig2', verified: false, reason: 'unsigned', message: 'feat: unsigned\n\nIssue: #771' }),
+      createRawCommit({ sha: 'sig3', verified: false, reason: 'unknown', message: 'feat: unknown\n\nIssue: #771' }),
+      createRawCommit({
+        sha: 'sig4',
+        verified: false,
+        reason: 'gpgverify_unavailable',
+        message: 'feat: service unavailable\n\nIssue: #771'
+      })
+    ],
+    sourceResolution
+  );
+  const evaluation = evaluateCommitIntegrity(commits, {
+    checks: {
+      requireKnownReasonForUnverified: true,
+      requireSignatureVerificationAvailable: true
+    }
+  });
+
+  assert.ok(!evaluation.violations.some((violation) => violation.sha === 'sig1' && violation.category === 'unverified-commit'));
+  assert.ok(evaluation.violations.some((violation) => violation.sha === 'sig2' && violation.category === 'unverified-commit'));
+  assert.ok(evaluation.violations.some((violation) => violation.sha === 'sig3' && violation.category === 'unknown-unverified-reason'));
+  assert.ok(
+    evaluation.violations.some(
+      (violation) => violation.sha === 'sig4' && violation.category === 'signature-verification-unavailable'
+    )
   );
 });
 
@@ -206,4 +247,116 @@ test('resolveScope supports pull_request and merge_group payloads', () => {
   assert.equal(mergeGroupScope.mode, 'compare');
   assert.equal(mergeGroupScope.baseSha, 'abc123');
   assert.equal(mergeGroupScope.headSha, 'def456');
+});
+
+test('evaluateCommitIntegrity enforces required trailer contract (missing trailer fails)', () => {
+  const commits = normalizeCommitRecords(
+    [createRawCommit({ sha: 'aa03', message: 'feat: add deterministic flow' })],
+    sourceResolution
+  );
+  const evaluation = evaluateCommitIntegrity(commits, {
+    checks: {
+      requireRequiredTrailer: true,
+      requiredTrailerRules
+    }
+  });
+  assert.equal(evaluation.result, 'fail');
+  assert.ok(evaluation.violations.some((violation) => violation.category === 'missing-required-trailer'));
+});
+
+test('evaluateCommitIntegrity passes required trailer contract when Issue trailer matches policy', () => {
+  const commits = normalizeCommitRecords(
+    [createRawCommit({ sha: 'aa04', message: 'feat: add deterministic flow\n\nIssue: #770' })],
+    sourceResolution
+  );
+  const evaluation = evaluateCommitIntegrity(commits, {
+    checks: {
+      requireRequiredTrailer: true,
+      requiredTrailerRules
+    }
+  });
+  assert.equal(evaluation.result, 'pass');
+  assert.ok(!evaluation.violations.some((violation) => violation.category === 'missing-required-trailer'));
+});
+
+test('evaluateCommitIntegrity fails required trailer contract when trailer value is malformed', () => {
+  const commits = normalizeCommitRecords(
+    [createRawCommit({ sha: 'aa05', message: 'feat: add deterministic flow\n\nIssue: 770' })],
+    sourceResolution
+  );
+  const evaluation = evaluateCommitIntegrity(commits, {
+    checks: {
+      requireRequiredTrailer: true,
+      requiredTrailerRules
+    }
+  });
+  assert.equal(evaluation.result, 'fail');
+  assert.ok(evaluation.violations.some((violation) => violation.category === 'invalid-required-trailer-format'));
+});
+
+test('evaluateCommitIntegrity reports empty-range issue deterministically', () => {
+  const evaluation = evaluateCommitIntegrity([], {
+    checks: {
+      requireRequiredTrailer: true,
+      requiredTrailerRules
+    }
+  });
+  assert.equal(evaluation.result, 'fail');
+  assert.ok(evaluation.issues.includes('no-commits-found'));
+});
+
+test('evaluateCommitIntegrity allows allowlisted bot identities', () => {
+  const commits = normalizeCommitRecords(
+    [
+      createRawCommit({
+        sha: 'bot01',
+        authorLogin: 'dependabot[bot]',
+        committerLogin: 'dependabot[bot]',
+        authorEmail: '49699333+dependabot[bot]@users.noreply.github.com',
+        committerEmail: '49699333+dependabot[bot]@users.noreply.github.com',
+        message: 'chore: update deps\n\nIssue: #772'
+      })
+    ],
+    sourceResolution
+  );
+  const evaluation = evaluateCommitIntegrity(commits, {
+    checks: {
+      requireBotAllowlist: true,
+      allowedBotLogins,
+      allowedBotEmailPatterns,
+      requireRequiredTrailer: true,
+      requiredTrailerRules
+    }
+  });
+
+  assert.equal(evaluation.result, 'pass');
+  assert.ok(!evaluation.violations.some((violation) => violation.category === 'unauthorized-bot-identity'));
+});
+
+test('evaluateCommitIntegrity fails on non-allowlisted bot identities', () => {
+  const commits = normalizeCommitRecords(
+    [
+      createRawCommit({
+        sha: 'bot02',
+        authorLogin: 'renovate[bot]',
+        committerLogin: 'renovate[bot]',
+        authorEmail: 'renovate[bot]@users.noreply.github.com',
+        committerEmail: 'renovate[bot]@users.noreply.github.com',
+        message: 'chore: update deps\n\nIssue: #772'
+      })
+    ],
+    sourceResolution
+  );
+  const evaluation = evaluateCommitIntegrity(commits, {
+    checks: {
+      requireBotAllowlist: true,
+      allowedBotLogins,
+      allowedBotEmailPatterns,
+      requireRequiredTrailer: true,
+      requiredTrailerRules
+    }
+  });
+
+  assert.equal(evaluation.result, 'fail');
+  assert.ok(evaluation.violations.some((violation) => violation.category === 'unauthorized-bot-identity'));
 });

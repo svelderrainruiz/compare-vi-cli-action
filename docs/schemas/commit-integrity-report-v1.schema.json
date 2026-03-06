@@ -78,7 +78,9 @@
         "path",
         "failOnUnverified",
         "checks",
-        "sourceResolution"
+        "sourceResolution",
+        "botIdentityPolicy",
+        "trailerContract"
       ],
       "properties": {
         "schema": {
@@ -94,15 +96,21 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
+            "requireBotAllowlist",
             "requireAuthorAttribution",
             "requireCommitterAttribution",
             "requireKnownReasonForUnverified",
+            "requireSignatureVerificationAvailable",
             "requireUniqueShas",
             "requireNonEmptyHeadline",
             "maxHeadlineLength",
-            "requireSignatureMaterialForVerified"
+            "requireSignatureMaterialForVerified",
+            "requireRequiredTrailer"
           ],
           "properties": {
+            "requireBotAllowlist": {
+              "type": "boolean"
+            },
             "requireAuthorAttribution": {
               "type": "boolean"
             },
@@ -110,6 +118,9 @@
               "type": "boolean"
             },
             "requireKnownReasonForUnverified": {
+              "type": "boolean"
+            },
+            "requireSignatureVerificationAvailable": {
               "type": "boolean"
             },
             "requireUniqueShas": {
@@ -123,6 +134,9 @@
               "minimum": 1
             },
             "requireSignatureMaterialForVerified": {
+              "type": "boolean"
+            },
+            "requireRequiredTrailer": {
               "type": "boolean"
             }
           }
@@ -142,6 +156,56 @@
             "botEmailPatternCount": {
               "type": "integer",
               "minimum": 0
+            }
+          }
+        },
+        "botIdentityPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "allowedBotLogins",
+            "allowedBotEmailPatterns"
+          ],
+          "properties": {
+            "allowedBotLogins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowedBotEmailPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "trailerContract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requiredAny"
+          ],
+          "properties": {
+            "requiredAny": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "key",
+                  "valuePattern"
+                ],
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "valuePattern": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         }
@@ -241,6 +305,8 @@
           "authorEmail",
           "committerEmail",
           "sourceKind"
+          ,
+          "trailers"
         ],
         "properties": {
           "sha": {
@@ -296,6 +362,25 @@
               "human",
               "bot"
             ]
+          },
+          "trailers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "value"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
