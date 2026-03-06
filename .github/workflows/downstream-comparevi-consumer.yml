@@ -1,0 +1,19 @@
+name: Downstream CompareVI Consumer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  consume-upstream-comparevi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consume upstream compare-vi action (stable pin)
+        uses: LabVIEW-Community-CI-CD/compare-vi-cli-action@v0.6.3
+        with:
+          base: fixtures/downstream/base.vi
+          head: fixtures/downstream/head.vi
+          loop-enabled: true
+          fail-on-diff: false
