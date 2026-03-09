@@ -126,6 +126,10 @@ function Download-RunArtifacts {
     [Parameter(Mandatory=$true)][string]$RunId,
     [Parameter(Mandatory=$true)][string]$TargetDir
   )
+  Write-Warning (
+    'Download-RunArtifacts uses legacy all-artifact gh download behavior for the historical one-button flow. ' +
+    'For maintained future-agent triage, prefer "node tools/npm/run-script.mjs priority:artifact:download -- --repo <owner/repo> --run-id <id> --artifact <name>".'
+  )
   New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
   gh run download $RunId -R $Repo -D $TargetDir | Out-Null
 }

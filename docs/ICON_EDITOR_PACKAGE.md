@@ -215,6 +215,11 @@ carries the actual LabVIEW payload.
     --name icon-editor-vi-comparison-report --dir artifacts/icon-editor/report
   ```
 
+  Historical compatibility note:
+  This example remains a raw `gh run download` snippet because this icon-editor package document is a historical
+  compatibility surface. For maintained future-agent/operator retrieval in this repository, prefer
+  `node tools/npm/run-script.mjs priority:artifact:download -- --repo <owner/repo> --run-id <id> --artifact <name>`.
+
   The Markdown file includes a status table (same/different/error) and links back to the capture artifact.
 
 ## Building overlays from icon-editor commits

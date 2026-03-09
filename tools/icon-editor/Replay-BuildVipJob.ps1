@@ -42,9 +42,11 @@
     Invoke the Close_LabVIEW.ps1 helper after the build.
 
 .PARAMETER DownloadArtifacts
-    When supplied, downloads the run's artifacts (via gh run download) into a
-    temporary directory and copies any lv_icon_*.lvlibp files into the expected
-    resource/plugins folder.
+    When supplied, downloads the run's artifacts (via legacy gh run download)
+    into a temporary directory and copies any lv_icon_*.lvlibp files into the
+    expected resource/plugins folder. For maintained future-agent triage, prefer
+    the checked-in priority:artifact:download helper when you only need named
+    artifacts.
 
 .PARAMETER BuildToolchain
     Toolchain used to rebuild the VIP. Defaults to 'gcli'; pass 'vipm' to route
@@ -198,6 +200,11 @@ if ($RunId) {
         }
         New-Item -ItemType Directory -Path $artifactDest | Out-Null
 
+        Write-Warning (
+            'Replay-BuildVipJob -DownloadArtifacts uses a legacy all-artifact gh download for historical icon-editor replay. ' +
+            'Prefer "node tools/npm/run-script.mjs priority:artifact:download -- --repo <owner/repo> --run-id <id> --artifact <name>" ' +
+            'for maintained future-agent named-artifact retrieval.'
+        )
         Write-Verbose "Downloading artifacts to $artifactDest"
         $downloadArgs = @('run', 'download', $RunId, '--dir', $artifactDest)
         Invoke-GitHubCli -Arguments $downloadArgs | Out-Null
