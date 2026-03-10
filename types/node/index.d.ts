@@ -30,17 +30,38 @@ declare module 'node:child_process' {
 }
 
 declare module 'node:crypto' {
+  interface Hash {
+    update(data: unknown): Hash;
+    digest(encoding: string): string;
+  }
+
+  function createHash(algorithm: string): Hash;
   function randomUUID(): string;
-  export { randomUUID };
+  export { createHash, randomUUID, Hash };
 }
 
 declare module 'node:fs' {
+  interface Dirent {
+    name: string;
+    isDirectory(): boolean;
+    isFile(): boolean;
+  }
+
+  interface Stats {
+    size: number;
+    isDirectory(): boolean;
+    isFile(): boolean;
+  }
+
   function existsSync(path: string): boolean;
-  function readFileSync(path: string, options?: unknown): string;
+  function readFileSync(path: string, options?: unknown): any;
   function writeFileSync(path: string, data: string, options?: unknown): void;
   function mkdirSync(path: string, options?: unknown): void;
+  function readdirSync(path: string, options?: { withFileTypes?: boolean }): Dirent[];
+  function statSync(path: string): Stats;
+  function cpSync(source: string, destination: string, options?: unknown): void;
 
-  export { existsSync, readFileSync, writeFileSync, mkdirSync };
+  export { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, cpSync, Dirent, Stats };
 }
 
 declare module 'fs' {
@@ -96,8 +117,13 @@ declare module 'node:path' {
   function join(...paths: string[]): string;
   function resolve(...paths: string[]): string;
   function dirname(path: string): string;
+  function relative(from: string, to: string): string;
 
-  export { join, resolve, dirname };
+  const posix: {
+    join(...paths: string[]): string;
+  };
+
+  export { join, resolve, dirname, relative, posix };
 }
 
 declare module 'node:process' {

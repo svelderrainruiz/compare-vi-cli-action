@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/vi-history-slice-selector-v1.schema.json",
+  "title": "VI History Slice Selector v1",
+  "description": "Input contract for deterministic VI history slice resolution.",
+  "type": "object",
+  "required": [
+    "schema",
+    "targetPath",
+    "headRef"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vi-history/slice-selector@v1"
+    },
+    "repoPath": {
+      "type": "string"
+    },
+    "targetPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pathFilter": {
+      "type": "string"
+    },
+    "headRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baselineRef": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "baselineMode": {
+      "enum": [
+        "explicit",
+        "merge-base",
+        "head-parent"
+      ]
+    },
+    "historyMode": {
+      "enum": [
+        "first-parent",
+        "ancestry-path",
+        "explicit-list"
+      ]
+    },
+    "maxCommitCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "maxPairs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "explicitCommits": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "repoIdentity": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "selectionPolicyVersion": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

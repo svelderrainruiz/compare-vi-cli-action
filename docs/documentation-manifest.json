@@ -2,7 +2,7 @@
   "$schema": "./schemas/documentation-manifest-v1.schema.json",
   "schema": "documentation-manifest-v1",
   "version": "1.0.0",
-  "updated": "2026-03-10T22:25:00Z",
+  "updated": "2026-03-11T00:25:00Z",
   "entries": [
     {
       "name": "Root Playbooks",
@@ -178,6 +178,28 @@
       ]
     },
     {
+      "name": "VI History Slice Contracts",
+      "category": "supporting",
+      "status": "reference",
+      "description": "Deterministic selector and manifest contracts for cross-platform VI history slice resolution.",
+      "files": [
+        "docs/schemas/vi-history-slice-selector-v1.schema.json",
+        "docs/schemas/vi-history-slice-manifest-v1.schema.json",
+        "tools/Resolve-VIHistorySlice.ps1",
+        "tools/VIHistorySlice.psm1"
+      ]
+    },
+    {
+      "name": "VI History Pages Publication Contracts",
+      "category": "supporting",
+      "status": "reference",
+      "description": "Typed publication contract and site-preparation tooling for GitHub Pages review surfaces backed by VI History suites.",
+      "files": [
+        "docs/schemas/vi-history-pages-publication-v1.schema.json",
+        "tools/cli/vi-history-pages-publication.ts"
+      ]
+    },
+    {
       "name": "Issue Drafts",
       "category": "drafts",
       "status": "draft",
@@ -194,6 +216,7 @@
         "issues-drafts/09-runbook-auto-upload.md",
         "issues-drafts/10-consolidated-diagnostics-report.md",
         "issues-drafts/11-vi-history-slice-selection-contract.md",
+        "issues-drafts/12-vi-history-smoke-pages-publication.md",
         "issues-drafts/README.md"
       ]
     },

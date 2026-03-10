@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/vi-history-slice-manifest-v1.schema.json",
+  "title": "VI History Slice Manifest v1",
+  "description": "Resolved immutable history slice contract for deterministic VI history execution.",
+  "type": "object",
+  "required": [
+    "schema",
+    "generatedAt",
+    "repoRoot",
+    "repoIdentity",
+    "repoIdentitySource",
+    "targetPath",
+    "pathFilter",
+    "requested",
+    "resolved",
+    "candidateCommits",
+    "commits",
+    "pairs",
+    "sliceDigest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vi-history/slice-manifest@v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repoRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repoIdentity": {
+      "type": "string"
+    },
+    "repoIdentitySource": {
+      "enum": [
+        "parameter",
+        "git-origin-url",
+        "unspecified"
+      ]
+    },
+    "targetPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pathFilter": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requested": {
+      "$ref": "#/$defs/selector"
+    },
+    "resolved": {
+      "$ref": "#/$defs/resolved"
+    },
+    "candidateCommits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/shaString"
+      }
+    },
+    "commits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/commitEntry"
+      }
+    },
+    "pairs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pairEntry"
+      }
+    },
+    "sliceDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "shaString": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "nullableShaString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "selector": {
+      "type": "object",
+      "required": [
+        "schema",
+        "repoPath",
+        "targetPath",
+        "pathFilter",
+        "headRef",
+        "baselineRef",
+        "baselineMode",
+        "historyMode",
+        "maxCommitCount",
+        "maxPairs",
+        "explicitCommits",
+        "repoIdentity",
+        "selectionPolicyVersion"
+      ],
+      "properties": {
+        "schema": {
+          "const": "vi-history/slice-selector@v1"
+        },
+        "repoPath": {
+          "type": "string"
+        },
+        "targetPath": {
+          "type": "string"
+        },
+        "pathFilter": {
+          "type": "string"
+        },
+        "headRef": {
+          "type": "string"
+        },
+        "baselineRef": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "baselineMode": {
+          "enum": [
+            "explicit",
+            "merge-base",
+            "head-parent"
+          ]
+        },
+        "historyMode": {
+          "enum": [
+            "first-parent",
+            "ancestry-path",
+            "explicit-list"
+          ]
+        },
+        "maxCommitCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "maxPairs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "explicitCommits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "repoIdentity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selectionPolicyVersion": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "resolved": {
+      "type": "object",
+      "required": [
+        "headSha",
+        "baselineRefSha",
+        "baselineSha",
+        "mergeBaseSha",
+        "baselineMode",
+        "historyMode",
+        "rangeExpression",
+        "candidateCommitCount",
+        "commitCount",
+        "pairCount",
+        "truncated"
+      ],
+      "properties": {
+        "headSha": {
+          "$ref": "#/$defs/shaString"
+        },
+        "baselineRefSha": {
+          "$ref": "#/$defs/nullableShaString"
+        },
+        "baselineSha": {
+          "$ref": "#/$defs/nullableShaString"
+        },
+        "mergeBaseSha": {
+          "$ref": "#/$defs/nullableShaString"
+        },
+        "baselineMode": {
+          "enum": [
+            "explicit",
+            "merge-base",
+            "head-parent"
+          ]
+        },
+        "historyMode": {
+          "enum": [
+            "first-parent",
+            "ancestry-path",
+            "explicit-list"
+          ]
+        },
+        "rangeExpression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidateCommitCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "commitCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pairCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "commitEntry": {
+      "type": "object",
+      "required": [
+        "index",
+        "candidateIndex",
+        "sha",
+        "parentSha",
+        "touchesPath"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "candidateIndex": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha": {
+          "$ref": "#/$defs/shaString"
+        },
+        "parentSha": {
+          "$ref": "#/$defs/nullableShaString"
+        },
+        "touchesPath": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "pairEntry": {
+      "type": "object",
+      "required": [
+        "index",
+        "baseSha",
+        "headSha",
+        "headCommitIndex",
+        "targetPath"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "baseSha": {
+          "$ref": "#/$defs/shaString"
+        },
+        "headSha": {
+          "$ref": "#/$defs/shaString"
+        },
+        "headCommitIndex": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "targetPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -18,6 +18,8 @@ any VI history or NI Linux container execution begins.
   stable description of exactly which commit pairs to process.
 - Hosted Ubuntu runners should be able to process multiple branch bundles
   concurrently without inferring branch meaning from runner-local state.
+- The same resolved slice identity should be reusable as a reviewer-facing
+  publication key for GitHub Pages, raw artifacts, and follow-on epic intake.
 
 ## Proposed contract
 
@@ -81,6 +83,8 @@ Container and report helpers consume only the resolved manifest:
 - [ ] The NI Linux container path runs from resolved slice input only.
 - [ ] Artifacts expose `sliceDigest` so concurrent runs can be correlated
       without branch-name ambiguity.
+- [ ] `sliceDigest` is stable enough to key downstream publication surfaces
+      without coupling reviewers to branch names or run-local paths.
 - [ ] Legacy `HistoryBranchRef` entry points remain functional during the
       migration window.
 

@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/vi-history-pages-publication-v1.schema.json",
+  "title": "VI History Pages Publication v1",
+  "description": "Static publication contract for a VI History suite packaged for GitHub Pages review.",
+  "type": "object",
+  "required": [
+    "schema",
+    "generatedAt",
+    "publicationKey",
+    "digestSource",
+    "publicationPath",
+    "pagesBaseUrl",
+    "siteUrl",
+    "scenarioLabel",
+    "source",
+    "suite",
+    "previews",
+    "files",
+    "status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vi-history-pages-publication@v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "publicationKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "digestSource": {
+      "enum": [
+        "explicit",
+        "suite",
+        "derived"
+      ]
+    },
+    "publicationPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pagesBaseUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "siteUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scenarioLabel": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "repository",
+        "workflow",
+        "runId",
+        "runAttempt"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runAttempt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "suite": {
+      "type": "object",
+      "required": [
+        "schema",
+        "targetPath",
+        "requestedStartRef",
+        "startRef",
+        "endRef",
+        "requestedModes",
+        "executedModes",
+        "reportFormat",
+        "status",
+        "stats",
+        "historyReportPath"
+      ],
+      "properties": {
+        "schema": {
+          "const": "vi-compare/history-suite@v1"
+        },
+        "targetPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestedStartRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endRef": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "executedModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reportFormat": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "historyReportPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stats": {
+          "$ref": "#/$defs/stats"
+        }
+      },
+      "additionalProperties": false
+    },
+    "previews": {
+      "type": "object",
+      "required": [
+        "imageIndexCount",
+        "publishedImageCount",
+        "missingImageCount",
+        "items"
+      ],
+      "properties": {
+        "imageIndexCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "publishedImageCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missingImageCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "relativePath",
+              "alt",
+              "sha256",
+              "byteLength",
+              "sourceIndexPath",
+              "imageOrdinal"
+            ],
+            "properties": {
+              "relativePath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "alt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "byteLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sourceIndexPath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "imageOrdinal": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "relativePath",
+          "kind",
+          "sha256",
+          "byteLength"
+        ],
+        "properties": {
+          "relativePath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "history-report",
+              "preview-image",
+              "suite-manifest",
+              "suite-asset",
+              "landing-page"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "const": "prepared"
+    }
+  },
+  "$defs": {
+    "countMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "stats": {
+      "type": "object",
+      "required": [
+        "processed",
+        "diffs",
+        "signalDiffs",
+        "noiseCollapsed",
+        "errors",
+        "missing",
+        "categoryCounts",
+        "bucketCounts"
+      ],
+      "properties": {
+        "processed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diffs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "signalDiffs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "noiseCollapsed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "categoryCounts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "bucketCounts": {
+          "$ref": "#/$defs/countMap"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
