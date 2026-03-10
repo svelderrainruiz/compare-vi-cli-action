@@ -17,6 +17,7 @@ export const WORKER_CHECKOUT_SCHEMA = 'priority/runtime-worker-checkout@v1';
 export const WORKER_READY_SCHEMA = 'priority/runtime-worker-ready@v1';
 export const WORKER_BRANCH_SCHEMA = 'priority/runtime-worker-branch@v1';
 export const TASK_PACKET_SCHEMA = 'priority/runtime-worker-task-packet@v1';
+export const WORKER_RECEIPT_SCHEMA = 'priority/runtime-worker-receipt@v1';
 export const DEFAULT_RUNTIME_DIR = path.join('tests', 'results', '_agent', 'runtime');
 export const DEFAULT_LEASE_SCOPE = 'workspace';
 export const ACTIONS = new Set(['status', 'step', 'stop', 'resume']);
@@ -286,6 +287,7 @@ export function createRuntimeAdapter(adapter = {}) {
     bootstrapWorker: typeof adapter.bootstrapWorker === 'function' ? adapter.bootstrapWorker : null,
     activateWorker: typeof adapter.activateWorker === 'function' ? adapter.activateWorker : null,
     buildTaskPacket: typeof adapter.buildTaskPacket === 'function' ? adapter.buildTaskPacket : null,
+    executeTaskPacket: typeof adapter.executeTaskPacket === 'function' ? adapter.executeTaskPacket : null,
     resolveRepository:
       typeof adapter.resolveRepository === 'function'
         ? adapter.resolveRepository
@@ -373,6 +375,22 @@ function summarizeTaskPacket(taskPacketRecord) {
     },
     generatedAt: taskPacketRecord.generatedAt ?? null,
     artifacts: taskPacketRecord.artifacts ?? {}
+  };
+}
+
+function summarizeWorkerReceipt(workerReceiptRecord) {
+  if (!workerReceiptRecord) return null;
+  return {
+    laneId: workerReceiptRecord.laneId,
+    cycle: workerReceiptRecord.cycle,
+    status: workerReceiptRecord.status,
+    source: workerReceiptRecord.source ?? null,
+    objective: {
+      summary: workerReceiptRecord.objective?.summary ?? null
+    },
+    result: workerReceiptRecord.result ?? null,
+    executedAt: workerReceiptRecord.executedAt ?? null,
+    artifacts: workerReceiptRecord.artifacts ?? {}
   };
 }
 
@@ -520,6 +538,38 @@ function normalizeTaskPacketRecord(taskPacket, now) {
   };
 }
 
+function normalizeWorkerReceiptRecord(workerReceipt, now) {
+  if (!workerReceipt || typeof workerReceipt !== 'object') return null;
+  const objective = workerReceipt.objective && typeof workerReceipt.objective === 'object' ? workerReceipt.objective : {};
+  const execution = workerReceipt.execution && typeof workerReceipt.execution === 'object' ? workerReceipt.execution : {};
+  const artifacts = workerReceipt.artifacts && typeof workerReceipt.artifacts === 'object' ? workerReceipt.artifacts : {};
+  return {
+    schema: WORKER_RECEIPT_SCHEMA,
+    generatedAt: normalizeText(workerReceipt.generatedAt) || toIso(now),
+    cycle: Number.isInteger(workerReceipt.cycle) ? workerReceipt.cycle : null,
+    laneId: normalizeText(workerReceipt.laneId) || null,
+    status: normalizeText(workerReceipt.status).toLowerCase() || 'noop',
+    source: normalizeText(workerReceipt.source) || null,
+    objective: {
+      summary: normalizeText(objective.summary) || null
+    },
+    result: normalizeText(workerReceipt.result) || null,
+    reason: normalizeText(workerReceipt.reason) || null,
+    execution: {
+      commands: Array.isArray(execution.commands) ? execution.commands.map((entry) => String(entry)) : [],
+      commandCount: Number.isInteger(execution.commandCount)
+        ? execution.commandCount
+        : Array.isArray(execution.commands)
+          ? execution.commands.length
+          : 0,
+      durationMs: Number.isFinite(execution.durationMs) ? Number(execution.durationMs) : null
+    },
+    taskPacketGeneratedAt: normalizeText(workerReceipt.taskPacketGeneratedAt) || null,
+    executedAt: normalizeText(workerReceipt.executedAt) || toIso(now),
+    artifacts
+  };
+}
+
 function buildActiveLaneSummary(laneRecord) {
   if (!laneRecord) return null;
   return {
@@ -534,6 +584,7 @@ function buildActiveLaneSummary(laneRecord) {
     workerReady: summarizeWorkerReady(laneRecord.workerReady),
     workerBranch: summarizeWorkerBranch(laneRecord.workerBranch),
     taskPacket: summarizeTaskPacket(laneRecord.taskPacket),
+    workerReceipt: summarizeWorkerReceipt(laneRecord.workerReceipt),
     updatedAt: laneRecord.updatedAt
   };
 }
@@ -623,6 +674,7 @@ function buildLaneRecord(options, now) {
   const workerReady = normalizeWorkerReadyRecord(options.workerReady, now);
   const workerBranch = normalizeWorkerBranchRecord(options.workerBranch, now);
   const taskPacket = normalizeTaskPacketRecord(options.taskPacket, now);
+  const workerReceipt = normalizeWorkerReceiptRecord(options.workerReceipt, now);
   return {
     schema: LANE_SCHEMA,
     laneId,
@@ -644,6 +696,7 @@ function buildLaneRecord(options, now) {
     workerReady,
     workerBranch,
     taskPacket,
+    workerReceipt,
     createdAt: toIso(now),
     updatedAt: toIso(now)
   };
@@ -880,6 +933,8 @@ async function runStepAction(context) {
         workerBranchArtifactPath: laneRecord?.workerBranch?.artifacts?.lanePath ?? null,
         taskPacketPath: laneRecord?.taskPacket?.artifacts?.latestPath ?? null,
         taskPacketHistoryPath: laneRecord?.taskPacket?.artifacts?.historyPath ?? null,
+        workerReceiptPath: laneRecord?.workerReceipt?.artifacts?.latestPath ?? null,
+        workerReceiptHistoryPath: laneRecord?.workerReceipt?.artifacts?.historyPath ?? null,
         statePath: runtimePaths.statePath,
         eventsPath: runtimePaths.eventsPath
       }
@@ -906,6 +961,7 @@ async function runStepAction(context) {
     report.workerReady = summarizeWorkerReady(laneRecord?.workerReady);
     report.workerBranch = summarizeWorkerBranch(laneRecord?.workerBranch);
     report.taskPacket = summarizeTaskPacket(laneRecord?.taskPacket);
+    report.workerReceipt = summarizeWorkerReceipt(laneRecord?.workerReceipt);
     report.state = state;
   } finally {
     const leaseId = report.lease?.acquire?.leaseId ?? null;

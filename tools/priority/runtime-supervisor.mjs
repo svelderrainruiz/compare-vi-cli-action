@@ -19,6 +19,7 @@ import {
   TASK_PACKET_SCHEMA,
   TURN_SCHEMA,
   WORKER_CHECKOUT_SCHEMA,
+  WORKER_RECEIPT_SCHEMA,
   __test,
   createRuntimeAdapter,
   parseArgs,
@@ -48,6 +49,7 @@ export {
   TASK_PACKET_SCHEMA,
   TURN_SCHEMA,
   WORKER_CHECKOUT_SCHEMA,
+  WORKER_RECEIPT_SCHEMA,
   WORKER_READY_SCHEMA,
   __test,
   createRuntimeAdapter,
@@ -299,6 +301,31 @@ async function buildCompareviTaskPacket({ repoRoot, schedulerDecision, preparedW
   };
 }
 
+async function buildCompareviWorkerReceipt({ taskPacket }) {
+  const taskStatus = normalizeText(taskPacket?.status).toLowerCase();
+  const status = taskStatus === 'blocked' ? 'blocked' : taskStatus === 'idle' ? 'noop' : 'completed';
+  return {
+    source: 'comparevi-runtime',
+    status,
+    objective: {
+      summary: normalizeText(taskPacket?.objective?.summary) || 'No compare-vi task packet was available.'
+    },
+    result:
+      status === 'blocked'
+        ? 'task-packet-blocked'
+        : status === 'noop'
+          ? 'task-packet-idle'
+          : 'task-packet-consumed',
+    reason: status === 'blocked' ? 'task packet reached the execution seam in a blocked state' : null,
+    execution: {
+      commands: [],
+      commandCount: 0,
+      durationMs: 0
+    },
+    taskPacketGeneratedAt: normalizeText(taskPacket?.generatedAt) || null
+  };
+}
+
 export const compareviRuntimeAdapter = createRuntimeAdapter({
   name: 'comparevi',
   resolveRepoRoot: () => getRepoRoot(),
@@ -310,13 +337,15 @@ export const compareviRuntimeAdapter = createRuntimeAdapter({
   prepareWorker: (context) => prepareCompareviWorkerCheckout(context),
   bootstrapWorker: (context) => bootstrapCompareviWorkerCheckout(context),
   activateWorker: (context) => activateCompareviWorkerLane(context),
-  buildTaskPacket: (context) => buildCompareviTaskPacket(context)
+  buildTaskPacket: (context) => buildCompareviTaskPacket(context),
+  executeTaskPacket: (context) => buildCompareviWorkerReceipt(context)
 });
 
 export const compareviRuntimeTest = {
   activateCompareviWorkerLane,
   buildSchedulerDecisionFromSnapshot,
   buildCompareviTaskPacket,
+  buildCompareviWorkerReceipt,
   bootstrapCompareviWorkerCheckout,
   planCompareviRuntimeStep,
   prepareCompareviWorkerCheckout,

@@ -143,6 +143,29 @@ test('runRuntimeSupervisor executes through an injected adapter', async () => {
           historyPath: path.join(repoRoot, 'tests', 'results', '_agent', 'runtime', 'task-packets', '2026-03-10T15-00-00-000Z-0001.json')
         }
       },
+      workerReceipt: {
+        schema: 'priority/runtime-worker-receipt@v1',
+        generatedAt: '2026-03-10T15:00:00.000Z',
+        cycle: 1,
+        laneId: 'origin-977',
+        status: 'completed',
+        source: 'test-adapter',
+        objective: {
+          summary: 'Advance issue #977'
+        },
+        result: 'receipt-completed',
+        execution: {
+          commands: ['node tools/npm/run-script.mjs priority:pr'],
+          commandCount: 1,
+          durationMs: 0
+        },
+        taskPacketGeneratedAt: '2026-03-10T15:00:00.000Z',
+        executedAt: '2026-03-10T15:00:01.000Z',
+        artifacts: {
+          latestPath: path.join(repoRoot, 'tests', 'results', '_agent', 'runtime', 'worker-receipt.json'),
+          historyPath: path.join(repoRoot, 'tests', 'results', '_agent', 'runtime', 'worker-receipts', '2026-03-10T15-00-01-000Z-0001.json')
+        }
+      },
       blockerClass: 'ci',
       reason: 'hosted checks are red'
     },
@@ -164,6 +187,8 @@ test('runRuntimeSupervisor executes through an injected adapter', async () => {
   assert.equal(result.report.workerBranch.branch, 'issue/origin-977-fork-policy-portability');
   assert.equal(state.activeLane.taskPacket.objective.summary, 'Advance issue #977');
   assert.equal(result.report.taskPacket.status, 'ready');
+  assert.equal(state.activeLane.workerReceipt.result, 'receipt-completed');
+  assert.equal(result.report.workerReceipt.status, 'completed');
   assert.deepEqual(
     adapterCalls.map((entry) => entry.type),
     ['acquire', 'release']

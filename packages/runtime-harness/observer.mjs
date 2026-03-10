@@ -9,6 +9,7 @@ import {
   DEFAULT_RUNTIME_DIR,
   SCHEDULER_DECISION_SCHEMA,
   TASK_PACKET_SCHEMA,
+  WORKER_RECEIPT_SCHEMA,
   WORKER_BRANCH_SCHEMA,
   WORKER_CHECKOUT_SCHEMA,
   WORKER_READY_SCHEMA
@@ -141,7 +142,9 @@ function resolveWorkerPaths(options, repoRoot) {
     readyLatestPath: path.join(runtimeDir, 'worker-ready.json'),
     readyDir: path.join(runtimeDir, 'workers-ready'),
     branchLatestPath: path.join(runtimeDir, 'worker-branch.json'),
-    branchDir: path.join(runtimeDir, 'workers-branch')
+    branchDir: path.join(runtimeDir, 'workers-branch'),
+    receiptLatestPath: path.join(runtimeDir, 'worker-receipt.json'),
+    receiptDir: path.join(runtimeDir, 'worker-receipts')
   };
 }
 
@@ -582,6 +585,7 @@ function buildObserverArtifacts({
   workerArtifacts,
   workerReadyArtifacts,
   workerBranchArtifacts,
+  workerReceiptArtifacts,
   schedulerArtifacts,
   taskPacketArtifacts,
   includeRuntimeState = false
@@ -596,10 +600,59 @@ function buildObserverArtifacts({
     workerReadyLanePath: workerReadyArtifacts.lanePath,
     workerBranchPath: workerBranchArtifacts.latestPath,
     workerBranchLanePath: workerBranchArtifacts.lanePath,
+    workerReceiptPath: workerReceiptArtifacts.latestPath,
+    workerReceiptHistoryPath: workerReceiptArtifacts.historyPath,
     schedulerDecisionPath: schedulerArtifacts.latestPath,
     schedulerDecisionHistoryPath: schedulerArtifacts.historyPath,
     taskPacketPath: taskPacketArtifacts.latestPath,
     taskPacketHistoryPath: taskPacketArtifacts.historyPath
+  };
+}
+
+function normalizeWorkerReceipt(rawWorkerReceipt, taskPacket, now, adapter, repository) {
+  if (!rawWorkerReceipt || typeof rawWorkerReceipt !== 'object') return null;
+  const objective = rawWorkerReceipt.objective && typeof rawWorkerReceipt.objective === 'object' ? rawWorkerReceipt.objective : {};
+  const execution = rawWorkerReceipt.execution && typeof rawWorkerReceipt.execution === 'object' ? rawWorkerReceipt.execution : {};
+  return {
+    schema: WORKER_RECEIPT_SCHEMA,
+    generatedAt: toIso(now),
+    runtimeAdapter: adapter.name,
+    repository,
+    cycle: Number.isInteger(rawWorkerReceipt.cycle) ? rawWorkerReceipt.cycle : taskPacket?.cycle ?? null,
+    laneId: normalizeText(rawWorkerReceipt.laneId) || taskPacket?.laneId || null,
+    status: normalizeText(rawWorkerReceipt.status).toLowerCase() || 'noop',
+    source: normalizeText(rawWorkerReceipt.source) || adapter.name,
+    objective: {
+      summary: normalizeText(objective.summary) || taskPacket?.objective?.summary || null
+    },
+    result: normalizeText(rawWorkerReceipt.result) || null,
+    reason: normalizeText(rawWorkerReceipt.reason) || null,
+    execution: {
+      commands: Array.isArray(execution.commands) ? execution.commands.map((entry) => String(entry)) : [],
+      commandCount: Number.isInteger(execution.commandCount)
+        ? execution.commandCount
+        : Array.isArray(execution.commands)
+          ? execution.commands.length
+          : 0,
+      durationMs: Number.isFinite(execution.durationMs) ? Number(execution.durationMs) : null
+    },
+    taskPacketGeneratedAt: normalizeText(rawWorkerReceipt.taskPacketGeneratedAt) || taskPacket?.generatedAt || null,
+    executedAt: normalizeText(rawWorkerReceipt.executedAt) || toIso(now),
+    artifacts: rawWorkerReceipt.artifacts && typeof rawWorkerReceipt.artifacts === 'object' ? rawWorkerReceipt.artifacts : {}
+  };
+}
+
+async function writeWorkerReceipt(workerPaths, workerReceipt) {
+  await mkdir(workerPaths.receiptDir, { recursive: true });
+  await writeJson(workerPaths.receiptLatestPath, workerReceipt);
+  const historyPath = path.join(
+    workerPaths.receiptDir,
+    makeDecisionFileName(new Date(workerReceipt.executedAt), workerReceipt.cycle ?? 0)
+  );
+  await writeJson(historyPath, workerReceipt);
+  return {
+    latestPath: workerPaths.receiptLatestPath,
+    historyPath
   };
 }
 
@@ -933,7 +986,9 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
       readyLatestPath: workerPaths.readyLatestPath,
       readyDir: workerPaths.readyDir,
       branchLatestPath: workerPaths.branchLatestPath,
-      branchDir: workerPaths.branchDir
+      branchDir: workerPaths.branchDir,
+      receiptLatestPath: workerPaths.receiptLatestPath,
+      receiptDir: workerPaths.receiptDir
     },
     taskPackets: {
       latestPath: taskPacketPaths.latestPath,
@@ -1029,6 +1084,49 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
     }
 
     if (schedulerDecision.outcome === 'blocked') {
+      let workerReceipt = null;
+      let workerReceiptArtifacts = {
+        latestPath: null,
+        historyPath: null
+      };
+      const executeTaskPacketFn =
+        typeof deps.executeTaskPacketFn === 'function'
+          ? deps.executeTaskPacketFn
+          : (typeof adapter.executeTaskPacket === 'function' ? (context) => adapter.executeTaskPacket(context) : null);
+      if (executeTaskPacketFn && taskPacket) {
+        workerReceipt = normalizeWorkerReceipt(
+          await executeTaskPacketFn({
+            options,
+            env: process.env,
+            repoRoot,
+            deps,
+            adapter,
+            repository: report.repository,
+            cycle,
+            heartbeatPath,
+            runtimeArtifactPaths,
+            schedulerPaths,
+            taskPacketPaths,
+            workerPaths,
+            schedulerDecision,
+            taskPacket,
+            previousDecision,
+            previousStep,
+            now: stepNow
+          }),
+          taskPacket,
+          stepNow,
+          adapter,
+          report.repository
+        );
+        if (workerReceipt) {
+          workerReceiptArtifacts = await writeWorkerReceipt(workerPaths, workerReceipt);
+          workerReceipt.artifacts = {
+            latestPath: workerReceiptArtifacts.latestPath,
+            historyPath: workerReceiptArtifacts.historyPath
+          };
+        }
+      }
       const heartbeatNow = nowFactory();
       await writeJson(heartbeatPath, {
         schema: OBSERVER_HEARTBEAT_SCHEMA,
@@ -1039,13 +1137,17 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
         cyclesCompleted: report.cyclesCompleted,
         outcome: 'scheduler-blocked',
         stopRequested: false,
-        activeLane: buildObservedActiveLane(schedulerDecision, null, null, null, taskPacket),
+        activeLane: {
+          ...(buildObservedActiveLane(schedulerDecision, null, null, null, taskPacket) ?? {}),
+          workerReceipt
+        },
         schedulerDecision: report.lastDecision,
         artifacts: buildObserverArtifacts({
           runtimeArtifactPaths,
           workerArtifacts: { latestPath: null, lanePath: null },
           workerReadyArtifacts: { latestPath: null, lanePath: null },
           workerBranchArtifacts: { latestPath: null, lanePath: null },
+          workerReceiptArtifacts,
           schedulerArtifacts,
           taskPacketArtifacts
         })
@@ -1057,7 +1159,8 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
         outcome: 'scheduler-blocked',
         statePath: null,
         turnPath: null,
-        taskPacket
+        taskPacket,
+        workerReceipt
       };
       return { exitCode: 12, report };
     }
@@ -1076,6 +1179,11 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
     let workerBranchArtifacts = {
       latestPath: null,
       lanePath: null
+    };
+    let workerReceipt = null;
+    let workerReceiptArtifacts = {
+      latestPath: null,
+      historyPath: null
     };
     const prepareWorkerFn =
       typeof deps.prepareWorkerFn === 'function'
@@ -1358,6 +1466,55 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
       };
     }
 
+    const executeTaskPacketFn =
+      typeof deps.executeTaskPacketFn === 'function'
+        ? deps.executeTaskPacketFn
+        : (typeof adapter.executeTaskPacket === 'function' ? (context) => adapter.executeTaskPacket(context) : null);
+    if (executeTaskPacketFn && taskPacket) {
+      try {
+        workerReceipt = normalizeWorkerReceipt(
+          await executeTaskPacketFn({
+            options,
+            env: process.env,
+            repoRoot,
+            deps,
+            adapter,
+            repository: report.repository,
+            cycle,
+            heartbeatPath,
+            runtimeArtifactPaths,
+            schedulerPaths,
+            taskPacketPaths,
+            workerPaths,
+            schedulerDecision,
+            preparedWorker,
+            workerReady,
+            workerBranch,
+            taskPacket,
+            previousDecision,
+            previousStep,
+            now: stepNow
+          }),
+          taskPacket,
+          stepNow,
+          adapter,
+          report.repository
+        );
+      } catch (error) {
+        report.status = 'blocked';
+        report.outcome = 'worker-receipt-failed';
+        report.message = error?.message || String(error);
+        return { exitCode: 16, report };
+      }
+      if (workerReceipt) {
+        workerReceiptArtifacts = await writeWorkerReceipt(workerPaths, workerReceipt);
+        workerReceipt.artifacts = {
+          latestPath: workerReceiptArtifacts.latestPath,
+          historyPath: workerReceiptArtifacts.historyPath
+        };
+      }
+    }
+
     if (workerBranch?.status === 'blocked') {
       const heartbeatNow = nowFactory();
       await writeJson(heartbeatPath, {
@@ -1369,13 +1526,17 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
         cyclesCompleted: report.cyclesCompleted,
         outcome: 'worker-branch-blocked',
         stopRequested: false,
-        activeLane: buildObservedActiveLane(schedulerDecision, preparedWorker, workerReady, workerBranch, taskPacket),
+        activeLane: {
+          ...(buildObservedActiveLane(schedulerDecision, preparedWorker, workerReady, workerBranch, taskPacket) ?? {}),
+          ...(workerReceipt ? { workerReceipt } : {})
+        },
         schedulerDecision: report.lastDecision,
         artifacts: buildObserverArtifacts({
           runtimeArtifactPaths,
           workerArtifacts,
           workerReadyArtifacts,
           workerBranchArtifacts,
+          workerReceiptArtifacts,
           schedulerArtifacts,
           taskPacketArtifacts
         })
@@ -1390,9 +1551,52 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
         worker: preparedWorker,
         workerReady,
         workerBranch,
-        taskPacket
+        taskPacket,
+        workerReceipt
       };
       return { exitCode: 15, report };
+    }
+
+    if (workerReceipt?.status === 'blocked') {
+      const heartbeatNow = nowFactory();
+      await writeJson(heartbeatPath, {
+        schema: OBSERVER_HEARTBEAT_SCHEMA,
+        generatedAt: toIso(heartbeatNow),
+        runtimeAdapter: adapter.name,
+        repository: report.repository,
+        platform,
+        cyclesCompleted: report.cyclesCompleted,
+        outcome: 'worker-receipt-blocked',
+        stopRequested: false,
+        activeLane: {
+          ...(buildObservedActiveLane(schedulerDecision, preparedWorker, workerReady, workerBranch, taskPacket) ?? {}),
+          workerReceipt
+        },
+        schedulerDecision: report.lastDecision,
+        artifacts: buildObserverArtifacts({
+          runtimeArtifactPaths,
+          workerArtifacts,
+          workerReadyArtifacts,
+          workerBranchArtifacts,
+          workerReceiptArtifacts,
+          schedulerArtifacts,
+          taskPacketArtifacts
+        })
+      });
+      report.status = 'blocked';
+      report.outcome = 'worker-receipt-blocked';
+      report.lastStep = {
+        exitCode: 16,
+        outcome: 'worker-receipt-blocked',
+        statePath: null,
+        turnPath: null,
+        worker: preparedWorker,
+        workerReady,
+        workerBranch,
+        taskPacket,
+        workerReceipt
+      };
+      return { exitCode: 16, report };
     }
 
     const stepResult = await runRuntimeWorkerStep(
@@ -1401,7 +1605,8 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
         worker: preparedWorker,
         workerReady,
         workerBranch,
-        taskPacket
+        taskPacket,
+        workerReceipt
       },
       {
         ...deps,
@@ -1420,7 +1625,8 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
       worker: stepResult.report.worker ?? preparedWorker,
       workerReady: stepResult.report.workerReady ?? workerReady,
       workerBranch: stepResult.report.workerBranch ?? workerBranch,
-      taskPacket: stepResult.report.taskPacket ?? taskPacket
+      taskPacket: stepResult.report.taskPacket ?? taskPacket,
+      workerReceipt: stepResult.report.workerReceipt ?? workerReceipt
     };
     previousDecision = schedulerDecision;
     previousStep = report.lastStep;
@@ -1442,6 +1648,7 @@ export async function runRuntimeObserverLoop(options = {}, deps = {}) {
         workerArtifacts,
         workerReadyArtifacts,
         workerBranchArtifacts,
+        workerReceiptArtifacts,
         schedulerArtifacts,
         taskPacketArtifacts,
         includeRuntimeState: true

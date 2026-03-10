@@ -115,6 +115,22 @@ test('comparevi branch resolver matches the repo issue branch naming contract', 
   assert.equal(branch, 'issue/personal-998-attach-ready-worker-checkouts-onto-deterministic-lane-branches');
 });
 
+test('comparevi worker receipt builder consumes a ready task packet deterministically', async () => {
+  const receipt = await compareviRuntimeTest.buildCompareviWorkerReceipt({
+    taskPacket: {
+      generatedAt: '2026-03-10T12:00:00.000Z',
+      status: 'ready',
+      objective: {
+        summary: 'Advance issue #1004'
+      }
+    }
+  });
+
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.result, 'task-packet-consumed');
+  assert.equal(receipt.objective.summary, 'Advance issue #1004');
+});
+
 test('runRuntimeSupervisor step writes runtime state, lane, turn, event, and blocker artifacts', async () => {
   const repoRoot = await mkdtemp(path.join(os.tmpdir(), 'runtime-supervisor-'));
   const runtimeDir = 'tests/results/_agent/runtime';

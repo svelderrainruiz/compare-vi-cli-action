@@ -129,6 +129,24 @@ function makeAdapter(repoRoot, calls, options = {}) {
         }
       }
     }),
+    executeTaskPacket: async ({ taskPacket }) => ({
+      source: 'test-adapter',
+      status: taskPacket?.status === 'blocked' ? 'blocked' : taskPacket?.status === 'idle' ? 'noop' : 'completed',
+      objective: {
+        summary: taskPacket?.objective?.summary ?? 'No task packet'
+      },
+      result:
+        taskPacket?.status === 'blocked'
+          ? 'receipt-blocked'
+          : taskPacket?.status === 'idle'
+            ? 'receipt-idle'
+            : 'receipt-completed',
+      execution: {
+        commands: taskPacket?.status === 'ready' ? ['node tools/npm/run-script.mjs priority:pr'] : [],
+        durationMs: 0
+      },
+      taskPacketGeneratedAt: taskPacket?.generatedAt ?? null
+    }),
     acquireLease: async (leaseOptions) => {
       calls.push({ type: 'acquire', leaseOptions });
       return {
@@ -274,6 +292,8 @@ test('runRuntimeObserverLoop writes heartbeat and state across bounded linux cyc
   const workerBranchHistory = await readdir(path.join(runtimeDir, 'workers-branch'));
   const taskPacket = await readJson(path.join(runtimeDir, 'task-packet.json'));
   const taskPacketHistory = await readdir(path.join(runtimeDir, 'task-packets'));
+  const workerReceipt = await readJson(path.join(runtimeDir, 'worker-receipt.json'));
+  const workerReceiptHistory = await readdir(path.join(runtimeDir, 'worker-receipts'));
   const state = await readJson(path.join(runtimeDir, 'runtime-state.json'));
 
   assert.equal(result.exitCode, 0);
@@ -306,11 +326,17 @@ test('runRuntimeObserverLoop writes heartbeat and state across bounded linux cyc
   assert.equal(taskPacket.helperSurface.preferred[0], 'node tools/npm/run-script.mjs priority:pr');
   assert.equal(taskPacket.recentEvents.length, 1);
   assert.equal(taskPacketHistory.length, 2);
+  assert.equal(workerReceipt.schema, 'priority/runtime-worker-receipt@v1');
+  assert.equal(workerReceipt.status, 'completed');
+  assert.equal(workerReceipt.result, 'receipt-completed');
+  assert.equal(workerReceipt.execution.commands[0], 'node tools/npm/run-script.mjs priority:pr');
+  assert.equal(workerReceiptHistory.length, 2);
   assert.equal(heartbeat.activeLane.issue, 977);
   assert.equal(heartbeat.activeLane.worker.status, 'created');
   assert.equal(heartbeat.activeLane.workerReady.status, 'ready');
   assert.equal(heartbeat.activeLane.workerBranch.status, 'attached');
   assert.equal(heartbeat.activeLane.taskPacket.objective.summary, 'Execute issue #977');
+  assert.equal(heartbeat.artifacts.workerReceiptPath, path.join(runtimeDir, 'worker-receipt.json'));
   assert.equal(heartbeat.artifacts.taskPacketPath, path.join(runtimeDir, 'task-packet.json'));
   assert.equal(state.lifecycle.cycle, 2);
   assert.equal(state.activeLane.issue, 977);
@@ -318,10 +344,12 @@ test('runRuntimeObserverLoop writes heartbeat and state across bounded linux cyc
   assert.equal(state.activeLane.workerReady.status, 'ready');
   assert.equal(state.activeLane.workerBranch.status, 'attached');
   assert.equal(state.activeLane.taskPacket.objective.summary, 'Execute issue #977');
+  assert.equal(state.activeLane.workerReceipt.result, 'receipt-completed');
   assert.equal(result.report.lastStep.worker.status, 'created');
   assert.equal(result.report.lastStep.workerReady.status, 'ready');
   assert.equal(result.report.lastStep.workerBranch.status, 'attached');
   assert.equal(result.report.lastStep.taskPacket.objective.summary, 'Execute issue #977');
+  assert.equal(result.report.lastStep.workerReceipt.result, 'receipt-completed');
   assert.equal(sleepCalls, 1);
   assert.deepEqual(
     calls.map((entry) => entry.type),
@@ -354,6 +382,7 @@ test('runRuntimeObserverLoop emits an idle task packet when the planner returns 
   );
 
   const taskPacket = await readJson(path.join(runtimeDir, 'task-packet.json'));
+  const workerReceipt = await readJson(path.join(runtimeDir, 'worker-receipt.json'));
 
   assert.equal(result.exitCode, 0);
   assert.equal(result.report.lastDecision.outcome, 'idle');
@@ -362,6 +391,8 @@ test('runRuntimeObserverLoop emits an idle task packet when the planner returns 
   assert.equal(taskPacket.objective.summary, 'Observe idle runtime state');
   assert.equal(taskPacket.laneId, null);
   assert.equal(taskPacket.evidence.adapter.cycle, 1);
+  assert.equal(workerReceipt.status, 'noop');
+  assert.equal(workerReceipt.result, 'receipt-idle');
 });
 
 test('runRuntimeObserverLoop emits a blocked task packet when the planner blocks the lane', async () => {
@@ -395,13 +426,17 @@ test('runRuntimeObserverLoop emits a blocked task packet when the planner blocks
 
   const taskPacket = await readJson(path.join(runtimeDir, 'task-packet.json'));
   const heartbeat = await readJson(path.join(runtimeDir, 'observer-heartbeat.json'));
+  const workerReceipt = await readJson(path.join(runtimeDir, 'worker-receipt.json'));
 
   assert.equal(result.exitCode, 12);
   assert.equal(result.report.outcome, 'scheduler-blocked');
   assert.equal(taskPacket.status, 'blocked');
   assert.equal(taskPacket.laneId, 'origin-1002');
   assert.equal(taskPacket.objective.summary, 'Execute issue #1002');
+  assert.equal(workerReceipt.status, 'blocked');
+  assert.equal(workerReceipt.result, 'receipt-blocked');
   assert.equal(heartbeat.artifacts.taskPacketPath, path.join(runtimeDir, 'task-packet.json'));
+  assert.equal(heartbeat.artifacts.workerReceiptPath, path.join(runtimeDir, 'worker-receipt.json'));
   assert.equal(heartbeat.activeLane.taskPacket.objective.summary, 'Execute issue #1002');
 });
 

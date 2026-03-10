@@ -354,7 +354,10 @@ Initial extraction note:
 - the worker/observer seam now also compiles a bounded per-cycle task packet
   from durable runtime state, persists `task-packet.json` plus
   `task-packets/*.json`, and leaves an adapter hook for repo-specific
-  objective/helper context before the execution layer is added
+  objective/helper context
+- the next execution seam now consumes that packet through an adapter hook,
+  persists `worker-receipt.json` plus `worker-receipts/*.json`, and records the
+  bounded execution outcome before repo-native worker steps continue
 - the compare-vi repository wrapper remains at
   `tools/priority/runtime-supervisor.mjs`
 - that wrapper now includes the first compare-vi scheduler cut: when no manual
