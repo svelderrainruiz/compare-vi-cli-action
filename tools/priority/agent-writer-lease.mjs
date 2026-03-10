@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
+import { readFileSync, statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,7 +41,7 @@ function envBool(name, fallback = false) {
 }
 
 export function defaultLeaseRoot() {
-  return process.env.AGENT_WRITER_LEASE_ROOT || path.join(REPO_ROOT, '.git', 'agent-writer-leases');
+  return process.env.AGENT_WRITER_LEASE_ROOT || path.join(resolveGitDir(), 'agent-writer-leases');
 }
 
 export function defaultOwner() {
@@ -59,6 +61,43 @@ export function leasePathForScope(scope, leaseRoot = defaultLeaseRoot()) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+export function resolveGitDir(
+  repoRoot = REPO_ROOT,
+  {
+    spawnSyncFn = spawnSync,
+    statSyncFn = statSync,
+    readFileSyncFn = readFileSync
+  } = {}
+) {
+  const probe = spawnSyncFn('git', ['rev-parse', '--git-dir'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  const rawGitDir = String(probe?.stdout ?? '').trim();
+  if (probe?.status === 0 && rawGitDir) {
+    return path.isAbsolute(rawGitDir) ? path.normalize(rawGitDir) : path.normalize(path.resolve(repoRoot, rawGitDir));
+  }
+
+  const dotGitPath = path.join(repoRoot, '.git');
+  try {
+    const stats = statSyncFn(dotGitPath);
+    if (stats.isDirectory()) {
+      return dotGitPath;
+    }
+    if (stats.isFile()) {
+      const marker = readFileSyncFn(dotGitPath, 'utf8');
+      const match = String(marker).match(/^gitdir:\s*(.+)$/im);
+      if (match?.[1]) {
+        return path.resolve(repoRoot, match[1].trim());
+      }
+    }
+  } catch {}
+
+  return dotGitPath;
 }
 
 function leaseAgeSeconds(lease, nowMs = Date.now()) {

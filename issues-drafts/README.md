@@ -14,5 +14,6 @@ This folder contains prepared markdown drafts for upcoming follow-up issues (pos
 | 08 | 08-quantile-accuracy-doc-expansion.md | Expand quantile accuracy & tuning docs |
 | 09 | 09-runbook-auto-upload.md | Auto-upload raw CLI artifacts in runbook when in GitHub Actions |
 | 10 | 10-consolidated-diagnostics-report.md | Consolidated diagnostics report artifact |
+| 11 | 11-vi-history-slice-selection-contract.md | Deterministic VI history slice selection contract |
 
-Creation Order Recommendation: 01 → 07 → 06 → 02 → 10 → 05 → 03 → 09 → 08 → 04
+Creation Order Recommendation: 01 → 07 → 06 → 02 → 10 → 11 → 05 → 03 → 09 → 08 → 04

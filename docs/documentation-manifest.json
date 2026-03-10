@@ -2,7 +2,7 @@
   "$schema": "./schemas/documentation-manifest-v1.schema.json",
   "schema": "documentation-manifest-v1",
   "version": "1.0.0",
-  "updated": "2026-03-09T23:10:00Z",
+  "updated": "2026-03-10T22:25:00Z",
   "entries": [
     {
       "name": "Root Playbooks",
@@ -193,6 +193,7 @@
         "issues-drafts/08-quantile-accuracy-doc-expansion.md",
         "issues-drafts/09-runbook-auto-upload.md",
         "issues-drafts/10-consolidated-diagnostics-report.md",
+        "issues-drafts/11-vi-history-slice-selection-contract.md",
         "issues-drafts/README.md"
       ]
     },

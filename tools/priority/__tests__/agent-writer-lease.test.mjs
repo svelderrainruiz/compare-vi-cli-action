@@ -10,6 +10,7 @@ import {
   acquireWriterLease,
   heartbeatWriterLease,
   inspectWriterLease,
+  resolveGitDir,
   releaseWriterLease
 } from '../agent-writer-lease.mjs';
 
@@ -142,4 +143,21 @@ test('release and heartbeat enforce owner or lease-id matching', async () => {
     owner: 'owner-a'
   });
   assert.equal(inspect.status, 'not-found');
+});
+
+test('resolveGitDir honors gitdir marker files used by worktrees', () => {
+  const repoRoot = path.join(path.sep, 'tmp', 'agent-writer-lease-worktree');
+  const resolved = resolveGitDir(repoRoot, {
+    spawnSyncFn: () => ({ status: 1, stdout: '', stderr: 'git unavailable' }),
+    statSyncFn: (candidate) => ({
+      isDirectory: () => false,
+      isFile: () => candidate === path.join(repoRoot, '.git')
+    }),
+    readFileSyncFn: () => `gitdir: ..${path.sep}shared${path.sep}worktrees${path.sep}issue-1011\n`
+  });
+
+  assert.equal(
+    resolved,
+    path.resolve(repoRoot, '..', 'shared', 'worktrees', 'issue-1011')
+  );
 });
