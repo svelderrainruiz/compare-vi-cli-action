@@ -2,7 +2,7 @@
   "$schema": "./schemas/documentation-manifest-v1.schema.json",
   "schema": "documentation-manifest-v1",
   "version": "1.0.0",
-  "updated": "2026-03-11T00:25:00Z",
+  "updated": "2026-03-11T00:45:00Z",
   "entries": [
     {
       "name": "Root Playbooks",
@@ -195,7 +195,9 @@
       "status": "reference",
       "description": "Typed publication contract and site-preparation tooling for GitHub Pages review surfaces backed by VI History suites.",
       "files": [
+        "docs/schemas/vi-history-pages-catalog-v1.schema.json",
         "docs/schemas/vi-history-pages-publication-v1.schema.json",
+        "tools/cli/vi-history-pages-catalog.ts",
         "tools/cli/vi-history-pages-publication.ts"
       ]
     },

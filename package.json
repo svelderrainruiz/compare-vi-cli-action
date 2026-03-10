@@ -36,6 +36,7 @@
     "handoff:session-schema": "node tools/npm/run-script.mjs schema:validate -- --schema docs/schemas/handoff-session-v1.schema.json --data tests/results/_agent/sessions/*.json --optional",
     "history:dispatch": "pwsh -NoLogo -NoProfile -File scripts/Dispatch-VIHistoryWorkflow.ps1",
     "history:bundle:verify": "tsc -p tsconfig.cli.json && node dist/tools/cli/verify-history-bundle-certification.js",
+    "history:pages:catalog": "tsc -p tsconfig.cli.json && node dist/tools/cli/vi-history-pages-catalog.js",
     "history:pages:build": "tsc -p tsconfig.cli.json && node dist/tools/cli/vi-history-pages-publication.js",
     "history:corpus:offline": "pwsh -NoLogo -NoProfile -File tools/Invoke-OfflineRealHistoryCorpus.ps1",
     "history:corpus:evaluate": "pwsh -NoLogo -NoProfile -File tools/Invoke-OfflineRealHistoryCorpusEvaluation.ps1",

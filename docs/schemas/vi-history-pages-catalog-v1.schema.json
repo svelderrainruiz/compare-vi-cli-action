@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/vi-history-pages-catalog-v1.schema.json",
+  "title": "VI History Pages Catalog v1",
+  "description": "Aggregate catalog contract for multiple static VI History review sites prepared for GitHub Pages.",
+  "type": "object",
+  "required": [
+    "schema",
+    "generatedAt",
+    "catalogDigest",
+    "catalogPathRoot",
+    "pagesBaseUrl",
+    "entryCount",
+    "entries"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vi-history-pages-catalog@v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "catalogDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "catalogPathRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pagesBaseUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "entryCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "publicationKey",
+          "publicationPath",
+          "siteUrl",
+          "source",
+          "suite",
+          "previews",
+          "epicRequest"
+        ],
+        "properties": {
+          "publicationKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "publicationPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "siteUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "repository",
+              "workflow",
+              "runId",
+              "runAttempt"
+            ],
+            "properties": {
+              "repository": {
+                "type": "string",
+                "minLength": 1
+              },
+              "workflow": {
+                "type": "string",
+                "minLength": 1
+              },
+              "runId": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "runAttempt": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "suite": {
+            "type": "object",
+            "required": [
+              "targetPath",
+              "startRef",
+              "status",
+              "executedModes"
+            ],
+            "properties": {
+              "targetPath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "startRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "string",
+                "minLength": 1
+              },
+              "executedModes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "historyReportPath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          },
+          "previews": {
+            "type": "object",
+            "required": [
+              "publishedImageCount",
+              "heroImagePath"
+            ],
+            "properties": {
+              "publishedImageCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "heroImagePath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": true
+          },
+          "epicRequest": {
+            "type": "object",
+            "required": [
+              "repository",
+              "template",
+              "labels",
+              "title",
+              "issueUrl",
+              "bodyLines"
+            ],
+            "properties": {
+              "repository": {
+                "type": "string",
+                "minLength": 1
+              },
+              "template": {
+                "type": "string",
+                "minLength": 1
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "issueUrl": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bodyLines": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

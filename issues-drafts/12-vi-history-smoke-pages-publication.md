@@ -30,6 +30,7 @@ Generate a review site from the history suite bundle:
 - preserve all pair reports and `_files/` asset directories
 - surface preview images discovered via `vi-history-image-index.json`
 - emit a publication manifest (`vi-history-pages-publication@v1`)
+- keep the output self-contained so a Pages workflow can upload the directory as-is
 
 ### 2. Key the publication by immutable content identity
 
@@ -58,6 +59,16 @@ This should mirror the thin deployment pattern already used by
 `.github/workflows/publish-traceability.yml`: tooling prepares the site, the
 workflow just publishes the directory.
 
+### 4. Add an aggregate catalog for concurrent publications
+
+Multiple immutable review sites should be indexable together:
+
+- emit a catalog manifest (`vi-history-pages-catalog@v1`)
+- render a root `index.html` listing recent publications
+- link each entry to the immutable review site URL
+- attach a follow-on epic request stub to each entry so humans can pivot from
+  inspection to intake without reconstructing context from logs
+
 ## Trust boundary
 
 - Only publish from trusted workflows in the canonical repository.
@@ -75,6 +86,8 @@ workflow just publishes the directory.
   - suite summary and executed modes
   - published file inventory with hashes
 - Publication path shall be deterministic from inputs
+- Multiple publication packages shall be aggregatable into a single catalog
+  without rewriting their internal relative links
 
 ## Acceptance criteria
 
@@ -88,6 +101,8 @@ workflow just publishes the directory.
       new epic against a specific immutable review surface.
 - [ ] A later trusted workflow can deploy the prepared package to GitHub Pages
       without changing the builder contract.
+- [ ] Multiple prepared review sites can be merged into a stable catalog for
+      concurrent hosted smoke outputs.
 
 ## Risks
 
