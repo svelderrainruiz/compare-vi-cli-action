@@ -55,7 +55,7 @@ declare module 'node:fs' {
 
   function existsSync(path: string): boolean;
   function readFileSync(path: string, options?: unknown): any;
-  function writeFileSync(path: string, data: string, options?: unknown): void;
+  function writeFileSync(path: string, data: any, options?: unknown): void;
   function mkdirSync(path: string, options?: unknown): void;
   function readdirSync(path: string, options?: { withFileTypes?: boolean }): Dirent[];
   function statSync(path: string): Stats;
@@ -76,7 +76,7 @@ declare module 'fs' {
   }
 
   function readFileSync(path: string, options?: unknown): string;
-  function writeFileSync(path: string, data: string, options?: unknown): void;
+  function writeFileSync(path: string, data: any, options?: unknown): void;
   function appendFileSync(path: string, data: string, options?: unknown): void;
   function mkdirSync(path: string, options?: MkdirOptions): void;
   function readdirSync(path: string, options?: { withFileTypes?: boolean }): Dirent[];
@@ -160,6 +160,18 @@ declare module 'node:url' {
   function pathToFileURL(path: string): FileUrl;
   export { pathToFileURL, FileUrl };
 }
+
+declare module 'node:buffer' {
+  class Buffer {
+    static from(data: unknown, encoding?: string): Buffer;
+  }
+
+  export { Buffer };
+}
+
+declare var Buffer: {
+  from(data: unknown, encoding?: string): unknown;
+};
 
 declare module 'node:module' {
   interface RequireFunction {

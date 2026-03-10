@@ -1,8 +1,10 @@
 import '../shims/punycode-userland.js';
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve } from 'node:path';
 import { ArgumentParser } from 'argparse';
+import { request } from 'undici';
 import { z } from 'zod';
 
 interface Args {
@@ -10,6 +12,7 @@ interface Args {
   publication_dir?: string[];
   scan_root?: string;
   pages_base_url?: string;
+  existing_catalog_url?: string;
   catalog_path_root?: string;
   epic_repository?: string;
   epic_template?: string;
@@ -42,6 +45,17 @@ const publicationSchema = z.object({
       relativePath: z.string().min(1),
     }).passthrough()).default([]),
   }).passthrough(),
+  files: z.array(z.object({
+    relativePath: z.string().min(1),
+    kind: z.string().min(1),
+  }).passthrough()).default([]),
+}).passthrough();
+
+const existingCatalogSchema = z.object({
+  schema: z.literal('vi-history-pages-catalog@v1'),
+  entries: z.array(z.object({
+    publicationPath: z.string().min(1),
+  }).passthrough()),
 }).passthrough();
 
 type PublicationManifest = z.infer<typeof publicationSchema>;
@@ -245,7 +259,65 @@ function appendStepSummary(stepSummaryPath: string, lines: string[]): void {
   writeFileSync(stepSummaryPath, `\n${lines.join('\n')}\n`, { encoding: 'utf8', flag: 'a' });
 }
 
-function main(): void {
+async function fetchOptionalText(url: string): Promise<string | null> {
+  const response = await request(url);
+  if (response.statusCode === 404) {
+    return null;
+  }
+  if (response.statusCode >= 400) {
+    throw new Error(`Request failed for ${url}: HTTP ${response.statusCode}`);
+  }
+  return response.body.text();
+}
+
+async function downloadBinary(url: string): Promise<any> {
+  const response = await request(url);
+  if (response.statusCode >= 400) {
+    throw new Error(`Request failed for ${url}: HTTP ${response.statusCode}`);
+  }
+  return Buffer.from(await response.body.arrayBuffer());
+}
+
+async function hydrateExistingCatalog(outputRoot: string, existingCatalogUrl: string | undefined): Promise<number> {
+  if (!existingCatalogUrl || existingCatalogUrl.trim().length === 0) {
+    return 0;
+  }
+
+  const catalogText = await fetchOptionalText(existingCatalogUrl);
+  if (!catalogText) {
+    return 0;
+  }
+
+  const catalog = existingCatalogSchema.parse(JSON.parse(catalogText));
+  const baseUrl = existingCatalogUrl.replace(/\/catalog\.json$/u, '').replace(/\/+$/u, '');
+  let hydratedCount = 0;
+
+  for (const entry of catalog.entries) {
+    const publicationUrlRoot = `${baseUrl}/${entry.publicationPath}`;
+    const publicationText = await fetchOptionalText(`${publicationUrlRoot}/publication.json`);
+    if (!publicationText) {
+      continue;
+    }
+
+    const publication = publicationSchema.parse(JSON.parse(publicationText));
+    const destinationRoot = join(outputRoot, ...publication.publicationPath.split('/'));
+    ensureDirectory(destinationRoot);
+    writeFileSync(join(destinationRoot, 'publication.json'), `${publicationText.trim()}\n`, 'utf8');
+
+    for (const file of publication.files) {
+      const targetPath = join(destinationRoot, ...file.relativePath.split('/'));
+      ensureDirectory(dirname(targetPath));
+      const payload = await downloadBinary(`${publicationUrlRoot}/${file.relativePath}`);
+      writeFileSync(targetPath, payload);
+    }
+
+    hydratedCount += 1;
+  }
+
+  return hydratedCount;
+}
+
+async function main(): Promise<void> {
   const parser = new ArgumentParser({
     description: 'Aggregate multiple VI History Pages publication packages into one catalog site.',
   });
@@ -254,6 +326,7 @@ function main(): void {
   parser.add_argument('--publication-dir', { action: 'append', required: false, help: 'Directory containing publication.json and a prepared site.' });
   parser.add_argument('--scan-root', { required: false, help: 'Optional root to recursively scan for publication.json files.' });
   parser.add_argument('--pages-base-url', { required: false, help: 'Optional base URL for the deployed Pages site.' });
+  parser.add_argument('--existing-catalog-url', { required: false, help: 'Optional URL to an existing deployed catalog.json that should be hydrated into the output site before new publications are added.' });
   parser.add_argument('--catalog-path-root', { required: false, default: 'vi-history-smoke', help: 'Logical root path for catalog publication.' });
   parser.add_argument('--epic-repository', { required: false, default: 'LabVIEW-Community-CI-CD/compare-vi-cli-action', help: 'Repository slug to receive follow-on epic requests.' });
   parser.add_argument('--epic-template', { required: false, default: '02-feature-program-intake.yml', help: 'GitHub issue template filename for epic intake.' });
@@ -274,7 +347,9 @@ function main(): void {
 
   const epicLabels = normalizeLabels(args.epic_label && args.epic_label.length > 0 ? args.epic_label : ['enhancement', 'program']);
   const baseUrl = args.pages_base_url ? args.pages_base_url.replace(/\/+$/u, '') : null;
-  const entries = publicationDirs.map((directoryPath) => {
+  const hydratedCount = await hydrateExistingCatalog(outputRoot, args.existing_catalog_url);
+
+  for (const directoryPath of publicationDirs) {
     const manifestPath = join(directoryPath, 'publication.json');
     if (!existsSync(manifestPath)) {
       throw new Error(`publication.json not found under ${directoryPath}`);
@@ -284,7 +359,12 @@ function main(): void {
     const destinationRoot = join(outputRoot, ...publication.publicationPath.split('/'));
     ensureDirectory(dirname(destinationRoot));
     cpSync(directoryPath, destinationRoot, { recursive: true, force: true });
+  }
 
+  const catalogPublicationDirs = findPublicationDirs(outputRoot);
+  const entries = catalogPublicationDirs.map((directoryPath) => {
+    const manifestPath = join(directoryPath, 'publication.json');
+    const publication = publicationSchema.parse(readJson<unknown>(manifestPath));
     const heroImagePath = publication.previews.items.length > 0 ? publication.previews.items[0].relativePath : null;
     const siteUrl = baseUrl ? `${baseUrl}/${publication.publicationPath}/index.html` : publication.siteUrl ?? null;
     const epicRequest = buildEpicRequest(publication, args.epic_repository ?? 'LabVIEW-Community-CI-CD/compare-vi-cli-action', args.epic_template ?? '02-feature-program-intake.yml', epicLabels);
@@ -327,6 +407,7 @@ function main(): void {
       '### VI History Pages Catalog',
       '',
       `- entries: \`${entries.length}\``,
+      `- hydrated_existing_entries: \`${hydratedCount}\``,
       `- catalog_digest: \`${catalogDigest}\``,
       `- output_dir: \`${outputRoot}\``,
       ...(baseUrl ? [`- pages_base_url: \`${baseUrl}\``] : []),
@@ -342,4 +423,4 @@ function main(): void {
   }, null, 2));
 }
 
-main();
+await main();

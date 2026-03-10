@@ -1,0 +1,323 @@
+name: Publish VI History Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 'Workflow run id containing the VI history artifact.'
+        required: true
+        type: string
+      source_run_attempt:
+        description: 'Optional workflow run attempt number.'
+        required: false
+        type: string
+        default: ''
+      source_repository:
+        description: 'Repository slug owning the source run.'
+        required: false
+        type: string
+        default: ''
+      source_artifact_name:
+        description: 'Artifact name containing the VI history suite bundle.'
+        required: false
+        type: string
+        default: 'validate-comparevi-history-bundle-certification'
+      source_workflow:
+        description: 'Human-readable source workflow name.'
+        required: false
+        type: string
+        default: 'Validate'
+      pages_base_url:
+        description: 'Optional Pages base URL override.'
+        required: false
+        type: string
+        default: ''
+      catalog_path_root:
+        description: 'Logical root path for VI history Pages content.'
+        required: false
+        type: string
+        default: 'vi-history-smoke'
+      epic_repository:
+        description: 'Repository slug to receive follow-on epic requests.'
+        required: false
+        type: string
+        default: 'LabVIEW-Community-CI-CD/compare-vi-cli-action'
+      preserve_existing_catalog:
+        description: 'Hydrate the currently published catalog before adding new sites.'
+        required: false
+        type: boolean
+        default: true
+      publish:
+        description: 'Deploy to GitHub Pages after preparing the site.'
+        required: false
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: [Validate]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: vi-history-pages-${{ github.event.workflow_run.id || github.event.inputs.source_run_id || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      site_ready: ${{ steps.status.outputs.site_ready }}
+      publish_enabled: ${{ steps.status.outputs.publish_enabled }}
+      prepared_artifact_name: ${{ steps.status.outputs.prepared_artifact_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        shell: pwsh
+        run: node tools/npm/cli.mjs ci
+
+      - name: Resolve publication context
+        id: ctx
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id || '' }}
+          INPUT_SOURCE_RUN_ATTEMPT: ${{ github.event.inputs.source_run_attempt || '' }}
+          INPUT_SOURCE_REPOSITORY: ${{ github.event.inputs.source_repository || '' }}
+          INPUT_SOURCE_ARTIFACT_NAME: ${{ github.event.inputs.source_artifact_name || '' }}
+          INPUT_SOURCE_WORKFLOW: ${{ github.event.inputs.source_workflow || '' }}
+          INPUT_PAGES_BASE_URL: ${{ github.event.inputs.pages_base_url || '' }}
+          INPUT_CATALOG_PATH_ROOT: ${{ github.event.inputs.catalog_path_root || '' }}
+          INPUT_EPIC_REPOSITORY: ${{ github.event.inputs.epic_repository || '' }}
+          INPUT_PRESERVE_EXISTING: ${{ github.event.inputs.preserve_existing_catalog || true }}
+          INPUT_PUBLISH: ${{ github.event.inputs.publish || false }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || '' }}
+          WORKFLOW_RUN_NAME: ${{ github.event.workflow_run.name || '' }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+
+          source_run_id="${INPUT_SOURCE_RUN_ID:-$WORKFLOW_RUN_ID}"
+          if [ -z "$source_run_id" ]; then
+            echo "::error::Unable to determine source run id."
+            exit 1
+          fi
+
+          source_run_attempt="${INPUT_SOURCE_RUN_ATTEMPT:-$WORKFLOW_RUN_ATTEMPT}"
+          if [ -z "$source_run_attempt" ]; then
+            source_run_attempt="1"
+          fi
+
+          source_repository="${INPUT_SOURCE_REPOSITORY:-$REPOSITORY}"
+          source_artifact_name="${INPUT_SOURCE_ARTIFACT_NAME:-validate-comparevi-history-bundle-certification}"
+          source_workflow="${INPUT_SOURCE_WORKFLOW:-$WORKFLOW_RUN_NAME}"
+          if [ -z "$source_workflow" ]; then
+            source_workflow="Validate"
+          fi
+
+          repo_name="${REPOSITORY#*/}"
+          pages_base_url="${INPUT_PAGES_BASE_URL:-https://${REPOSITORY_OWNER,,}.github.io/${repo_name}}"
+          catalog_path_root="${INPUT_CATALOG_PATH_ROOT:-vi-history-smoke}"
+          epic_repository="${INPUT_EPIC_REPOSITORY:-LabVIEW-Community-CI-CD/compare-vi-cli-action}"
+          preserve_existing="${INPUT_PRESERVE_EXISTING:-true}"
+          existing_catalog_url=""
+          if [ "$preserve_existing" = "true" ] && [ -n "$pages_base_url" ]; then
+            existing_catalog_url="${pages_base_url}/catalog.json"
+          fi
+
+          publish_enabled="false"
+          if [ "$REPOSITORY" = "LabVIEW-Community-CI-CD/compare-vi-cli-action" ]; then
+            if [ "$EVENT_NAME" = "workflow_run" ]; then
+              publish_enabled="true"
+            elif [ "${INPUT_PUBLISH}" = "true" ]; then
+              publish_enabled="true"
+            fi
+          fi
+
+          prepared_artifact_name="vi-history-pages-site-${source_run_id}-${source_run_attempt}"
+
+          {
+            echo "source_run_id=$source_run_id"
+            echo "source_run_attempt=$source_run_attempt"
+            echo "source_repository=$source_repository"
+            echo "source_artifact_name=$source_artifact_name"
+            echo "source_workflow=$source_workflow"
+            echo "pages_base_url=$pages_base_url"
+            echo "catalog_path_root=$catalog_path_root"
+            echo "existing_catalog_url=$existing_catalog_url"
+            echo "epic_repository=$epic_repository"
+            echo "publish_enabled=$publish_enabled"
+            echo "prepared_artifact_name=$prepared_artifact_name"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect source artifact
+        id: artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ steps.ctx.outputs.source_repository }}
+          SOURCE_RUN_ID: ${{ steps.ctx.outputs.source_run_id }}
+          SOURCE_ARTIFACT_NAME: ${{ steps.ctx.outputs.source_artifact_name }}
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api "repos/${SOURCE_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" --paginate --jq ".artifacts[] | select(.name == \"${SOURCE_ARTIFACT_NAME}\") | .id" | head -n 1 || true)"
+          if [ -z "$artifact_id" ]; then
+            echo "artifact_present=false" >> "$GITHUB_OUTPUT"
+            {
+              echo '### VI History Pages'
+              echo ''
+              echo "- source run: \`${SOURCE_REPOSITORY}#${SOURCE_RUN_ID}\`"
+              echo "- source artifact: \`${SOURCE_ARTIFACT_NAME}\`"
+              echo '- artifact status: not found'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "artifact_present=true" >> "$GITHUB_OUTPUT"
+            echo "artifact_id=$artifact_id" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download source artifact
+        if: steps.artifact.outputs.artifact_present == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          repository: ${{ steps.ctx.outputs.source_repository }}
+          run-id: ${{ steps.ctx.outputs.source_run_id }}
+          github-token: ${{ github.token }}
+          name: ${{ steps.ctx.outputs.source_artifact_name }}
+          path: artifacts/source
+
+      - name: Build publication sites from history manifests
+        id: build
+        if: steps.artifact.outputs.artifact_present == 'true'
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path (Get-Location) 'artifacts/source'
+          $publicationRoot = Join-Path (Get-Location) 'artifacts/pages/publications'
+          New-Item -ItemType Directory -Path $publicationRoot -Force | Out-Null
+
+          $suiteManifests = @(Get-ChildItem -LiteralPath $artifactRoot -Recurse -Filter 'manifest.json' -File | Where-Object {
+              try {
+                  $json = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json -Depth 16
+                  return $json.schema -eq 'vi-compare/history-suite@v1'
+              } catch {
+                  return $false
+              }
+          })
+
+          if ($suiteManifests.Count -eq 0) {
+              throw "No vi-compare/history-suite@v1 manifest.json file was found under $artifactRoot"
+          }
+
+          $index = 0
+          foreach ($suiteManifest in $suiteManifests) {
+              $index++
+              $publicationDir = Join-Path $publicationRoot ('publication-{0:D2}' -f $index)
+              $scenarioLabel = 'artifact-{0:D2}' -f $index
+              node tools/npm/run-script.mjs history:pages:build -- `
+                --suite $suiteManifest.FullName `
+                --output-dir $publicationDir `
+                --source-repository '${{ steps.ctx.outputs.source_repository }}' `
+                --source-workflow '${{ steps.ctx.outputs.source_workflow }}' `
+                --source-run-id '${{ steps.ctx.outputs.source_run_id }}' `
+                --source-run-attempt '${{ steps.ctx.outputs.source_run_attempt }}' `
+                --pages-base-url '${{ steps.ctx.outputs.pages_base_url }}' `
+                --publication-root '${{ steps.ctx.outputs.catalog_path_root }}' `
+                --scenario-label $scenarioLabel `
+                --step-summary $env:GITHUB_STEP_SUMMARY
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          "publication_count=$index" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build catalog site
+        if: steps.build.outputs.publication_count != ''
+        shell: pwsh
+        run: |
+          $arguments = @(
+            'tools/npm/run-script.mjs',
+            'history:pages:catalog',
+            '--',
+            '--scan-root', 'artifacts/pages/publications',
+            '--output-dir', 'artifacts/pages/site',
+            '--pages-base-url', '${{ steps.ctx.outputs.pages_base_url }}',
+            '--catalog-path-root', '${{ steps.ctx.outputs.catalog_path_root }}',
+            '--epic-repository', '${{ steps.ctx.outputs.epic_repository }}',
+            '--step-summary', $env:GITHUB_STEP_SUMMARY
+          )
+          if (-not [string]::IsNullOrWhiteSpace('${{ steps.ctx.outputs.existing_catalog_url }}')) {
+            $arguments += @('--existing-catalog-url', '${{ steps.ctx.outputs.existing_catalog_url }}')
+          }
+          node @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate generated Pages schemas
+        if: steps.build.outputs.publication_count != ''
+        shell: pwsh
+        run: |
+          $publicationSchema = 'docs/schemas/vi-history-pages-publication-v1.schema.json'
+          $catalogSchema = 'docs/schemas/vi-history-pages-catalog-v1.schema.json'
+          $publicationFiles = @(Get-ChildItem -LiteralPath 'artifacts/pages/publications' -Recurse -Filter 'publication.json' -File)
+          foreach ($publicationFile in $publicationFiles) {
+            node tools/npm/run-script.mjs schema:validate -- --schema $publicationSchema --data $publicationFile.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          node tools/npm/run-script.mjs schema:validate -- --schema $catalogSchema --data 'artifacts/pages/site/catalog.json'
+
+      - name: Finalize site status
+        id: status
+        if: always()
+        shell: bash
+        env:
+          PREPARED_ARTIFACT_NAME: ${{ steps.ctx.outputs.prepared_artifact_name }}
+          PUBLISH_ENABLED: ${{ steps.ctx.outputs.publish_enabled }}
+        run: |
+          set -euo pipefail
+          site_ready="false"
+          if [ -f artifacts/pages/site/index.html ] && [ -f artifacts/pages/site/catalog.json ]; then
+            site_ready="true"
+          fi
+          {
+            echo "site_ready=$site_ready"
+            echo "publish_enabled=$PUBLISH_ENABLED"
+            echo "prepared_artifact_name=$PREPARED_ARTIFACT_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload prepared Pages site artifact
+        if: steps.status.outputs.site_ready == 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.status.outputs.prepared_artifact_name }}
+          path: artifacts/pages/site/**
+          if-no-files-found: error
+
+  deploy:
+    needs: prepare
+    if: needs.prepare.outputs.site_ready == 'true' && needs.prepare.outputs.publish_enabled == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download prepared Pages site artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ needs.prepare.outputs.prepared_artifact_name }}
+          path: artifacts/pages/site
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: artifacts/pages/site
+
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
