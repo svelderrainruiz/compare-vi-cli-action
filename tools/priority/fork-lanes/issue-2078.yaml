@@ -1,0 +1,63 @@
+schema: comparevi/fork-lane-iteration@v1
+issue:
+  number: 2078
+  title: split Pester execution monolith into context/runtime/selection/execution/post layers
+  lane: fork-standing-priority
+
+policy:
+  purpose: local-regression-lane
+  fork_remote_proof: false
+  upstream_remote_proof: true
+  rule: >
+    Iterate and catch regressions locally on the fork branch first. Only mount
+    proven commits onto the upstream integration branch for remote self-hosted
+    evidence.
+
+fork:
+  repository: svelderrainruiz/compare-vi-cli-action
+  branch: issue/2078-pester-layered-execution
+
+upstream:
+  repository: LabVIEW-Community-CI-CD/compare-vi-cli-action
+  integration_branch: integration/pester-service-model
+  standing_priority_issue: 2069
+
+service_model:
+  target_workflow: pester-gate.yml
+  decomposition_layers:
+    - pester-context
+    - pester-runtime-preflight
+    - pester-selection
+    - pester-execute
+    - pester-post
+  first_slice:
+    mounted_commit: 2e9363ecf692268f9813b743f60497ac3c33eba7
+    summary:
+      - add reusable pester-context workflow
+      - gate readiness on context readiness
+      - require context receipt before execution
+      - classify context-blocked distinctly in evidence
+
+local_validation:
+  install:
+    - node tools/npm/cli.mjs ci
+  checks:
+    - node --test tools/priority/__tests__/pester-service-model-workflow-contract.test.mjs
+    - node tools/lint-markdown.mjs
+    - ./bin/actionlint -color .github/workflows/pester-context.yml .github/workflows/pester-gate.yml .github/workflows/pester-run.yml .github/workflows/pester-evidence.yml
+    - git diff --check
+
+upstream_proof:
+  dispatch:
+    workflow: pester-gate.yml
+    ref: integration/pester-service-model
+    inputs:
+      checkout_repository: LabVIEW-Community-CI-CD/compare-vi-cli-action
+      checkout_ref: integration/pester-service-model
+  latest_run:
+    id: 23807834363
+    url: https://github.com/LabVIEW-Community-CI-CD/compare-vi-cli-action/actions/runs/23807834363
+
+notes:
+  - Keep this file fork-only until the lane shape stabilizes.
+  - Do not rely on fork-side self-hosted runners for proof.
