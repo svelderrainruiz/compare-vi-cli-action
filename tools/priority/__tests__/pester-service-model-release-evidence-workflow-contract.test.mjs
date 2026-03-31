@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
+
+const repoRoot = process.cwd();
+
+function readRepoFile(relativePath) {
+  return readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
+test('pester service-model release-evidence workflow retains coverage, docs, and assurance artifacts', () => {
+  const workflow = readRepoFile('.github/workflows/pester-service-model-release-evidence.yml');
+
+  assert.match(workflow, /name:\s+Pester service-model release evidence/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /name:\s+Release evidence \/ pester-service-model/);
+  assert.match(workflow, /write-node-test-coverage-xml\.mjs/);
+  assert.match(workflow, /coverage\.xml/);
+  assert.match(workflow, /Docs link check \/ lychee/);
+  assert.match(workflow, /fork-lane-local-assurance-ci\.mjs/);
+  assert.match(workflow, /materialize-pester-service-model-release-evidence\.mjs/);
+  assert.match(workflow, /render-pester-service-model-promotion-dossier\.mjs/);
+  assert.match(workflow, /Upload release-evidence bundle/);
+});

@@ -1,0 +1,103 @@
+name: Pester service-model release evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - issue/2078-pester-layered-execution
+    paths:
+      - '.github/workflows/pester-service-model-release-evidence.yml'
+      - '.github/workflows/pester-service-model-quality.yml'
+      - '.github/workflows/pester-context.yml'
+      - '.github/workflows/pester-gate.yml'
+      - '.github/workflows/pester-run.yml'
+      - '.github/workflows/pester-evidence.yml'
+      - '.github/workflows/pester-service-model-on-label.yml'
+      - '.github/workflows/selfhosted-readiness.yml'
+      - 'docs/knowledgebase/Pester-Service-Model.md'
+      - 'docs/architecture/pester-service-model-control-plane.md'
+      - 'docs/architecture/ADR-2078-pester-service-model-requirements.md'
+      - 'docs/cm-plan-pester-service-model.md'
+      - 'docs/release-procedure-pester-service-model.md'
+      - 'docs/requirements-pester-service-model-srs.md'
+      - 'docs/rtm-pester-service-model.csv'
+      - 'docs/testing/pester-service-model-test-plan.md'
+      - 'docs/pester-service-model-quality-report.md'
+      - 'docs/pester-service-model-information-item-map.md'
+      - 'tools/priority/materialize-pester-service-model-release-evidence.mjs'
+      - 'tools/priority/render-pester-service-model-promotion-dossier.mjs'
+      - 'tools/priority/write-node-test-coverage-xml.mjs'
+      - 'tools/priority/__tests__/pester-service-model-workflow-contract.test.mjs'
+      - 'tools/priority/__tests__/pester-service-model-quality-workflow-contract.test.mjs'
+      - 'tools/priority/__tests__/write-node-test-coverage-xml.test.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  release-evidence:
+    name: Release evidence / pester-service-model
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Node dependencies
+        shell: bash
+        run: node tools/npm/cli.mjs ci
+
+      - name: Run packet tests with Node coverage
+        shell: bash
+        run: |
+          mkdir -p tests/results/_agent/pester-service-model
+          node --test --experimental-test-coverage \
+            tools/priority/__tests__/pester-service-model-workflow-contract.test.mjs \
+            tools/priority/__tests__/pester-service-model-quality-workflow-contract.test.mjs \
+            tools/priority/__tests__/write-node-test-coverage-xml.test.mjs \
+            2>&1 | tee tests/results/_agent/pester-service-model/node-test-coverage.log
+
+      - name: Materialize coverage.xml
+        shell: bash
+        run: |
+          node tools/priority/write-node-test-coverage-xml.mjs \
+            --input tests/results/_agent/pester-service-model/node-test-coverage.log \
+            --output tests/results/_agent/pester-service-model/coverage.xml \
+            --line-threshold 75
+
+      - name: Docs link check / lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          fail: true
+          args: >-
+            --no-progress
+            --format json
+            --output tests/results/_agent/pester-service-model/docs-link-check.json
+            docs/knowledgebase/Pester-Service-Model.md
+            docs/architecture/pester-service-model-control-plane.md
+            docs/architecture/ADR-2078-pester-service-model-requirements.md
+            docs/cm-plan-pester-service-model.md
+            docs/release-procedure-pester-service-model.md
+            docs/requirements-pester-service-model-srs.md
+            docs/pester-service-model-quality-report.md
+            docs/pester-service-model-information-item-map.md
+
+      - name: Run local assurance packet
+        shell: bash
+        run: |
+          node tools/priority/fork-lane-local-assurance-ci.mjs \
+            --surface tools/priority/fork-lanes/pester-service-model-audit-surface.yaml \
+            --results-dir tests/results/_agent/pester-service-model/local-assurance \
+            --output tests/results/_agent/pester-service-model/local-assurance/pester-service-model-assurance-report.json \
+            --summary-output tests/results/_agent/pester-service-model/local-assurance/pester-service-model-assurance-summary.md
+
+      - name: Materialize release evidence bundle
+        shell: bash
+        run: |
+          node tools/priority/materialize-pester-service-model-release-evidence.mjs --version v0.1.0
+          node tools/priority/render-pester-service-model-promotion-dossier.mjs
+
+      - name: Upload release-evidence bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: pester-service-model-release-evidence
+          path: tests/results/_agent/pester-service-model/release-evidence
+          if-no-files-found: error

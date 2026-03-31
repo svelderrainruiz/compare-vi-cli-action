@@ -89,7 +89,19 @@ function buildCoberturaXml({ lineRatePercent, branchRatePercent, functionRatePer
 `;
 }
 
-export { extractCoverageMetrics, buildCoberturaXml };
+async function materializeCoverageXml({ inputPath, outputPath, lineThreshold }) {
+  const inputText = await fs.readFile(inputPath, 'utf8');
+  const metrics = extractCoverageMetrics(inputText);
+  const xml = buildCoberturaXml({ ...metrics, lineThreshold });
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, xml, 'utf8');
+  if (metrics.lineRatePercent < lineThreshold) {
+    throw new Error(`Line coverage ${metrics.lineRatePercent}% is below threshold ${lineThreshold}%`);
+  }
+  return { metrics, outputPath };
+}
+
+export { parseArgs, extractCoverageMetrics, buildCoberturaXml, materializeCoverageXml };
 
 async function main() {
   const options = parseArgs();
@@ -97,14 +109,11 @@ async function main() {
     console.log(HELP.join('\n'));
     return;
   }
-  const inputText = await fs.readFile(options.input, 'utf8');
-  const metrics = extractCoverageMetrics(inputText);
-  const xml = buildCoberturaXml({ ...metrics, lineThreshold: options.lineThreshold });
-  await fs.mkdir(path.dirname(options.output), { recursive: true });
-  await fs.writeFile(options.output, xml, 'utf8');
-  if (metrics.lineRatePercent < options.lineThreshold) {
-    throw new Error(`Line coverage ${metrics.lineRatePercent}% is below threshold ${options.lineThreshold}%`);
-  }
+  await materializeCoverageXml({
+    inputPath: options.input,
+    outputPath: options.output,
+    lineThreshold: options.lineThreshold
+  });
   console.log(`coverage_xml=${options.output}`);
 }
 

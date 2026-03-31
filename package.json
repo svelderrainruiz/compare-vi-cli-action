@@ -170,6 +170,8 @@
     "priority:fork-lane:assurance": "node tools/priority/fork-lane-local-assurance-ci.mjs",
     "priority:fork-lane:assurance:pester-service-model": "node tools/priority/fork-lane-local-assurance-ci.mjs --surface tools/priority/fork-lanes/pester-service-model-audit-surface.yaml --results-dir tests/results/_agent/pester-service-model/local-assurance --output tests/results/_agent/pester-service-model/local-assurance/pester-service-model-assurance-report.json --summary-output tests/results/_agent/pester-service-model/local-assurance/pester-service-model-assurance-summary.md",
     "priority:fork-lane:docs:check:pester-service-model": "~/.local/bin/lychee --no-progress docs/knowledgebase/Pester-Service-Model.md docs/architecture/pester-service-model-control-plane.md docs/architecture/ADR-2078-pester-service-model-requirements.md docs/cm-plan-pester-service-model.md docs/release-procedure-pester-service-model.md docs/requirements-pester-service-model-srs.md docs/pester-service-model-quality-report.md docs/pester-service-model-information-item-map.md",
+    "priority:fork-lane:release-evidence:pester-service-model": "node tools/priority/materialize-pester-service-model-release-evidence.mjs",
+    "priority:fork-lane:promotion-dossier:pester-service-model": "node tools/priority/render-pester-service-model-promotion-dossier.mjs",
     "priority:github:metadata:apply": "tsc -p tsconfig.cli.json && node dist/tools/cli/github-metadata.js",
     "priority:policy": "node tools/priority/check-policy.mjs",
     "priority:policy:route": "node tools/priority/policy-engine.mjs",

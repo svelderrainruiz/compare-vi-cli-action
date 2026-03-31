@@ -16,6 +16,8 @@ surface.
    the upstream integration rail.
 5. Compare the additive service-model proof against the monolithic gate.
 6. Only after positive proof, advance a promotion slice on the upstream issue.
+7. Retain the packet release-evidence bundle and promotion dossier alongside the
+   selected fork baseline before proposing the upstream slice.
 
 ## Baseline Rule
 
@@ -28,3 +30,4 @@ surface.
 - Status is recorded in the issues, fork-lane manifests, and assurance outputs.
 - The baseline must retain both the requirements packet and the resulting
   receipts or summaries used to justify the move.
+- The retained packet release-evidence bundle is the minimum promotion handoff.

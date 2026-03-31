@@ -48,5 +48,9 @@
 
 - Baseline decisions must reference a concrete branch or integration rail state.
 - Release flow evidence is anchored by `.github/workflows/release.yml`.
+- Packet-level retained evidence is anchored by
+  `.github/workflows/pester-service-model-release-evidence.yml`.
+- The packet release bundle retains `coverage.xml`, `docs-link-check.json`, the
+  assurance report, and the assurance summary.
 - Promotion remains additive until the service model proves equivalent or better
   behavior than the monolith.
