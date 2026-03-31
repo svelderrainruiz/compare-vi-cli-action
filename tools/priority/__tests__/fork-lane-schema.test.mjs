@@ -38,6 +38,8 @@ test('fork lane instance schema validates the issue-specific manifest and the re
     const selected = document.forks.selected;
     const fork = document.forks.catalog.find((item) => item.id === selected);
     assert.ok(fork, `${relativePath} missing selected fork '${selected}'`);
+    assert.equal(typeof fork.push_enabled, 'boolean');
+    assert.equal(typeof fork.mount_allowed, 'boolean');
   }
 });
 

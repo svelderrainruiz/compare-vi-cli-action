@@ -30,10 +30,9 @@ test('fork lane design audit produces a standards-grounded report with action it
   const validate = ajv.compile(schema);
   assert.equal(validate(report), true, JSON.stringify(validate.errors, null, 2));
 
-  assert.equal(report.overall.status, 'pass-with-actions');
-  assert.ok(report.findings.some((finding) => finding.id === 'fork-capability-contract' && finding.status === 'finding'));
-  assert.ok(report.findings.some((finding) => finding.id === 'lifecycle-closure-contract' && finding.status === 'finding'));
+  assert.equal(report.overall.status, 'pass');
+  assert.ok(report.findings.some((finding) => finding.id === 'fork-capability-contract' && finding.status === 'pass'));
+  assert.ok(report.findings.some((finding) => finding.id === 'lifecycle-closure-contract' && finding.status === 'pass'));
   assert.ok(report.findings.some((finding) => finding.id === 'index-reconciliation' && finding.status === 'pass'));
-  assert.ok(report.actionItems.some((item) => item.id === 'add-fork-capability-attributes'));
-  assert.ok(report.actionItems.some((item) => item.id === 'add-lifecycle-closure-rules'));
+  assert.equal(report.actionItems.length, 0);
 });

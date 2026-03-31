@@ -24,11 +24,16 @@ forks:
       repository: svelderrainruiz/compare-vi-cli-action
       local_remote: origin
       branch: issue/2078-pester-layered-execution
+      push_enabled: true
+      mount_allowed: true
       operator_owned: true
       purpose: local-regression
     - id: org-shadow
       repository: LabVIEW-Community-CI-CD/compare-vi-cli-action-fork
+      local_remote: upstream-fork
       branch: issue/2078-pester-layered-execution
+      push_enabled: false
+      mount_allowed: false
       operator_owned: true
       purpose: alternate-fork
 

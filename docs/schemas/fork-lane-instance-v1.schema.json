@@ -102,7 +102,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "repository", "branch", "operator_owned", "purpose"],
+            "required": ["id", "repository", "branch", "push_enabled", "mount_allowed", "operator_owned", "purpose"],
             "properties": {
               "id": {
                 "type": "string",
@@ -118,6 +118,12 @@
               "branch": {
                 "type": "string",
                 "minLength": 1
+              },
+              "push_enabled": {
+                "type": "boolean"
+              },
+              "mount_allowed": {
+                "type": "boolean"
               },
               "operator_owned": {
                 "type": "boolean"
@@ -251,6 +257,76 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "lifecycle": {
+            "properties": {
+              "status": {
+                "const": "closed"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "lifecycle": {
+            "required": ["closed_at"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "lifecycle": {
+            "properties": {
+              "status": {
+                "const": "superseded"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "lifecycle": {
+            "required": ["closed_at", "superseded_by_issue"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "lifecycle": {
+            "properties": {
+              "status": {
+                "const": "active"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "lifecycle": {
+            "not": {
+              "anyOf": [
+                { "required": ["closed_at"] },
+                { "required": ["superseded_by_issue"] }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "repositorySlug": {
       "type": "string",
