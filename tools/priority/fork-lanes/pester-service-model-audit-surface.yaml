@@ -1,0 +1,27 @@
+version: 1
+id: pester-service-model-control-plane
+description: >
+  Dedicated local audit surface for the Pester service-model subsystem. This
+  bundle captures the trusted router, context, readiness, execution, evidence,
+  and the issue-scoped assurance packet that specifies them.
+include:
+  - package.json
+  - .github/workflows/pester-context.yml
+  - .github/workflows/pester-gate.yml
+  - .github/workflows/pester-run.yml
+  - .github/workflows/pester-evidence.yml
+  - .github/workflows/pester-service-model-on-label.yml
+  - .github/workflows/selfhosted-readiness.yml
+  - .github/workflows/release.yml
+  - docs/knowledgebase/Pester-Service-Model.md
+  - docs/architecture/pester-service-model-control-plane.md
+  - docs/architecture/ADR-2078-pester-service-model-requirements.md
+  - docs/cm-plan-pester-service-model.md
+  - docs/release-procedure-pester-service-model.md
+  - docs/requirements-pester-service-model-srs.md
+  - docs/rtm-pester-service-model.csv
+  - docs/testing/pester-service-model-test-plan.md
+  - docs/pester-service-model-quality-report.md
+  - docs/pester-service-model-information-item-map.md
+  - tools/priority/__tests__/pester-service-model-workflow-contract.test.mjs
+  - Invoke-PesterTests.ps1
