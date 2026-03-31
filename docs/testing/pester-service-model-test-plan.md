@@ -15,6 +15,7 @@
 | Item | Type | Risk | Notes |
 | --- | --- | --- | --- |
 | `pester-service-model-workflow-contract.test.mjs` | Integration | High | Verifies the workflow split and core receipt/evidence obligations |
+| `pester-service-model-quality-workflow-contract.test.mjs` | Integration | Medium | Verifies the coverage gate and docs link-check control-plane workflow |
 | `pester-gate.yml` + trusted pilot routing | Workflow | High | Verifies admission and orchestration across layers |
 | `Invoke-PesterTests.ps1` execution contract | Execution | High | Verifies the dispatcher remains the execution engine only |
 
@@ -36,6 +37,7 @@
 | Workflow contract coverage | All layer responsibilities represented | `tools/priority/__tests__/pester-service-model-workflow-contract.test.mjs` |
 | Receipt coverage | Context, readiness, execution, and evidence all emit auditable artifacts | assurance report + integration runs |
 | Classification coverage | blocked and defect outcomes remain distinguishable | evidence workflow outputs |
+| Packet coverage gate | Retained `coverage.xml` and named PR coverage gate | `.github/workflows/pester-service-model-quality.yml` |
 
 ## Reporting
 

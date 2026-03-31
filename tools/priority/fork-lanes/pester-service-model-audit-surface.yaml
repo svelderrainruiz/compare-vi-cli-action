@@ -11,6 +11,7 @@ include:
   - .github/workflows/pester-run.yml
   - .github/workflows/pester-evidence.yml
   - .github/workflows/pester-service-model-on-label.yml
+  - .github/workflows/pester-service-model-quality.yml
   - .github/workflows/selfhosted-readiness.yml
   - .github/workflows/release.yml
   - docs/knowledgebase/Pester-Service-Model.md
@@ -24,4 +25,7 @@ include:
   - docs/pester-service-model-quality-report.md
   - docs/pester-service-model-information-item-map.md
   - tools/priority/__tests__/pester-service-model-workflow-contract.test.mjs
+  - tools/priority/__tests__/pester-service-model-quality-workflow-contract.test.mjs
+  - tools/priority/__tests__/write-node-test-coverage-xml.test.mjs
+  - tools/priority/write-node-test-coverage-xml.mjs
   - Invoke-PesterTests.ps1
