@@ -1,0 +1,32 @@
+version: 1
+id: fork-lane-control-plane
+description: >
+  Minimal local audit surface for the fork-lane control plane. This bundle is
+  intentionally narrower than the full repository so the local standards audit
+  evaluates the design surface that issue #2078 is changing.
+include:
+  - package.json
+  - .github/workflows/fork-lane-design-audit.yml
+  - docs/architecture/fork-lane-control-plane.md
+  - docs/architecture/ADR-2078-fork-lane-local-assurance.md
+  - docs/cm-plan-fork-lane.md
+  - docs/schemas/fork-lane-instance-v1.schema.json
+  - docs/schemas/fork-lane-index-v1.schema.json
+  - docs/schemas/fork-lane-design-audit-report-v1.schema.json
+  - docs/schemas/fork-lane-assurance-report-v1.schema.json
+  - docs/fork-lanes/fork-lane-information-item-map.md
+  - docs/fork-lanes/fork-lane-quality-report.md
+  - docs/release-procedure-fork-lane.md
+  - docs/rtm-fork-lane.csv
+  - docs/requirements-fork-lane-srs.md
+  - docs/testing/fork-lane-test-plan.md
+  - tools/priority/fork-lanes/template.yaml
+  - tools/priority/fork-lanes/index.yaml
+  - tools/priority/fork-lanes/issue-2078.yaml
+  - tools/priority/fork-lanes/design-audit-policy.json
+  - tools/priority/fork-lane-design-audit.mjs
+  - tools/priority/fork-lane-local-assurance-ci.mjs
+  - tools/priority/__tests__/fork-lane-schema.test.mjs
+  - tools/priority/__tests__/fork-lane-design-audit.test.mjs
+  - tools/priority/__tests__/fork-lane-design-audit-workflow-contract.test.mjs
+  - tools/priority/__tests__/fork-lane-local-assurance-ci.test.mjs

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Fork Lane Local Assurance Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "repo_root",
+    "audit_surface",
+    "design_audit",
+    "standards_audit",
+    "overall",
+    "action_items"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repo_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audit_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "manifest_path",
+        "bundle_root",
+        "included_paths"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "manifest_path": { "type": "string", "minLength": 1 },
+        "bundle_root": { "type": "string", "minLength": 1 },
+        "included_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "design_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "report_path",
+        "summary_path",
+        "finding_count",
+        "action_item_count"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "pass-with-actions", "fail"] },
+        "report_path": { "type": "string", "minLength": 1 },
+        "summary_path": { "type": "string", "minLength": 1 },
+        "finding_count": { "type": "integer", "minimum": 0 },
+        "action_item_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "standards_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "profile",
+        "evidence_path",
+        "score_path",
+        "top_risk_count",
+        "derived_action_item_count"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "pass-with-actions", "fail"] },
+        "profile": { "type": "string", "minLength": 1 },
+        "evidence_path": { "type": "string", "minLength": 1 },
+        "score_path": { "type": "string", "minLength": 1 },
+        "top_risk_count": { "type": "integer", "minimum": 0 },
+        "derived_action_item_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "action_item_count"],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "pass-with-actions", "fail"] },
+        "action_item_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "action_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source", "priority", "title", "description"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "enum": ["design-audit", "standards-audit"] },
+          "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "standards": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "evidence_paths": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
