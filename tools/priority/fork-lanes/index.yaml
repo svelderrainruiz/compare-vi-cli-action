@@ -1,0 +1,10 @@
+schema: comparevi/fork-lane-index@v1
+updated_at: '2026-03-31T16:20:01Z'
+active_issue: 2078
+instances:
+  - issue_number: 2078
+    path: tools/priority/fork-lanes/issue-2078.yaml
+    title: split Pester execution monolith into context/runtime/selection/execution/post layers
+    status: active
+    fork_branch: issue/2078-pester-layered-execution
+    upstream_branch: integration/pester-service-model

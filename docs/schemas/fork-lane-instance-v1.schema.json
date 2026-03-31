@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/fork-lane-instance-v1.schema.json",
+  "title": "Fork Lane Instance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "lifecycle",
+    "issue",
+    "policy",
+    "fork",
+    "upstream",
+    "service_model",
+    "local_validation",
+    "upstream_proof"
+  ],
+  "properties": {
+    "schema": {
+      "const": "comparevi/fork-lane-instance@v1"
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["active", "closed", "superseded", "archived"]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "closed_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "superseded_by_issue": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "title", "lane"],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lane": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "fork_remote_proof",
+        "upstream_remote_proof",
+        "rule"
+      ],
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "enum": ["local-regression-lane", "upstream-integration-proof", "hybrid"]
+        },
+        "fork_remote_proof": {
+          "type": "boolean"
+        },
+        "upstream_remote_proof": {
+          "type": "boolean"
+        },
+        "rule": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "fork": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "branch"],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/repositorySlug"
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "integration_branch", "standing_priority_issue"],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/repositorySlug"
+        },
+        "integration_branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "standing_priority_issue": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "service_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_workflow", "decomposition_layers"],
+      "properties": {
+        "target_workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decomposition_layers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "first_slice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mounted_commit", "summary"],
+          "properties": {
+            "mounted_commit": {
+              "$ref": "#/$defs/gitCommit"
+            },
+            "summary": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "local_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["install", "checks"],
+      "properties": {
+        "install": {
+          "$ref": "#/$defs/commandList"
+        },
+        "checks": {
+          "$ref": "#/$defs/commandList"
+        }
+      }
+    },
+    "upstream_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dispatch"],
+      "properties": {
+        "dispatch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workflow", "ref", "inputs"],
+          "properties": {
+            "workflow": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1
+            },
+            "inputs": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": ["string", "number", "boolean"]
+              }
+            }
+          }
+        },
+        "latest_run": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "url"],
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "repositorySlug": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "commandList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
