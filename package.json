@@ -166,6 +166,7 @@
     "priority:diagnostics:public-linux": "node tools/priority/public-linux-diagnostics-harness.mjs",
     "priority:vi-history:budget": "node tools/priority/vi-history-cross-plane-budget.mjs",
     "priority:develop:sync": "node tools/priority/develop-sync.mjs",
+    "priority:fork-lane:audit": "node tools/priority/fork-lane-design-audit.mjs",
     "priority:github:metadata:apply": "tsc -p tsconfig.cli.json && node dist/tools/cli/github-metadata.js",
     "priority:policy": "node tools/priority/check-policy.mjs",
     "priority:policy:route": "node tools/priority/policy-engine.mjs",

@@ -1,0 +1,52 @@
+name: Fork lane design audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fork-lane-design-audit.yml'
+      - 'docs/schemas/fork-lane-*.json'
+      - 'tools/priority/fork-lanes/**'
+      - 'tools/priority/fork-lane-design-audit.mjs'
+      - 'tools/priority/__tests__/fork-lane-schema.test.mjs'
+      - 'tools/priority/__tests__/fork-lane-design-audit.test.mjs'
+      - 'tools/priority/__tests__/fork-lane-design-audit-workflow-contract.test.mjs'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Node dependencies
+        shell: pwsh
+        run: node tools/npm/cli.mjs ci
+
+      - name: Run fork lane schema and audit tests
+        shell: pwsh
+        run: |
+          node --test tools/priority/__tests__/fork-lane-schema.test.mjs tools/priority/__tests__/fork-lane-design-audit.test.mjs tools/priority/__tests__/fork-lane-design-audit-workflow-contract.test.mjs
+
+      - name: Run design audit
+        shell: pwsh
+        run: |
+          node tools/priority/fork-lane-design-audit.mjs `
+            --output tests/results/_agent/fork-lanes/fork-lane-design-audit-report.json `
+            --summary-output tests/results/_agent/fork-lanes/fork-lane-design-audit-summary.md
+
+      - name: Append audit summary
+        if: always()
+        shell: pwsh
+        run: |
+          $summaryPath = 'tests/results/_agent/fork-lanes/fork-lane-design-audit-summary.md'
+          if (Test-Path -LiteralPath $summaryPath) {
+            Get-Content -LiteralPath $summaryPath -Raw | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fork-lane-design-audit
+          path: tests/results/_agent/fork-lanes
+          if-no-files-found: error

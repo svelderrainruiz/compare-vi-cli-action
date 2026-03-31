@@ -1,0 +1,68 @@
+{
+  "schema": "comparevi/fork-lane-design-audit-policy@v1",
+  "subject": "fork-lane-control-plane",
+  "checks": [
+    {
+      "id": "index-reconciliation",
+      "title": "Active index reconciles checked-in fork lane instances",
+      "severity": "high",
+      "standards": ["10007 §5.5.1", "12207 §6.3.5"],
+      "actionItem": {
+        "id": "reconcile-index-from-instances",
+        "priority": "P1",
+        "title": "Make the active index derive from instance manifests",
+        "acceptance": [
+          "Every active index entry must match the corresponding instance manifest.",
+          "CI must fail when the index diverges from any referenced instance."
+        ]
+      }
+    },
+    {
+      "id": "proof-plane-separation",
+      "title": "Fork-local regression and upstream proof planes are explicitly separated",
+      "severity": "medium",
+      "standards": ["10007 §5.3.3", "12207 §6.3.5"],
+      "actionItem": {
+        "id": "separate-fork-and-upstream-proof-policy",
+        "priority": "P2",
+        "title": "Split local fork regression from upstream remote proof policy",
+        "acceptance": [
+          "Fork lane instances must declare fork-side remote proof disabled when self-hosted proof belongs upstream.",
+          "Upstream proof inputs must remain explicit in the instance manifest."
+        ]
+      }
+    },
+    {
+      "id": "fork-capability-contract",
+      "title": "Multiple owned forks carry explicit operational capability attributes",
+      "severity": "medium",
+      "standards": ["10007 §5.3.3", "10007 §5.5.1", "12207 §6.3.5"],
+      "actionItem": {
+        "id": "add-fork-capability-attributes",
+        "priority": "P2",
+        "title": "Add explicit push and mount capability attributes to each owned fork",
+        "acceptance": [
+          "Each owned fork entry declares whether it is eligible for local push operations.",
+          "Each owned fork entry declares whether it is eligible for upstream mount staging.",
+          "The selected fork can be evaluated from capabilities rather than free-text purpose alone."
+        ]
+      }
+    },
+    {
+      "id": "lifecycle-closure-contract",
+      "title": "Lifecycle closure and supersession rules are conditionally enforced",
+      "severity": "medium",
+      "standards": ["10007 §5.5.1", "12207 §6.3.5"],
+      "actionItem": {
+        "id": "add-lifecycle-closure-rules",
+        "priority": "P2",
+        "title": "Add conditional lifecycle closure and supersession rules",
+        "acceptance": [
+          "Closed instances require a close date.",
+          "Superseded instances require a replacement issue reference.",
+          "CI fails when lifecycle state and lifecycle evidence diverge."
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://labview-community-ci-cd.github.io/compare-vi-cli-action/schemas/fork-lane-design-audit-report-v1.schema.json",
+  "title": "Fork Lane Design Audit Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generatedAtUtc",
+    "subject",
+    "overall",
+    "findings",
+    "actionItems"
+  ],
+  "properties": {
+    "schema": {
+      "const": "comparevi/fork-lane-design-audit-report@v1"
+    },
+    "generatedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activeIssue", "indexPath", "templatePath", "instancePaths", "policyPath"],
+      "properties": {
+        "activeIssue": { "type": "integer", "minimum": 1 },
+        "indexPath": { "type": "string", "minLength": 1 },
+        "templatePath": { "type": "string", "minLength": 1 },
+        "instancePaths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "policyPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "findingCount", "actionItemCount", "blockingCount"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "pass-with-actions", "fail"]
+        },
+        "findingCount": { "type": "integer", "minimum": 0 },
+        "actionItemCount": { "type": "integer", "minimum": 0 },
+        "blockingCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "severity", "status", "summary", "standards", "evidence", "actionItemIds"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "severity": { "type": "string", "enum": ["high", "medium", "low", "info"] },
+          "status": { "type": "string", "enum": ["pass", "finding"] },
+          "summary": { "type": "string", "minLength": 1 },
+          "standards": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "detail"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "line": { "type": "integer", "minimum": 1 },
+                "detail": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "actionItemIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "actionItems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "priority", "title", "description", "acceptance", "standards", "relatedFindingIds"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "priority": { "type": "string", "enum": ["P1", "P2", "P3"] },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "acceptance": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "standards": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "relatedFindingIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}
