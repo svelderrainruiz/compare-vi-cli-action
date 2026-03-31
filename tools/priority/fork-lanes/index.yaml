@@ -6,5 +6,9 @@ instances:
     path: tools/priority/fork-lanes/issue-2078.yaml
     title: split Pester execution monolith into context/runtime/selection/execution/post layers
     status: active
+    selected_fork_id: personal
+    fork_repositories:
+      - svelderrainruiz/compare-vi-cli-action
+      - LabVIEW-Community-CI-CD/compare-vi-cli-action-fork
     fork_branch: issue/2078-pester-layered-execution
     upstream_branch: integration/pester-service-model

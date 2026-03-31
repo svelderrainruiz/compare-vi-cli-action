@@ -9,7 +9,7 @@
     "lifecycle",
     "issue",
     "policy",
-    "fork",
+    "forks",
     "upstream",
     "service_model",
     "local_validation",
@@ -87,17 +87,47 @@
         }
       }
     },
-    "fork": {
+    "forks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "branch"],
+      "required": ["selected", "catalog"],
       "properties": {
-        "repository": {
-          "$ref": "#/$defs/repositorySlug"
-        },
-        "branch": {
+        "selected": {
           "type": "string",
           "minLength": 1
+        },
+        "catalog": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "repository", "branch", "operator_owned", "purpose"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "repository": {
+                "$ref": "#/$defs/repositorySlug"
+              },
+              "local_remote": {
+                "type": "string",
+                "minLength": 1
+              },
+              "branch": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operator_owned": {
+                "type": "boolean"
+              },
+              "purpose": {
+                "type": "string",
+                "enum": ["local-regression", "alternate-fork", "mount-staging", "reserve"]
+              }
+            }
+          }
         }
       }
     },

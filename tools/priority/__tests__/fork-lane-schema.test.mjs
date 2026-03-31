@@ -35,6 +35,9 @@ test('fork lane instance schema validates the issue-specific manifest and the re
   ]) {
     const document = loadYaml(relativePath);
     assert.equal(validate(document), true, `${relativePath} failed schema validation:\n${JSON.stringify(validate.errors, null, 2)}`);
+    const selected = document.forks.selected;
+    const fork = document.forks.catalog.find((item) => item.id === selected);
+    assert.ok(fork, `${relativePath} missing selected fork '${selected}'`);
   }
 });
 
@@ -49,5 +52,10 @@ test('fork lane index schema tracks the active issue and checked-in instance pat
   const entry = index.instances.find((item) => item.issue_number === 2078);
   assert.ok(entry, 'expected active instance entry for issue 2078');
   assert.equal(entry.path, 'tools/priority/fork-lanes/issue-2078.yaml');
+  assert.equal(entry.selected_fork_id, 'personal');
+  assert.deepEqual(entry.fork_repositories, [
+    'svelderrainruiz/compare-vi-cli-action',
+    'LabVIEW-Community-CI-CD/compare-vi-cli-action-fork'
+  ]);
   assert.equal(fs.existsSync(path.join(repoRoot, entry.path)), true);
 });

@@ -16,9 +16,20 @@ policy:
     Catch regressions locally on the fork branch first. Only mount proven commits
     onto the upstream integration branch for remote self-hosted evidence.
 
-fork:
-  repository: svelderrainruiz/compare-vi-cli-action
-  branch: issue/1000-short-description
+forks:
+  selected: personal
+  catalog:
+    - id: personal
+      repository: svelderrainruiz/compare-vi-cli-action
+      local_remote: origin
+      branch: issue/1000-short-description
+      operator_owned: true
+      purpose: local-regression
+    - id: org-shadow
+      repository: LabVIEW-Community-CI-CD/compare-vi-cli-action-fork
+      branch: issue/1000-short-description
+      operator_owned: true
+      purpose: alternate-fork
 
 upstream:
   repository: LabVIEW-Community-CI-CD/compare-vi-cli-action

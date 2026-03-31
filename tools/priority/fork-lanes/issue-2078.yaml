@@ -17,9 +17,20 @@ policy:
     proven commits onto the upstream integration branch for remote self-hosted
     evidence.
 
-fork:
-  repository: svelderrainruiz/compare-vi-cli-action
-  branch: issue/2078-pester-layered-execution
+forks:
+  selected: personal
+  catalog:
+    - id: personal
+      repository: svelderrainruiz/compare-vi-cli-action
+      local_remote: origin
+      branch: issue/2078-pester-layered-execution
+      operator_owned: true
+      purpose: local-regression
+    - id: org-shadow
+      repository: LabVIEW-Community-CI-CD/compare-vi-cli-action-fork
+      branch: issue/2078-pester-layered-execution
+      operator_owned: true
+      purpose: alternate-fork
 
 upstream:
   repository: LabVIEW-Community-CI-CD/compare-vi-cli-action
